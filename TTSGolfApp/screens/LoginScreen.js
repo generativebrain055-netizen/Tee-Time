@@ -14,10 +14,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { API_ENDPOINTS } from '../config/api';
+import { COUNTRY_CODES } from '../constants/countryCodes';
 
 const { width, height } = Dimensions.get("window");
 
-const COUNTRY_CODES = [
+const COUNTRY_CODES_OLD = [
   { code: "+93", country: "Afghanistan", flag: "🇦🇫" },
   { code: "+355", country: "Albania", flag: "🇦🇱" },
   { code: "+213", country: "Algeria", flag: "🇩🇿" },
@@ -192,9 +194,8 @@ const COUNTRY_CODES = [
 ];
 
 export default function LoginScreen({ navigation }) {
-  // Use your computer's local IP address here
-  const API_BASE_URL = "http://192.168.18.103:3000";
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [username, setUsername] = useState("");
   const [selectedCountry, setSelectedCountry] = useState(
     COUNTRY_CODES.find((c) => c.country === "United States") || COUNTRY_CODES[0]
   );
@@ -202,7 +203,7 @@ export default function LoginScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [password, setPassword] = useState("");
-  const [currentStep, setCurrentStep] = useState("phone"); // phone, otp, password
+  const [currentStep, setCurrentStep] = useState("phone"); // phone, otp, password, username
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -213,6 +214,7 @@ export default function LoginScreen({ navigation }) {
   const isPhoneValid = digitsOnly.length >= 8;
   const isOtpValid = otpCode.trim().length === 6;
   const isPasswordValid = password.length >= 6;
+  const isUsernameValid = username.trim().length >= 3;
 
   const primaryDisabled =
     loading ||
@@ -220,6 +222,8 @@ export default function LoginScreen({ navigation }) {
       ? !isPhoneValid
       : currentStep === "otp"
       ? !isOtpValid
+      : currentStep === "username"
+      ? !isUsernameValid || !isPasswordValid
       : !isPasswordValid);
 
   useEffect(() => {
@@ -242,7 +246,7 @@ export default function LoginScreen({ navigation }) {
     setErrorMessage("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/request-otp`, {
+      const response = await fetch(API_ENDPOINTS.REQUEST_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber: e164Phone }),
@@ -275,7 +279,7 @@ export default function LoginScreen({ navigation }) {
     setStatusMessage("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+      const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber: e164Phone, otp: otpCode.trim() }),
@@ -290,7 +294,7 @@ export default function LoginScreen({ navigation }) {
       setStatusMessage("OTP verified. Logging you in...");
       setTimeout(() => {
         if (navigation) {
-          navigation.navigate("Home");
+          navigation.navigate("Home", { user: data.user });
         }
       }, 500);
     } catch (error) {
@@ -308,7 +312,7 @@ export default function LoginScreen({ navigation }) {
     setStatusMessage("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber: e164Phone, password }),
@@ -323,7 +327,40 @@ export default function LoginScreen({ navigation }) {
       setStatusMessage("Login successful!");
       setTimeout(() => {
         if (navigation) {
-          navigation.navigate("Home");
+          navigation.navigate("Home", { user: data.user });
+        }
+      }, 500);
+    } catch (error) {
+      setErrorMessage(error.message || "Login failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginWithUsername = async () => {
+    if (!isUsernameValid || !isPasswordValid || loading) return;
+
+    setLoading(true);
+    setErrorMessage("");
+    setStatusMessage("");
+
+    try {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Login failed.");
+      }
+
+      setStatusMessage("Login successful!");
+      setTimeout(() => {
+        if (navigation) {
+          navigation.navigate("Home", { user: data.user });
         }
       }, 500);
     } catch (error) {
@@ -338,6 +375,8 @@ export default function LoginScreen({ navigation }) {
       handleRequestOtp();
     } else if (currentStep === "otp") {
       handleVerifyOtp();
+    } else if (currentStep === "username") {
+      handleLoginWithUsername();
     } else {
       handleLoginWithPassword();
     }
@@ -475,6 +514,59 @@ export default function LoginScreen({ navigation }) {
           </View>
         )}
 
+        {currentStep === "username" && (
+          <View style={styles.otpContainer}>
+            <Text style={styles.otpLabel}>Login with Username</Text>
+            <TextInput
+              style={{
+                width: "100%",
+                height: 55,
+                borderWidth: 2,
+                borderColor: "#E0E0E0",
+                borderRadius: 8,
+                paddingHorizontal: 16,
+                fontSize: 16,
+                marginBottom: 12,
+                backgroundColor: "#FFFFFF",
+              }}
+              placeholder="Username"
+              placeholderTextColor="#999"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={{
+                width: "100%",
+                height: 55,
+                borderWidth: 2,
+                borderColor: "#E0E0E0",
+                borderRadius: 8,
+                paddingHorizontal: 16,
+                fontSize: 16,
+                marginBottom: 20,
+                backgroundColor: "#FFFFFF",
+              }}
+              placeholder="Password"
+              placeholderTextColor="#999"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity onPress={() => setCurrentStep("phone")}>
+              <Text
+                style={{
+                  color: "#2D7A4F",
+                  textAlign: "center",
+                  marginBottom: 10,
+                }}
+              >
+                Back to Phone Login
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Continue Button */}
         <TouchableOpacity
           style={[
@@ -500,9 +592,12 @@ export default function LoginScreen({ navigation }) {
         <View style={styles.signupContainer}>
           {currentStep === "phone" ? (
             <>
-              <Text style={styles.signupText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => setCurrentStep("password")}>
-                <Text style={styles.signupLink}>Login with Password</Text>
+                <Text style={styles.signupLink}>Login with Phone & Password</Text>
+              </TouchableOpacity>
+              <Text style={styles.signupText}> or </Text>
+              <TouchableOpacity onPress={() => setCurrentStep("username")}>
+                <Text style={styles.signupLink}>Login with Username</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -511,6 +606,8 @@ export default function LoginScreen({ navigation }) {
                 setCurrentStep("phone");
                 setErrorMessage("");
                 setStatusMessage("");
+                setUsername("");
+                setPassword("");
               }}
             >
               <Text style={styles.signupLink}>Back to Phone Entry</Text>

@@ -11,6 +11,8 @@ import {
   Platform,
   Alert,
   Dimensions,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { API_ENDPOINTS } from '../config/api';
@@ -63,10 +65,11 @@ export default function SimpleLoginScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
         {/* Logo Section */}
         <View style={styles.logoContainer}>
           <Image
@@ -139,7 +142,8 @@ export default function SimpleLoginScreen({ navigation }) {
             resizeMode="cover"
           />
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

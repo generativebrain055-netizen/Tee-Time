@@ -55,6 +55,7 @@ const ensureUsersTable = async () => {
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       phone_number TEXT UNIQUE NOT NULL,
+      username TEXT UNIQUE,
       first_name TEXT,
       last_name TEXT,
       handicap INTEGER,
@@ -72,8 +73,20 @@ const getUserByPhone = async (phoneNumber) => {
     return null;
   }
   const { rows } = await pool.query(
-    "SELECT id, phone_number, first_name, last_name, handicap, social_rate, password_hash FROM users WHERE phone_number = $1 LIMIT 1",
+    "SELECT id, phone_number, username, first_name, last_name, handicap, social_rate, password_hash FROM users WHERE phone_number = $1 LIMIT 1",
     [phoneNumber]
+  );
+  return rows[0] || null;
+};
+
+const getUserByUsername = async (username) => {
+  if (!dbConnected) {
+    console.warn("Database not connected, using in-memory storage");
+    return null;
+  }
+  const { rows } = await pool.query(
+    "SELECT id, phone_number, username, first_name, last_name, handicap, social_rate, password_hash FROM users WHERE username = $1 LIMIT 1",
+    [username]
   );
   return rows[0] || null;
 };
@@ -292,9 +305,9 @@ app.post("/auth/request-otp", async (req, res) => {
 });
 
 app.post("/auth/verify-otp", async (req, res) => {
-  const { phoneNumber, otp, firstName, lastName, handicap } = req.body;
+  const { phoneNumber, otp, firstName, lastName, username, handicap, password } = req.body;
 
-  console.log('Verify OTP request:', { phoneNumber, otp, firstName, lastName, handicap });
+  console.log('Verify OTP request:', { phoneNumber, otp, firstName, lastName, username, handicap, hasPassword: !!password });
 
   if (!phoneNumber || !otp) {
     return res
@@ -345,6 +358,7 @@ app.post("/auth/verify-otp", async (req, res) => {
         user: {
           id: existingUser.id,
           phoneNumber: existingUser.phone_number,
+          username: existingUser.username,
           firstName: existingUser.first_name,
           lastName: existingUser.last_name,
           handicap: existingUser.handicap,
@@ -354,13 +368,25 @@ app.post("/auth/verify-otp", async (req, res) => {
       });
     }
 
+    // Validate username if provided
+    if (username) {
+      const usernameExists = await getUserByUsername(username);
+      if (usernameExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Username already taken. Please choose another.",
+        });
+      }
+    }
+
     // Create new user
     if (dbConnected) {
+      const passwordHash = password ? await bcrypt.hash(String(password), 10) : null;
       const { rows } = await pool.query(
-        `INSERT INTO users (phone_number, first_name, last_name, handicap, social_rate)
-         VALUES ($1, $2, $3, $4, 100)
-         RETURNING id, phone_number, first_name, last_name, handicap, social_rate`,
-        [formattedNumber, firstName || null, lastName || null, handicap ? parseInt(handicap) : null]
+        `INSERT INTO users (phone_number, username, first_name, last_name, handicap, social_rate, password_hash)
+         VALUES ($1, $2, $3, $4, $5, 100, $6)
+         RETURNING id, phone_number, username, first_name, last_name, handicap, social_rate`,
+        [formattedNumber, username || null, firstName || null, lastName || null, handicap ? parseInt(handicap) : null, passwordHash]
       );
 
       otpStore.delete(formattedNumber);
@@ -371,6 +397,7 @@ app.post("/auth/verify-otp", async (req, res) => {
         user: {
           id: rows[0].id,
           phoneNumber: rows[0].phone_number,
+          username: rows[0].username,
           firstName: rows[0].first_name,
           lastName: rows[0].last_name,
           handicap: rows[0].handicap,
@@ -386,6 +413,7 @@ app.post("/auth/verify-otp", async (req, res) => {
         user: {
           id: Date.now(),
           phoneNumber: formattedNumber,
+          username: username || null,
           firstName: firstName || null,
           lastName: lastName || null,
           handicap: handicap ? parseInt(handicap) : null,
@@ -458,24 +486,29 @@ app.post("/auth/set-password", async (req, res) => {
 });
 
 app.post("/auth/login", async (req, res) => {
-  const { phoneNumber, password } = req.body;
+  const { phoneNumber, username, password } = req.body;
 
-  if (!phoneNumber || !password) {
+  if ((!phoneNumber && !username) || !password) {
     return res.status(400).json({
       success: false,
-      message: "Phone number and password are required.",
+      message: "Username/phone number and password are required.",
     });
   }
 
-  const formattedNumber = formatPhoneNumber(phoneNumber);
-
   try {
-    const user = await getUserByPhone(formattedNumber);
+    let user;
+    
+    if (username) {
+      user = await getUserByUsername(username);
+    } else {
+      const formattedNumber = formatPhoneNumber(phoneNumber);
+      user = await getUserByPhone(formattedNumber);
+    }
 
     if (!user || !user.password_hash) {
       return res.status(400).json({
         success: false,
-        message: "No account found. Sign up with your phone number first.",
+        message: "No account found. Sign up first.",
       });
     }
 
@@ -487,14 +520,22 @@ app.post("/auth/login", async (req, res) => {
     if (!passwordMatches) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid credentials. Double-check your phone number and password.",
+        message: "Invalid credentials. Please check your username/phone and password.",
       });
     }
 
     return res.json({
       success: true,
       message: "Login successful.",
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
       token: createSessionToken(),
     });
   } catch (error) {

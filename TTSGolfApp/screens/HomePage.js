@@ -16,6 +16,7 @@ export default function HomePage({ route }) {
   const user = route?.params?.user || {
     firstName: 'Guest',
     lastName: 'User',
+    username: 'guest',
     phoneNumber: '+1234567890',
     handicap: null,
     socialRate: 100,
@@ -42,6 +43,16 @@ export default function HomePage({ route }) {
           </View>
 
           <View style={styles.userInfo}>
+            {user.username && (
+              <>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Username</Text>
+                  <Text style={styles.infoValue}>@{user.username}</Text>
+                </View>
+                <View style={styles.divider} />
+              </>
+            )}
+
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Phone Number</Text>
               <Text style={styles.infoValue}>{user.phoneNumber}</Text>

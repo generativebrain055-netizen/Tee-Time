@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,41 +11,35 @@ import {
   Platform,
   Alert,
   Modal,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { API_ENDPOINTS } from '../config/api';
-
-// Popular country codes
-const COUNTRY_CODES = [
-  { code: '+1', country: 'United States', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+91', country: 'India', flag: '🇮🇳' },
-  { code: '+92', country: 'Pakistan', flag: '🇵🇰' },
-  { code: '+86', country: 'China', flag: '🇨🇳' },
-  { code: '+81', country: 'Japan', flag: '🇯🇵' },
-  { code: '+49', country: 'Germany', flag: '🇩🇪' },
-  { code: '+33', country: 'France', flag: '🇫🇷' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+971', country: 'UAE', flag: '🇦🇪' },
-  { code: '+966', country: 'Saudi Arabia', flag: '🇸🇦' },
-  { code: '+52', country: 'Mexico', flag: '🇲🇽' },
-  { code: '+55', country: 'Brazil', flag: '🇧🇷' },
-  { code: '+7', country: 'Russia', flag: '🇷🇺' },
-  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
-];
+import { COUNTRY_CODES } from '../constants/countryCodes';
 
 export default function SignupScreen({ navigation }) {
   const [step, setStep] = useState(1); // 1: Basic Info, 2: OTP Verification
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     phoneNumber: '',
     handicap: '',
+    password: '',
   });
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const [modalVisible, setModalVisible] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
+
+  useEffect(() => {
+    if (otpTimer > 0) {
+      const timer = setTimeout(() => setOtpTimer(otpTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpTimer]);
 
   const handleContinue = async () => {
     if (step === 1) {
@@ -58,8 +52,16 @@ export default function SignupScreen({ navigation }) {
         Alert.alert('Error', 'Please enter your last name');
         return;
       }
+      if (!formData.username.trim() || formData.username.length < 3) {
+        Alert.alert('Error', 'Username must be at least 3 characters');
+        return;
+      }
       if (!formData.phoneNumber.trim() || formData.phoneNumber.length < 10) {
         Alert.alert('Error', 'Please enter a valid phone number');
+        return;
+      }
+      if (!formData.password.trim() || formData.password.length < 6) {
+        Alert.alert('Error', 'Password must be at least 6 characters');
         return;
       }
 
@@ -78,6 +80,7 @@ export default function SignupScreen({ navigation }) {
         if (data.success) {
           Alert.alert('Success', 'OTP sent! Check your phone or console.');
           setStep(2);
+          setOtpTimer(60); // 1 minute timer
         } else {
           Alert.alert('Error', data.message || 'Failed to send OTP');
         }
@@ -104,7 +107,9 @@ export default function SignupScreen({ navigation }) {
             otp: otp,
             firstName: formData.firstName,
             lastName: formData.lastName,
+            username: formData.username,
             handicap: formData.handicap,
+            password: formData.password,
           }),
         });
 
@@ -131,14 +136,15 @@ export default function SignupScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Create Account</Text>
@@ -171,6 +177,18 @@ export default function SignupScreen({ navigation }) {
                   value={formData.lastName}
                   onChangeText={(text) => setFormData({ ...formData, lastName: text })}
                   autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Username *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="johndoe123"
+                  placeholderTextColor="#999"
+                  value={formData.username}
+                  onChangeText={(text) => setFormData({ ...formData, username: text.toLowerCase().replace(/\s/g, '') })}
+                  autoCapitalize="none"
                 />
               </View>
 
@@ -209,6 +227,18 @@ export default function SignupScreen({ navigation }) {
                   keyboardType="numeric"
                 />
               </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="At least 6 characters"
+                  placeholderTextColor="#999"
+                  value={formData.password}
+                  onChangeText={(text) => setFormData({ ...formData, password: text })}
+                  secureTextEntry
+                />
+              </View>
             </View>
           )}
 
@@ -218,6 +248,18 @@ export default function SignupScreen({ navigation }) {
               <Text style={styles.otpInfo}>
                 We've sent a 6-digit code to {formData.phoneNumber}
               </Text>
+              
+              {otpTimer > 0 && (
+                <View style={styles.timerContainer}>
+                  <Text style={styles.timerText}>⏱️ Code expires in: {otpTimer}s</Text>
+                </View>
+              )}
+
+              {otpTimer === 0 && (
+                <View style={styles.expiredContainer}>
+                  <Text style={styles.expiredText}>⚠️ OTP expired. Please request a new one.</Text>
+                </View>
+              )}
               
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Enter OTP *</Text>
@@ -266,6 +308,7 @@ export default function SignupScreen({ navigation }) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
 
       {/* Country Code Modal */}
       <Modal
@@ -538,5 +581,33 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#50C878',
     fontWeight: 'bold',
+  },
+  timerContainer: {
+    backgroundColor: '#FFF3CD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFC107',
+  },
+  timerText: {
+    fontSize: 14,
+    color: '#856404',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  expiredContainer: {
+    backgroundColor: '#F8D7DA',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F5C6CB',
+  },
+  expiredText: {
+    fontSize: 14,
+    color: '#721C24',
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
