@@ -1,9 +1,9 @@
-const twilio = require('twilio');
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
-const userRepository = require('../repositories/userRepository');
-const otpRepository = require('../repositories/otpRepository');
-const logger = require('../config/logger');
+const twilio = require("twilio");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+const userRepository = require("../repositories/userRepository");
+const otpRepository = require("../repositories/otpRepository");
+const logger = require("../config/logger");
 
 // Initialize Twilio client
 let twilioClient = null;
@@ -13,32 +13,36 @@ const initializeTwilioClient = () => {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
-  
+
   if (!accountSid || !authToken) {
-    logger.warn('Twilio credentials not configured. OTP will be logged to console.');
+    logger.warn(
+      "Twilio credentials not configured. OTP will be logged to console."
+    );
     return { client: null, verify: null };
   }
-  
-  if (!accountSid.startsWith('AC')) {
-    logger.error('Invalid TWILIO_ACCOUNT_SID. Must start with AC');
+
+  if (!accountSid.startsWith("AC")) {
+    logger.error("Invalid TWILIO_ACCOUNT_SID. Must start with AC");
     return { client: null, verify: null };
   }
-  
+
   try {
     const client = twilio(accountSid, authToken);
-    
+
     // Initialize Verify service if SID is provided
-    const verify = verifyServiceSid 
+    const verify = verifyServiceSid
       ? client.verify.v2.services(verifyServiceSid)
       : null;
-    
+
     if (!verify) {
-      logger.warn('TWILIO_VERIFY_SERVICE_SID not configured. Using fallback OTP method.');
+      logger.warn(
+        "TWILIO_VERIFY_SERVICE_SID not configured. Using fallback OTP method."
+      );
     }
-    
+
     return { client, verify };
   } catch (error) {
-    logger.error('Failed to initialize Twilio client:', error);
+    logger.error("Failed to initialize Twilio client:", error);
     return { client: null, verify: null };
   }
 };
@@ -63,66 +67,74 @@ const sendOTPViaTwilio = async (phoneNumber) => {
     try {
       const verification = await verifyService.verifications.create({
         to: phoneNumber,
-        channel: 'sms',
+        channel: "sms",
       });
-      
-      logger.info(`OTP sent via Verify API to ${phoneNumber}. Status: ${verification.status}`);
-      return { 
-        success: true, 
-        mode: 'verify_api', 
+
+      logger.info(
+        `OTP sent via Verify API to ${phoneNumber}. Status: ${verification.status}`
+      );
+      return {
+        success: true,
+        mode: "verify_api",
         status: verification.status,
-        sid: verification.sid 
+        sid: verification.sid,
       };
     } catch (error) {
       logger.error(`Twilio Verify API error for ${phoneNumber}:`, error);
-      
+
       // Fallback to manual OTP in development
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === "development") {
         const otp = generateOTP();
-        logger.info(`\n🔐 [VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`);
-        return { success: true, mode: 'console_fallback', otp };
+        logger.info(
+          `\n🔐 [VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`
+        );
+        return { success: true, mode: "console_fallback", otp };
       }
-      
+
       throw error;
     }
   }
-  
+
   // Method 2: Manual OTP with Messages API (Fallback)
   if (twilioClient) {
     const fromNumber = process.env.TWILIO_FROM_NUMBER;
-    
+
     if (!fromNumber) {
-      throw new Error('TWILIO_FROM_NUMBER not configured');
+      throw new Error("TWILIO_FROM_NUMBER not configured");
     }
-    
+
     const otp = generateOTP();
-    
+
     try {
       const message = await twilioClient.messages.create({
         body: `Your TeeTime Golf verification code is: ${otp}. Valid for 5 minutes.`,
         from: fromNumber,
         to: phoneNumber,
       });
-      
-      logger.info(`OTP sent via Messages API to ${phoneNumber}. SID: ${message.sid}`);
-      return { success: true, mode: 'messages_api', sid: message.sid, otp };
+
+      logger.info(
+        `OTP sent via Messages API to ${phoneNumber}. SID: ${message.sid}`
+      );
+      return { success: true, mode: "messages_api", sid: message.sid, otp };
     } catch (error) {
       logger.error(`Twilio Messages API error for ${phoneNumber}:`, error);
-      
+
       // Fallback to console in development
-      if (process.env.NODE_ENV === 'development') {
-        logger.info(`\n🔐 [MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`);
-        return { success: true, mode: 'console_fallback', otp };
+      if (process.env.NODE_ENV === "development") {
+        logger.info(
+          `\n🔐 [MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`
+        );
+        return { success: true, mode: "console_fallback", otp };
       }
-      
+
       throw error;
     }
   }
-  
+
   // Method 3: Development mode - log OTP to console
   const otp = generateOTP();
   logger.info(`\n🔐 [DEVELOPMENT MODE] OTP for ${phoneNumber}: ${otp}\n`);
-  return { success: true, mode: 'console', otp };
+  return { success: true, mode: "console", otp };
 };
 
 /**
@@ -132,15 +144,17 @@ const verifyOTPViaTwilio = async (phoneNumber, otp) => {
   if (!verifyService) {
     return null; // Will use manual verification
   }
-  
+
   try {
     const verificationCheck = await verifyService.verificationChecks.create({
       to: phoneNumber,
       code: otp,
     });
-    
-    logger.info(`OTP verification for ${phoneNumber}. Status: ${verificationCheck.status}`);
-    return verificationCheck.status === 'approved';
+
+    logger.info(
+      `OTP verification for ${phoneNumber}. Status: ${verificationCheck.status}`
+    );
+    return verificationCheck.status === "approved";
   } catch (error) {
     logger.error(`Twilio Verify check error for ${phoneNumber}:`, error);
     return null; // Will fallback to manual verification
@@ -152,65 +166,80 @@ const verifyOTPViaTwilio = async (phoneNumber, otp) => {
  */
 const requestOTP = async (req, res, next) => {
   try {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, purpose = "signup" } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
-    
+
     // Check rate limiting
     const isPhoneRateLimited = await otpRepository.isPhoneRateLimited(
       phoneNumber,
       parseInt(process.env.OTP_RATE_LIMIT_PER_HOUR) || 5
     );
-    
+
     if (isPhoneRateLimited) {
       return res.status(429).json({
         success: false,
-        message: 'Too many OTP requests. Please try again later.',
+        message: "Too many OTP requests. Please try again later.",
       });
     }
-    
+
     // Check if user already exists
     const existingUser = await userRepository.findByPhoneNumber(phoneNumber);
-    
-    if (existingUser && existingUser.password_hash) {
-      return res.status(400).json({
-        success: false,
-        message: 'Account already exists. Please login with your password.',
-      });
+
+    // For LOGIN purpose: user must exist
+    if (purpose === "login") {
+      if (!existingUser) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "No account found with this phone number. Please sign up first.",
+        });
+      }
+    } else {
+      // For SIGNUP purpose: user should not have a password already
+      if (existingUser && existingUser.password_hash) {
+        return res.status(400).json({
+          success: false,
+          message: "Account already exists. Please login instead.",
+        });
+      }
     }
-    
+
     // Send OTP via Twilio
     const sendResult = await sendOTPViaTwilio(phoneNumber);
-    
+
     // If using Verify API, we don't need to store OTP hash
     // If using manual method, store the OTP hash
     if (sendResult.otp) {
       const otpHash = await bcrypt.hash(sendResult.otp, 10);
-      const expiresAt = new Date(Date.now() + (parseInt(process.env.OTP_TTL_MS) || 300000));
-      
+      const expiresAt = new Date(
+        Date.now() + (parseInt(process.env.OTP_TTL_MS) || 300000)
+      );
+
       await otpRepository.create({
         phoneNumber,
         userId: existingUser?.id || null,
         otpCodeHash: otpHash,
-        purpose: 'signup',
+        purpose: purpose, // Use the purpose from request (login or signup)
         expiresAt,
         ipAddress,
         maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS) || 5,
       });
     }
-    
-    const isDevelopmentMode = sendResult.mode === 'console' || sendResult.mode === 'console_fallback';
-    
+
+    const isDevelopmentMode =
+      sendResult.mode === "console" || sendResult.mode === "console_fallback";
+
     return res.json({
       success: true,
       message: isDevelopmentMode
-        ? 'OTP generated. Check server console for code.'
-        : 'OTP sent successfully to your phone.',
+        ? "OTP generated. Check server console for code."
+        : "OTP sent successfully to your phone.",
       mode: sendResult.mode,
       expiresInSeconds: parseInt(process.env.OTP_TTL_MS) / 1000 || 300,
       resendAfterSeconds: parseInt(process.env.OTP_RESEND_SECONDS) || 30,
     });
   } catch (error) {
-    logger.error('Error in requestOTP:', error);
+    logger.error("Error in requestOTP:", error);
     next(error);
   }
 };
@@ -218,26 +247,36 @@ const requestOTP = async (req, res, next) => {
 /**
  * Helper function to create account after OTP verification
  */
-const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, lastName, username, handicap, password) => {
+const createAccountAfterOTP = async (
+  req,
+  res,
+  next,
+  phoneNumber,
+  firstName,
+  lastName,
+  username,
+  handicap,
+  password
+) => {
   try {
-    const cryptoUtils = require('../utils/crypto');
-    const sessionRepository = require('../repositories/sessionRepository');
-    const deviceFingerprint = require('../utils/deviceFingerprint');
-    
+    const cryptoUtils = require("../utils/crypto");
+    const sessionRepository = require("../repositories/sessionRepository");
+    const deviceFingerprint = require("../utils/deviceFingerprint");
+
     // Validate password
     if (!password || password.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters long.',
+        message: "Password must be at least 6 characters long.",
       });
     }
-    
+
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-    
+
     // Check if user exists
     let user = await userRepository.findByPhoneNumber(phoneNumber);
-    
+
     if (user) {
       // Update existing user
       user = await userRepository.updatePassword(user.id, passwordHash);
@@ -253,27 +292,28 @@ const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, las
         isVerified: true,
       });
     }
-    
+
     // Extract and save device info
-    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const deviceInfo =
+      req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
     const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
-    
+
     // Generate JWT tokens
     const tokenFamilyId = cryptoUtils.generateSessionId();
     const accessToken = cryptoUtils.generateAccessToken(
       { userId: user.id },
-      process.env.JWT_ACCESS_EXPIRY || '15m'
+      process.env.JWT_ACCESS_EXPIRY || "15m"
     );
     const refreshToken = cryptoUtils.generateRefreshToken(
       { userId: user.id, tokenFamilyId },
-      process.env.JWT_REFRESH_EXPIRY || '7d'
+      process.env.JWT_REFRESH_EXPIRY || "7d"
     );
-    
+
     // Create session
     const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const userAgent = req.headers["user-agent"];
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    
+
     await sessionRepository.create({
       userId: user.id,
       deviceId: device?.id || null,
@@ -285,10 +325,10 @@ const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, las
       expiresAt,
       rememberMe: false,
     });
-    
+
     return res.json({
       success: true,
-      message: 'Account created successfully.',
+      message: "Account created successfully.",
       accessToken,
       refreshToken,
       user: {
@@ -302,10 +342,94 @@ const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, las
       },
     });
   } catch (error) {
-    logger.error('Error creating account after OTP:', error);
+    logger.error("Error creating account after OTP:", error);
     return res.status(500).json({
       success: false,
-      message: 'Unable to create account. Please try again.',
+      message: "Unable to create account. Please try again.",
+    });
+  }
+};
+
+/**
+ * Login user after OTP verification (for existing users)
+ */
+const loginUserAfterOTP = async (req, res, next, phoneNumber) => {
+  try {
+    const cryptoUtils = require("../utils/crypto");
+    const sessionRepository = require("../repositories/sessionRepository");
+    const deviceFingerprint = require("../utils/deviceFingerprint");
+
+    // Find user by phone number
+    const user = await userRepository.findByPhoneNumber(phoneNumber);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "User not found. Please sign up first.",
+      });
+    }
+
+    // Extract and save device info
+    const deviceInfo =
+      req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
+
+    // Generate JWT tokens
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || "15m"
+    );
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || "7d"
+    );
+
+    // Create session
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await sessionRepository.create({
+      userId: user.id,
+      deviceId: device?.id || null,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: false,
+    });
+
+    // Update last login
+    await userRepository.updateLastLogin(user.id, ipAddress);
+
+    logger.info("✅ [BACKEND] User logged in via OTP:", {
+      userId: user.id,
+      phoneNumber,
+    });
+
+    return res.json({
+      success: true,
+      message: "Login successful!",
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
+    });
+  } catch (error) {
+    logger.error("Error logging in user after OTP:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to login. Please try again.",
     });
   }
 };
@@ -315,75 +439,149 @@ const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, las
  */
 const verifyOTP = async (req, res, next) => {
   try {
-    const { phoneNumber, otp, firstName, lastName, username, handicap, password } = req.body;
-    
+    const {
+      phoneNumber,
+      otp,
+      purpose = "signup", // 'login' or 'signup'
+      firstName,
+      lastName,
+      username,
+      handicap,
+      password,
+    } = req.body;
+
+    logger.info("🔍 [BACKEND] Verifying OTP:", {
+      phoneNumber,
+      otp,
+      otpLength: otp?.length,
+      otpType: typeof otp,
+      purpose,
+      hasPassword: !!password,
+      hasUserData: !!(firstName || lastName || username),
+    });
+
     // Try Twilio Verify API first
     const twilioVerified = await verifyOTPViaTwilio(phoneNumber, otp);
-    
+    logger.info("🔍 [BACKEND] Twilio Verify result:", twilioVerified);
+
     if (twilioVerified === true) {
-      // If password provided, create account directly
-      if (password) {
-        return await createAccountAfterOTP(req, res, next, phoneNumber, firstName, lastName, username, handicap, password);
+      // For LOGIN purpose, just login the user
+      if (purpose === "login") {
+        return await loginUserAfterOTP(req, res, next, phoneNumber);
       }
-      
+
+      // For SIGNUP purpose with password, create account directly
+      if (password) {
+        return await createAccountAfterOTP(
+          req,
+          res,
+          next,
+          phoneNumber,
+          firstName,
+          lastName,
+          username,
+          handicap,
+          password
+        );
+      }
+
       // Otherwise return session token for set-password
-      const sessionToken = crypto.randomBytes(32).toString('hex');
+      const sessionToken = crypto.randomBytes(32).toString("hex");
       return res.json({
         success: true,
-        message: 'OTP verified successfully. Please set your password.',
+        message: "OTP verified successfully. Please set your password.",
         otpSessionToken: sessionToken,
         phoneNumber,
       });
     }
-    
+
     // Fallback to manual verification (if Verify API not available or failed)
-    const otpRecord = await otpRepository.findLatestValid(phoneNumber, 'signup');
-    
+    logger.info("🔍 [BACKEND] Falling back to manual verification");
+    const otpRecord = await otpRepository.findLatestValid(
+      phoneNumber,
+      purpose // Use the purpose from request
+    );
+
+    logger.info("🔍 [BACKEND] OTP record found:", {
+      found: !!otpRecord,
+      id: otpRecord?.id,
+      attempts: otpRecord?.attempts,
+      maxAttempts: otpRecord?.max_attempts,
+      expiresAt: otpRecord?.expires_at,
+    });
+
     if (!otpRecord) {
+      logger.error("❌ [BACKEND] No OTP record found in database");
       return res.status(400).json({
         success: false,
-        message: 'OTP expired or not found. Please request a new one.',
+        message: "OTP expired or not found. Please request a new one.",
       });
     }
-    
+
     // Check max attempts
     if (otpRecord.attempts >= otpRecord.max_attempts) {
       return res.status(400).json({
         success: false,
-        message: 'Too many failed attempts. Please request a new OTP.',
+        message: "Too many failed attempts. Please request a new OTP.",
       });
     }
-    
+
     // Verify OTP
+    logger.info("🔍 [BACKEND] Comparing OTP with hash", {
+      receivedOtp: otp,
+      receivedOtpLength: otp?.length,
+      receivedOtpType: typeof otp,
+      otpRecordId: otpRecord.id,
+      hasHash: !!otpRecord.otp_code_hash,
+    });
     const isValid = await bcrypt.compare(otp, otpRecord.otp_code_hash);
-    
+    logger.info("🔍 [BACKEND] OTP comparison result:", isValid);
+
     if (!isValid) {
+      logger.error("❌ [BACKEND] Invalid OTP entered");
       await otpRepository.incrementAttempts(otpRecord.id);
       return res.status(400).json({
         success: false,
-        message: 'Invalid OTP. Please try again.',
+        message: "Invalid OTP. Please try again.",
         attemptsRemaining: otpRecord.max_attempts - otpRecord.attempts - 1,
       });
     }
-    
+
+    logger.info("✅ [BACKEND] OTP verified successfully");
+
     // Mark OTP as verified
     await otpRepository.markAsVerified(otpRecord.id);
-    
-    // If password provided, create account directly
-    if (password) {
-      return await createAccountAfterOTP(req, res, next, phoneNumber, firstName, lastName, username, handicap, password);
+
+    // For LOGIN purpose, just login the user
+    if (purpose === "login") {
+      return await loginUserAfterOTP(req, res, next, phoneNumber);
     }
-    
+
+    // For SIGNUP: If password provided, create account directly
+    if (password) {
+      return await createAccountAfterOTP(
+        req,
+        res,
+        next,
+        phoneNumber,
+        firstName,
+        lastName,
+        username,
+        handicap,
+        password
+      );
+    }
+
     // Otherwise return session token for set-password
-    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const sessionToken = crypto.randomBytes(32).toString("hex");
     return res.json({
       success: true,
-      message: 'OTP verified successfully. Please set your password.',
+      message: "OTP verified successfully. Please set your password.",
       otpSessionToken: sessionToken,
       phoneNumber,
     });
   } catch (error) {
-    logger.error('Error in verifyOTP:', error);
+    logger.error("Error in verifyOTP:", error);
     next(error);
   }
 };
@@ -393,15 +591,23 @@ const verifyOTP = async (req, res, next) => {
  */
 const setPassword = async (req, res, next) => {
   try {
-    const { phoneNumber, password, otpSessionToken, firstName, lastName, username, handicap } = req.body;
-    const cryptoUtils = require('../utils/crypto');
-    const sessionRepository = require('../repositories/sessionRepository');
-    const deviceFingerprint = require('../utils/deviceFingerprint');
-    
+    const {
+      phoneNumber,
+      password,
+      otpSessionToken,
+      firstName,
+      lastName,
+      username,
+      handicap,
+    } = req.body;
+    const cryptoUtils = require("../utils/crypto");
+    const sessionRepository = require("../repositories/sessionRepository");
+    const deviceFingerprint = require("../utils/deviceFingerprint");
+
     // Validate password
-    const validation = require('../utils/validation');
+    const validation = require("../utils/validation");
     const passwordValidation = validation.validatePassword(password);
-    
+
     if (!passwordValidation.isValid) {
       return res.status(400).json({
         success: false,
@@ -409,13 +615,13 @@ const setPassword = async (req, res, next) => {
         errors: passwordValidation.errors,
       });
     }
-    
+
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-    
+
     // Create or update user
     let user = await userRepository.findByPhoneNumber(phoneNumber);
-    
+
     if (user) {
       user = await userRepository.updatePassword(user.id, passwordHash);
     } else {
@@ -429,26 +635,27 @@ const setPassword = async (req, res, next) => {
         isVerified: true,
       });
     }
-    
+
     // Extract and save device info
-    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const deviceInfo =
+      req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
     const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
-    
+
     // Generate JWT tokens and create session
     const tokenFamilyId = cryptoUtils.generateSessionId();
     const accessToken = cryptoUtils.generateAccessToken(
       { userId: user.id },
-      process.env.JWT_ACCESS_EXPIRY || '15m'
+      process.env.JWT_ACCESS_EXPIRY || "15m"
     );
     const refreshToken = cryptoUtils.generateRefreshToken(
       { userId: user.id, tokenFamilyId },
-      process.env.JWT_REFRESH_EXPIRY || '7d'
+      process.env.JWT_REFRESH_EXPIRY || "7d"
     );
-    
+
     const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const userAgent = req.headers["user-agent"];
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    
+
     await sessionRepository.create({
       userId: user.id,
       deviceId: device?.id || null,
@@ -460,10 +667,10 @@ const setPassword = async (req, res, next) => {
       expiresAt,
       rememberMe: false,
     });
-    
+
     return res.json({
       success: true,
-      message: 'Account created successfully.',
+      message: "Account created successfully.",
       accessToken,
       refreshToken,
       user: {
@@ -476,7 +683,7 @@ const setPassword = async (req, res, next) => {
       },
     });
   } catch (error) {
-    logger.error('Error in setPassword:', error);
+    logger.error("Error in setPassword:", error);
     next(error);
   }
 };
@@ -487,10 +694,10 @@ const setPassword = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { phoneNumber, username, password, rememberMe } = req.body;
-    const cryptoUtils = require('../utils/crypto');
-    const sessionRepository = require('../repositories/sessionRepository');
-    const deviceFingerprint = require('../utils/deviceFingerprint');
-    
+    const cryptoUtils = require("../utils/crypto");
+    const sessionRepository = require("../repositories/sessionRepository");
+    const deviceFingerprint = require("../utils/deviceFingerprint");
+
     // Find user by phone or username
     let user;
     if (username) {
@@ -500,62 +707,67 @@ const login = async (req, res, next) => {
     } else {
       return res.status(400).json({
         success: false,
-        message: 'Phone number or username is required.',
+        message: "Phone number or username is required.",
       });
     }
-    
+
     if (!user || !user.password_hash) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials.',
+        message: "Invalid credentials.",
       });
     }
-    
+
     // Check if account is locked
     if (user.is_locked && new Date(user.locked_until) > new Date()) {
-      const lockDuration = Math.ceil((new Date(user.locked_until) - new Date()) / 1000 / 60);
+      const lockDuration = Math.ceil(
+        (new Date(user.locked_until) - new Date()) / 1000 / 60
+      );
       return res.status(401).json({
         success: false,
         message: `Account is locked. Try again in ${lockDuration} minutes.`,
       });
     }
-    
+
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!isValidPassword) {
       // Increment failed login attempts
       await userRepository.incrementFailedLoginAttempts(user.id);
-      
+
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials.',
+        message: "Invalid credentials.",
       });
     }
-    
+
     // Reset failed login attempts
     await userRepository.resetFailedLoginAttempts(user.id);
-    
+
     // Extract and save device info
-    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const deviceInfo =
+      req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
     const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
-    
+
     // Generate JWT tokens
     const tokenFamilyId = cryptoUtils.generateSessionId();
     const accessToken = cryptoUtils.generateAccessToken(
       { userId: user.id },
-      process.env.JWT_ACCESS_EXPIRY || '15m'
+      process.env.JWT_ACCESS_EXPIRY || "15m"
     );
     const refreshToken = cryptoUtils.generateRefreshToken(
       { userId: user.id, tokenFamilyId },
-      process.env.JWT_REFRESH_EXPIRY || '7d'
+      process.env.JWT_REFRESH_EXPIRY || "7d"
     );
-    
+
     // Create session in database
     const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    const expiresAt = new Date(Date.now() + (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000);
-    
+    const userAgent = req.headers["user-agent"];
+    const expiresAt = new Date(
+      Date.now() + (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000
+    );
+
     const session = await sessionRepository.create({
       userId: user.id,
       deviceId: device?.id || null,
@@ -567,13 +779,13 @@ const login = async (req, res, next) => {
       expiresAt,
       rememberMe: rememberMe || false,
     });
-    
+
     // Update last login
     await userRepository.updateLastLogin(user.id, ipAddress, device?.id);
-    
+
     return res.json({
       success: true,
-      message: 'Login successful.',
+      message: "Login successful.",
       accessToken,
       refreshToken,
       user: {
@@ -588,7 +800,7 @@ const login = async (req, res, next) => {
       },
     });
   } catch (error) {
-    logger.error('Error in login:', error);
+    logger.error("Error in login:", error);
     next(error);
   }
 };
@@ -599,69 +811,73 @@ const login = async (req, res, next) => {
 const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken: token } = req.body;
-    
+
     if (!token) {
       return res.status(400).json({
         success: false,
-        message: 'Refresh token is required.',
+        message: "Refresh token is required.",
       });
     }
-    
+
     // Verify refresh token
-    const cryptoUtils = require('../utils/crypto');
+    const cryptoUtils = require("../utils/crypto");
     let decoded;
     try {
       decoded = cryptoUtils.verifyRefreshToken(token);
     } catch (error) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid or expired refresh token.',
+        message: "Invalid or expired refresh token.",
       });
     }
-    
+
     // Find session by refresh token hash
-    const sessionRepository = require('../repositories/sessionRepository');
+    const sessionRepository = require("../repositories/sessionRepository");
     const tokenHash = cryptoUtils.hashToken(token);
     const session = await sessionRepository.findByRefreshToken(tokenHash);
-    
+
     if (!session) {
       return res.status(401).json({
         success: false,
-        message: 'Session not found or expired.',
+        message: "Session not found or expired.",
       });
     }
-    
+
     // Generate new tokens
     const newAccessToken = cryptoUtils.generateAccessToken(
       { userId: session.user_id, sessionId: session.id },
-      process.env.JWT_ACCESS_EXPIRY || '15m'
+      process.env.JWT_ACCESS_EXPIRY || "15m"
     );
-    
+
     const newRefreshToken = cryptoUtils.generateRefreshToken(
-      { userId: session.user_id, sessionId: session.id, tokenFamilyId: session.token_family_id },
-      process.env.JWT_REFRESH_EXPIRY || '7d'
+      {
+        userId: session.user_id,
+        sessionId: session.id,
+        tokenFamilyId: session.token_family_id,
+      },
+      process.env.JWT_REFRESH_EXPIRY || "7d"
     );
-    
+
     // Update session with new token hashes
     const newAccessTokenHash = cryptoUtils.hashToken(newAccessToken);
     const newRefreshTokenHash = cryptoUtils.hashToken(newRefreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-    
+
     await sessionRepository.updateTokens(
       session.id,
       newAccessTokenHash,
       newRefreshTokenHash,
       expiresAt
     );
-    
+
     return res.json({
       success: true,
-      message: 'Token refreshed successfully.',
+      message: "Token refreshed successfully.",
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
     });
   } catch (error) {
-    logger.error('Error in refreshToken:', error);
+    logger.error("Error in refreshToken:", error);
     next(error);
   }
 };
@@ -671,18 +887,22 @@ const refreshToken = async (req, res, next) => {
  */
 const logout = async (req, res, next) => {
   try {
-    const sessionRepository = require('../repositories/sessionRepository');
-    
+    const sessionRepository = require("../repositories/sessionRepository");
+
     if (req.session?.id) {
-      await sessionRepository.revoke(req.session.id, req.user.id, 'user_logout');
+      await sessionRepository.revoke(
+        req.session.id,
+        req.user.id,
+        "user_logout"
+      );
     }
-    
+
     return res.json({
       success: true,
-      message: 'Logged out successfully.',
+      message: "Logged out successfully.",
     });
   } catch (error) {
-    logger.error('Error in logout:', error);
+    logger.error("Error in logout:", error);
     next(error);
   }
 };
@@ -692,21 +912,21 @@ const logout = async (req, res, next) => {
  */
 const logoutAll = async (req, res, next) => {
   try {
-    const sessionRepository = require('../repositories/sessionRepository');
-    
+    const sessionRepository = require("../repositories/sessionRepository");
+
     const revokedCount = await sessionRepository.revokeAllForUser(
       req.user.id,
       req.session?.id, // Keep current session active
-      'user_logout_all'
+      "user_logout_all"
     );
-    
+
     return res.json({
       success: true,
       message: `Logged out from ${revokedCount} device(s).`,
       revokedSessions: revokedCount,
     });
   } catch (error) {
-    logger.error('Error in logoutAll:', error);
+    logger.error("Error in logoutAll:", error);
     next(error);
   }
 };
@@ -717,14 +937,14 @@ const logoutAll = async (req, res, next) => {
 const getCurrentUser = async (req, res, next) => {
   try {
     const user = await userRepository.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found.',
+        message: "User not found.",
       });
     }
-    
+
     return res.json({
       success: true,
       user: {
@@ -738,7 +958,7 @@ const getCurrentUser = async (req, res, next) => {
       },
     });
   } catch (error) {
-    logger.error('Error in getCurrentUser:', error);
+    logger.error("Error in getCurrentUser:", error);
     next(error);
   }
 };
@@ -750,32 +970,35 @@ const requestMagicLink = async (req, res, next) => {
   try {
     const { email } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    
+    const userAgent = req.headers["user-agent"];
+
     // Check rate limiting
-    const magicLinkRepository = require('../repositories/magicLinkRepository');
-    const isRateLimited = await magicLinkRepository.isEmailRateLimited(email, 3);
-    
+    const magicLinkRepository = require("../repositories/magicLinkRepository");
+    const isRateLimited = await magicLinkRepository.isEmailRateLimited(
+      email,
+      3
+    );
+
     if (isRateLimited) {
       return res.status(429).json({
         success: false,
-        message: 'Too many magic link requests. Please try again later.',
+        message: "Too many magic link requests. Please try again later.",
       });
     }
-    
+
     // Find or prepare user
     let user = await userRepository.findByEmail(email);
-    const purpose = user ? 'login' : 'signup';
-    
+    const purpose = user ? "login" : "signup";
+
     // Generate magic link token
-    const cryptoUtils = require('../utils/crypto');
+    const cryptoUtils = require("../utils/crypto");
     const token = cryptoUtils.generateToken(32);
     const tokenHash = cryptoUtils.hashToken(token);
-    
+
     // Calculate expiry
     const expiryMinutes = parseInt(process.env.MAGIC_LINK_EXPIRY_MINUTES) || 15;
     const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
-    
+
     // Save magic link to database
     await magicLinkRepository.create({
       userId: user?.id || null,
@@ -787,46 +1010,60 @@ const requestMagicLink = async (req, res, next) => {
       userAgent,
       maxAttempts: 3,
     });
-    
+
     // Send email via SendGrid
-    const sgMail = require('@sendgrid/mail');
+    const sgMail = require("@sendgrid/mail");
     const apiKey = process.env.SENDGRID_API_KEY;
-    
+
     if (!apiKey) {
-      logger.warn('SendGrid API key not configured. Magic link logged to console.');
+      logger.warn(
+        "SendGrid API key not configured. Magic link logged to console."
+      );
       const magicLink = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
       logger.info(`\n🔗 [MAGIC LINK] for ${email}:\n${magicLink}\n`);
-      
+
       return res.json({
         success: true,
-        message: 'Magic link generated. Check server console.',
-        mode: 'console',
+        message: "Magic link generated. Check server console.",
+        mode: "console",
       });
     }
-    
+
     sgMail.setApiKey(apiKey);
-    
+
     // Create both web and deep link URLs
     const webLink = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
     const deepLink = `teetimegolf://auth/magic-link?token=${token}`;
     const universalLink = `${process.env.API_URL}/auth/magic-link-redirect?token=${token}`;
-    
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@teetimeapp.com';
-    const fromName = process.env.SENDGRID_FROM_NAME || 'TeeTime Golf App';
-    
+
+    const fromEmail =
+      process.env.SENDGRID_FROM_EMAIL || "noreply@teetimeapp.com";
+    const fromName = process.env.SENDGRID_FROM_NAME || "TeeTime Golf App";
+
     const msg = {
       to: email,
       from: { email: fromEmail, name: fromName },
-      subject: purpose === 'login' ? 'Your TeeTime Login Link' : 'Welcome to TeeTime Golf',
-      text: `Click this link to ${purpose === 'login' ? 'log in' : 'sign up'}: ${universalLink}\n\nThis link expires in ${expiryMinutes} minutes.`,
+      subject:
+        purpose === "login"
+          ? "Your TeeTime Login Link"
+          : "Welcome to TeeTime Golf",
+      text: `Click this link to ${
+        purpose === "login" ? "log in" : "sign up"
+      }: ${universalLink}\n\nThis link expires in ${expiryMinutes} minutes.`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2c3e50;">${purpose === 'login' ? 'Log in to TeeTime Golf' : 'Welcome to TeeTime Golf'}</h2>
-          <p style="color: #555; font-size: 16px;">Click the button below to ${purpose === 'login' ? 'log in' : 'complete your signup'}:</p>
+          <h2 style="color: #2c3e50;">${
+            purpose === "login"
+              ? "Log in to TeeTime Golf"
+              : "Welcome to TeeTime Golf"
+          }</h2>
+          <p style="color: #555; font-size: 16px;">Click the button below to ${
+            purpose === "login" ? "log in" : "complete your signup"
+          }:</p>
           
           <div style="text-align: center; margin: 30px 0;">
             <a href="${universalLink}" style="display: inline-block; padding: 15px 30px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">
-              ${purpose === 'login' ? '🏌️ Log In to TeeTime' : '🏌️ Get Started'}
+              ${purpose === "login" ? "🏌️ Log In to TeeTime" : "🏌️ Get Started"}
             </a>
           </div>
           
@@ -849,33 +1086,35 @@ const requestMagicLink = async (req, res, next) => {
         </div>
       `,
     };
-    
+
     try {
       await sgMail.send(msg);
       logger.info(`Magic link sent to ${email}`);
-      
+
       return res.json({
         success: true,
-        message: 'Magic link sent to your email.',
+        message: "Magic link sent to your email.",
         expiresInMinutes: expiryMinutes,
       });
     } catch (error) {
-      logger.error('SendGrid error:', error);
-      
+      logger.error("SendGrid error:", error);
+
       // Fallback to console in development
-      if (process.env.NODE_ENV === 'development') {
-        logger.info(`\n🔗 [SENDGRID FAILED - FALLBACK] Magic link for ${email}:\n${magicLink}\n`);
+      if (process.env.NODE_ENV === "development") {
+        logger.info(
+          `\n🔗 [SENDGRID FAILED - FALLBACK] Magic link for ${email}:\n${magicLink}\n`
+        );
         return res.json({
           success: true,
-          message: 'Magic link generated. Check server console.',
-          mode: 'console_fallback',
+          message: "Magic link generated. Check server console.",
+          mode: "console_fallback",
         });
       }
-      
+
       throw error;
     }
   } catch (error) {
-    logger.error('Error in requestMagicLink:', error);
+    logger.error("Error in requestMagicLink:", error);
     next(error);
   }
 };
@@ -887,7 +1126,7 @@ const requestMagicLink = async (req, res, next) => {
 const magicLinkRedirect = async (req, res, next) => {
   try {
     const { token } = req.query;
-    
+
     if (!token) {
       return res.status(400).send(`
         <!DOCTYPE html>
@@ -912,11 +1151,11 @@ const magicLinkRedirect = async (req, res, next) => {
         </html>
       `);
     }
-    
+
     // Try to open the app with deep link, fallback to web verification
     const deepLink = `teetimegolf://auth/magic-link?token=${token}`;
     const webFallback = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
-    
+
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1017,7 +1256,7 @@ const magicLinkRedirect = async (req, res, next) => {
       </html>
     `);
   } catch (error) {
-    logger.error('Error in magicLinkRedirect:', error);
+    logger.error("Error in magicLinkRedirect:", error);
     next(error);
   }
 };
@@ -1028,44 +1267,44 @@ const magicLinkRedirect = async (req, res, next) => {
 const verifyMagicLink = async (req, res, next) => {
   try {
     const { token } = req.query;
-    
+
     if (!token) {
       return res.status(400).json({
         success: false,
-        message: 'Magic link token is required.',
+        message: "Magic link token is required.",
       });
     }
-    
+
     // Hash token and find in database
-    const cryptoUtils = require('../utils/crypto');
+    const cryptoUtils = require("../utils/crypto");
     const tokenHash = cryptoUtils.hashToken(token);
-    
-    const magicLinkRepository = require('../repositories/magicLinkRepository');
+
+    const magicLinkRepository = require("../repositories/magicLinkRepository");
     const magicLink = await magicLinkRepository.findByTokenHash(tokenHash);
-    
+
     if (!magicLink) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired magic link.',
+        message: "Invalid or expired magic link.",
       });
     }
-    
+
     // Check max attempts
     if (magicLink.attempts >= magicLink.max_attempts) {
       return res.status(400).json({
         success: false,
-        message: 'Magic link has been used too many times.',
+        message: "Magic link has been used too many times.",
       });
     }
-    
+
     // Mark as used
     await magicLinkRepository.markAsUsed(magicLink.id);
-    
+
     // Find or create user
-    let user = magicLink.user_id 
+    let user = magicLink.user_id
       ? await userRepository.findById(magicLink.user_id)
       : await userRepository.findByEmail(magicLink.email);
-    
+
     if (!user) {
       // Create new user
       user = await userRepository.create({
@@ -1073,26 +1312,26 @@ const verifyMagicLink = async (req, res, next) => {
         isVerified: true,
       });
     }
-    
+
     // Generate session tokens
-    const sessionRepository = require('../repositories/sessionRepository');
+    const sessionRepository = require("../repositories/sessionRepository");
     const tokenFamilyId = cryptoUtils.generateSessionId();
-    
+
     const accessToken = cryptoUtils.generateAccessToken(
       { userId: user.id },
-      process.env.JWT_ACCESS_EXPIRY || '15m'
+      process.env.JWT_ACCESS_EXPIRY || "15m"
     );
-    
+
     const refreshToken = cryptoUtils.generateRefreshToken(
       { userId: user.id, tokenFamilyId },
-      process.env.JWT_REFRESH_EXPIRY || '7d'
+      process.env.JWT_REFRESH_EXPIRY || "7d"
     );
-    
+
     // Create session
     const ipAddress = req.ip || req.connection.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const userAgent = req.headers["user-agent"];
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    
+
     await sessionRepository.create({
       userId: user.id,
       accessTokenHash: cryptoUtils.hashToken(accessToken),
@@ -1103,10 +1342,10 @@ const verifyMagicLink = async (req, res, next) => {
       expiresAt,
       rememberMe: true,
     });
-    
+
     return res.json({
       success: true,
-      message: 'Magic link verified successfully.',
+      message: "Magic link verified successfully.",
       accessToken,
       refreshToken,
       user: {
@@ -1116,7 +1355,7 @@ const verifyMagicLink = async (req, res, next) => {
       },
     });
   } catch (error) {
-    logger.error('Error in verifyMagicLink:', error);
+    logger.error("Error in verifyMagicLink:", error);
     next(error);
   }
 };

@@ -194,15 +194,14 @@ const updateProfile = async (userId, updates) => {
  * @param {string} deviceId
  * @returns {Promise<void>}
  */
-const updateLastLogin = async (userId, ipAddress, deviceId) => {
+const updateLastLogin = async (userId, ipAddress, deviceId = null) => {
   await query(
     `UPDATE users 
      SET last_login_at = NOW(), 
          last_login_ip = $1,
-         last_login_device_id = $2,
          failed_login_attempts = 0
-     WHERE id = $3`,
-    [ipAddress, deviceId, userId]
+     WHERE id = $2`,
+    [ipAddress, userId]
   );
 };
 

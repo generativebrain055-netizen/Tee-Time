@@ -19,7 +19,7 @@ export const useAuth = (navigation) => {
    * Request OTP for phone verification
    */
   const requestOtp = useCallback(
-    async (phoneNumber) => {
+    async (phoneNumber, purpose = "signup") => {
       setLoading(true);
       clearMessages();
 
@@ -27,13 +27,14 @@ export const useAuth = (navigation) => {
         const response = await fetch(API_ENDPOINTS.REQUEST_OTP, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phoneNumber }),
+          body: JSON.stringify({ phoneNumber, purpose }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || "Unable to send OTP.");
+          const errorMsg = data.message || "Unable to send OTP.";
+          throw new Error(errorMsg);
         }
 
         setStatus(data.message || "OTP sent successfully.");
@@ -42,8 +43,9 @@ export const useAuth = (navigation) => {
           resendAfterSeconds: data.resendAfterSeconds || 30,
         };
       } catch (err) {
-        setError(err.message || "Unable to send OTP.");
-        return { success: false };
+        const errorMessage = err.message || "Unable to send OTP.";
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       } finally {
         setLoading(false);
       }
@@ -52,7 +54,7 @@ export const useAuth = (navigation) => {
   );
 
   /**
-   * Verify OTP code
+   * Verify OTP code (for login - existing users only)
    */
   const verifyOtp = useCallback(
     async (phoneNumber, otpCode) => {
@@ -66,13 +68,31 @@ export const useAuth = (navigation) => {
           throw new Error("OTP must be exactly 6 digits");
         }
 
+        console.log("🔍 [FRONTEND] Verifying OTP for LOGIN:", {
+          phoneNumber,
+          originalOtp: otpCode,
+          cleanOtp,
+          otpLength: cleanOtp.length,
+        });
+
+        const requestBody = { phoneNumber, otp: cleanOtp, purpose: "login" };
+        console.log(
+          "📤 [FRONTEND] Sending request:",
+          JSON.stringify(requestBody, null, 2)
+        );
+
         const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phoneNumber, otp: cleanOtp }),
+          body: JSON.stringify(requestBody),
         });
 
         const data = await response.json();
+        console.log("📥 [FRONTEND] Response received:", {
+          status: response.status,
+          ok: response.ok,
+          data,
+        });
 
         if (!response.ok) {
           throw new Error(data.message || "Unable to verify OTP.");

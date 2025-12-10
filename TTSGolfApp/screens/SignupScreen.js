@@ -69,8 +69,9 @@ export default function SignupScreen({ navigation }) {
   const { translateAnim: cardTranslateY } = useSlideIn("bottom", 300);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  // Derived values
-  const fullPhoneNumber = `${selectedCountry.code}${formData.phoneNumber}`;
+  // Derived values - ensure phone number is digits only for E.164 format
+  const phoneDigitsOnly = formData.phoneNumber.replace(/\D/g, "");
+  const fullPhoneNumber = `${selectedCountry.code}${phoneDigitsOnly}`;
 
   // OTP Timer effect
   useEffect(() => {
@@ -112,7 +113,8 @@ export default function SignupScreen({ navigation }) {
       Alert.alert("Error", "Username must be at least 3 characters");
       return false;
     }
-    if (!formData.phoneNumber.trim() || formData.phoneNumber.length < 10) {
+    // Validate phone number using digits only
+    if (phoneDigitsOnly.length < 8) {
       Alert.alert("Error", "Please enter a valid phone number");
       return false;
     }
@@ -142,15 +144,17 @@ export default function SignupScreen({ navigation }) {
         return;
       }
 
-      const result = await registerUser({
-        phoneNumber: fullPhoneNumber,
-        otp: otp,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        username: formData.username,
-        handicap: formData.handicap,
-        password: formData.password,
-      });
+      const result = await registerUser(
+        {
+          phoneNumber: fullPhoneNumber,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          username: formData.username,
+          handicap: formData.handicap,
+          password: formData.password,
+        },
+        otp
+      );
 
       if (result.success) {
         const userName =

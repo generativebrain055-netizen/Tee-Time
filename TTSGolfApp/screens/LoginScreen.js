@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 
 // Theme & Constants
 import {
@@ -125,7 +126,8 @@ export default function LoginScreen({ navigation }) {
   const handleRequestOtp = async (isResend = false) => {
     if (!isPhoneValid || loading) return;
 
-    const result = await requestOtp(e164Phone);
+    // Pass 'login' purpose for existing users only
+    const result = await requestOtp(e164Phone, "login");
     if (result.success) {
       if (!isResend) {
         animateStepChange(() => setCurrentStep("otp"));
@@ -272,20 +274,38 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.cardTitle}>{stepContent.title}</Text>
                 <Text style={styles.cardSubtitle}>{stepContent.subtitle}</Text>
 
-                {/* Phone Input */}
+                {/* Phone Input with Country Code */}
                 {currentStep === "phone" && (
                   <View style={styles.phoneInputWrapper}>
-                    <StyledTextInput
-                      placeholder="(555) 123-4567"
-                      keyboardType="phone-pad"
-                      value={formatPhoneNumber(phoneNumber)}
-                      onChangeText={(text) =>
-                        setPhoneNumber(text.replace(/\D/g, ""))
-                      }
-                      maxLength={14}
-                      textAlign="center"
-                      containerStyle={styles.phoneInputFixed}
-                    />
+                    <View style={styles.phoneInputRow}>
+                      <TouchableOpacity
+                        style={styles.countryCodeButton}
+                        onPress={() => setModalVisible(true)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.flagText}>
+                          {selectedCountry.flag}
+                        </Text>
+                        <Text style={styles.countryCodeText}>
+                          {selectedCountry.code}
+                        </Text>
+                        <Ionicons
+                          name="chevron-down"
+                          size={14}
+                          color={colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      <StyledTextInput
+                        placeholder="3051234567"
+                        keyboardType="phone-pad"
+                        value={phoneNumber}
+                        onChangeText={(text) =>
+                          setPhoneNumber(text.replace(/\D/g, ""))
+                        }
+                        maxLength={12}
+                        containerStyle={styles.phoneInputField}
+                      />
+                    </View>
                   </View>
                 )}
 
@@ -446,14 +466,39 @@ const styles = {
   ...linkStyles,
   // Use shared footer styles
   ...footerStyles,
-  // Phone input fixed width/height styles
+  // Phone input styles
   phoneInputWrapper: {
     width: "100%",
     alignItems: "center",
+    marginBottom: spacing.md,
   },
-  phoneInputFixed: {
-    width: SCREEN_WIDTH * 0.55, // 55% of screen width for better visibility
-    minHeight: SCREEN_HEIGHT * 0.065, // ~6.5% of screen height
+  phoneInputRow: {
+    flexDirection: "row",
+    width: SCREEN_WIDTH * 0.75,
+    height: 56,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  countryCodeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    backgroundColor: colors.primaryLight,
+    borderRightWidth: 1,
+    borderRightColor: colors.surfaceDark,
+    gap: 4,
+  },
+  flagText: {
+    fontSize: 20,
+  },
+  countryCodeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  phoneInputField: {
+    flex: 1,
     marginBottom: 0,
   },
 };
