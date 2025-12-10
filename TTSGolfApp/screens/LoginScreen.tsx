@@ -11,6 +11,7 @@ import {
   Keyboard,
   ViewStyle,
   TextStyle,
+  TextInput as RNTextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -37,7 +38,6 @@ import type { CountryCode } from "../types";
 // Shared Components
 import {
   PrimaryButton,
-  TextInput as StyledTextInput,
   OTPInput,
   CountryCodeModal,
   IconContainer,
@@ -82,7 +82,7 @@ interface LocalStyles {
   countryCodeButton: ViewStyle;
   flagText: TextStyle;
   countryCodeText: TextStyle;
-  phoneInputField: ViewStyle;
+  phoneInput: TextStyle;
 }
 
 export default function LoginScreen({
@@ -276,15 +276,16 @@ export default function LoginScreen({
                           color={colors.textSecondary}
                         />
                       </TouchableOpacity>
-                      <StyledTextInput
+                      <RNTextInput
+                        style={styles.phoneInput}
                         placeholder="3051234567"
+                        placeholderTextColor={colors.placeholder}
                         keyboardType="phone-pad"
                         value={phoneNumber}
                         onChangeText={(text: string) =>
                           setPhoneNumber(text.replace(/\D/g, ""))
                         }
                         maxLength={12}
-                        containerStyle={styles.phoneInputField}
                       />
                     </View>
                   </View>
@@ -423,9 +424,13 @@ const localStyles: LocalStyles = {
     fontWeight: "600",
     color: colors.textPrimary,
   },
-  phoneInputField: {
+  phoneInput: {
     flex: 1,
-    marginBottom: 0,
+    height: "100%",
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: colors.textPrimary,
+    backgroundColor: "transparent",
   },
 };
 
