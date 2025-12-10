@@ -27,7 +27,7 @@ router.post(
       ),
   ],
   validateRequest,
-  logAuthEvent('otp_requested'),
+  logAuthEvent("otp_requested"),
   authController.requestOTP
 );
 
@@ -52,7 +52,7 @@ router.post(
       .withMessage("OTP must be 6 digits"),
   ],
   validateRequest,
-  logAuthEvent('otp_verified'),
+  logAuthEvent("otp_verified"),
   authController.verifyOTP
 );
 
@@ -74,7 +74,7 @@ router.post(
       .withMessage("Password must be between 8 and 128 characters"),
   ],
   validateRequest,
-  logAuthEvent('password_set'),
+  logAuthEvent("password_set"),
   authController.setPassword
 );
 
@@ -105,7 +105,7 @@ router.post(
       .withMessage("rememberMe must be a boolean"),
   ],
   validateRequest,
-  logAuthEvent('login'),
+  logAuthEvent("login"),
   authController.login
 );
 
@@ -124,7 +124,7 @@ router.post(
       .withMessage("Refresh token is required"),
   ],
   validateRequest,
-  logAuthEvent('token_refreshed'),
+  logAuthEvent("token_refreshed"),
   authController.refreshToken
 );
 
@@ -133,7 +133,12 @@ router.post(
  * @desc    Logout current session
  * @access  Private
  */
-router.post("/logout", authenticate, logAuthEvent('logout'), authController.logout);
+router.post(
+  "/logout",
+  authenticate,
+  logAuthEvent("logout"),
+  authController.logout
+);
 
 /**
  * @route   POST /api/auth/logout-all
@@ -166,7 +171,7 @@ router.post(
       .withMessage("Invalid email address"),
   ],
   validateRequest,
-  logAuthEvent('magic_link_requested'),
+  logAuthEvent("magic_link_requested"),
   authController.requestMagicLink
 );
 
@@ -182,6 +187,94 @@ router.get("/magic-link-redirect", authController.magicLinkRedirect);
  * @desc    Verify magic link token (API endpoint for app)
  * @access  Public
  */
-router.get("/verify-magic", captureDeviceInfo, logAuthEvent('magic_link_verified'), authController.verifyMagicLink);
+router.get(
+  "/verify-magic",
+  captureDeviceInfo,
+  logAuthEvent("magic_link_verified"),
+  authController.verifyMagicLink
+);
+
+/**
+ * @route   POST /api/auth/sms-magic-link
+ * @desc    Request magic link via SMS for signup
+ * @access  Public
+ */
+router.post(
+  "/sms-magic-link",
+  captureDeviceInfo,
+  rateLimiter.magicLink,
+  [
+    body("phoneNumber")
+      .trim()
+      .notEmpty()
+      .withMessage("Phone number is required")
+      .matches(/^\+?[1-9]\d{6,14}$/)
+      .withMessage("Invalid phone number format"),
+  ],
+  validateRequest,
+  logAuthEvent("sms_magic_link_requested"),
+  authController.requestSmsMagicLink
+);
+
+/**
+ * @route   POST /api/auth/verify-sms-magic
+ * @desc    Verify SMS magic link token and complete signup
+ * @access  Public
+ */
+router.post(
+  "/verify-sms-magic",
+  captureDeviceInfo,
+  [body("token").trim().notEmpty().withMessage("Token is required")],
+  validateRequest,
+  logAuthEvent("sms_magic_link_verified"),
+  authController.verifySmsMagicLink
+);
+
+/**
+ * @route   POST /api/auth/register
+ * @desc    Direct user registration (passwordless, no OTP required)
+ * @access  Public
+ */
+router.post(
+  "/register",
+  captureDeviceInfo,
+  rateLimiter.otpRequest,
+  [
+    body("phoneNumber")
+      .trim()
+      .matches(/^\+[1-9]\d{1,14}$/)
+      .withMessage("Invalid phone number format. Must be E.164 format (+1234567890)"),
+    body("firstName")
+      .trim()
+      .notEmpty()
+      .withMessage("First name is required")
+      .isLength({ min: 1, max: 50 })
+      .withMessage("First name must be between 1 and 50 characters"),
+    body("lastName")
+      .trim()
+      .notEmpty()
+      .withMessage("Last name is required")
+      .isLength({ min: 1, max: 50 })
+      .withMessage("Last name must be between 1 and 50 characters"),
+    body("username")
+      .optional()
+      .trim()
+      .isLength({ min: 3, max: 50 })
+      .withMessage("Username must be between 3 and 50 characters"),
+    body("email")
+      .optional({ nullable: true })
+      .trim()
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Invalid email address"),
+    body("handicap")
+      .optional({ nullable: true })
+      .isInt({ min: 0, max: 54 })
+      .withMessage("Handicap must be between 0 and 54"),
+  ],
+  validateRequest,
+  logAuthEvent("user_registered"),
+  authController.registerUser
+);
 
 module.exports = router;

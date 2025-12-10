@@ -22,17 +22,18 @@ const create = async (linkData) => {
     userAgent,
     deviceFingerprint,
     maxAttempts = 3,
+    metadata = null,
   } = linkData;
 
   const result = await query(
     `INSERT INTO magic_links (
       user_id, email, phone_number, token_hash, purpose, 
-      expires_at, ip_address, user_agent, device_fingerprint, max_attempts
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING id, email, phone_number, purpose, created_at, expires_at`,
+      expires_at, ip_address, user_agent, device_fingerprint, max_attempts, metadata
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING id, email, phone_number, purpose, created_at, expires_at, metadata`,
     [
       userId || null,
-      email,
+      email || null,
       phoneNumber || null,
       tokenHash,
       purpose,
@@ -41,6 +42,7 @@ const create = async (linkData) => {
       userAgent || null,
       deviceFingerprint || null,
       maxAttempts,
+      metadata ? JSON.stringify(metadata) : null,
     ]
   );
 
@@ -56,7 +58,7 @@ const findByTokenHash = async (tokenHash) => {
   const result = await query(
     `SELECT id, user_id, email, phone_number, purpose, 
             attempts, max_attempts, is_used, used_at, 
-            created_at, expires_at
+            created_at, expires_at, metadata
      FROM magic_links
      WHERE token_hash = $1 
        AND is_used = false
@@ -220,6 +222,34 @@ const isEmailRateLimited = async (email, maxPerHour = 3) => {
   return count >= maxPerHour;
 };
 
+/**
+ * Count recent magic link requests for phone number
+ * @param {string} phoneNumber
+ * @param {number} windowMinutes
+ * @returns {Promise<number>}
+ */
+const countRecentRequestsByPhone = async (phoneNumber, windowMinutes = 60) => {
+  const result = await query(
+    `SELECT COUNT(*) as count
+     FROM magic_links
+     WHERE phone_number = $1 
+       AND created_at > NOW() - INTERVAL '${windowMinutes} minutes'`,
+    [phoneNumber]
+  );
+  return parseInt(result.rows[0].count, 10);
+};
+
+/**
+ * Check if phone is being rate limited
+ * @param {string} phoneNumber
+ * @param {number} maxPerHour
+ * @returns {Promise<boolean>}
+ */
+const isPhoneRateLimited = async (phoneNumber, maxPerHour = 3) => {
+  const count = await countRecentRequestsByPhone(phoneNumber, 60);
+  return count >= maxPerHour;
+};
+
 module.exports = {
   create,
   findByTokenHash,
@@ -227,9 +257,11 @@ module.exports = {
   markAsUsed,
   countRecentRequests,
   countRecentRequestsByIp,
+  countRecentRequestsByPhone,
   deleteExpired,
   invalidateAllForUser,
   getStatistics,
   getStatisticsByPurpose,
   isEmailRateLimited,
+  isPhoneRateLimited,
 };

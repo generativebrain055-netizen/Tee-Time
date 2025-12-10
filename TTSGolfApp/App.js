@@ -1,9 +1,14 @@
 import React, { useState } from "react";
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from "react-native-safe-area-context";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
 import HomePage from "./screens/HomePage";
+import { OnboardingScreen } from "./screens/onboarding";
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("Splash");
@@ -34,6 +39,9 @@ export default function App() {
         return <LoginScreen navigation={navigation} />;
       case "Signup":
         return <SignupScreen navigation={navigation} />;
+      case "Onboarding":
+        return <OnboardingScreen navigation={navigation} />;
+      case "HomePage":
       case "Home":
         return (
           <HomePage
@@ -46,5 +54,9 @@ export default function App() {
     }
   };
 
-  return renderScreen();
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      {renderScreen()}
+    </SafeAreaProvider>
+  );
 }

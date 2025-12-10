@@ -246,6 +246,7 @@ const requestOTP = async (req, res, next) => {
 
 /**
  * Helper function to create account after OTP verification
+ * Supports passwordless signup - password is optional
  */
 const createAccountAfterOTP = async (
   req,
@@ -263,32 +264,34 @@ const createAccountAfterOTP = async (
     const sessionRepository = require("../repositories/sessionRepository");
     const deviceFingerprint = require("../utils/deviceFingerprint");
 
-    // Validate password
-    if (!password || password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long.",
-      });
+    // Password is optional for passwordless signup
+    let passwordHash = null;
+    if (password && password.length >= 6) {
+      passwordHash = await bcrypt.hash(password, 10);
     }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
 
     // Check if user exists
     let user = await userRepository.findByPhoneNumber(phoneNumber);
 
     if (user) {
-      // Update existing user
-      user = await userRepository.updatePassword(user.id, passwordHash);
+      // Update existing user with new info
+      user = await userRepository.update(user.id, {
+        firstName: firstName || user.first_name,
+        lastName: lastName || user.last_name,
+        username: username || user.username,
+        handicap: handicap || user.handicap,
+        passwordHash: passwordHash || user.password_hash,
+        isVerified: true,
+      });
     } else {
-      // Create new user
+      // Create new user (passwordless)
       user = await userRepository.create({
         phoneNumber,
         firstName,
         lastName,
         username,
         handicap,
-        passwordHash,
+        passwordHash, // Can be null for passwordless
         isVerified: true,
       });
     }
@@ -470,29 +473,18 @@ const verifyOTP = async (req, res, next) => {
         return await loginUserAfterOTP(req, res, next, phoneNumber);
       }
 
-      // For SIGNUP purpose with password, create account directly
-      if (password) {
-        return await createAccountAfterOTP(
-          req,
-          res,
-          next,
-          phoneNumber,
-          firstName,
-          lastName,
-          username,
-          handicap,
-          password
-        );
-      }
-
-      // Otherwise return session token for set-password
-      const sessionToken = crypto.randomBytes(32).toString("hex");
-      return res.json({
-        success: true,
-        message: "OTP verified successfully. Please set your password.",
-        otpSessionToken: sessionToken,
+      // For SIGNUP purpose: Create account (passwordless)
+      return await createAccountAfterOTP(
+        req,
+        res,
+        next,
         phoneNumber,
-      });
+        firstName,
+        lastName,
+        username,
+        handicap,
+        password || null // Password is optional for passwordless signup
+      );
     }
 
     // Fallback to manual verification (if Verify API not available or failed)
@@ -557,29 +549,18 @@ const verifyOTP = async (req, res, next) => {
       return await loginUserAfterOTP(req, res, next, phoneNumber);
     }
 
-    // For SIGNUP: If password provided, create account directly
-    if (password) {
-      return await createAccountAfterOTP(
-        req,
-        res,
-        next,
-        phoneNumber,
-        firstName,
-        lastName,
-        username,
-        handicap,
-        password
-      );
-    }
-
-    // Otherwise return session token for set-password
-    const sessionToken = crypto.randomBytes(32).toString("hex");
-    return res.json({
-      success: true,
-      message: "OTP verified successfully. Please set your password.",
-      otpSessionToken: sessionToken,
+    // For SIGNUP: Create account without password (passwordless)
+    return await createAccountAfterOTP(
+      req,
+      res,
+      next,
       phoneNumber,
-    });
+      firstName,
+      lastName,
+      username,
+      handicap,
+      null // No password required - passwordless signup
+    );
   } catch (error) {
     logger.error("Error in verifyOTP:", error);
     next(error);
@@ -1360,6 +1341,324 @@ const verifyMagicLink = async (req, res, next) => {
   }
 };
 
+/**
+ * Request magic link via SMS for signup
+ * Sends magic link to phone number via Twilio SMS
+ */
+const requestSmsMagicLink = async (req, res, next) => {
+  try {
+    const { phoneNumber, userData } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    // Check rate limiting
+    const magicLinkRepository = require("../repositories/magicLinkRepository");
+    const isRateLimited = await magicLinkRepository.isPhoneRateLimited(
+      phoneNumber,
+      3
+    );
+
+    if (isRateLimited) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many magic link requests. Please try again later.",
+      });
+    }
+
+    // Check if user already exists with this phone
+    let user = await userRepository.findByPhoneNumber(phoneNumber);
+
+    if (user) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "An account with this phone number already exists. Please login instead.",
+      });
+    }
+
+    // Generate magic link token
+    const cryptoUtils = require("../utils/crypto");
+    const token = cryptoUtils.generateToken(32);
+    const tokenHash = cryptoUtils.hashToken(token);
+
+    // Calculate expiry
+    const expiryMinutes = parseInt(process.env.MAGIC_LINK_EXPIRY_MINUTES) || 15;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    // Store user data with the magic link for later account creation
+    // userData is stored in metadata field as JSON
+    await magicLinkRepository.create({
+      userId: null,
+      email: userData?.email || null,
+      phoneNumber,
+      tokenHash,
+      purpose: "signup",
+      expiresAt,
+      ipAddress,
+      userAgent,
+      maxAttempts: 3,
+      metadata: userData || null, // Store user data for account creation
+    });
+
+    // Create deep link URL
+    const deepLink = `teetimegolf://auth/signup-complete?token=${token}`;
+    const webLink = `${
+      process.env.API_URL || "http://localhost:3000"
+    }/auth/verify-signup?token=${token}`;
+
+    // Send SMS via Twilio
+    if (twilioClient) {
+      const fromNumber = process.env.TWILIO_FROM_NUMBER;
+
+      if (fromNumber) {
+        try {
+          await twilioClient.messages.create({
+            body: `Welcome to TeeTime Golf! 🏌️ Complete your signup: ${webLink}\n\nThis link expires in ${expiryMinutes} minutes.`,
+            from: fromNumber,
+            to: phoneNumber,
+          });
+
+          logger.info(`SMS magic link sent to ${phoneNumber}`);
+
+          return res.json({
+            success: true,
+            message: "Magic link sent to your phone via SMS.",
+            expiresInMinutes: expiryMinutes,
+            mode: "sms",
+          });
+        } catch (twilioError) {
+          logger.error("Twilio SMS error:", twilioError);
+          // Fall through to console logging
+        }
+      }
+    }
+
+    // Fallback: Log to console in development
+    logger.info(`\n🔗 [SMS MAGIC LINK] for ${phoneNumber}:`);
+    logger.info(`   Deep Link: ${deepLink}`);
+    logger.info(`   Web Link: ${webLink}`);
+    logger.info(`   Token: ${token}`);
+    logger.info(`   Expires in: ${expiryMinutes} minutes\n`);
+
+    return res.json({
+      success: true,
+      message: "Magic link generated. Check server console.",
+      expiresInMinutes: expiryMinutes,
+      mode: "console",
+      // Include token in dev for testing
+      ...(process.env.NODE_ENV === "development" && { devToken: token }),
+    });
+  } catch (error) {
+    logger.error("Error in requestSmsMagicLink:", error);
+    next(error);
+  }
+};
+
+/**
+ * Verify SMS magic link and complete signup
+ * Creates the user account when magic link is verified
+ */
+const verifySmsMagicLink = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Token is required.",
+      });
+    }
+
+    const cryptoUtils = require("../utils/crypto");
+    const magicLinkRepository = require("../repositories/magicLinkRepository");
+    const sessionRepository = require("../repositories/sessionRepository");
+    const deviceFingerprint = require("../utils/deviceFingerprint");
+
+    // Hash the token to find in database
+    const tokenHash = cryptoUtils.hashToken(token);
+    const magicLink = await magicLinkRepository.findByTokenHash(tokenHash);
+
+    if (!magicLink) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired magic link.",
+      });
+    }
+
+    // Check if max attempts reached
+    if (magicLink.attempts >= magicLink.max_attempts) {
+      return res.status(400).json({
+        success: false,
+        message: "Magic link has exceeded maximum attempts.",
+      });
+    }
+
+    // Increment attempts
+    await magicLinkRepository.incrementAttempts(magicLink.id);
+
+    // Mark as used
+    await magicLinkRepository.markAsUsed(magicLink.id);
+
+    // Get user data from metadata stored when magic link was created
+    const storedUserData = magicLink.metadata || {};
+
+    // Create the user account using stored metadata
+    const user = await userRepository.create({
+      phoneNumber: magicLink.phone_number,
+      email: storedUserData.email || magicLink.email,
+      firstName: storedUserData.firstName || null,
+      lastName: storedUserData.lastName || null,
+      username: storedUserData.username || null,
+      handicap: storedUserData.handicap || null,
+      passwordHash: null, // Passwordless signup
+      isVerified: true,
+    });
+
+    // Extract and save device info
+    const deviceInfo =
+      req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
+
+    // Generate JWT tokens
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || "15m"
+    );
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || "7d"
+    );
+
+    // Create session
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await sessionRepository.create({
+      userId: user.id,
+      deviceId: device?.id || null,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: true,
+    });
+
+    logger.info(`New user created via SMS magic link: ${user.id}`);
+
+    return res.json({
+      success: true,
+      message: "Account created successfully.",
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
+    });
+  } catch (error) {
+    logger.error("Error in verifySmsMagicLink:", error);
+    next(error);
+  }
+};
+
+/**
+ * Direct user registration (passwordless, no OTP required)
+ * Used for onboarding flow where phone is verified via magic link mock
+ */
+const registerUser = async (req, res, next) => {
+  try {
+    const {
+      phoneNumber,
+      firstName,
+      lastName,
+      username,
+      email,
+      handicap,
+    } = req.body;
+
+    logger.info("📝 [BACKEND] Direct user registration:", {
+      phoneNumber,
+      firstName,
+      lastName,
+      username,
+      email,
+      handicap,
+    });
+
+    // Check if user already exists with this phone number
+    const existingUser = await userRepository.findByPhoneNumber(phoneNumber);
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this phone number already exists. Please login instead.",
+      });
+    }
+
+    // Check if username is taken (if provided)
+    if (username) {
+      const existingUsername = await userRepository.findByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({
+          success: false,
+          message: "This username is already taken. Please choose another.",
+        });
+      }
+    }
+
+    // Create new user (passwordless)
+    const user = await userRepository.create({
+      phoneNumber,
+      firstName,
+      lastName,
+      username: username || `${firstName.toLowerCase()}${lastName.toLowerCase()}${Math.floor(Math.random() * 1000)}`,
+      email: email || null,
+      handicap: handicap ? parseInt(handicap) : null,
+      passwordHash: null, // Passwordless signup
+      isVerified: true,
+    });
+
+    logger.info("✅ [BACKEND] User registered successfully:", {
+      userId: user.id,
+      phoneNumber,
+      username: user.username,
+    });
+
+    return res.json({
+      success: true,
+      message: "Account created successfully. Please login to continue.",
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
+    });
+  } catch (error) {
+    logger.error("Error in registerUser:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   requestOTP,
   verifyOTP,
@@ -1372,4 +1671,7 @@ module.exports = {
   requestMagicLink,
   magicLinkRedirect,
   verifyMagicLink,
+  requestSmsMagicLink,
+  verifySmsMagicLink,
+  registerUser,
 };

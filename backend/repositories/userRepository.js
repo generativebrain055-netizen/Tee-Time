@@ -124,6 +124,50 @@ const create = async (userData) => {
 };
 
 /**
+ * Update user by ID (general update)
+ * @param {string} userId
+ * @param {Object} userData
+ * @returns {Promise<Object>}
+ */
+const update = async (userId, userData) => {
+  const {
+    firstName,
+    lastName,
+    username,
+    handicap,
+    passwordHash,
+    isVerified,
+    email,
+  } = userData;
+
+  const result = await query(
+    `UPDATE users SET 
+      first_name = COALESCE($1, first_name),
+      last_name = COALESCE($2, last_name),
+      username = COALESCE($3, username),
+      handicap = COALESCE($4, handicap),
+      password_hash = COALESCE($5, password_hash),
+      is_verified = COALESCE($6, is_verified),
+      email = COALESCE($7, email),
+      updated_at = NOW()
+    WHERE id = $8 AND deleted_at IS NULL
+    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, updated_at`,
+    [
+      firstName || null,
+      lastName || null,
+      username || null,
+      handicap ? parseInt(handicap) : null,
+      passwordHash, // Don't use || null here, we want to allow null to be set
+      isVerified !== undefined ? isVerified : null,
+      email || null,
+      userId,
+    ]
+  );
+
+  return result.rows[0];
+};
+
+/**
  * Update user password
  * @param {string} userId
  * @param {string} passwordHash
@@ -345,6 +389,7 @@ module.exports = {
   findById,
   findByUsername,
   create,
+  update,
   updatePassword,
   updateProfile,
   updateLastLogin,
