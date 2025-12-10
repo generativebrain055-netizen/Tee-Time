@@ -216,19 +216,118 @@ const requestOTP = async (req, res, next) => {
 };
 
 /**
+ * Helper function to create account after OTP verification
+ */
+const createAccountAfterOTP = async (req, res, next, phoneNumber, firstName, lastName, username, handicap, password) => {
+  try {
+    const cryptoUtils = require('../utils/crypto');
+    const sessionRepository = require('../repositories/sessionRepository');
+    const deviceFingerprint = require('../utils/deviceFingerprint');
+    
+    // Validate password
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long.',
+      });
+    }
+    
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    // Check if user exists
+    let user = await userRepository.findByPhoneNumber(phoneNumber);
+    
+    if (user) {
+      // Update existing user
+      user = await userRepository.updatePassword(user.id, passwordHash);
+    } else {
+      // Create new user
+      user = await userRepository.create({
+        phoneNumber,
+        firstName,
+        lastName,
+        username,
+        handicap,
+        passwordHash,
+        isVerified: true,
+      });
+    }
+    
+    // Extract and save device info
+    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
+    
+    // Generate JWT tokens
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || '15m'
+    );
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || '7d'
+    );
+    
+    // Create session
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    
+    await sessionRepository.create({
+      userId: user.id,
+      deviceId: device?.id || null,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: false,
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Account created successfully.',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
+    });
+  } catch (error) {
+    logger.error('Error creating account after OTP:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to create account. Please try again.',
+    });
+  }
+};
+
+/**
  * Verify OTP
  */
 const verifyOTP = async (req, res, next) => {
   try {
-    const { phoneNumber, otp } = req.body;
+    const { phoneNumber, otp, firstName, lastName, username, handicap, password } = req.body;
     
     // Try Twilio Verify API first
     const twilioVerified = await verifyOTPViaTwilio(phoneNumber, otp);
     
     if (twilioVerified === true) {
-      // OTP verified via Twilio Verify API
-      const sessionToken = crypto.randomBytes(32).toString('hex');
+      // If password provided, create account directly
+      if (password) {
+        return await createAccountAfterOTP(req, res, next, phoneNumber, firstName, lastName, username, handicap, password);
+      }
       
+      // Otherwise return session token for set-password
+      const sessionToken = crypto.randomBytes(32).toString('hex');
       return res.json({
         success: true,
         message: 'OTP verified successfully. Please set your password.',
@@ -270,9 +369,13 @@ const verifyOTP = async (req, res, next) => {
     // Mark OTP as verified
     await otpRepository.markAsVerified(otpRecord.id);
     
-    // Create temporary session token
-    const sessionToken = crypto.randomBytes(32).toString('hex');
+    // If password provided, create account directly
+    if (password) {
+      return await createAccountAfterOTP(req, res, next, phoneNumber, firstName, lastName, username, handicap, password);
+    }
     
+    // Otherwise return session token for set-password
+    const sessionToken = crypto.randomBytes(32).toString('hex');
     return res.json({
       success: true,
       message: 'OTP verified successfully. Please set your password.',
@@ -290,13 +393,20 @@ const verifyOTP = async (req, res, next) => {
  */
 const setPassword = async (req, res, next) => {
   try {
-    const { phoneNumber, password, otpSessionToken } = req.body;
+    const { phoneNumber, password, otpSessionToken, firstName, lastName, username, handicap } = req.body;
+    const cryptoUtils = require('../utils/crypto');
+    const sessionRepository = require('../repositories/sessionRepository');
+    const deviceFingerprint = require('../utils/deviceFingerprint');
     
     // Validate password
-    if (!password || password.length < 8) {
+    const validation = require('../utils/validation');
+    const passwordValidation = validation.validatePassword(password);
+    
+    if (!passwordValidation.isValid) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 8 characters long.',
+        message: passwordValidation.errors[0],
+        errors: passwordValidation.errors,
       });
     }
     
@@ -311,14 +421,59 @@ const setPassword = async (req, res, next) => {
     } else {
       user = await userRepository.create({
         phoneNumber,
+        firstName,
+        lastName,
+        username,
+        handicap,
         passwordHash,
+        isVerified: true,
       });
     }
     
+    // Extract and save device info
+    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
+    
+    // Generate JWT tokens and create session
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || '15m'
+    );
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || '7d'
+    );
+    
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    
+    await sessionRepository.create({
+      userId: user.id,
+      deviceId: device?.id || null,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: false,
+    });
+    
     return res.json({
       success: true,
-      message: 'Password set successfully. You can now login.',
-      userId: user.id,
+      message: 'Account created successfully.',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+      },
     });
   } catch (error) {
     logger.error('Error in setPassword:', error);
@@ -331,36 +486,105 @@ const setPassword = async (req, res, next) => {
  */
 const login = async (req, res, next) => {
   try {
-    const { phoneNumber, password } = req.body;
+    const { phoneNumber, username, password, rememberMe } = req.body;
+    const cryptoUtils = require('../utils/crypto');
+    const sessionRepository = require('../repositories/sessionRepository');
+    const deviceFingerprint = require('../utils/deviceFingerprint');
     
-    const user = await userRepository.findByPhoneNumber(phoneNumber);
+    // Find user by phone or username
+    let user;
+    if (username) {
+      user = await userRepository.findByUsername(username);
+    } else if (phoneNumber) {
+      user = await userRepository.findByPhoneNumber(phoneNumber);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number or username is required.',
+      });
+    }
     
     if (!user || !user.password_hash) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid phone number or password.',
+        message: 'Invalid credentials.',
       });
     }
     
+    // Check if account is locked
+    if (user.is_locked && new Date(user.locked_until) > new Date()) {
+      const lockDuration = Math.ceil((new Date(user.locked_until) - new Date()) / 1000 / 60);
+      return res.status(401).json({
+        success: false,
+        message: `Account is locked. Try again in ${lockDuration} minutes.`,
+      });
+    }
+    
+    // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     
     if (!isValidPassword) {
+      // Increment failed login attempts
+      await userRepository.incrementFailedLoginAttempts(user.id);
+      
       return res.status(401).json({
         success: false,
-        message: 'Invalid phone number or password.',
+        message: 'Invalid credentials.',
       });
     }
     
-    // Generate session token (implement JWT or session management)
-    const token = crypto.randomBytes(32).toString('hex');
+    // Reset failed login attempts
+    await userRepository.resetFailedLoginAttempts(user.id);
+    
+    // Extract and save device info
+    const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+    const device = await deviceFingerprint.saveDevice(user.id, deviceInfo);
+    
+    // Generate JWT tokens
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || '15m'
+    );
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || '7d'
+    );
+    
+    // Create session in database
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const expiresAt = new Date(Date.now() + (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000);
+    
+    const session = await sessionRepository.create({
+      userId: user.id,
+      deviceId: device?.id || null,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: rememberMe || false,
+    });
+    
+    // Update last login
+    await userRepository.updateLastLogin(user.id, ipAddress, device?.id);
     
     return res.json({
       success: true,
       message: 'Login successful.',
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         phoneNumber: user.phone_number,
+        email: user.email,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
       },
     });
   } catch (error) {
@@ -369,29 +593,532 @@ const login = async (req, res, next) => {
   }
 };
 
-// Placeholder functions for other auth methods
+/**
+ * Refresh access token using refresh token
+ */
 const refreshToken = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const { refreshToken: token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required.',
+      });
+    }
+    
+    // Verify refresh token
+    const cryptoUtils = require('../utils/crypto');
+    let decoded;
+    try {
+      decoded = cryptoUtils.verifyRefreshToken(token);
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token.',
+      });
+    }
+    
+    // Find session by refresh token hash
+    const sessionRepository = require('../repositories/sessionRepository');
+    const tokenHash = cryptoUtils.hashToken(token);
+    const session = await sessionRepository.findByRefreshToken(tokenHash);
+    
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session not found or expired.',
+      });
+    }
+    
+    // Generate new tokens
+    const newAccessToken = cryptoUtils.generateAccessToken(
+      { userId: session.user_id, sessionId: session.id },
+      process.env.JWT_ACCESS_EXPIRY || '15m'
+    );
+    
+    const newRefreshToken = cryptoUtils.generateRefreshToken(
+      { userId: session.user_id, sessionId: session.id, tokenFamilyId: session.token_family_id },
+      process.env.JWT_REFRESH_EXPIRY || '7d'
+    );
+    
+    // Update session with new token hashes
+    const newAccessTokenHash = cryptoUtils.hashToken(newAccessToken);
+    const newRefreshTokenHash = cryptoUtils.hashToken(newRefreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    await sessionRepository.updateTokens(
+      session.id,
+      newAccessTokenHash,
+      newRefreshTokenHash,
+      expiresAt
+    );
+    
+    return res.json({
+      success: true,
+      message: 'Token refreshed successfully.',
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    logger.error('Error in refreshToken:', error);
+    next(error);
+  }
 };
 
+/**
+ * Logout current session
+ */
 const logout = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const sessionRepository = require('../repositories/sessionRepository');
+    
+    if (req.session?.id) {
+      await sessionRepository.revoke(req.session.id, req.user.id, 'user_logout');
+    }
+    
+    return res.json({
+      success: true,
+      message: 'Logged out successfully.',
+    });
+  } catch (error) {
+    logger.error('Error in logout:', error);
+    next(error);
+  }
 };
 
+/**
+ * Logout from all devices
+ */
 const logoutAll = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const sessionRepository = require('../repositories/sessionRepository');
+    
+    const revokedCount = await sessionRepository.revokeAllForUser(
+      req.user.id,
+      req.session?.id, // Keep current session active
+      'user_logout_all'
+    );
+    
+    return res.json({
+      success: true,
+      message: `Logged out from ${revokedCount} device(s).`,
+      revokedSessions: revokedCount,
+    });
+  } catch (error) {
+    logger.error('Error in logoutAll:', error);
+    next(error);
+  }
 };
 
+/**
+ * Get current user profile
+ */
 const getCurrentUser = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const user = await userRepository.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+      });
+    }
+    
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        isVerified: user.is_verified,
+        createdAt: user.created_at,
+      },
+    });
+  } catch (error) {
+    logger.error('Error in getCurrentUser:', error);
+    next(error);
+  }
 };
 
+/**
+ * Request magic link for email authentication
+ */
 const requestMagicLink = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const { email } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    
+    // Check rate limiting
+    const magicLinkRepository = require('../repositories/magicLinkRepository');
+    const isRateLimited = await magicLinkRepository.isEmailRateLimited(email, 3);
+    
+    if (isRateLimited) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many magic link requests. Please try again later.',
+      });
+    }
+    
+    // Find or prepare user
+    let user = await userRepository.findByEmail(email);
+    const purpose = user ? 'login' : 'signup';
+    
+    // Generate magic link token
+    const cryptoUtils = require('../utils/crypto');
+    const token = cryptoUtils.generateToken(32);
+    const tokenHash = cryptoUtils.hashToken(token);
+    
+    // Calculate expiry
+    const expiryMinutes = parseInt(process.env.MAGIC_LINK_EXPIRY_MINUTES) || 15;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+    
+    // Save magic link to database
+    await magicLinkRepository.create({
+      userId: user?.id || null,
+      email,
+      tokenHash,
+      purpose,
+      expiresAt,
+      ipAddress,
+      userAgent,
+      maxAttempts: 3,
+    });
+    
+    // Send email via SendGrid
+    const sgMail = require('@sendgrid/mail');
+    const apiKey = process.env.SENDGRID_API_KEY;
+    
+    if (!apiKey) {
+      logger.warn('SendGrid API key not configured. Magic link logged to console.');
+      const magicLink = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
+      logger.info(`\n🔗 [MAGIC LINK] for ${email}:\n${magicLink}\n`);
+      
+      return res.json({
+        success: true,
+        message: 'Magic link generated. Check server console.',
+        mode: 'console',
+      });
+    }
+    
+    sgMail.setApiKey(apiKey);
+    
+    // Create both web and deep link URLs
+    const webLink = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
+    const deepLink = `teetimegolf://auth/magic-link?token=${token}`;
+    const universalLink = `${process.env.API_URL}/auth/magic-link-redirect?token=${token}`;
+    
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@teetimeapp.com';
+    const fromName = process.env.SENDGRID_FROM_NAME || 'TeeTime Golf App';
+    
+    const msg = {
+      to: email,
+      from: { email: fromEmail, name: fromName },
+      subject: purpose === 'login' ? 'Your TeeTime Login Link' : 'Welcome to TeeTime Golf',
+      text: `Click this link to ${purpose === 'login' ? 'log in' : 'sign up'}: ${universalLink}\n\nThis link expires in ${expiryMinutes} minutes.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2c3e50;">${purpose === 'login' ? 'Log in to TeeTime Golf' : 'Welcome to TeeTime Golf'}</h2>
+          <p style="color: #555; font-size: 16px;">Click the button below to ${purpose === 'login' ? 'log in' : 'complete your signup'}:</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${universalLink}" style="display: inline-block; padding: 15px 30px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">
+              ${purpose === 'login' ? '🏌️ Log In to TeeTime' : '🏌️ Get Started'}
+            </a>
+          </div>
+          
+          <p style="color: #777; font-size: 14px;">Or copy and paste this link in your browser:</p>
+          <p style="background: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all; font-size: 12px; color: #555;">
+            ${universalLink}
+          </p>
+          
+          <div style="margin-top: 30px; padding: 15px; background: #f0f8ff; border-left: 4px solid #4CAF50; border-radius: 5px;">
+            <p style="margin: 0; color: #555; font-size: 14px;">
+              <strong>📱 Using the mobile app?</strong><br>
+              The link will automatically open the TeeTime Golf app on your device.
+            </p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            <small>⏱️ This link expires in ${expiryMinutes} minutes.</small><br>
+            <small>If you didn't request this, you can safely ignore this email.</small>
+          </p>
+        </div>
+      `,
+    };
+    
+    try {
+      await sgMail.send(msg);
+      logger.info(`Magic link sent to ${email}`);
+      
+      return res.json({
+        success: true,
+        message: 'Magic link sent to your email.',
+        expiresInMinutes: expiryMinutes,
+      });
+    } catch (error) {
+      logger.error('SendGrid error:', error);
+      
+      // Fallback to console in development
+      if (process.env.NODE_ENV === 'development') {
+        logger.info(`\n🔗 [SENDGRID FAILED - FALLBACK] Magic link for ${email}:\n${magicLink}\n`);
+        return res.json({
+          success: true,
+          message: 'Magic link generated. Check server console.',
+          mode: 'console_fallback',
+        });
+      }
+      
+      throw error;
+    }
+  } catch (error) {
+    logger.error('Error in requestMagicLink:', error);
+    next(error);
+  }
 };
 
+/**
+ * Magic link redirect handler (Universal Link)
+ * Detects if mobile app is installed and redirects accordingly
+ */
+const magicLinkRedirect = async (req, res, next) => {
+  try {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Invalid Link - TeeTime Golf</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+            .container { background: white; padding: 40px; border-radius: 10px; max-width: 500px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { color: #e74c3c; }
+            p { color: #555; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>❌ Invalid Link</h1>
+            <p>This magic link is invalid or has expired.</p>
+            <p>Please request a new one from the app.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Try to open the app with deep link, fallback to web verification
+    const deepLink = `teetimegolf://auth/magic-link?token=${token}`;
+    const webFallback = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Opening TeeTime Golf...</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+          }
+          .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            max-width: 500px;
+            margin: 0 auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            color: #333;
+          }
+          .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .button {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-weight: bold;
+          }
+          .button:hover {
+            background: #45a049;
+          }
+          .info {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f0f8ff;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #555;
+          }
+        </style>
+        <script>
+          // Attempt to open the app
+          window.location.href = '${deepLink}';
+          
+          // Fallback to web after 2 seconds if app doesn't open
+          setTimeout(function() {
+            document.getElementById('status').innerHTML = 
+              '<p>App not installed? <a href="${webFallback}" class="button">Continue in Browser</a></p>';
+          }, 2000);
+          
+          // For iOS, try universal link approach
+          if (/(iPhone|iPad|iPod)/i.test(navigator.userAgent)) {
+            setTimeout(function() {
+              if (document.hidden || document.webkitHidden) {
+                // App opened successfully
+                return;
+              }
+              // App not installed, show web option
+              document.getElementById('status').innerHTML = 
+                '<p>📱 Install the TeeTime Golf app for the best experience!</p>' +
+                '<a href="${webFallback}" class="button">Continue in Browser</a>';
+            }, 1500);
+          }
+        </script>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🏌️ TeeTime Golf</h1>
+          <div class="spinner"></div>
+          <div id="status">
+            <p>Opening the app...</p>
+            <p style="font-size: 14px; color: #777;">Please wait a moment</p>
+          </div>
+          <div class="info">
+            <strong>💡 Tip:</strong> If the app doesn't open automatically, 
+            make sure you have the TeeTime Golf app installed on your device.
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error('Error in magicLinkRedirect:', error);
+    next(error);
+  }
+};
+
+/**
+ * Verify magic link token (API endpoint for app)
+ */
 const verifyMagicLink = async (req, res, next) => {
-  res.status(501).json({ message: 'Not implemented yet' });
+  try {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Magic link token is required.',
+      });
+    }
+    
+    // Hash token and find in database
+    const cryptoUtils = require('../utils/crypto');
+    const tokenHash = cryptoUtils.hashToken(token);
+    
+    const magicLinkRepository = require('../repositories/magicLinkRepository');
+    const magicLink = await magicLinkRepository.findByTokenHash(tokenHash);
+    
+    if (!magicLink) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired magic link.',
+      });
+    }
+    
+    // Check max attempts
+    if (magicLink.attempts >= magicLink.max_attempts) {
+      return res.status(400).json({
+        success: false,
+        message: 'Magic link has been used too many times.',
+      });
+    }
+    
+    // Mark as used
+    await magicLinkRepository.markAsUsed(magicLink.id);
+    
+    // Find or create user
+    let user = magicLink.user_id 
+      ? await userRepository.findById(magicLink.user_id)
+      : await userRepository.findByEmail(magicLink.email);
+    
+    if (!user) {
+      // Create new user
+      user = await userRepository.create({
+        email: magicLink.email,
+        isVerified: true,
+      });
+    }
+    
+    // Generate session tokens
+    const sessionRepository = require('../repositories/sessionRepository');
+    const tokenFamilyId = cryptoUtils.generateSessionId();
+    
+    const accessToken = cryptoUtils.generateAccessToken(
+      { userId: user.id },
+      process.env.JWT_ACCESS_EXPIRY || '15m'
+    );
+    
+    const refreshToken = cryptoUtils.generateRefreshToken(
+      { userId: user.id, tokenFamilyId },
+      process.env.JWT_REFRESH_EXPIRY || '7d'
+    );
+    
+    // Create session
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    
+    await sessionRepository.create({
+      userId: user.id,
+      accessTokenHash: cryptoUtils.hashToken(accessToken),
+      refreshTokenHash: cryptoUtils.hashToken(refreshToken),
+      tokenFamilyId,
+      ipAddress,
+      userAgent,
+      expiresAt,
+      rememberMe: true,
+    });
+    
+    return res.json({
+      success: true,
+      message: 'Magic link verified successfully.',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        phoneNumber: user.phone_number,
+      },
+    });
+  } catch (error) {
+    logger.error('Error in verifyMagicLink:', error);
+    next(error);
+  }
 };
 
 module.exports = {
@@ -404,5 +1131,6 @@ module.exports = {
   logoutAll,
   getCurrentUser,
   requestMagicLink,
+  magicLinkRedirect,
   verifyMagicLink,
 };

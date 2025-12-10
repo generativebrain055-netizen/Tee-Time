@@ -7,12 +7,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-export default function HomePage({ route }) {
+export default function HomePage({ route, navigation }) {
   const user = route?.params?.user || {
     firstName: 'Guest',
     lastName: 'User',
@@ -22,16 +24,58 @@ export default function HomePage({ route }) {
     socialRate: 100,
   };
 
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('accessToken');
+              await AsyncStorage.removeItem('refreshToken');
+              await AsyncStorage.removeItem('user');
+              if (navigation) {
+                if (navigation.replace) {
+                  navigation.replace('Login');
+                } else if (navigation.navigate) {
+                  navigation.navigate('Login');
+                }
+              }
+            } catch (error) {
+              console.error('Error signing out:', error);
+              Alert.alert('Error', 'Unable to sign out. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.welcomeText}>Welcome Back!</Text>
-          <Text style={styles.userName}>
-            {user.firstName} {user.lastName}
-          </Text>
+          <View>
+            <Text style={styles.welcomeText}>Welcome Back!</Text>
+            <Text style={styles.userName}>
+              {user.firstName} {user.lastName}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
 
         {/* User Card */}
@@ -155,6 +199,20 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 24,
     marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  signOutButton: {
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  signOutText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   welcomeText: {
     fontSize: 16,

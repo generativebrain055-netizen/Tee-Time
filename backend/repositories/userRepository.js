@@ -67,6 +67,26 @@ const findById = async (userId) => {
 };
 
 /**
+ * Find user by username
+ * @param {string} username
+ * @returns {Promise<Object|null>}
+ */
+const findByUsername = async (username) => {
+  const result = await query(
+    `SELECT id, phone_number, email, username, password_hash, is_active, is_verified, 
+            is_locked, locked_until, failed_login_attempts,
+            first_name, last_name, handicap, social_rate, avatar_url,
+            notification_preferences, timezone, language,
+            last_login_at, last_login_ip, created_at, updated_at
+     FROM users 
+     WHERE username = $1 AND deleted_at IS NULL 
+     LIMIT 1`,
+    [username]
+  );
+  return result.rows[0] || null;
+};
+
+/**
  * Create a new user
  * @param {Object} userData
  * @returns {Promise<Object>}
@@ -74,23 +94,29 @@ const findById = async (userId) => {
 const create = async (userData) => {
   const {
     phoneNumber,
+    email,
+    username,
     firstName,
     lastName,
     handicap,
     passwordHash,
+    isVerified,
   } = userData;
 
   const result = await query(
     `INSERT INTO users (
-      phone_number, first_name, last_name, handicap, password_hash
-    ) VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, phone_number, first_name, last_name, handicap, social_rate, created_at`,
+      phone_number, email, username, first_name, last_name, handicap, password_hash, is_verified
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, created_at`,
     [
-      phoneNumber,
+      phoneNumber || null,
+      email || null,
+      username || null,
       firstName || null,
       lastName || null,
       handicap ? parseInt(handicap) : null,
       passwordHash || null,
+      isVerified || false,
     ]
   );
 
@@ -318,6 +344,7 @@ module.exports = {
   findByPhoneNumber,
   findByEmail,
   findById,
+  findByUsername,
   create,
   updatePassword,
   updateProfile,

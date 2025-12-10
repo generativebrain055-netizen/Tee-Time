@@ -1,39 +1,78 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Modal,
   TouchableWithoutFeedback,
   Keyboard,
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { API_ENDPOINTS } from '../config/api';
-import { COUNTRY_CODES } from '../constants/countryCodes';
+  Animated,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+
+// Theme & Constants
+import {
+  colors,
+  spacing,
+  gradients,
+  headerStyles,
+  cardStyles,
+  formStyles,
+  buttonStyles,
+  linkStyles,
+  footerStyles,
+  phoneInputStyles,
+  otpStyles,
+} from "../theme";
+import { COUNTRY_CODES, getDefaultCountry } from "../constants/countryCodes";
+
+// Shared Components
+import {
+  PrimaryButton,
+  TextInput as StyledTextInput,
+  OTPInput,
+  CountryCodeModal,
+  LogoBox,
+} from "../components";
+
+// Hooks
+import { useAuth, useFadeIn, useSlideIn } from "../hooks";
 
 export default function SignupScreen({ navigation }) {
+  // State
   const [step, setStep] = useState(1); // 1: Basic Info, 2: OTP Verification
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    username: '',
-    phoneNumber: '',
-    handicap: '',
-    password: '',
+    firstName: "",
+    lastName: "",
+    username: "",
+    phoneNumber: "",
+    handicap: "",
+    password: "",
   });
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [selectedCountry, setSelectedCountry] = useState(getDefaultCountry());
   const [modalVisible, setModalVisible] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [otp, setOtp] = useState("");
   const [otpTimer, setOtpTimer] = useState(0);
 
+  // Auth hook
+  const { requestOtp, registerUser, loading, error, status, clearMessages } =
+    useAuth();
+
+  // Animations
+  const headerOpacity = useFadeIn(0);
+  const { translateAnim: cardTranslateY } = useSlideIn("bottom", 300);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // Derived values
+  const fullPhoneNumber = `${selectedCountry.code}${formData.phoneNumber}`;
+
+  // OTP Timer effect
   useEffect(() => {
     if (otpTimer > 0) {
       const timer = setTimeout(() => setOtpTimer(otpTimer - 1), 1000);
@@ -41,573 +80,384 @@ export default function SignupScreen({ navigation }) {
     }
   }, [otpTimer]);
 
+  // Step transition animation
+  const animateStepChange = (newStep) => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setTimeout(() => setStep(newStep), 150);
+  };
+
+  // Validation
+  const validateStep1 = () => {
+    if (!formData.firstName.trim()) {
+      Alert.alert("Error", "Please enter your first name");
+      return false;
+    }
+    if (!formData.lastName.trim()) {
+      Alert.alert("Error", "Please enter your last name");
+      return false;
+    }
+    if (!formData.username.trim() || formData.username.length < 3) {
+      Alert.alert("Error", "Username must be at least 3 characters");
+      return false;
+    }
+    if (!formData.phoneNumber.trim() || formData.phoneNumber.length < 10) {
+      Alert.alert("Error", "Please enter a valid phone number");
+      return false;
+    }
+    if (!formData.password.trim() || formData.password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters");
+      return false;
+    }
+    return true;
+  };
+
+  // Handlers
   const handleContinue = async () => {
     if (step === 1) {
-      // Validate basic info
-      if (!formData.firstName.trim()) {
-        Alert.alert('Error', 'Please enter your first name');
-        return;
-      }
-      if (!formData.lastName.trim()) {
-        Alert.alert('Error', 'Please enter your last name');
-        return;
-      }
-      if (!formData.username.trim() || formData.username.length < 3) {
-        Alert.alert('Error', 'Username must be at least 3 characters');
-        return;
-      }
-      if (!formData.phoneNumber.trim() || formData.phoneNumber.length < 10) {
-        Alert.alert('Error', 'Please enter a valid phone number');
-        return;
-      }
-      if (!formData.password.trim() || formData.password.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters');
-        return;
-      }
+      if (!validateStep1()) return;
 
-      // Request OTP
-      setLoading(true);
-      try {
-        const fullPhoneNumber = `${selectedCountry.code}${formData.phoneNumber}`;
-        const response = await fetch(API_ENDPOINTS.REQUEST_OTP, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phoneNumber: fullPhoneNumber }),
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-          Alert.alert('Success', 'OTP sent! Check your phone or console.');
-          setStep(2);
-          setOtpTimer(60); // 1 minute timer
-        } else {
-          Alert.alert('Error', data.message || 'Failed to send OTP');
-        }
-      } catch (error) {
-        Alert.alert('Error', 'Network error. Please try again.');
-      } finally {
-        setLoading(false);
+      const result = await requestOtp(fullPhoneNumber);
+      if (result.success) {
+        Alert.alert("Success", "OTP sent! Check your phone or console.");
+        animateStepChange(2);
+        setOtpTimer(60);
+      } else {
+        Alert.alert("Error", result.error || "Failed to send OTP");
       }
     } else if (step === 2) {
-      // Verify OTP and create account
       if (otp.length !== 6) {
-        Alert.alert('Error', 'Please enter the 6-digit OTP');
+        Alert.alert("Error", "Please enter the 6-digit OTP");
         return;
       }
 
-      setLoading(true);
-      try {
-        const fullPhoneNumber = `${selectedCountry.code}${formData.phoneNumber}`;
-        const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phoneNumber: fullPhoneNumber,
-            otp: otp,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            username: formData.username,
-            handicap: formData.handicap,
-            password: formData.password,
-          }),
-        });
+      const result = await registerUser({
+        phoneNumber: fullPhoneNumber,
+        otp: otp,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        username: formData.username,
+        handicap: formData.handicap,
+        password: formData.password,
+      });
 
-        const data = await response.json();
-        
-        if (data.success && data.user) {
-          const userName = data.user.firstName || formData.firstName || 'there';
-          Alert.alert('Success', `Welcome ${userName}! Account created successfully.`);
-          if (navigation) {
-            navigation.navigate('Home', { user: data.user });
+      if (result.success) {
+        const userName =
+          result.user?.firstName || formData.firstName || "there";
+        Alert.alert(
+          "Success",
+          `Welcome ${userName}! Account created successfully.`
+        );
+        navigation?.navigate("Home", { user: result.user });
+      } else {
+        let errorMessage = "Invalid OTP";
+        if (result.error) {
+          if (result.error.includes("expired")) {
+            errorMessage = "OTP has expired. Please request a new one.";
+          } else if (
+            result.error.includes("invalid") ||
+            result.error.includes("Invalid")
+          ) {
+            errorMessage =
+              "The OTP you entered is incorrect. Please try again.";
+          } else if (result.error.includes("attempts")) {
+            errorMessage =
+              "Too many failed attempts. Please request a new OTP.";
+          } else {
+            errorMessage = result.error;
           }
-        } else {
-          Alert.alert('Error', data.message || 'Invalid OTP');
         }
-      } catch (error) {
-        Alert.alert('Error', 'Network error. Please try again.');
-        console.error(error);
-      } finally {
-        setLoading(false);
+        Alert.alert("Verification Failed", errorMessage);
       }
     }
   };
 
+  const updateFormData = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const getStepContent = () => {
+    return step === 1
+      ? {
+          title: "Create Account",
+          subtitle: "Enter your details to get started",
+        }
+      : {
+          title: "Verify Number",
+          subtitle: "Enter the code sent to your phone",
+        };
+  };
+
+  const stepContent = getStepContent();
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <LinearGradient
+      colors={gradients.primary}
+      style={styles.container}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <StatusBar style="light" />
+
+      {/* Header */}
+      <Animated.View
+        style={[styles.headerGradient, { opacity: headerOpacity }]}
+      >
+        <SafeAreaView style={styles.headerContent}>
+          <LogoBox
+            source={require("../assets/striplogo.png")}
+            width={160}
+            height={90}
+            imageWidth={140}
+            imageHeight={70}
+          />
+          <Text style={styles.appName}>{stepContent.title}</Text>
+          <Text style={styles.tagline}>{stepContent.subtitle}</Text>
+        </SafeAreaView>
+      </Animated.View>
+
+      {/* Card */}
+      <Animated.View
+        style={[
+          styles.cardContainer,
+          { transform: [{ translateY: cardTranslateY }] },
+        ]}
+      >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+          style={styles.cardWrapper}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              {step === 1 ? 'Enter your details to get started' : 'Verify your phone number'}
-            </Text>
-          </View>
-
-          {/* Step 1: Basic Information */}
-          {step === 1 && (
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>First Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="John"
-                  placeholderTextColor="#999"
-                  value={formData.firstName}
-                  onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-                  autoCapitalize="words"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Last Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Doe"
-                  placeholderTextColor="#999"
-                  value={formData.lastName}
-                  onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-                  autoCapitalize="words"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="johndoe123"
-                  placeholderTextColor="#999"
-                  value={formData.username}
-                  onChangeText={(text) => setFormData({ ...formData, username: text.toLowerCase().replace(/\s/g, '') })}
-                  autoCapitalize="none"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number *</Text>
-                <View style={styles.phoneInputContainer}>
-                  <TouchableOpacity
-                    style={styles.countryCodeButton}
-                    onPress={() => setModalVisible(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.flagText}>{selectedCountry.flag}</Text>
-                    <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
-                    <Text style={styles.dropdownArrow}>▼</Text>
-                  </TouchableOpacity>
-
-                  <TextInput
-                    style={styles.phoneInput}
-                    placeholder="234 567 8900"
-                    placeholderTextColor="#999"
-                    value={formData.phoneNumber}
-                    onChangeText={(text) => setFormData({ ...formData, phoneNumber: text })}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Handicap (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 15"
-                  placeholderTextColor="#999"
-                  value={formData.handicap}
-                  onChangeText={(text) => setFormData({ ...formData, handicap: text })}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="At least 6 characters"
-                  placeholderTextColor="#999"
-                  value={formData.password}
-                  onChangeText={(text) => setFormData({ ...formData, password: text })}
-                  secureTextEntry
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Step 2: OTP Verification */}
-          {step === 2 && (
-            <View style={styles.form}>
-              <Text style={styles.otpInfo}>
-                We've sent a 6-digit code to {formData.phoneNumber}
-              </Text>
-              
-              {otpTimer > 0 && (
-                <View style={styles.timerContainer}>
-                  <Text style={styles.timerText}>⏱️ Code expires in: {otpTimer}s</Text>
-                </View>
-              )}
-
-              {otpTimer === 0 && (
-                <View style={styles.expiredContainer}>
-                  <Text style={styles.expiredText}>⚠️ OTP expired. Please request a new one.</Text>
-                </View>
-              )}
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Enter OTP *</Text>
-                <TextInput
-                  style={[styles.input, styles.otpInput]}
-                  placeholder="123456"
-                  placeholderTextColor="#999"
-                  value={otp}
-                  onChangeText={setOtp}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoFocus
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.resendButton}
-                onPress={() => setStep(1)}
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.card}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.resendText}>Change phone number</Text>
-              </TouchableOpacity>
+                <Animated.View style={{ opacity: fadeAnim }}>
+                  {/* Step 1: Basic Information */}
+                  {step === 1 && (
+                    <View style={styles.form}>
+                      <StyledTextInput
+                        label="First Name *"
+                        placeholder="John"
+                        value={formData.firstName}
+                        onChangeText={(text) =>
+                          updateFormData("firstName", text)
+                        }
+                        autoCapitalize="words"
+                      />
+
+                      <View style={styles.inputSpacer} />
+
+                      <StyledTextInput
+                        label="Last Name *"
+                        placeholder="Doe"
+                        value={formData.lastName}
+                        onChangeText={(text) =>
+                          updateFormData("lastName", text)
+                        }
+                        autoCapitalize="words"
+                      />
+
+                      <View style={styles.inputSpacer} />
+
+                      <StyledTextInput
+                        label="Username *"
+                        placeholder="johndoe123"
+                        value={formData.username}
+                        onChangeText={(text) =>
+                          updateFormData(
+                            "username",
+                            text.toLowerCase().replace(/\s/g, "")
+                          )
+                        }
+                        autoCapitalize="none"
+                      />
+
+                      <View style={styles.inputSpacer} />
+
+                      {/* Phone Input with Country Code */}
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Phone Number *</Text>
+                        <View style={styles.phoneInputContainer}>
+                          <TouchableOpacity
+                            style={styles.countryCodeButton}
+                            onPress={() => setModalVisible(true)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.flagText}>
+                              {selectedCountry.flag}
+                            </Text>
+                            <Text style={styles.countryCodeText}>
+                              {selectedCountry.code}
+                            </Text>
+                            <Ionicons
+                              name="chevron-down"
+                              size={14}
+                              color={colors.textSecondary}
+                            />
+                          </TouchableOpacity>
+                          <StyledTextInput
+                            placeholder="234 567 8900"
+                            value={formData.phoneNumber}
+                            onChangeText={(text) =>
+                              updateFormData("phoneNumber", text)
+                            }
+                            keyboardType="phone-pad"
+                            containerStyle={styles.phoneInputField}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.inputSpacer} />
+
+                      <StyledTextInput
+                        label="Handicap (Optional)"
+                        placeholder="e.g., 15"
+                        value={formData.handicap}
+                        onChangeText={(text) =>
+                          updateFormData("handicap", text)
+                        }
+                        keyboardType="numeric"
+                      />
+
+                      <View style={styles.inputSpacer} />
+
+                      <StyledTextInput
+                        label="Password *"
+                        placeholder="At least 6 characters"
+                        value={formData.password}
+                        onChangeText={(text) =>
+                          updateFormData("password", text)
+                        }
+                        secureTextEntry
+                      />
+                    </View>
+                  )}
+
+                  {/* Step 2: OTP Verification */}
+                  {step === 2 && (
+                    <View style={styles.form}>
+                      <Text style={styles.otpInfo}>
+                        We've sent a 6-digit code to {formData.phoneNumber}
+                      </Text>
+
+                      {otpTimer > 0 && (
+                        <View style={styles.timerContainer}>
+                          <Ionicons
+                            name="time-outline"
+                            size={18}
+                            color={colors.warning}
+                          />
+                          <Text style={styles.timerText}>
+                            Code expires in: {otpTimer}s
+                          </Text>
+                        </View>
+                      )}
+
+                      {otpTimer === 0 && (
+                        <View style={styles.expiredContainer}>
+                          <Ionicons
+                            name="warning-outline"
+                            size={18}
+                            color={colors.error}
+                          />
+                          <Text style={styles.expiredText}>
+                            OTP expired. Please request a new one.
+                          </Text>
+                        </View>
+                      )}
+
+                      <OTPInput value={otp} onChangeText={setOtp} length={6} />
+
+                      <TouchableOpacity
+                        style={styles.resendButton}
+                        onPress={() => animateStepChange(1)}
+                      >
+                        <Text style={styles.resendText}>
+                          Change phone number
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Continue Button */}
+                  <PrimaryButton
+                    title={step === 1 ? "Send OTP" : "Verify & Continue"}
+                    onPress={handleContinue}
+                    disabled={loading}
+                    loading={loading}
+                    icon="arrow-forward"
+                    style={styles.continueButton}
+                  />
+
+                  {/* Login Link */}
+                  {step === 1 && (
+                    <TouchableOpacity
+                      style={styles.loginLink}
+                      onPress={() => navigation?.navigate("Login")}
+                    >
+                      <Text style={styles.loginLinkText}>
+                        Already have an account?{" "}
+                        <Text style={styles.loginLinkBold}>Login</Text>
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </Animated.View>
+              </ScrollView>
             </View>
-          )}
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Animated.View>
 
-          {/* Continue Button */}
-          <TouchableOpacity
-            style={[styles.continueButton, loading && styles.continueButtonDisabled]}
-            onPress={handleContinue}
-            disabled={loading}
-          >
-            <Text style={styles.continueButtonText}>
-              {loading ? 'Please wait...' : step === 1 ? 'Send OTP' : 'Verify & Continue'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Login Link */}
-          {step === 1 && (
-            <TouchableOpacity
-              style={styles.loginLink}
-              onPress={() => navigation && navigation.navigate('Login')}
-            >
-              <Text style={styles.loginLinkText}>
-                Already have an account? <Text style={styles.loginLinkBold}>Login</Text>
-              </Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          © 2025 Tee Time Social. All rights reserved.
+        </Text>
+      </View>
 
       {/* Country Code Modal */}
-      <Modal
+      <CountryCodeModal
         visible={modalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Country Code</Text>
-              <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.countryList}>
-              {COUNTRY_CODES.map((country, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.countryItem,
-                    selectedCountry.code === country.code && styles.selectedCountryItem
-                  ]}
-                  onPress={() => {
-                    setSelectedCountry(country);
-                    setModalVisible(false);
-                  }}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.countryFlag}>{country.flag}</Text>
-                  <Text style={styles.countryName}>{country.country}</Text>
-                  <Text style={styles.countryCodeInList}>{country.code}</Text>
-                  {selectedCountry.code === country.code && (
-                    <Text style={styles.checkMark}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        onClose={() => setModalVisible(false)}
+        onSelect={setSelectedCountry}
+        selectedCountry={selectedCountry}
+      />
+    </LinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
+// Local styles that extend shared styles
+const styles = {
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
-  keyboardView: {
-    flex: 1,
-  },
+  // Shared styles
+  ...headerStyles,
+  ...cardStyles,
+  ...formStyles,
+  ...buttonStyles,
+  ...linkStyles,
+  ...footerStyles,
+  ...phoneInputStyles,
+  ...otpStyles,
+  // Signup-specific overrides
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
-    paddingBottom: 40,
+    paddingBottom: spacing.xl,
   },
-  header: {
-    marginTop: 20,
-    marginBottom: 30,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#666',
-  },
-  form: {
-    marginBottom: 24,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    height: 56,
-    borderWidth: 2,
-    borderColor: '#E8E8E8',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#FFFFFF',
-    color: '#000',
-  },
-  otpInput: {
-    fontSize: 24,
-    letterSpacing: 8,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  otpInfo: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  continueButton: {
-    height: 56,
-    backgroundColor: '#50C878',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#2D7A4F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    borderBottomWidth: 4,
-    borderBottomColor: '#3D9960',
-    marginTop: 10,
-  },
-  continueButtonDisabled: {
-    backgroundColor: '#D3D3D3',
-    borderBottomColor: '#A8A8A8',
-  },
-  continueButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  loginLink: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  loginLinkText: {
-    fontSize: 15,
-    color: '#666',
-  },
-  loginLinkBold: {
-    color: '#50C878',
-    fontWeight: '700',
-  },
-  resendButton: {
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  resendText: {
-    fontSize: 14,
-    color: '#50C878',
-    fontWeight: '600',
-  },
-  phoneInputContainer: {
-    flexDirection: 'row',
-    height: 56,
-    borderWidth: 2,
-    borderColor: '#E8E8E8',
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-  },
-  countryCodeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    backgroundColor: '#F8F9FA',
-    borderRightWidth: 2,
-    borderRightColor: '#E8E8E8',
-    minWidth: 110,
-  },
-  flagText: {
-    fontSize: 24,
-    marginRight: 6,
-  },
-  countryCodeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginRight: 4,
-  },
-  dropdownArrow: {
-    fontSize: 10,
-    color: '#666',
-  },
-  phoneInput: {
-    flex: 1,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#000',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '70%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 18,
-  },
-  closeButtonText: {
-    fontSize: 20,
-    color: '#666',
-    fontWeight: '600',
-  },
-  countryList: {
-    maxHeight: '100%',
-  },
-  countryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
-    backgroundColor: '#FFFFFF',
-  },
-  selectedCountryItem: {
-    backgroundColor: '#F0F8F0',
-  },
-  countryFlag: {
-    fontSize: 32,
-    marginRight: 15,
-    width: 40,
-  },
-  countryName: {
-    flex: 1,
-    fontSize: 16,
-    color: '#000000',
-    fontWeight: '500',
-  },
-  countryCodeInList: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#50C878',
-    marginRight: 8,
-  },
-  checkMark: {
-    fontSize: 20,
-    color: '#50C878',
-    fontWeight: 'bold',
-  },
-  timerContainer: {
-    backgroundColor: '#FFF3CD',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFC107',
-  },
-  timerText: {
-    fontSize: 14,
-    color: '#856404',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  expiredContainer: {
-    backgroundColor: '#F8D7DA',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F5C6CB',
-  },
-  expiredText: {
-    fontSize: 14,
-    color: '#721C24',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-});
+};

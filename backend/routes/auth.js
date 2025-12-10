@@ -4,6 +4,8 @@ const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/auth");
 const { validateRequest } = require("../middleware/validator");
 const rateLimiter = require("../middleware/rateLimiter");
+const { logAuthEvent } = require("../middleware/analytics");
+const { captureDeviceInfo } = require("../utils/deviceFingerprint");
 
 const router = Router();
 
@@ -14,6 +16,7 @@ const router = Router();
  */
 router.post(
   "/request-otp",
+  captureDeviceInfo,
   rateLimiter.otpRequest,
   [
     body("phoneNumber")
@@ -24,6 +27,7 @@ router.post(
       ),
   ],
   validateRequest,
+  logAuthEvent('otp_requested'),
   authController.requestOTP
 );
 
@@ -34,6 +38,7 @@ router.post(
  */
 router.post(
   "/verify-otp",
+  captureDeviceInfo,
   rateLimiter.otpVerify,
   [
     body("phoneNumber")
@@ -47,45 +52,52 @@ router.post(
       .withMessage("OTP must be 6 digits"),
   ],
   validateRequest,
+  logAuthEvent('otp_verified'),
   authController.verifyOTP
 );
 
 /**
  * @route   POST /api/auth/set-password
- * @desc    Set password after OTP verification
- * @access  Private (OTP session token required)
- */
-router.post(
-  "/set-password",
-  authenticate,
-  [
-    body("password")
-      .isLength({ min: 8, max: 128 })
-      .withMessage("Password must be between 8 and 128 characters")
-      .matches(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/
-      )
-      .withMessage(
-        "Password must contain at least one uppercase, lowercase, number, and special character"
-      ),
-  ],
-  validateRequest,
-  authController.setPassword
-);
-
-/**
- * @route   POST /api/auth/login
- * @desc    Login with phone number and password
+ * @desc    Set password after OTP verification (signup completion)
  * @access  Public
  */
 router.post(
-  "/login",
-  rateLimiter.login,
+  "/set-password",
+  captureDeviceInfo,
   [
     body("phoneNumber")
       .trim()
       .matches(/^\+[1-9]\d{1,14}$/)
       .withMessage("Invalid phone number format"),
+    body("password")
+      .isLength({ min: 8, max: 128 })
+      .withMessage("Password must be between 8 and 128 characters"),
+  ],
+  validateRequest,
+  logAuthEvent('password_set'),
+  authController.setPassword
+);
+
+/**
+ * @route   POST /api/auth/login
+ * @desc    Login with phone number/username and password
+ * @access  Public
+ */
+router.post(
+  "/login",
+  captureDeviceInfo,
+  rateLimiter.login,
+  [
+    body("phoneNumber")
+      .optional()
+      .trim()
+      .matches(/^\+[1-9]\d{1,14}$/)
+      .withMessage("Invalid phone number format"),
+    body("username")
+      .optional()
+      .trim()
+      .isLength({ min: 3, max: 50 })
+      .withMessage("Username must be between 3 and 50 characters"),
     body("password").trim().notEmpty().withMessage("Password is required"),
     body("rememberMe")
       .optional()
@@ -93,6 +105,7 @@ router.post(
       .withMessage("rememberMe must be a boolean"),
   ],
   validateRequest,
+  logAuthEvent('login'),
   authController.login
 );
 
@@ -111,6 +124,7 @@ router.post(
       .withMessage("Refresh token is required"),
   ],
   validateRequest,
+  logAuthEvent('token_refreshed'),
   authController.refreshToken
 );
 
@@ -119,7 +133,7 @@ router.post(
  * @desc    Logout current session
  * @access  Private
  */
-router.post("/logout", authenticate, authController.logout);
+router.post("/logout", authenticate, logAuthEvent('logout'), authController.logout);
 
 /**
  * @route   POST /api/auth/logout-all
@@ -142,6 +156,7 @@ router.get("/me", authenticate, authController.getCurrentUser);
  */
 router.post(
   "/magic-link",
+  captureDeviceInfo,
   rateLimiter.magicLink,
   [
     body("email")
@@ -151,14 +166,22 @@ router.post(
       .withMessage("Invalid email address"),
   ],
   validateRequest,
+  logAuthEvent('magic_link_requested'),
   authController.requestMagicLink
 );
 
 /**
- * @route   GET /api/auth/verify-magic
- * @desc    Verify magic link token
+ * @route   GET /api/auth/magic-link-redirect
+ * @desc    Universal link handler - redirects to app or web
  * @access  Public
  */
-router.get("/verify-magic", authController.verifyMagicLink);
+router.get("/magic-link-redirect", authController.magicLinkRedirect);
+
+/**
+ * @route   GET /api/auth/verify-magic
+ * @desc    Verify magic link token (API endpoint for app)
+ * @access  Public
+ */
+router.get("/verify-magic", captureDeviceInfo, logAuthEvent('magic_link_verified'), authController.verifyMagicLink);
 
 module.exports = router;
