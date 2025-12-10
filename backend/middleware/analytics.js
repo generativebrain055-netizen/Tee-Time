@@ -1,5 +1,5 @@
-const { query } = require('../config/database');
-const logger = require('../config/logger');
+const { query } = require("../config/database");
+const logger = require("../config/logger");
 
 /**
  * Analytics Middleware
@@ -14,7 +14,6 @@ const logEvent = async (eventData) => {
   try {
     const {
       userId,
-      eventType,
       eventCategory,
       eventName,
       eventData: data,
@@ -26,15 +25,14 @@ const logEvent = async (eventData) => {
 
     await query(
       `INSERT INTO analytics_events (
-        user_id, event_type, event_category, event_name, event_data,
+        user_id, event_name, event_category, event_properties,
         ip_address, user_agent, device_id, session_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         userId || null,
-        eventType,
-        eventCategory,
         eventName,
-        data ? JSON.stringify(data) : null,
+        eventCategory || null,
+        data ? JSON.stringify(data) : "{}",
         ipAddress || null,
         userAgent || null,
         deviceId || null,
@@ -43,7 +41,7 @@ const logEvent = async (eventData) => {
     );
   } catch (error) {
     // Don't throw errors for analytics failures
-    logger.error('Failed to log analytics event:', error);
+    logger.error("Failed to log analytics event:", error);
   }
 };
 
@@ -65,8 +63,7 @@ const logAuthEvent = (eventName) => {
 
           await logEvent({
             userId,
-            eventType: 'auth',
-            eventCategory: 'authentication',
+            eventCategory: "auth",
             eventName,
             eventData: {
               success,
@@ -76,12 +73,12 @@ const logAuthEvent = (eventName) => {
               ...(body.error && { error: body.error.message }),
             },
             ipAddress: req.ip || req.connection.remoteAddress,
-            userAgent: req.headers['user-agent'],
+            userAgent: req.headers["user-agent"],
             deviceId: req.session?.deviceId,
             sessionId: req.session?.id,
           });
         } catch (error) {
-          logger.error('Error logging auth event:', error);
+          logger.error("Error logging auth event:", error);
         }
       });
 
@@ -111,8 +108,7 @@ const logApiRequest = async (req, res, next) => {
       try {
         await logEvent({
           userId: req.user?.id,
-          eventType: 'api',
-          eventCategory: 'request',
+          eventCategory: "api",
           eventName: `${req.method} ${req.path}`,
           eventData: {
             method: req.method,
@@ -122,12 +118,12 @@ const logApiRequest = async (req, res, next) => {
             success: res.statusCode < 400,
           },
           ipAddress: req.ip || req.connection.remoteAddress,
-          userAgent: req.headers['user-agent'],
+          userAgent: req.headers["user-agent"],
           deviceId: req.session?.deviceId,
           sessionId: req.session?.id,
         });
       } catch (error) {
-        logger.error('Error logging API request:', error);
+        logger.error("Error logging API request:", error);
       }
     });
 
@@ -143,12 +139,11 @@ const logApiRequest = async (req, res, next) => {
 const logCustomEvent = async (req, eventCategory, eventName, eventData = {}) => {
   await logEvent({
     userId: req.user?.id,
-    eventType: 'custom',
     eventCategory,
     eventName,
     eventData,
     ipAddress: req.ip || req.connection.remoteAddress,
-    userAgent: req.headers['user-agent'],
+    userAgent: req.headers["user-agent"],
     deviceId: req.session?.deviceId,
     sessionId: req.session?.id,
   });
@@ -158,9 +153,9 @@ const logCustomEvent = async (req, eventCategory, eventName, eventData = {}) => 
  * Get analytics statistics
  */
 const getAnalyticsStats = async (filters = {}) => {
-  const { startDate, endDate, eventType, eventCategory, userId } = filters;
+  const { startDate, endDate, eventCategory, eventName, userId } = filters;
 
-  let whereClause = 'WHERE 1=1';
+  let whereClause = "WHERE 1=1";
   const params = [];
   let paramIndex = 1;
 
@@ -176,15 +171,15 @@ const getAnalyticsStats = async (filters = {}) => {
     paramIndex++;
   }
 
-  if (eventType) {
-    whereClause += ` AND event_type = $${paramIndex}`;
-    params.push(eventType);
-    paramIndex++;
-  }
-
   if (eventCategory) {
     whereClause += ` AND event_category = $${paramIndex}`;
     params.push(eventCategory);
+    paramIndex++;
+  }
+
+  if (eventName) {
+    whereClause += ` AND event_name = $${paramIndex}`;
+    params.push(eventName);
     paramIndex++;
   }
 
@@ -199,13 +194,12 @@ const getAnalyticsStats = async (filters = {}) => {
       COUNT(*) as total_events,
       COUNT(DISTINCT user_id) as unique_users,
       COUNT(DISTINCT session_id) as unique_sessions,
-      event_type,
       event_category,
       event_name,
       COUNT(*) as event_count
     FROM analytics_events
     ${whereClause}
-    GROUP BY event_type, event_category, event_name
+    GROUP BY event_category, event_name
     ORDER BY event_count DESC
     LIMIT 100`,
     params

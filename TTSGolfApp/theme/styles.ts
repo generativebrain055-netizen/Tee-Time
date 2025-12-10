@@ -17,21 +17,21 @@ import {
 export const headerStyles = StyleSheet.create({
   headerGradient: {
     paddingTop: Platform.OS === "android" ? 40 : 0,
-    paddingBottom: spacing.xxxl,
+    paddingBottom: spacing.xxl,
   } as ViewStyle,
   headerContent: {
     alignItems: "center",
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.lg,
   } as ViewStyle,
   appName: {
-    fontSize: fontSize.xxxl,
+    fontSize: fontSize.xxl,
     fontWeight: fontWeight.extrabold as TextStyle["fontWeight"],
     color: colors.white,
     marginBottom: spacing.xs,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   } as TextStyle,
   tagline: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.md,
     color: colors.textLight,
     fontWeight: fontWeight.medium as TextStyle["fontWeight"],
   } as TextStyle,
@@ -41,7 +41,7 @@ export const headerStyles = StyleSheet.create({
 export const cardStyles = StyleSheet.create({
   cardContainer: {
     flex: 1,
-    marginTop: -spacing.xl,
+    marginTop: -spacing.lg,
   } as ViewStyle,
   cardWrapper: {
     flex: 1,
@@ -50,16 +50,17 @@ export const cardStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
     borderRadius: borderRadius.xxl,
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.massive,
-    paddingHorizontal: spacing.xxl,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
     ...shadows.large,
   } as ViewStyle,
   cardContent: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
   } as ViewStyle,
   cardTitle: {
     fontSize: fontSize.xxl,
@@ -67,14 +68,12 @@ export const cardStyles = StyleSheet.create({
     color: colors.textPrimary,
     marginBottom: spacing.sm,
     textAlign: "center",
-    paddingHorizontal: spacing.xl,
   } as TextStyle,
   cardSubtitle: {
     fontSize: fontSize.md,
     color: colors.textSecondary,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
     textAlign: "center",
-    paddingHorizontal: spacing.xl,
     lineHeight: 22,
   } as TextStyle,
 });

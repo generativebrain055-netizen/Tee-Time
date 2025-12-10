@@ -4,7 +4,7 @@
  */
 
 // Using your computer's IP for physical device testing
-const API_BASE_URL: string = "http://192.168.18.163:3000";
+const API_BASE_URL: string = "http://192.168.18.103:3000";
 
 /**
  * Get the API base URL

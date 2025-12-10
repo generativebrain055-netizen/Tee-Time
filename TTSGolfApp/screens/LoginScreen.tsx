@@ -307,7 +307,7 @@ export default function LoginScreen({
                         style={[
                           styles.resendText,
                           (resendTimer > 0 || loading) &&
-                            styles.resendTextDisabled,
+                          styles.resendTextDisabled,
                         ]}
                       >
                         {resendTimer > 0
@@ -396,11 +396,11 @@ const localStyles: LocalStyles = {
   phoneInputWrapper: {
     width: "100%",
     alignItems: "center",
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   phoneInputRow: {
     flexDirection: "row",
-    width: SCREEN_WIDTH * 0.75,
+    width: "100%",
     height: 56,
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -409,17 +409,17 @@ const localStyles: LocalStyles = {
   countryCodeButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     backgroundColor: colors.primaryLight,
     borderRightWidth: 1,
     borderRightColor: colors.surfaceDark,
-    gap: 4,
+    gap: 6,
   },
   flagText: {
-    fontSize: 20,
+    fontSize: 22,
   },
   countryCodeText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
     color: colors.textPrimary,
   },
