@@ -70,7 +70,7 @@ Includes:
 Test Twilio setup:
 ```bash
 cd backend
-node test-twilio.js +923001234567
+node test-twilio.js +92
 ```
 
 ## 📱 Tech Stack
