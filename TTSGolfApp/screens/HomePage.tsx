@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Dimensions,
   ViewStyle,
   TextStyle,
 } from "react-native";
@@ -14,7 +15,21 @@ import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
+import {
+  Bell,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  MapPin,
+  Plus,
+  Home,
+  Calendar as CalendarIcon,
+  MessageSquare,
+  Users,
+  User,
+} from "lucide-react-native";
 
+// --- Types ---
 type RootStackParamList = {
   Welcome: undefined;
   Login: undefined;
@@ -33,10 +48,7 @@ interface UserData {
   socialRate?: number;
 }
 
-type HomePageNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  "HomePage"
->;
+type HomePageNavigationProp = StackNavigationProp<RootStackParamList, "HomePage">;
 type HomePageRouteProp = RouteProp<RootStackParamList, "HomePage">;
 
 interface HomePageProps {
@@ -44,39 +56,89 @@ interface HomePageProps {
   navigation: HomePageNavigationProp;
 }
 
-interface Styles {
-  container: ViewStyle;
-  scrollContent: ViewStyle;
-  header: ViewStyle;
-  signOutButton: ViewStyle;
-  signOutText: TextStyle;
-  welcomeText: TextStyle;
-  userName: TextStyle;
-  userCard: ViewStyle;
-  avatarContainer: ViewStyle;
-  avatarText: TextStyle;
-  userInfo: ViewStyle;
-  infoRow: ViewStyle;
-  infoLabel: TextStyle;
-  infoValue: TextStyle;
-  divider: ViewStyle;
-  socialRateBadge: ViewStyle;
-  socialRateText: TextStyle;
-  actionsContainer: ViewStyle;
-  sectionTitle: TextStyle;
-  actionButton: ViewStyle;
-  actionIcon: TextStyle;
-  actionTextContainer: ViewStyle;
-  actionTitle: TextStyle;
-  actionSubtitle: TextStyle;
-  actionArrow: TextStyle;
-  statsCard: ViewStyle;
-  statsGrid: ViewStyle;
-  statItem: ViewStyle;
-  statValue: TextStyle;
-  statLabel: TextStyle;
+interface CalendarDay {
+  day: number | "";
+  id: string;
+  hasEvent?: boolean;
+  isSelected?: boolean;
+  isToday?: boolean;
 }
 
+// --- Constants ---
+const COLORS = {
+  primary: "#5DB075",
+  primaryDark: "#4a9c63",
+  bg: "#F6F6F6",
+  white: "#FFFFFF",
+  text: "#1C1C1E",
+  textSecondary: "#8A8A8E",
+  border: "#E5E5EA",
+  confirmedBg: "#E8F5E9",
+  confirmedText: "#2E7D32",
+  grayCircle: "#E5E5EA",
+};
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const CALENDAR_WIDTH = SCREEN_WIDTH - 80; // 20px margin on each side + 20px padding on each side
+const DAY_CELL_WIDTH = Math.floor(CALENDAR_WIDTH / 7);
+const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// --- Helper Functions ---
+const getDaysInMonth = (year: number, month: number): number => {
+  return new Date(year, month + 1, 0).getDate();
+};
+
+const getFirstDayOfMonth = (year: number, month: number): number => {
+  return new Date(year, month, 1).getDay();
+};
+
+const generateCalendarDays = (
+  year: number,
+  month: number,
+  selectedDate: Date | null,
+  eventsMap: Set<string>
+): CalendarDay[] => {
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+  const today = new Date();
+  const days: CalendarDay[] = [];
+
+  // Add empty cells for days before the first day of the month
+  for (let i = 0; i < firstDay; i++) {
+    days.push({ day: "", id: `empty-${i}` });
+  }
+
+  // Add days of the month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateKey = `${year}-${month}-${day}`;
+    const isToday =
+      today.getFullYear() === year &&
+      today.getMonth() === month &&
+      today.getDate() === day;
+    const isSelected =
+      selectedDate &&
+      selectedDate.getFullYear() === year &&
+      selectedDate.getMonth() === month &&
+      selectedDate.getDate() === day;
+
+    days.push({
+      day,
+      id: `day-${day}`,
+      hasEvent: eventsMap.has(dateKey),
+      isSelected: isSelected || false,
+      isToday,
+    });
+  }
+
+  return days;
+};
+
+
+// --- Main Component ---
 export default function HomePage({
   route,
   navigation,
@@ -90,12 +152,53 @@ export default function HomePage({
     socialRate: 100,
   };
 
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(today);
+  const [activeTab, setActiveTab] = useState<string>("Home");
+
+  // Mock events - dates with tee times scheduled
+  const eventsMap = useMemo(() => {
+    const events = new Set<string>();
+    // Add some sample events for current month
+    events.add(`${currentYear}-${currentMonth}-3`);
+    events.add(`${currentYear}-${currentMonth}-13`);
+    events.add(`${currentYear}-${currentMonth}-25`);
+    return events;
+  }, [currentYear, currentMonth]);
+
+  const calendarDays = useMemo(
+    () => generateCalendarDays(currentYear, currentMonth, selectedDate, eventsMap),
+    [currentYear, currentMonth, selectedDate, eventsMap]
+  );
+
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+
+  const handleDayPress = (day: number | "") => {
+    if (day === "") return;
+    setSelectedDate(new Date(currentYear, currentMonth, day));
+  };
+
   const handleSignOut = (): void => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+      { text: "Cancel", style: "cancel" },
       {
         text: "Sign Out",
         style: "destructive",
@@ -104,12 +207,10 @@ export default function HomePage({
             await AsyncStorage.removeItem("accessToken");
             await AsyncStorage.removeItem("refreshToken");
             await AsyncStorage.removeItem("user");
-            if (navigation) {
-              if (navigation.replace) {
-                navigation.replace("Login");
-              } else if (navigation.navigate) {
-                navigation.navigate("Login");
-              }
+            if (navigation?.replace) {
+              navigation.replace("Login");
+            } else if (navigation?.navigate) {
+              navigation.navigate("Login");
             }
           } catch (error) {
             console.error("Error signing out:", error);
@@ -120,310 +221,431 @@ export default function HomePage({
     ]);
   };
 
+  // --- Header Component ---
+  const Header = () => (
+    <View style={styles.header}>
+      <View>
+        <Text style={styles.logoText}>TEE TIME</Text>
+        <Text style={styles.logoSubText}>Social</Text>
+      </View>
+      <TouchableOpacity style={styles.iconButton} onPress={handleSignOut}>
+        <Bell color={COLORS.text} size={24} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  // --- Calendar Component ---
+  const CalendarSection = () => (
+    <View style={styles.cardContainer}>
+      {/* Month Navigation */}
+      <View style={styles.monthHeader}>
+        <TouchableOpacity onPress={handlePrevMonth}>
+          <ChevronLeft color={COLORS.textSecondary} size={24} />
+        </TouchableOpacity>
+        <Text style={styles.monthTitle}>
+          {MONTHS[currentMonth]} {currentYear}
+        </Text>
+        <TouchableOpacity onPress={handleNextMonth}>
+          <ChevronRight color={COLORS.textSecondary} size={24} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Days of Week */}
+      <View style={styles.weekRow}>
+        {DAYS_OF_WEEK.map((day) => (
+          <Text key={day} style={styles.weekDayText}>
+            {day}
+          </Text>
+        ))}
+      </View>
+
+      {/* Calendar Grid */}
+      <View style={styles.calendarGrid}>
+        {calendarDays.map((item) => {
+          if (item.day === "") {
+            return <View key={item.id} style={styles.dayCell} />;
+          }
+
+          let cellStyle: ViewStyle[] = [styles.dayCellInner];
+          let textStyle: TextStyle[] = [styles.dayText];
+
+          if (item.isSelected) {
+            cellStyle.push(styles.selectedDayBg);
+            textStyle.push(styles.selectedDayText);
+          } else if (item.isToday) {
+            cellStyle.push(styles.todayBg);
+            textStyle.push(styles.todayText);
+          } else if (item.hasEvent) {
+            cellStyle.push(styles.eventDayBg);
+          }
+
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.dayCell}
+              onPress={() => handleDayPress(item.day)}
+            >
+              <View style={cellStyle}>
+                <Text style={textStyle}>{item.day}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <TouchableOpacity style={styles.fullCalendarBtn}>
+        <Text style={styles.fullCalendarBtnText}>View Full Calendar</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+
+  // --- Upcoming Tee Times Section ---
+  const UpcomingSection = () => {
+    const selectedDateStr = selectedDate
+      ? selectedDate.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "long",
+        day: "numeric",
+      })
+      : "Select a date";
+
+    return (
+      <View style={styles.upcomingContainer}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Upcoming Tee Times</Text>
+          <Text style={styles.sectionSubtitle}>3 rounds</Text>
+        </View>
+
+        <View style={styles.teeTimeCard}>
+          {/* Header of Card */}
+          <View style={styles.cardRow}>
+            <Text style={styles.cardDate}>{selectedDateStr}</Text>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>✓ Confirmed</Text>
+            </View>
+          </View>
+
+          {/* Details */}
+          <View style={styles.cardDetailRow}>
+            <Clock size={16} color={COLORS.textSecondary} />
+            <Text style={styles.cardDetailText}>8:30 AM</Text>
+          </View>
+          <View style={styles.cardDetailRow}>
+            <MapPin size={16} color={COLORS.textSecondary} />
+            <View>
+              <Text style={styles.cardDetailTextMain}>Pine Valley Golf Club</Text>
+              <Text style={styles.cardDetailTextSub}>Pine Valley, NJ</Text>
+            </View>
+          </View>
+
+          {/* Floating Action Button */}
+          <TouchableOpacity style={styles.fab}>
+            <Plus color={COLORS.white} size={28} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // --- Bottom Navigation ---
+  const BottomTab = () => {
+    const tabs = [
+      { name: "Home", icon: Home },
+      { name: "Community", icon: CalendarIcon },
+      { name: "Messages", icon: MessageSquare },
+      { name: "Roster", icon: Users },
+      { name: "Profile", icon: User },
+    ];
+
+    return (
+      <View style={styles.bottomTabContainer}>
+        {tabs.map((tab) => {
+          const IconComponent = tab.icon;
+          const isActive = activeTab === tab.name;
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              style={styles.tabItem}
+              onPress={() => setActiveTab(tab.name)}
+            >
+              <IconComponent
+                color={isActive ? COLORS.primary : COLORS.textSecondary}
+                size={24}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: isActive ? COLORS.primary : COLORS.textSecondary },
+                ]}
+              >
+                {tab.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.welcomeText}>Welcome Back!</Text>
-            <Text style={styles.userName}>
-              {user.firstName} {user.lastName}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-          >
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* User Card */}
-        <View style={styles.userCard}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {user.firstName?.charAt(0)}
-              {user.lastName?.charAt(0)}
-            </Text>
-          </View>
-
-          <View style={styles.userInfo}>
-            {user.username && (
-              <>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Username</Text>
-                  <Text style={styles.infoValue}>@{user.username}</Text>
-                </View>
-                <View style={styles.divider} />
-              </>
-            )}
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Phone Number</Text>
-              <Text style={styles.infoValue}>{user.phoneNumber}</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Social Rate</Text>
-              <View style={styles.socialRateBadge}>
-                <Text style={styles.socialRateText}>
-                  {user.socialRate || 100}
-                </Text>
-              </View>
-            </View>
-
-            {user.handicap && (
-              <>
-                <View style={styles.divider} />
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Handicap</Text>
-                  <Text style={styles.infoValue}>{user.handicap}</Text>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.actionsContainer}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>📅</Text>
-            <View style={styles.actionTextContainer}>
-              <Text style={styles.actionTitle}>My Tee Times</Text>
-              <Text style={styles.actionSubtitle}>View upcoming games</Text>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>👥</Text>
-            <View style={styles.actionTextContainer}>
-              <Text style={styles.actionTitle}>My Roster</Text>
-              <Text style={styles.actionSubtitle}>
-                Manage your golf buddies
-              </Text>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>➕</Text>
-            <View style={styles.actionTextContainer}>
-              <Text style={styles.actionTitle}>Send Invite</Text>
-              <Text style={styles.actionSubtitle}>
-                Invite players to a game
-              </Text>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>🔔</Text>
-            <View style={styles.actionTextContainer}>
-              <Text style={styles.actionTitle}>Notifications</Text>
-              <Text style={styles.actionSubtitle}>Check your invites</Text>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Stats Card */}
-        <View style={styles.statsCard}>
-          <Text style={styles.sectionTitle}>Your Stats</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Games Played</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Invites Sent</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Roster Size</Text>
-            </View>
-          </View>
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Header />
+        <CalendarSection />
+        <UpcomingSection />
+        <View style={{ height: 100 }} />
       </ScrollView>
+      <BottomTab />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create<Styles>({
+
+// --- Styles ---
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: COLORS.bg,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
+  // Header
   header: {
-    marginBottom: 24,
-    marginTop: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  signOutButton: {
-    backgroundColor: "#FF6B6B",
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingTop: 10,
+    paddingBottom: 20,
+    backgroundColor: COLORS.bg,
   },
-  signOutText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
+  logoText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#000",
+    letterSpacing: 0.5,
   },
-  welcomeText: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 4,
+  logoSubText: {
+    fontSize: 20,
+    fontWeight: "500",
+    color: COLORS.primary,
+    fontStyle: "italic",
+    marginTop: -8,
   },
-  userName: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1a1a1a",
+  iconButton: {
+    padding: 8,
   },
-  userCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+  // Calendar Card
+  cardContainer: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 20,
+    borderRadius: 20,
     padding: 20,
-    marginBottom: 24,
-    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#50C878",
-    justifyContent: "center",
-    alignItems: "center",
-    alignSelf: "center",
-    marginBottom: 20,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  userInfo: {
-    marginTop: 8,
-  },
-  infoRow: {
+  monthHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    marginBottom: 20,
   },
-  infoLabel: {
-    fontSize: 15,
-    color: "#666",
+  monthTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: COLORS.text,
+  },
+  weekRow: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    marginBottom: 10,
+  },
+  weekDayText: {
+    width: DAY_CELL_WIDTH,
+    textAlign: "center",
+    color: COLORS.textSecondary,
+    fontSize: 14,
     fontWeight: "500",
   },
-  infoValue: {
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+  },
+  dayCell: {
+    width: DAY_CELL_WIDTH,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  dayCellInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dayText: {
     fontSize: 15,
-    color: "#1a1a1a",
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  selectedDayBg: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+  },
+  selectedDayText: {
+    color: COLORS.white,
+    fontWeight: "bold",
+  },
+  todayBg: {
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 12,
+  },
+  todayText: {
+    color: COLORS.primary,
+    fontWeight: "bold",
+  },
+  eventDayBg: {
+    backgroundColor: COLORS.grayCircle,
+    borderRadius: 18,
+  },
+  fullCalendarBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  fullCalendarBtnText: {
+    color: COLORS.white,
     fontWeight: "600",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#E8E8E8",
-  },
-  socialRateBadge: {
-    backgroundColor: "#50C878",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  socialRateText: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
   },
-  actionsContainer: {
-    marginBottom: 24,
+  // Upcoming Section
+  upcomingContainer: {
+    paddingHorizontal: 20,
+    marginTop: 25,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: 15,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    marginBottom: 16,
+    fontWeight: "bold",
+    color: COLORS.text,
   },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+  sectionSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
-  actionIcon: {
-    fontSize: 28,
-    marginRight: 16,
-  },
-  actionTextContainer: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1a1a1a",
-    marginBottom: 2,
-  },
-  actionSubtitle: {
-    fontSize: 13,
-    color: "#666",
-  },
-  actionArrow: {
-    fontSize: 28,
-    color: "#CCC",
-    fontWeight: "300",
-  },
-  statsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+  teeTimeCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
     padding: 20,
-    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    position: "relative",
   },
-  statsGrid: {
+  cardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  cardDate: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: COLORS.text,
+  },
+  statusBadge: {
+    backgroundColor: COLORS.confirmedBg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: COLORS.confirmedText,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  cardDetailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  cardDetailText: {
+    marginLeft: 10,
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  cardDetailTextMain: {
+    marginLeft: 10,
+    color: COLORS.text,
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  cardDetailTextSub: {
+    marginLeft: 10,
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    backgroundColor: COLORS.primary,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  // Bottom Tab
+  bottomTabContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.white,
     flexDirection: "row",
     justifyContent: "space-around",
-    marginTop: 8,
+    paddingVertical: 12,
+    paddingBottom: 25,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    elevation: 10,
   },
-  statItem: {
+  tabItem: {
     alignItems: "center",
   },
-  statValue: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#50C878",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
+  tabLabel: {
+    fontSize: 10,
+    marginTop: 4,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
   },
 });
