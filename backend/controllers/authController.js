@@ -169,19 +169,6 @@ const requestOTP = async (req, res, next) => {
     const { phoneNumber, purpose = "signup" } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress;
 
-    // Check rate limiting
-    const isPhoneRateLimited = await otpRepository.isPhoneRateLimited(
-      phoneNumber,
-      parseInt(process.env.OTP_RATE_LIMIT_PER_HOUR) || 5
-    );
-
-    if (isPhoneRateLimited) {
-      return res.status(429).json({
-        success: false,
-        message: "Too many OTP requests. Please try again later.",
-      });
-    }
-
     // Check if user already exists
     const existingUser = await userRepository.findByPhoneNumber(phoneNumber);
 

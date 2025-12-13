@@ -3,6 +3,11 @@ import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
 import HomePage from "./screens/HomePage";
+import RosterScreen from "./screens/roster";
+import MessagesScreen from "./screens/MessagesScreen";
+import ChatDetailScreen from "./screens/ChatDetailScreen";
+import FullCalendarScreen from "./screens/FullCalendarScreen";
+import ProfileScreen from "./screens/profile";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -11,7 +16,12 @@ type ScreenName =
   | "Login"
   | "Onboarding"
   | "HomePage"
-  | "Home";
+  | "Home"
+  | "Roster"
+  | "Messages"
+  | "ChatDetail"
+  | "FullCalendar"
+  | "Profile";
 
 interface UserData {
   firstName: string;
@@ -24,16 +34,20 @@ interface UserData {
 
 interface NavigationParams {
   user?: UserData;
+  chatInfo?: any;
 }
 
 interface Navigation {
   navigate: (screen: ScreenName, params?: NavigationParams) => void;
   replace: (screen: ScreenName, params?: NavigationParams) => void;
+  goBack: () => void;
 }
 
 export default function App(): React.ReactElement {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>("Splash");
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [screenParams, setScreenParams] = useState<NavigationParams>({});
+  const [screenHistory, setScreenHistory] = useState<ScreenName[]>(["Splash"]);
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
 
@@ -45,7 +59,9 @@ export default function App(): React.ReactElement {
         // Clear user data when navigating to auth screens
         setUserData(null);
       }
+      setScreenParams(params || {});
       setScreenKey((prev) => prev + 1); // Force remount
+      setScreenHistory((prev) => [...prev, screen]);
       setCurrentScreen(screen);
     },
     replace: (screen: ScreenName, params?: NavigationParams) => {
@@ -57,6 +73,16 @@ export default function App(): React.ReactElement {
       }
       setScreenKey((prev) => prev + 1); // Force remount
       setCurrentScreen(screen);
+    },
+    goBack: () => {
+      if (screenHistory.length > 1) {
+        const newHistory = [...screenHistory];
+        newHistory.pop(); // Remove current screen
+        const previousScreen = newHistory[newHistory.length - 1];
+        setScreenHistory(newHistory);
+        setScreenKey((prev) => prev + 1);
+        setCurrentScreen(previousScreen);
+      }
     },
   };
 
@@ -78,6 +104,28 @@ export default function App(): React.ReactElement {
             key={`home-${screenKey}`}
             route={{ params: { user: userData } } as any}
             navigation={navigation as any}
+          />
+        );
+      case "Roster":
+        return <RosterScreen key={`roster-${screenKey}`} navigation={navigation as any} />;
+      case "Messages":
+        return <MessagesScreen key={`messages-${screenKey}`} navigation={navigation as any} />;
+      case "ChatDetail":
+        return (
+          <ChatDetailScreen
+            key={`chat-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "FullCalendar":
+        return <FullCalendarScreen key={`calendar-${screenKey}`} navigation={navigation as any} />;
+      case "Profile":
+        return (
+          <ProfileScreen
+            key={`profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: { user: userData } } as any}
           />
         );
       default:

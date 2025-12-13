@@ -17,7 +17,6 @@ const router = Router();
 router.post(
   "/request-otp",
   captureDeviceInfo,
-  rateLimiter.otpRequest,
   [
     body("phoneNumber")
       .trim()
@@ -238,7 +237,6 @@ router.post(
 router.post(
   "/register",
   captureDeviceInfo,
-  rateLimiter.otpRequest,
   [
     body("phoneNumber")
       .trim()

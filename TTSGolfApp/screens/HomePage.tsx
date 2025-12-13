@@ -293,7 +293,10 @@ export default function HomePage({
         })}
       </View>
 
-      <TouchableOpacity style={styles.fullCalendarBtn}>
+      <TouchableOpacity
+        style={styles.fullCalendarBtn}
+        onPress={() => navigation && (navigation as any).navigate("FullCalendar")}
+      >
         <Text style={styles.fullCalendarBtnText}>View Full Calendar</Text>
       </TouchableOpacity>
     </View>
@@ -338,11 +341,6 @@ export default function HomePage({
               <Text style={styles.cardDetailTextSub}>Pine Valley, NJ</Text>
             </View>
           </View>
-
-          {/* Floating Action Button */}
-          <TouchableOpacity style={styles.fab}>
-            <Plus color={COLORS.white} size={28} />
-          </TouchableOpacity>
         </View>
       </View>
     );
@@ -367,7 +365,18 @@ export default function HomePage({
             <TouchableOpacity
               key={tab.name}
               style={styles.tabItem}
-              onPress={() => setActiveTab(tab.name)}
+              onPress={() => {
+                setActiveTab(tab.name);
+                if (navigation) {
+                  if (tab.name === "Roster") {
+                    (navigation as any).navigate("Roster");
+                  } else if (tab.name === "Messages") {
+                    (navigation as any).navigate("Messages");
+                  } else if (tab.name === "Profile") {
+                    (navigation as any).navigate("Profile");
+                  }
+                }
+              }}
             >
               <IconComponent
                 color={isActive ? COLORS.primary : COLORS.textSecondary}
@@ -400,6 +409,12 @@ export default function HomePage({
         <UpcomingSection />
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity style={styles.fab}>
+        <Plus color={COLORS.white} size={28} />
+      </TouchableOpacity>
+
       <BottomTab />
     </SafeAreaView>
   );
@@ -562,7 +577,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 2,
-    position: "relative",
   },
   cardRow: {
     flexDirection: "row",
@@ -610,19 +624,20 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 20,
+    bottom: 100,
     right: 20,
     backgroundColor: COLORS.primary,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 10,
   },
   // Bottom Tab
   bottomTabContainer: {
