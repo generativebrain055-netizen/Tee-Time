@@ -52,10 +52,13 @@ export const cardStyles = StyleSheet.create({
     borderRadius: borderRadius.xxl,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.xl,
+    ...shadows.large,
+  } as ViewStyle,
+  cardScrollContent: {
+    flexGrow: 1,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
     paddingBottom: spacing.lg,
-    ...shadows.large,
   } as ViewStyle,
   cardContent: {
     flex: 1,

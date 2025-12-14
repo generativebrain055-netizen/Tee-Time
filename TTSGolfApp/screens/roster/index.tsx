@@ -21,10 +21,11 @@ export default function RosterScreen({ navigation }: any) {
         setShowPersonDetail(true);
     };
 
-    const handleGroupClick = (groupId: number) => {
-        if (groupId === 1) {
-            setShowGroupDetail(true);
-        }
+    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+    const handleGroupClick = (groupId: string) => {
+        setSelectedGroupId(groupId);
+        setShowGroupDetail(true);
     };
 
     const Header = () => (
@@ -38,7 +39,7 @@ export default function RosterScreen({ navigation }: any) {
     );
 
     const TabBar = () => {
-        const tabs = ["Roster", "Groups", "On Deck", "Requests"];
+        const tabs = ["Roster", "Groups", "Requests"];
         return (
             <View style={styles.tabBar}>
                 {tabs.map((tab) => (
@@ -65,12 +66,6 @@ export default function RosterScreen({ navigation }: any) {
                 return <GroupsList onGroupClick={handleGroupClick} />;
             case "Requests":
                 return <RequestsList />;
-            case "On Deck":
-                return (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>On Deck Content</Text>
-                    </View>
-                );
             default:
                 return <RosterList onPersonClick={handlePersonClick} />;
         }
@@ -80,8 +75,8 @@ export default function RosterScreen({ navigation }: any) {
         return <PersonDetail person={selectedPerson} onBack={() => setShowPersonDetail(false)} />;
     }
 
-    if (showGroupDetail) {
-        return <GroupDetail onBack={() => setShowGroupDetail(false)} />;
+    if (showGroupDetail && selectedGroupId) {
+        return <GroupDetail groupId={selectedGroupId} onBack={() => { setShowGroupDetail(false); setSelectedGroupId(null); }} />;
     }
 
     return (

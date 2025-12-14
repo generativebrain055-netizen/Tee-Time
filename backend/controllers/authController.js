@@ -1646,6 +1646,51 @@ const registerUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Update user profile
+ */
+const updateProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { firstName, lastName, email, handicap, location, equipment, preferences } = req.body;
+
+    // Build update object
+    const updates = {};
+    if (firstName !== undefined) updates.firstName = firstName;
+    if (lastName !== undefined) updates.lastName = lastName;
+    if (email !== undefined) updates.email = email;
+    if (handicap !== undefined) updates.handicap = handicap;
+
+    // Update basic profile
+    const user = await userRepository.update(userId, updates);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully.",
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        username: user.username,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+      },
+    });
+  } catch (error) {
+    logger.error("Error in updateProfile:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   requestOTP,
   verifyOTP,
@@ -1655,6 +1700,7 @@ module.exports = {
   logout,
   logoutAll,
   getCurrentUser,
+  updateProfile,
   requestMagicLink,
   magicLinkRedirect,
   verifyMagicLink,

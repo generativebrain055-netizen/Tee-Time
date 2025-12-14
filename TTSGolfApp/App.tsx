@@ -2,12 +2,16 @@ import React, { useState } from "react";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
-import HomePage from "./screens/HomePage";
+import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
-import MessagesScreen from "./screens/MessagesScreen";
+import MessagesScreen from "./screens/Messages";
 import ChatDetailScreen from "./screens/ChatDetailScreen";
 import FullCalendarScreen from "./screens/FullCalendarScreen";
 import ProfileScreen from "./screens/profile";
+import CreateTeeTimeScreen from "./screens/CreateTeeTime";
+import InvitesScreen from "./screens/InvitesScreen";
+import AvailabilityScreen from "./screens/AvailabilityScreen";
+import FriendProfileScreen from "./screens/FriendProfileScreen";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -21,7 +25,12 @@ type ScreenName =
   | "Messages"
   | "ChatDetail"
   | "FullCalendar"
-  | "Profile";
+  | "Profile"
+  | "CreateTeeTime"
+  | "Invites"
+  | "Availability"
+  | "Community"
+  | "FriendProfile";
 
 interface UserData {
   firstName: string;
@@ -126,6 +135,21 @@ export default function App(): React.ReactElement {
             key={`profile-${screenKey}`}
             navigation={navigation as any}
             route={{ params: { user: userData } } as any}
+          />
+        );
+      case "CreateTeeTime":
+        return <CreateTeeTimeScreen key={`create-${screenKey}`} navigation={navigation as any} />;
+      case "Invites":
+        return <InvitesScreen key={`invites-${screenKey}`} navigation={navigation as any} />;
+      case "Availability":
+      case "Community":
+        return <AvailabilityScreen key={`availability-${screenKey}`} navigation={navigation as any} />;
+      case "FriendProfile":
+        return (
+          <FriendProfileScreen
+            key={`friend-profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       default:

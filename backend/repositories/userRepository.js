@@ -6,19 +6,21 @@ const { query, getClient } = require("../config/database");
  */
 
 /**
- * Find user by phone number
+ * Find user by phone number with profile
  * @param {string} phoneNumber
  * @returns {Promise<Object|null>}
  */
 const findByPhoneNumber = async (phoneNumber) => {
   const result = await query(
-    `SELECT id, phone_number, email, password_hash, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts, 
-            first_name, last_name, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, created_at, updated_at
-     FROM users 
-     WHERE phone_number = $1 AND deleted_at IS NULL 
+    `SELECT u.id, u.phone_number, u.email, u.password_hash, u.is_active, u.is_verified, 
+            u.is_locked, u.locked_until, u.failed_login_attempts, 
+            u.first_name, u.last_name, u.username,
+            u.last_login_at, u.last_login_ip, u.created_at, u.updated_at,
+            p.handicap, p.social_rate, p.avatar_url,
+            p.timezone, p.language, p.notification_preferences
+     FROM users u
+     LEFT JOIN user_profiles p ON u.id = p.user_id
+     WHERE u.phone_number = $1 AND u.deleted_at IS NULL 
      LIMIT 1`,
     [phoneNumber]
   );
@@ -46,20 +48,25 @@ const findByEmail = async (email) => {
 };
 
 /**
- * Find user by ID
+ * Find user by ID with profile
  * @param {string} userId
  * @returns {Promise<Object|null>}
  */
 const findById = async (userId) => {
   const result = await query(
-    `SELECT id, phone_number, email, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts,
-            first_name, last_name, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, last_login_device_id,
-            created_at, updated_at
-     FROM users 
-     WHERE id = $1 AND deleted_at IS NULL 
+    `SELECT u.id, u.phone_number, u.email, u.username, u.is_active, u.is_verified, 
+            u.is_locked, u.locked_until, u.failed_login_attempts,
+            u.first_name, u.last_name,
+            u.last_login_at, u.last_login_ip, u.last_login_device_id,
+            u.created_at, u.updated_at,
+            p.handicap, p.social_rate, p.avatar_url, p.bio, p.location, p.home_course,
+            p.driver, p.irons, p.putter, p.ball,
+            p.preferred_tee_time, p.walk_or_ride, p.playing_partner_preference,
+            p.timezone, p.language, p.notification_preferences, p.privacy_settings,
+            p.rounds_played, p.average_score
+     FROM users u
+     LEFT JOIN user_profiles p ON u.id = p.user_id
+     WHERE u.id = $1 AND u.deleted_at IS NULL 
      LIMIT 1`,
     [userId]
   );
@@ -67,19 +74,21 @@ const findById = async (userId) => {
 };
 
 /**
- * Find user by username
+ * Find user by username with profile
  * @param {string} username
  * @returns {Promise<Object|null>}
  */
 const findByUsername = async (username) => {
   const result = await query(
-    `SELECT id, phone_number, email, username, password_hash, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts,
-            first_name, last_name, handicap, social_rate, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, created_at, updated_at
-     FROM users 
-     WHERE username = $1 AND deleted_at IS NULL 
+    `SELECT u.id, u.phone_number, u.email, u.username, u.password_hash, u.is_active, u.is_verified, 
+            u.is_locked, u.locked_until, u.failed_login_attempts,
+            u.first_name, u.last_name,
+            u.last_login_at, u.last_login_ip, u.created_at, u.updated_at,
+            p.handicap, p.social_rate, p.avatar_url,
+            p.timezone, p.language, p.notification_preferences
+     FROM users u
+     LEFT JOIN user_profiles p ON u.id = p.user_id
+     WHERE u.username = $1 AND u.deleted_at IS NULL 
      LIMIT 1`,
     [username]
   );
@@ -87,7 +96,7 @@ const findByUsername = async (username) => {
 };
 
 /**
- * Create a new user
+ * Create a new user with profile
  * @param {Object} userData
  * @returns {Promise<Object>}
  */
@@ -103,24 +112,47 @@ const create = async (userData) => {
     isVerified,
   } = userData;
 
-  const result = await query(
-    `INSERT INTO users (
-      phone_number, email, username, first_name, last_name, handicap, password_hash, is_verified
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, created_at`,
-    [
-      phoneNumber || null,
-      email || null,
-      username || null,
-      firstName || null,
-      lastName || null,
-      handicap ? parseInt(handicap) : null,
-      passwordHash || null,
-      isVerified || false,
-    ]
-  );
-
-  return result.rows[0];
+  const client = await getClient();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Create user
+    const userResult = await client.query(
+      `INSERT INTO users (
+        phone_number, email, username, first_name, last_name, password_hash, is_verified
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, phone_number, email, username, first_name, last_name, is_verified, created_at`,
+      [
+        phoneNumber || null,
+        email || null,
+        username || null,
+        firstName || null,
+        lastName || null,
+        passwordHash || null,
+        isVerified || false,
+      ]
+    );
+    
+    const user = userResult.rows[0];
+    
+    // Create profile
+    await client.query(
+      `INSERT INTO user_profiles (user_id, handicap)
+       VALUES ($1, $2)`,
+      [user.id, handicap ? parseFloat(handicap) : null]
+    );
+    
+    await client.query('COMMIT');
+    
+    // Return user with profile data
+    return { ...user, handicap: handicap ? parseFloat(handicap) : null, social_rate: 5.0 };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -140,31 +172,51 @@ const update = async (userId, userData) => {
     email,
   } = userData;
 
-  const result = await query(
-    `UPDATE users SET 
-      first_name = COALESCE($1, first_name),
-      last_name = COALESCE($2, last_name),
-      username = COALESCE($3, username),
-      handicap = COALESCE($4, handicap),
-      password_hash = COALESCE($5, password_hash),
-      is_verified = COALESCE($6, is_verified),
-      email = COALESCE($7, email),
-      updated_at = NOW()
-    WHERE id = $8 AND deleted_at IS NULL
-    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, updated_at`,
-    [
-      firstName || null,
-      lastName || null,
-      username || null,
-      handicap ? parseInt(handicap) : null,
-      passwordHash, // Don't use || null here, we want to allow null to be set
-      isVerified !== undefined ? isVerified : null,
-      email || null,
-      userId,
-    ]
-  );
-
-  return result.rows[0];
+  const client = await getClient();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Update users table
+    await client.query(
+      `UPDATE users SET 
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        username = COALESCE($3, username),
+        password_hash = COALESCE($4, password_hash),
+        is_verified = COALESCE($5, is_verified),
+        email = COALESCE($6, email),
+        updated_at = NOW()
+      WHERE id = $7 AND deleted_at IS NULL`,
+      [
+        firstName || null,
+        lastName || null,
+        username || null,
+        passwordHash,
+        isVerified !== undefined ? isVerified : null,
+        email || null,
+        userId,
+      ]
+    );
+    
+    // Update profile if handicap provided
+    if (handicap !== undefined) {
+      await client.query(
+        `UPDATE user_profiles SET handicap = $1, updated_at = NOW() WHERE user_id = $2`,
+        [handicap ? parseFloat(handicap) : null, userId]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    // Return updated user with profile
+    return findById(userId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -306,16 +358,16 @@ const verifyUser = async (userId) => {
 };
 
 /**
- * Update notification preferences
+ * Update notification preferences (in user_profiles table)
  * @param {string} userId
  * @param {Object} preferences
  * @returns {Promise<Object>}
  */
 const updateNotificationPreferences = async (userId, preferences) => {
   const result = await query(
-    `UPDATE users 
+    `UPDATE user_profiles 
      SET notification_preferences = $1, updated_at = NOW() 
-     WHERE id = $2 AND deleted_at IS NULL
+     WHERE user_id = $2
      RETURNING id, notification_preferences`,
     [JSON.stringify(preferences), userId]
   );

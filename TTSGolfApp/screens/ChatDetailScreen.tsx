@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
     View,
     Text,
@@ -10,6 +10,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Modal,
+    ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -21,11 +22,11 @@ import {
     X,
     Users,
 } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// --- TYPES ---
 interface ChatMessage {
-    id: number;
-    senderId: number;
+    id: string;
+    senderId: string;
     senderName: string;
     senderImg: string;
     message: string;
@@ -34,14 +35,14 @@ interface ChatMessage {
 }
 
 interface ChatInfo {
-    id: number;
+    id: string;
+    recipientId?: string;
     name: string;
     subtitle: string;
     img: string;
     isGroup?: boolean;
 }
 
-// --- CONSTANTS ---
 const COLORS = {
     primary: "#5DB075",
     primaryLight: "#D1FAE5",
@@ -55,114 +56,81 @@ const COLORS = {
     otherMessageBg: "#FFFFFF",
 };
 
-// --- MOCK DATA ---
-const CHAT_INFO: ChatInfo = {
-    id: 1,
-    name: "Nov 18 @7:40 - Torrey Pines...",
-    subtitle: "4 players",
-    img: "https://api.dicebear.com/7.x/avataaars/svg?seed=Group1",
-    isGroup: true,
-};
-
-const CHAT_MESSAGES: ChatMessage[] = [
-    {
-        id: 1,
-        senderId: 2,
-        senderName: "Mike Smith",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mike",
-        message: "Hey! Are you free for a round this weekend?",
-        time: "10:30 AM",
-        isMe: false,
-    },
-    {
-        id: 2,
-        senderId: 1,
-        senderName: "You",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=You",
-        message: "Yeah! What time were you thinking?",
-        time: "10:32 AM",
-        isMe: true,
-    },
-    {
-        id: 3,
-        senderId: 2,
-        senderName: "Mike Smith",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mike",
-        message: "How about Saturday morning around 9:00 AM?",
-        time: "10:30 AM",
-        isMe: false,
-    },
-    {
-        id: 4,
-        senderId: 1,
-        senderName: "You",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=You",
-        message: "Perfect. Which course?",
-        time: "10:32 AM",
-        isMe: true,
-    },
-    {
-        id: 5,
-        senderId: 3,
-        senderName: "David Wilson",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=David",
-        message: "Pine Valley. I can go ahead and book the tee time.",
-        time: "10:30 AM",
-        isMe: false,
-    },
-    {
-        id: 6,
-        senderId: 1,
-        senderName: "You",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=You",
-        message: "Awesome. See you there! 🏌️",
-        time: "10:32 AM",
-        isMe: true,
-    },
-    {
-        id: 7,
-        senderId: 4,
-        senderName: "Sarah Johnson",
-        senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
-        message: "Looking forward to it!",
-        time: "10:30 AM",
-        isMe: false,
-    },
-];
-
 export default function ChatDetailScreen({ navigation, route }: any) {
     const [messageText, setMessageText] = useState("");
     const [showMenu, setShowMenu] = useState(false);
-    const chatInfo = route?.params?.chatInfo || CHAT_INFO;
-    const [messages, setMessages] = useState<ChatMessage[]>(CHAT_MESSAGES);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState<{
+        id: string;
+        name: string;
+        avatar?: string;
+    } | null>(null);
+    const scrollViewRef = useRef<ScrollView>(null);
 
-    const handleSend = () => {
-        if (messageText.trim()) {
-            const newMessage: ChatMessage = {
-                id: messages.length + 1,
-                senderId: 1,
-                senderName: "You",
-                senderImg: "https://api.dicebear.com/7.x/avataaars/svg?seed=You",
-                message: messageText.trim(),
-                time: new Date().toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                }),
-                isMe: true,
-            };
-            setMessages((prev) => [...prev, newMessage]);
-            setMessageText("");
-        }
+    const chatInfo: ChatInfo = route?.params?.chatInfo || {
+        id: "1",
+        name: "Unknown",
+        subtitle: "",
+        img: "https://api.dicebear.com/7.x/avataaars/svg?seed=Unknown",
     };
 
-    // --- HEADER ---
+    useEffect(() => {
+        const loadCurrentUser = async () => {
+            try {
+                const userData = await AsyncStorage.getItem("user");
+                if (userData) {
+                    const user = JSON.parse(userData);
+                    setCurrentUser({
+                        id: user.id,
+                        name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "You",
+                        avatar: user.avatarUrl,
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load user:", error);
+            }
+            setLoading(false);
+        };
+        loadCurrentUser();
+    }, []);
+
+    useEffect(() => {
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+    }, [messages]);
+
+    const handleSend = async () => {
+        if (!messageText.trim()) return;
+
+        const trimmedMessage = messageText.trim();
+        setMessageText("");
+
+        const newMessage: ChatMessage = {
+            id: Date.now().toString(),
+            senderId: currentUser?.id || "me",
+            senderName: currentUser?.name || "You",
+            senderImg:
+                currentUser?.avatar ||
+                "https://api.dicebear.com/7.x/avataaars/svg?seed=You",
+            message: trimmedMessage,
+            time: new Date().toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            }),
+            isMe: true,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+    };
+
     const Header = () => (
         <View style={styles.header}>
             <View style={styles.headerLeft}>
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => navigation && (navigation as any).goBack()}
+                    onPress={() => navigation?.goBack()}
                 >
                     <ArrowLeft size={24} color={COLORS.textMain} />
                 </TouchableOpacity>
@@ -191,7 +159,6 @@ export default function ChatDetailScreen({ navigation, route }: any) {
         </View>
     );
 
-    // --- MESSAGE BUBBLE ---
     const MessageBubble = ({ message }: { message: ChatMessage }) => (
         <View
             style={[
@@ -229,7 +196,6 @@ export default function ChatDetailScreen({ navigation, route }: any) {
         </View>
     );
 
-    // --- CHAT ACTIONS MENU ---
     const ChatActionsMenu = () => (
         <Modal
             visible={showMenu}
@@ -249,19 +215,10 @@ export default function ChatDetailScreen({ navigation, route }: any) {
                             <X size={24} color={COLORS.textMain} />
                         </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity style={styles.menuItem}>
-                        <Text style={styles.menuItemText}>Create group</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.menuDivider} />
-
                     <TouchableOpacity style={styles.menuItem}>
                         <Text style={styles.menuItemText}>Mute</Text>
                     </TouchableOpacity>
-
                     <View style={styles.menuDivider} />
-
                     <TouchableOpacity style={styles.menuItem}>
                         <Text style={[styles.menuItemText, styles.menuItemDanger]}>
                             Delete chat
@@ -272,10 +229,17 @@ export default function ChatDetailScreen({ navigation, route }: any) {
         </Modal>
     );
 
-    // --- INPUT BAR (using useCallback to prevent re-renders) ---
     const handleTextChange = useCallback((text: string) => {
         setMessageText(text);
     }, []);
+
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.loadingContainer]}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -283,17 +247,26 @@ export default function ChatDetailScreen({ navigation, route }: any) {
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
-                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
             >
                 <Header />
                 <ScrollView
+                    ref={scrollViewRef}
                     style={styles.messagesContainer}
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {messages.map((message) => (
-                        <MessageBubble key={message.id} message={message} />
-                    ))}
+                    {messages.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No messages yet</Text>
+                            <Text style={styles.emptySubtext}>
+                                Send a message to start the conversation
+                            </Text>
+                        </View>
+                    ) : (
+                        messages.map((message) => (
+                            <MessageBubble key={message.id} message={message} />
+                        ))
+                    )}
                 </ScrollView>
                 <View style={styles.inputContainer}>
                     <TouchableOpacity style={styles.inputButton}>
@@ -326,20 +299,15 @@ export default function ChatDetailScreen({ navigation, route }: any) {
                 </View>
             </KeyboardAvoidingView>
             <ChatActionsMenu />
-        </SafeAreaView>
+        </View>
     );
 }
 
 
-// --- STYLES ---
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    keyboardView: {
-        flex: 1,
-    },
+    container: { flex: 1, backgroundColor: COLORS.bg },
+    loadingContainer: { justifyContent: "center", alignItems: "center" },
+    keyboardView: { flex: 1 },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -351,11 +319,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: COLORS.divider,
     },
-    headerLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-    },
+    headerLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
     backButton: {
         width: 40,
         height: 40,
@@ -363,9 +327,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginLeft: -8,
     },
-    chatAvatarContainer: {
-        marginLeft: 8,
-    },
+    chatAvatarContainer: { marginLeft: 8 },
     chatAvatar: {
         width: 40,
         height: 40,
@@ -380,45 +342,36 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    headerInfo: {
-        marginLeft: 12,
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    headerSubtitle: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
+    headerInfo: { marginLeft: 12, flex: 1 },
+    headerTitle: { fontSize: 16, fontWeight: "600", color: COLORS.textMain },
+    headerSubtitle: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
     moreButton: {
         width: 40,
         height: 40,
         justifyContent: "center",
         alignItems: "center",
     },
-    messagesContainer: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
+    messagesContainer: { flex: 1, backgroundColor: COLORS.bg },
     messagesContent: {
         paddingVertical: 16,
         paddingHorizontal: 16,
+        flexGrow: 1,
     },
+    emptyState: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingTop: 100,
+    },
+    emptyText: { fontSize: 16, fontWeight: "600", color: COLORS.textMain },
+    emptySubtext: { fontSize: 14, color: COLORS.textSub, marginTop: 4 },
     messageContainer: {
         flexDirection: "row",
         marginBottom: 16,
         alignItems: "flex-end",
     },
-    myMessageContainer: {
-        justifyContent: "flex-end",
-    },
-    otherMessageContainer: {
-        justifyContent: "flex-start",
-    },
+    myMessageContainer: { justifyContent: "flex-end" },
+    otherMessageContainer: { justifyContent: "flex-start" },
     messageAvatar: {
         width: 32,
         height: 32,
@@ -426,9 +379,7 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.divider,
         marginRight: 8,
     },
-    messageSpacer: {
-        width: 40,
-    },
+    messageSpacer: { width: 40 },
     messageBubble: {
         maxWidth: "70%",
         borderRadius: 16,
@@ -448,27 +399,12 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 1,
     },
-    messageText: {
-        fontSize: 15,
-        lineHeight: 20,
-    },
-    myMessageText: {
-        color: COLORS.textMain,
-    },
-    otherMessageText: {
-        color: COLORS.textMain,
-    },
-    messageTime: {
-        fontSize: 11,
-        marginTop: 4,
-    },
-    myMessageTime: {
-        color: COLORS.textSub,
-        textAlign: "right",
-    },
-    otherMessageTime: {
-        color: COLORS.textSub,
-    },
+    messageText: { fontSize: 15, lineHeight: 20 },
+    myMessageText: { color: COLORS.textMain },
+    otherMessageText: { color: COLORS.textMain },
+    messageTime: { fontSize: 11, marginTop: 4 },
+    myMessageTime: { color: COLORS.textSub, textAlign: "right" },
+    otherMessageTime: { color: COLORS.textSub },
     inputContainer: {
         flexDirection: "row",
         alignItems: "center",
@@ -505,9 +441,7 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.secondary,
         marginLeft: 8,
     },
-    sendButtonActive: {
-        backgroundColor: COLORS.primary,
-    },
+    sendButtonActive: { backgroundColor: COLORS.primary },
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -528,22 +462,10 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: COLORS.divider,
     },
-    menuTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    menuItem: {
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    menuItemText: {
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-    menuItemDanger: {
-        color: "#EF4444",
-    },
+    menuTitle: { fontSize: 18, fontWeight: "600", color: COLORS.textMain },
+    menuItem: { paddingHorizontal: 20, paddingVertical: 16 },
+    menuItemText: { fontSize: 16, color: COLORS.textMain },
+    menuItemDanger: { color: "#EF4444" },
     menuDivider: {
         height: 1,
         backgroundColor: COLORS.divider,

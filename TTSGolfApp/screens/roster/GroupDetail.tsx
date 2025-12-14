@@ -14,10 +14,11 @@ import { COLORS } from "../../constants/colors";
 import { GROUP_MEMBERS } from "./mockData";
 
 interface GroupDetailProps {
+    groupId: string;
     onBack: () => void;
 }
 
-export default function GroupDetail({ onBack }: GroupDetailProps) {
+export default function GroupDetail({ groupId, onBack }: GroupDetailProps) {
     return (
         <View style={styles.container}>
             <StatusBar style="dark" />

@@ -154,6 +154,27 @@ router.post("/logout-all", authenticate, authController.logoutAll);
 router.get("/me", authenticate, authController.getCurrentUser);
 
 /**
+ * @route   PUT /api/auth/profile
+ * @desc    Update user profile
+ * @access  Private
+ */
+router.put(
+  "/profile",
+  authenticate,
+  [
+    body("firstName").optional().trim().isLength({ min: 1, max: 50 }),
+    body("lastName").optional().trim().isLength({ min: 1, max: 50 }),
+    body("email").optional().trim().isEmail().normalizeEmail(),
+    body("handicap").optional().isInt({ min: 0, max: 54 }),
+    body("location").optional().trim().isLength({ max: 100 }),
+    body("equipment").optional().isObject(),
+    body("preferences").optional().isObject(),
+  ],
+  validateRequest,
+  authController.updateProfile
+);
+
+/**
  * @route   POST /api/auth/magic-link
  * @desc    Request magic link for email
  * @access  Public

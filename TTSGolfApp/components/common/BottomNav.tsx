@@ -20,16 +20,16 @@ interface BottomNavProps {
     onTabChange?: (tab: string) => void;
 }
 
-const tabs = [
+const TABS = [
     { name: "Home", icon: Home, screen: "HomePage" },
-    { name: "Availability", icon: Clock, screen: null },
+    { name: "Availability", icon: Clock, screen: "Availability" },
     { name: "Messages", icon: MessageCircle, screen: "Messages" },
     { name: "Roster", icon: Users, screen: "Roster" },
     { name: "Profile", icon: User, screen: "Profile" },
 ];
 
 export default function BottomNav({ activeTab, navigation, onTabChange }: BottomNavProps) {
-    const handlePress = (tab: typeof tabs[0]) => {
+    const handlePress = (tab: typeof TABS[0]) => {
         onTabChange?.(tab.name);
         if (navigation && tab.screen) {
             (navigation as any).navigate(tab.screen);
@@ -38,7 +38,7 @@ export default function BottomNav({ activeTab, navigation, onTabChange }: Bottom
 
     return (
         <View style={styles.bottomNav}>
-            {tabs.map((tab) => {
+            {TABS.map((tab) => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.name;
                 return (

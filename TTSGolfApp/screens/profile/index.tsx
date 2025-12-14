@@ -19,7 +19,6 @@ import {
     BasicInfoSection,
     EquipmentSection,
     PreferencesSection,
-    SettingsSection,
     SignOutButton,
 } from "./ProfileSections";
 
@@ -157,10 +156,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     setEditedProfile={setEditedProfile}
                 />
                 {!isEditMode && (
-                    <>
-                        <SettingsSection />
-                        <SignOutButton onSignOut={handleSignOut} />
-                    </>
+                    <SignOutButton onSignOut={handleSignOut} />
                 )}
                 <View style={{ height: 40 }} />
             </ScrollView>

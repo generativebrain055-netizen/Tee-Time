@@ -15,6 +15,11 @@ const { logApiRequest } = require("./middleware/analytics");
 
 // Import routes
 const authRoutes = require("./routes/auth");
+const rosterRoutes = require("./routes/roster");
+const teeTimeRoutes = require("./routes/teeTimes");
+const inviteRoutes = require("./routes/invites");
+const friendRoutes = require("./routes/friends");
+const courseRoutes = require("./routes/courses");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +67,11 @@ app.get("/health", (req, res) => {
 
 // API Routes
 app.use("/auth", authRoutes);
+app.use("/api/roster", rosterRoutes);
+app.use("/api/tee-times", teeTimeRoutes);
+app.use("/api/invites", inviteRoutes);
+app.use("/api/friends", friendRoutes);
+app.use("/api/courses", courseRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

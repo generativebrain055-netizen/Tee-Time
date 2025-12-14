@@ -12,6 +12,7 @@ import {
   ViewStyle,
   TextStyle,
   TextInput as RNTextInput,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -241,10 +242,17 @@ export default function LoginScreen({
       >
         <KeyboardAvoidingView
           style={styles.cardWrapper}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.card}>
+            <ScrollView
+              style={styles.card}
+              contentContainerStyle={styles.cardScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
               <Animated.View
                 style={[styles.cardContent, { opacity: fadeAnim }]}
               >
@@ -366,7 +374,7 @@ export default function LoginScreen({
                   </View>
                 )}
               </Animated.View>
-            </View>
+            </ScrollView>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Animated.View>
