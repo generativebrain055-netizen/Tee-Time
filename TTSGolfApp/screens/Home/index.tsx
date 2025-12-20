@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { BottomNav } from "../../components/common";
 import { teeTimeApi, TeeTime } from "../../services/api";
+import { useAuthStore } from "../../stores";
 import { COLORS, DAYS_SHORT } from "./constants";
 import { WeekDay, UpcomingTeeTime } from "./types";
 import { Header, QuickActions, WeekCalendar, NextTeeTime } from "./components";
 
+// Pure function - no side effects, memoizable
 const getWeekDays = (teeTimes: TeeTime[]): WeekDay[] => {
     const today = new Date();
     const currentDay = today.getDay();
@@ -44,26 +45,20 @@ const transformTeeTime = (tt: TeeTime): UpcomingTeeTime => ({
     maxPlayers: tt.maxPlayers,
 });
 
-export default function HomePage({ navigation }: any) {
+function HomePage({ navigation }: any) {
     const insets = useSafeAreaInsets();
     const [refreshing, setRefreshing] = useState(false);
     const [teeTimes, setTeeTimes] = useState<TeeTime[]>([]);
-    const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+
+    // Use Zustand store instead of local state
+    const user = useAuthStore((state) => state.user);
+    const loadUser = useAuthStore((state) => state.loadUser);
 
     const loadData = useCallback(async () => {
         try {
-            const [teeTimeResponse, storedUser] = await Promise.all([
-                teeTimeApi.getUpcoming(5),
-                AsyncStorage.getItem("user"),
-            ]);
-
+            const teeTimeResponse = await teeTimeApi.getUpcoming(5);
             if (teeTimeResponse.success) {
                 setTeeTimes(teeTimeResponse.teeTimes);
-            }
-
-            if (storedUser) {
-                const user = JSON.parse(storedUser);
-                setCurrentUserId(user.id);
             }
         } catch (error) {
             console.log("Failed to load data:", error);
@@ -71,8 +66,9 @@ export default function HomePage({ navigation }: any) {
     }, []);
 
     useEffect(() => {
+        loadUser();
         loadData();
-    }, [loadData]);
+    }, [loadData, loadUser]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -80,20 +76,42 @@ export default function HomePage({ navigation }: any) {
         setRefreshing(false);
     }, [loadData]);
 
+    // Memoized derived state
     const weekDays = useMemo(() => getWeekDays(teeTimes), [teeTimes]);
     const nextTeeTime = useMemo(
         () => (teeTimes.length > 0 ? transformTeeTime(teeTimes[0]) : null),
         [teeTimes]
     );
 
-    const handleNotifications = () => {
+    // Stable callbacks - won't cause child re-renders
+    const handleNotifications = useCallback(() => {
         navigation?.navigate("Roster", { initialTab: "Requests" });
-    };
+    }, [navigation]);
 
-    const handleCreateTeeTime = () => navigation?.navigate("CreateTeeTime");
-    const handleInvitePlayers = () => navigation?.navigate("Roster");
-    const handleFindAvailability = () => navigation?.navigate("Availability");
-    const handleViewSchedule = () => navigation?.navigate("FullCalendar");
+    const handleCreateTeeTime = useCallback(() => {
+        navigation?.navigate("CreateTeeTime");
+    }, [navigation]);
+
+    const handleInvitePlayers = useCallback(() => {
+        navigation?.navigate("Roster");
+    }, [navigation]);
+
+    const handleFindAvailability = useCallback(() => {
+        navigation?.navigate("Availability");
+    }, [navigation]);
+
+    const handleViewSchedule = useCallback(() => {
+        navigation?.navigate("FullCalendar");
+    }, [navigation]);
+
+    // Memoized refresh control to prevent recreation
+    const refreshControl = useMemo(() => (
+        <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
+        />
+    ), [refreshing, onRefresh]);
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -102,13 +120,7 @@ export default function HomePage({ navigation }: any) {
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.primary}
-                    />
-                }
+                refreshControl={refreshControl}
             >
                 <Header onNotificationPress={handleNotifications} />
                 <QuickActions
@@ -117,12 +129,14 @@ export default function HomePage({ navigation }: any) {
                     onFindAvailability={handleFindAvailability}
                 />
                 <WeekCalendar weekDays={weekDays} onViewSchedule={handleViewSchedule} />
-                <NextTeeTime teeTime={nextTeeTime} currentUserId={currentUserId} />
+                <NextTeeTime teeTime={nextTeeTime} currentUserId={user?.id} />
             </ScrollView>
             <BottomNav activeTab="Home" navigation={navigation} />
         </View>
     );
 }
+
+export default memo(HomePage);
 
 const styles = StyleSheet.create({
     container: {

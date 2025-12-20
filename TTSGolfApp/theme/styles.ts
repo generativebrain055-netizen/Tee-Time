@@ -58,7 +58,7 @@ export const cardStyles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xxxl,
   } as ViewStyle,
   cardContent: {
     flex: 1,

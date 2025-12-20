@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
 import { Clock, MapPin, Users, Check } from "lucide-react-native";
 import { COLORS } from "../constants";
@@ -9,6 +9,7 @@ interface NextTeeTimeProps {
     currentUserId?: string;
 }
 
+// Pure helper functions - outside component
 const formatDate = (dateStr: string): string => {
     const date = new Date(dateStr);
     const options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
@@ -40,7 +41,23 @@ const formatDateWithSuffix = (dateStr: string): string => {
     return `${month} ${day}${getDateSuffix(day)}`;
 };
 
-export default function NextTeeTime({ teeTime, currentUserId }: NextTeeTimeProps) {
+const getInitials = (name: string): string => {
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+};
+
+const getShortName = (name: string): string => {
+    const parts = name.split(" ");
+    const firstName = parts[0] || "";
+    const lastInitial = parts[1] ? parts[1][0] : "";
+    const shortName = lastInitial ? `${firstName} ${lastInitial}` : firstName;
+    return shortName.length > 6 ? `${shortName.substring(0, 5)}...` : shortName;
+};
+
+function NextTeeTime({ teeTime, currentUserId }: NextTeeTimeProps) {
     if (!teeTime) {
         return (
             <View style={styles.container}>
@@ -52,22 +69,6 @@ export default function NextTeeTime({ teeTime, currentUserId }: NextTeeTimeProps
             </View>
         );
     }
-
-    const getInitials = (name: string): string => {
-        const parts = name.split(" ");
-        if (parts.length >= 2) {
-            return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-        }
-        return name.substring(0, 2).toUpperCase();
-    };
-
-    const getShortName = (name: string, isCreator: boolean): string => {
-        const parts = name.split(" ");
-        const firstName = parts[0] || "";
-        const lastInitial = parts[1] ? parts[1][0] : "";
-        const shortName = lastInitial ? `${firstName} ${lastInitial}` : firstName;
-        return shortName.length > 6 ? `${shortName.substring(0, 5)}...` : shortName;
-    };
 
     return (
         <View style={styles.container}>
@@ -118,7 +119,7 @@ export default function NextTeeTime({ teeTime, currentUserId }: NextTeeTimeProps
                                         </View>
                                     </View>
                                     <Text style={styles.participantName}>
-                                        {isCurrentUser ? "You" : getShortName(p.name, p.isCreator)}
+                                        {isCurrentUser ? "You" : getShortName(p.name)}
                                     </Text>
                                     {p.isCreator && !isCurrentUser && (
                                         <Text style={styles.hostLabel}>(host)</Text>
@@ -292,3 +293,5 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
 });
+
+export default memo(NextTeeTime);

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo, useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { COLORS, DAYS_SHORT } from "../constants";
@@ -9,7 +9,22 @@ interface WeekCalendarProps {
     onViewSchedule: () => void;
 }
 
-export default function WeekCalendar({ weekDays, onViewSchedule }: WeekCalendarProps) {
+// Memoized day component
+const DayColumn = memo(({ day }: { day: WeekDay }) => (
+    <View style={styles.dayColumn}>
+        <Text style={styles.dayName}>{day.dayName}</Text>
+        <View style={[styles.dayCircle, day.isToday && styles.todayCircle]}>
+            <Text style={[styles.dayNumber, day.isToday && styles.todayNumber]}>
+                {day.dayNumber}
+            </Text>
+        </View>
+        {day.hasEvent && <View style={styles.eventDot} />}
+    </View>
+));
+
+DayColumn.displayName = 'DayColumn';
+
+function WeekCalendar({ weekDays, onViewSchedule }: WeekCalendarProps) {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -21,15 +36,7 @@ export default function WeekCalendar({ weekDays, onViewSchedule }: WeekCalendarP
             </View>
             <View style={styles.weekRow}>
                 {weekDays.map((day, index) => (
-                    <View key={index} style={styles.dayColumn}>
-                        <Text style={styles.dayName}>{day.dayName}</Text>
-                        <View style={[styles.dayCircle, day.isToday && styles.todayCircle]}>
-                            <Text style={[styles.dayNumber, day.isToday && styles.todayNumber]}>
-                                {day.dayNumber}
-                            </Text>
-                        </View>
-                        {day.hasEvent && <View style={styles.eventDot} />}
-                    </View>
+                    <DayColumn key={index} day={day} />
                 ))}
             </View>
         </View>
@@ -102,3 +109,5 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
 });
+
+export default memo(WeekCalendar);

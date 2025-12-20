@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import {
     View,
     Text,
-    ScrollView,
     TouchableOpacity,
     Image,
     StyleSheet,
     RefreshControl,
     ActivityIndicator,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Calendar, MessageCircle, Menu } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { friendApi, Friend } from "../../services/api";
@@ -17,6 +17,7 @@ interface RosterListProps {
     navigation: any;
 }
 
+// Memoized helper - computed once
 const formatLastPlayed = (dateStr?: string): string => {
     if (!dateStr) return "Never played";
     const date = new Date(dateStr);
@@ -33,7 +34,81 @@ const formatLastPlayed = (dateStr?: string): string => {
     return `Last played: ${date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" })}`;
 };
 
-export default function RosterList({ navigation }: RosterListProps) {
+const getInitials = (firstName: string, lastName: string): string => {
+    return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+};
+
+// Memoized row component - prevents re-renders
+interface RosterItemProps {
+    friend: Friend;
+    index: number;
+    onInvite: (friend: Friend) => void;
+    onMessage: (friend: Friend) => void;
+}
+
+const RosterItem = memo(({ friend, index, onInvite, onMessage }: RosterItemProps) => {
+    const handleInvite = useCallback(() => onInvite(friend), [friend, onInvite]);
+    const handleMessage = useCallback(() => onMessage(friend), [friend, onMessage]);
+
+    return (
+        <View style={styles.rosterItem}>
+            <View style={styles.dragHandle}>
+                <Menu size={20} color={COLORS.textSub} />
+            </View>
+
+            <Text style={styles.rankNumber}>{index + 1}</Text>
+
+            <View style={styles.avatarContainer}>
+                {friend.avatar ? (
+                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                ) : (
+                    <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitials}>
+                            {getInitials(friend.firstName, friend.lastName)}
+                        </Text>
+                    </View>
+                )}
+            </View>
+
+            <View style={styles.infoContainer}>
+                <Text style={styles.name}>
+                    {friend.firstName} {friend.lastName}
+                </Text>
+                <Text style={styles.lastPlayed}>
+                    {formatLastPlayed(friend.friendsSince)}
+                </Text>
+            </View>
+
+            <View style={styles.actions}>
+                <TouchableOpacity style={styles.actionButton} onPress={handleInvite}>
+                    <Calendar size={18} color={COLORS.primary} strokeWidth={1.5} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={handleMessage}>
+                    <MessageCircle size={18} color={COLORS.primary} strokeWidth={1.5} />
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+});
+
+RosterItem.displayName = 'RosterItem';
+
+// Empty state component
+const EmptyState = memo(({ onFindPlayers }: { onFindPlayers: () => void }) => (
+    <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>No friends in roster</Text>
+        <Text style={styles.emptySubtext}>
+            Add friends from Availability to build your roster
+        </Text>
+        <TouchableOpacity style={styles.addButton} onPress={onFindPlayers}>
+            <Text style={styles.addButtonText}>Find Players</Text>
+        </TouchableOpacity>
+    </View>
+));
+
+EmptyState.displayName = 'EmptyState';
+
+function RosterList({ navigation }: RosterListProps) {
     const [friends, setFriends] = useState<Friend[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -62,11 +137,12 @@ export default function RosterList({ navigation }: RosterListProps) {
         await loadFriends();
     }, [loadFriends]);
 
-    const handleInvite = (friend: Friend) => {
+    // Stable callbacks - won't cause child re-renders
+    const handleInvite = useCallback((friend: Friend) => {
         navigation?.navigate("CreateTeeTime", { invitee: friend });
-    };
+    }, [navigation]);
 
-    const handleMessage = (friend: Friend) => {
+    const handleMessage = useCallback((friend: Friend) => {
         navigation?.navigate("ChatDetail", {
             chatInfo: {
                 id: friend.id,
@@ -74,11 +150,23 @@ export default function RosterList({ navigation }: RosterListProps) {
                 avatar: friend.avatar,
             },
         });
-    };
+    }, [navigation]);
 
-    const getInitials = (firstName: string, lastName: string): string => {
-        return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
-    };
+    const handleFindPlayers = useCallback(() => {
+        navigation?.navigate("Availability");
+    }, [navigation]);
+
+    // Optimized render function
+    const renderItem = useCallback(({ item, index }: { item: Friend; index: number }) => (
+        <RosterItem
+            friend={item}
+            index={index}
+            onInvite={handleInvite}
+            onMessage={handleMessage}
+        />
+    ), [handleInvite, handleMessage]);
+
+    const keyExtractor = useCallback((item: Friend) => item.id, []);
 
     if (loading) {
         return (
@@ -89,37 +177,16 @@ export default function RosterList({ navigation }: RosterListProps) {
     }
 
     if (friends.length === 0) {
-        return (
-            <ScrollView
-                style={styles.container}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.primary}
-                    />
-                }
-            >
-                <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyTitle}>No friends in roster</Text>
-                    <Text style={styles.emptySubtext}>
-                        Add friends from Availability to build your roster
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => navigation?.navigate("Availability")}
-                    >
-                        <Text style={styles.addButtonText}>Find Players</Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        );
+        return <EmptyState onFindPlayers={handleFindPlayers} />;
     }
 
     return (
-        <ScrollView
-            style={styles.container}
-            showsVerticalScrollIndicator={false}
+        <FlashList
+            data={friends}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            estimatedItemSize={80}
+            contentContainerStyle={styles.listContent}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
@@ -127,61 +194,15 @@ export default function RosterList({ navigation }: RosterListProps) {
                     tintColor={COLORS.primary}
                 />
             }
-        >
-            {friends.map((friend, index) => (
-                <View key={friend.id} style={styles.rosterItem}>
-                    <View style={styles.dragHandle}>
-                        <Menu size={20} color={COLORS.textSub} />
-                    </View>
-
-                    <Text style={styles.rankNumber}>{index + 1}</Text>
-
-                    <View style={styles.avatarContainer}>
-                        {friend.avatar ? (
-                            <Image source={{ uri: friend.avatar }} style={styles.avatar} />
-                        ) : (
-                            <View style={styles.avatarPlaceholder}>
-                                <Text style={styles.avatarInitials}>
-                                    {getInitials(friend.firstName, friend.lastName)}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={styles.infoContainer}>
-                        <Text style={styles.name}>
-                            {friend.firstName} {friend.lastName}
-                        </Text>
-                        <Text style={styles.lastPlayed}>
-                            {formatLastPlayed(friend.friendsSince)}
-                        </Text>
-                    </View>
-
-                    <View style={styles.actions}>
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => handleInvite(friend)}
-                        >
-                            <Calendar size={18} color={COLORS.primary} strokeWidth={1.5} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={() => handleMessage(friend)}
-                        >
-                            <MessageCircle size={18} color={COLORS.primary} strokeWidth={1.5} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            ))}
-            <View style={{ height: 100 }} />
-        </ScrollView>
+        />
     );
 }
 
+export default memo(RosterList);
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.white,
+    listContent: {
+        paddingBottom: 100,
     },
     loadingContainer: {
         flex: 1,

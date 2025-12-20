@@ -241,7 +241,7 @@ export default function LoginScreen({
         ]}
       >
         <KeyboardAvoidingView
-          style={styles.cardWrapper}
+          style={styles.keyboardAvoidContainer}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
@@ -393,13 +393,16 @@ export default function LoginScreen({
         onSelect={setSelectedCountry}
         selectedCountry={selectedCountry}
       />
-    </LinearGradient>
+    </LinearGradient >
   );
 }
 
 // Local styles that extend shared styles
 const localStyles: LocalStyles = {
   container: {
+    flex: 1,
+  },
+  keyboardAvoidContainer: {
     flex: 1,
   },
   phoneInputWrapper: {

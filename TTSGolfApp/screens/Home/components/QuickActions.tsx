@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CalendarPlus, UserPlus, Search } from "lucide-react-native";
 import { COLORS } from "../constants";
@@ -9,7 +9,7 @@ interface QuickActionsProps {
     onFindAvailability: () => void;
 }
 
-export default function QuickActions({
+function QuickActions({
     onCreateTeeTime,
     onInvitePlayers,
     onFindAvailability,
@@ -83,3 +83,5 @@ const styles = StyleSheet.create({
         lineHeight: 16,
     },
 });
+
+export default memo(QuickActions);

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Bell } from "lucide-react-native";
 import { COLORS } from "../constants";
@@ -7,7 +7,7 @@ interface HeaderProps {
     onNotificationPress: () => void;
 }
 
-export default function Header({ onNotificationPress }: HeaderProps) {
+function Header({ onNotificationPress }: HeaderProps) {
     return (
         <View style={styles.container}>
             <View>
@@ -47,3 +47,5 @@ const styles = StyleSheet.create({
         padding: 8,
     },
 });
+
+export default memo(Header);
