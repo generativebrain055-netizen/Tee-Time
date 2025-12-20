@@ -1,4 +1,4 @@
-const pool = require("../config/database");
+const { pool } = require("../config/database");
 const logger = require("../config/logger");
 
 class TeeTimeRepository {
@@ -24,9 +24,10 @@ class TeeTimeRepository {
   // Get tee time by ID
   async getTeeTimeById(teeTimeId) {
     const query = `
-      SELECT t.*, u.first_name, u.last_name, u.username, u.avatar_url
+      SELECT t.*, u.first_name, u.last_name, u.username, p.avatar_url
       FROM tee_times t
       JOIN users u ON t.creator_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE t.id = $1
     `;
     const result = await pool.query(query, [teeTimeId]);
@@ -96,9 +97,10 @@ class TeeTimeRepository {
   // Get participants
   async getParticipants(teeTimeId) {
     const query = `
-      SELECT p.*, u.first_name, u.last_name, u.username, u.avatar_url, u.handicap
+      SELECT p.*, u.first_name, u.last_name, u.username, up.avatar_url, up.handicap
       FROM tee_time_participants p
       LEFT JOIN users u ON p.user_id = u.id
+      LEFT JOIN user_profiles up ON u.id = up.user_id
       WHERE p.tee_time_id = $1
       ORDER BY p.position ASC
     `;

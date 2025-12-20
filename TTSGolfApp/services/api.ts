@@ -18,6 +18,14 @@ export interface RosterContact {
   notes?: string;
 }
 
+export interface TeeTimeParticipant {
+  id: string;
+  userId?: string;
+  name: string;
+  avatar?: string;
+  isCreator: boolean;
+}
+
 export interface TeeTime {
   id: string;
   courseName: string;
@@ -29,6 +37,7 @@ export interface TeeTime {
   status: "pending" | "confirmed" | "cancelled" | "completed";
   participantCount: number;
   creator?: { firstName: string; lastName: string };
+  participants?: TeeTimeParticipant[];
   notes?: string;
 }
 
@@ -53,16 +62,71 @@ const getAuthHeaders = async () => {
   };
 };
 
-// Generic API call wrapper
+// Token refresh function
+const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const refreshToken = await AsyncStorage.getItem("refreshToken");
+    if (!refreshToken) return null;
+
+    const response = await fetch(API_ENDPOINTS.REFRESH_TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      await AsyncStorage.setItem("accessToken", data.accessToken);
+      if (data.refreshToken) {
+        await AsyncStorage.setItem("refreshToken", data.refreshToken);
+      }
+      return data.accessToken;
+    }
+
+    // Refresh failed - clear tokens
+    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+    return null;
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    return null;
+  }
+};
+
+// Generic API call wrapper with automatic token refresh
 const apiCall = async <T>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retryOnUnauthorized = true
 ): Promise<T> => {
   const headers = await getAuthHeaders();
   const response = await fetch(url, {
     ...options,
     headers: { ...headers, ...options.headers },
   });
+
+  // Handle 401 Unauthorized - try to refresh token
+  if (response.status === 401 && retryOnUnauthorized) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      // Retry the request with new token
+      const retryResponse = await fetch(url, {
+        ...options,
+        headers: {
+          ...options.headers,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${newToken}`,
+        },
+      });
+      const retryData = await retryResponse.json();
+      if (!retryResponse.ok) {
+        throw new Error(retryData.message || "API request failed");
+      }
+      return retryData;
+    }
+    // Token refresh failed
+    throw new Error("Session expired. Please login again.");
+  }
 
   const data = await response.json();
 

@@ -76,7 +76,7 @@ export default function PersonDetail({ person, onBack }: PersonDetailProps) {
         <View style={styles.tabContent}>
             <View style={styles.statsGrid}>
                 <StatCard icon={Award} label="Handicap" value={profile?.stats.handicap} />
-                <StatCard icon={Star} label="Social Rate" value={profile?.stats.socialRate?.toFixed(1)} color="#F59E0B" />
+                <StatCard icon={Star} label="Social Rate" value={profile?.stats.socialRate != null ? Number(profile.stats.socialRate).toFixed(1) : undefined} color="#F59E0B" />
                 <StatCard icon={TrendingUp} label="Rounds" value={profile?.stats.roundsPlayed} />
                 <StatCard icon={Users} label="Played Together" value={profile?.stats.timesPlayedTogether} />
             </View>

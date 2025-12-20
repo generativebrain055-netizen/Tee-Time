@@ -1,7 +1,9 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions } from "react-native";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
-import { COLORS, MONTHS, DAYS, SCREEN_WIDTH } from "./constants";
+import { COLORS, MONTHS, DAYS } from "./constants";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface DatePickerModalProps {
     visible: boolean;

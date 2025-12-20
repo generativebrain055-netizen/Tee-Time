@@ -222,17 +222,17 @@ export default function FriendProfileScreen({ navigation, route }: Props) {
                 {renderActionButton()}
 
                 <View style={styles.statsRow}>
-                    {profile.handicap !== undefined && (
+                    {profile.handicap != null && (
                         <View style={styles.statItem}>
                             <Award size={20} color={COLORS.primary} />
                             <Text style={styles.statValue}>{profile.handicap}</Text>
                             <Text style={styles.statLabel}>Handicap</Text>
                         </View>
                     )}
-                    {profile.socialRate !== undefined && (
+                    {profile.socialRate != null && (
                         <View style={styles.statItem}>
                             <Star size={20} color={COLORS.primary} />
-                            <Text style={styles.statValue}>{profile.socialRate.toFixed(1)}</Text>
+                            <Text style={styles.statValue}>{Number(profile.socialRate).toFixed(1)}</Text>
                             <Text style={styles.statLabel}>Social Rate</Text>
                         </View>
                     )}

@@ -3,17 +3,19 @@ import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     ScrollView,
     TouchableOpacity,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ArrowLeft, Edit2 } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { BottomNav } from "../../components/common";
 import { UserProfile, DEFAULT_USER } from "./types";
+import { profileApi } from "../../services/api";
 import {
     ProfilePhotoSection,
     BasicInfoSection,
@@ -23,36 +25,85 @@ import {
 } from "./ProfileSections";
 
 export default function ProfileScreen({ navigation, route }: any) {
+    const insets = useSafeAreaInsets();
     const [isEditMode, setIsEditMode] = useState(false);
     const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER);
     const [editedProfile, setEditedProfile] = useState<UserProfile>(profile);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchProfile();
     }, []);
 
     const fetchProfile = async () => {
+        setLoading(true);
         try {
-            const userData = route?.params?.user;
-            if (userData) {
-                setProfile({
+            // First try to get from API
+            const response = await profileApi.getCurrentUser();
+            if (response.success && response.user) {
+                const userData = response.user;
+                const fetchedProfile: UserProfile = {
                     ...DEFAULT_USER,
                     firstName: userData.firstName || DEFAULT_USER.firstName,
                     lastName: userData.lastName || DEFAULT_USER.lastName,
                     phone: userData.phoneNumber || DEFAULT_USER.phone,
+                    email: userData.email || DEFAULT_USER.email,
                     handicap: userData.handicap?.toString() || DEFAULT_USER.handicap,
-                });
+                    username: userData.username || DEFAULT_USER.username,
+                    location: userData.location || DEFAULT_USER.location,
+                    homeCourse: userData.homeCourse || DEFAULT_USER.homeCourse,
+                    bio: userData.bio || DEFAULT_USER.bio,
+                };
+                setProfile(fetchedProfile);
+                setEditedProfile(fetchedProfile);
             }
         } catch (error) {
-            console.error("Error fetching profile:", error);
+            console.error("Error fetching profile from API:", error);
+            // Fallback to route params or stored user
+            try {
+                const storedUser = await AsyncStorage.getItem("user");
+                const userData = route?.params?.user || (storedUser ? JSON.parse(storedUser) : null);
+                if (userData) {
+                    setProfile({
+                        ...DEFAULT_USER,
+                        firstName: userData.firstName || DEFAULT_USER.firstName,
+                        lastName: userData.lastName || DEFAULT_USER.lastName,
+                        phone: userData.phoneNumber || DEFAULT_USER.phone,
+                        handicap: userData.handicap?.toString() || DEFAULT_USER.handicap,
+                    });
+                }
+            } catch (e) {
+                console.error("Error loading stored user:", e);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSave = async () => {
         try {
-            setProfile(editedProfile);
-            setIsEditMode(false);
-            Alert.alert("Success", "Profile updated successfully!");
+            const response = await profileApi.updateProfile({
+                firstName: editedProfile.firstName,
+                lastName: editedProfile.lastName,
+                email: editedProfile.email,
+                handicap: editedProfile.handicap ? parseInt(editedProfile.handicap) : undefined,
+            });
+
+            if (response.success) {
+                setProfile(editedProfile);
+                setIsEditMode(false);
+                // Update stored user
+                const storedUser = await AsyncStorage.getItem("user");
+                if (storedUser) {
+                    const user = JSON.parse(storedUser);
+                    await AsyncStorage.setItem("user", JSON.stringify({
+                        ...user,
+                        firstName: editedProfile.firstName,
+                        lastName: editedProfile.lastName,
+                    }));
+                }
+                Alert.alert("Success", "Profile updated successfully!");
+            }
         } catch (error) {
             console.error("Error saving profile:", error);
             Alert.alert("Error", "Failed to save profile. Please try again.");
@@ -123,60 +174,65 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <StatusBar style="dark" />
             <Header />
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-            >
-                <ProfilePhotoSection
-                    profile={isEditMode ? editedProfile : profile}
-                    isEditMode={isEditMode}
-                    onChangePhoto={handleChangePhoto}
-                />
-                <BasicInfoSection
-                    profile={profile}
-                    editedProfile={editedProfile}
-                    isEditMode={isEditMode}
-                    setEditedProfile={setEditedProfile}
-                />
-                <EquipmentSection
-                    profile={profile}
-                    editedProfile={editedProfile}
-                    isEditMode={isEditMode}
-                    setEditedProfile={setEditedProfile}
-                />
-                <PreferencesSection
-                    profile={profile}
-                    editedProfile={editedProfile}
-                    isEditMode={isEditMode}
-                    setEditedProfile={setEditedProfile}
-                />
-                {!isEditMode && (
-                    <SignOutButton onSignOut={handleSignOut} />
-                )}
-                <View style={{ height: 40 }} />
-            </ScrollView>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            ) : (
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    <ProfilePhotoSection
+                        profile={isEditMode ? editedProfile : profile}
+                        isEditMode={isEditMode}
+                        onChangePhoto={handleChangePhoto}
+                    />
+                    <BasicInfoSection
+                        profile={profile}
+                        editedProfile={editedProfile}
+                        isEditMode={isEditMode}
+                        setEditedProfile={setEditedProfile}
+                    />
+                    <EquipmentSection
+                        profile={profile}
+                        editedProfile={editedProfile}
+                        isEditMode={isEditMode}
+                        setEditedProfile={setEditedProfile}
+                    />
+                    <PreferencesSection
+                        profile={profile}
+                        editedProfile={editedProfile}
+                        isEditMode={isEditMode}
+                        setEditedProfile={setEditedProfile}
+                    />
+                    {!isEditMode && (
+                        <SignOutButton onSignOut={handleSignOut} />
+                    )}
+                    <View style={{ height: 40 }} />
+                </ScrollView>
+            )}
             {!isEditMode && <BottomNav activeTab="Profile" navigation={navigation} />}
-        </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.bg,
+        backgroundColor: COLORS.white,
     },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
         paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
+        paddingVertical: 12,
         backgroundColor: COLORS.white,
     },
     headerButton: {
@@ -200,5 +256,10 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: 100,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
     },
 });

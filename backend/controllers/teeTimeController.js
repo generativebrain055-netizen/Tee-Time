@@ -72,20 +72,31 @@ class TeeTimeController {
 
       const teeTimes = await teeTimeRepository.getUpcomingTeeTimes(userId, limit);
       
-      const formatted = teeTimes.map(t => ({
-        id: t.id,
-        courseName: t.course_name,
-        courseLocation: t.course_location,
-        teeDate: t.tee_date,
-        teeTime: t.tee_time,
-        maxPlayers: t.max_players,
-        inviteType: t.invite_type,
-        status: t.status,
-        participantCount: parseInt(t.participant_count),
-        creator: {
-          firstName: t.creator_first_name,
-          lastName: t.creator_last_name
-        }
+      // Get participants for each tee time
+      const formatted = await Promise.all(teeTimes.map(async (t) => {
+        const participants = await teeTimeRepository.getParticipants(t.id);
+        return {
+          id: t.id,
+          courseName: t.course_name,
+          courseLocation: t.course_location,
+          teeDate: t.tee_date,
+          teeTime: t.tee_time,
+          maxPlayers: t.max_players,
+          inviteType: t.invite_type,
+          status: t.status,
+          participantCount: parseInt(t.participant_count),
+          creator: {
+            firstName: t.creator_first_name,
+            lastName: t.creator_last_name
+          },
+          participants: participants.map(p => ({
+            id: p.id,
+            userId: p.user_id,
+            name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+            avatar: p.avatar_url,
+            isCreator: p.is_creator
+          }))
+        };
       }));
 
       res.json({ success: true, teeTimes: formatted });

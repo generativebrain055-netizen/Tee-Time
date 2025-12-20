@@ -1,0 +1,27 @@
+\contentsline {section}{\numberline {1}Session Overview}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Key Accomplishments}{2}{subsection.1.1}%
+\contentsline {section}{\numberline {2}Bug Fixes and Improvements}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Create Invite API Error}{2}{subsection.2.1}%
+\contentsline {subsubsection}{\numberline {2.1.1}Problem}{2}{subsubsection.2.1.1}%
+\contentsline {subsubsection}{\numberline {2.1.2}Solution}{2}{subsubsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.2}OTP Input Keyboard Visibility}{3}{subsection.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.1}Problem}{3}{subsubsection.2.2.1}%
+\contentsline {subsubsection}{\numberline {2.2.2}Solution}{3}{subsubsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.3}Controller Method Binding Fixes}{3}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}Problem}{3}{subsubsection.2.3.1}%
+\contentsline {subsubsection}{\numberline {2.3.2}Solution}{4}{subsubsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.4}Express Route Ordering Fixes}{4}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Problem}{4}{subsubsection.2.4.1}%
+\contentsline {subsubsection}{\numberline {2.4.2}Solution}{4}{subsubsection.2.4.2}%
+\contentsline {subsection}{\numberline {2.5}API Endpoint Configuration Fix}{5}{subsection.2.5}%
+\contentsline {subsubsection}{\numberline {2.5.1}Problem}{5}{subsubsection.2.5.1}%
+\contentsline {subsubsection}{\numberline {2.5.2}Solution}{5}{subsubsection.2.5.2}%
+\contentsline {section}{\numberline {3}Files Modified}{5}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Backend Files}{5}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Frontend Files}{5}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Technical Notes}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Why Method Binding is Required}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Express Route Matching Order}{6}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}KeyboardAvoidingView Best Practices}{6}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Testing Recommendations}{6}{section.5}%
+\contentsline {section}{\numberline {6}Conclusion}{6}{section.6}%

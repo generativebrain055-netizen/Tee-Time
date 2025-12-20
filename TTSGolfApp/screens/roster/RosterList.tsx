@@ -6,192 +6,78 @@ import {
     TouchableOpacity,
     Image,
     StyleSheet,
-    Alert,
     RefreshControl,
     ActivityIndicator,
 } from "react-native";
-import { Calendar, MessageSquare, Star, StarOff, ChevronDown } from "lucide-react-native";
+import { Calendar, MessageCircle, Menu } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
-import { RosterPerson, SortOption } from "./types";
-import { rosterApi, RosterContact } from "../../services/api";
+import { friendApi, Friend } from "../../services/api";
 
 interface RosterListProps {
-    onPersonClick: (person: RosterPerson) => void;
+    navigation: any;
 }
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-    { value: "position", label: "Position" },
-    { value: "socialRate", label: "Social Rate" },
-    { value: "handicap", label: "Handicap" },
-    { value: "name", label: "Name" },
-    { value: "distance", label: "Distance" },
-    { value: "membership", label: "Membership" },
-];
+const formatLastPlayed = (dateStr?: string): string => {
+    if (!dateStr) return "Never played";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-export default function RosterList({ onPersonClick }: RosterListProps) {
-    const [roster, setRoster] = useState<RosterContact[]>([]);
-    const [onDeck, setOnDeck] = useState<RosterContact[]>([]);
+    if (diffDays === 0) return "Last played: today";
+    if (diffDays === 1) return "Last played: yesterday";
+    if (diffDays < 7) return `Last played: ${diffDays} days ago`;
+    if (diffDays < 14) return "Last played: 1 week ago";
+    if (diffDays < 30) return `Last played: ${Math.floor(diffDays / 7)} weeks ago`;
+    if (diffDays < 60) return "Last played: last month";
+
+    return `Last played: ${date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" })}`;
+};
+
+export default function RosterList({ navigation }: RosterListProps) {
+    const [friends, setFriends] = useState<Friend[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [sortBy, setSortBy] = useState<SortOption>("position");
-    const [showSortMenu, setShowSortMenu] = useState(false);
 
-    const loadData = useCallback(async () => {
+    const loadFriends = useCallback(async () => {
         try {
-            const [rosterRes, onDeckRes] = await Promise.all([
-                rosterApi.getRoster(sortBy),
-                rosterApi.getOnDeck(),
-            ]);
-            if (rosterRes.success) {
-                setRoster(rosterRes.roster.filter((r) => !r.isOnDeck));
-            }
-            if (onDeckRes.success) {
-                setOnDeck(onDeckRes.onDeck);
+            const response = await friendApi.getFriends();
+            if (response.success) {
+                setFriends(response.friends);
             }
         } catch (error) {
-            console.error("Failed to load roster:", error);
-            // Show empty state on error
-            setRoster([]);
-            setOnDeck([]);
+            console.error("Failed to load friends:", error);
+            setFriends([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [sortBy]);
+    }, []);
 
     useEffect(() => {
-        loadData();
-    }, [loadData]);
+        loadFriends();
+    }, [loadFriends]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await loadData();
-    }, [loadData]);
+        await loadFriends();
+    }, [loadFriends]);
 
-    const handleMoveToOnDeck = async (item: RosterContact) => {
-        try {
-            await rosterApi.moveMember(item.id, { isOnDeck: true, newPosition: onDeck.length });
-            setRoster((prev) => prev.filter((r) => r.id !== item.id));
-            setOnDeck((prev) => [...prev, { ...item, isOnDeck: true }]);
-        } catch (error) {
-            Alert.alert("Error", "Failed to move to On Deck");
-        }
+    const handleInvite = (friend: Friend) => {
+        navigation?.navigate("CreateTeeTime", { invitee: friend });
     };
 
-    const handleMoveToRoster = async (item: RosterContact) => {
-        try {
-            await rosterApi.moveMember(item.id, { isOnDeck: false, newPosition: roster.length });
-            setOnDeck((prev) => prev.filter((r) => r.id !== item.id));
-            setRoster((prev) => [...prev, { ...item, isOnDeck: false }]);
-        } catch (error) {
-            Alert.alert("Error", "Failed to move to Roster");
-        }
+    const handleMessage = (friend: Friend) => {
+        navigation?.navigate("ChatDetail", {
+            chatInfo: {
+                id: friend.id,
+                name: `${friend.firstName} ${friend.lastName}`,
+                avatar: friend.avatar,
+            },
+        });
     };
 
-    const toPerson = (item: RosterContact, index: number): RosterPerson => ({
-        id: item.id,
-        name: item.contact.name || "Unknown",
-        sub: item.contact.handicap ? `HCP ${item.contact.handicap}` : item.contact.phone || "",
-        img:
-            item.contact.avatar ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.contact.name}`,
-        phone: item.contact.phone,
-        handicap: item.contact.handicap,
-        socialRate: (item.contact as any).socialRate,
-        isOnDeck: item.isOnDeck,
-    });
-
-    const SortDropdown = () => (
-        <View style={styles.sortContainer}>
-            <TouchableOpacity
-                style={styles.sortButton}
-                onPress={() => setShowSortMenu(!showSortMenu)}
-            >
-                <Text style={styles.sortLabel}>
-                    Sort: {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
-                </Text>
-                <ChevronDown size={16} color={COLORS.textSub} />
-            </TouchableOpacity>
-            {showSortMenu && (
-                <View style={styles.sortMenu}>
-                    {SORT_OPTIONS.map((option) => (
-                        <TouchableOpacity
-                            key={option.value}
-                            style={[
-                                styles.sortMenuItem,
-                                sortBy === option.value && styles.sortMenuItemActive,
-                            ]}
-                            onPress={() => {
-                                setSortBy(option.value);
-                                setShowSortMenu(false);
-                            }}
-                        >
-                            <Text
-                                style={[
-                                    styles.sortMenuText,
-                                    sortBy === option.value && styles.sortMenuTextActive,
-                                ]}
-                            >
-                                {option.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-        </View>
-    );
-
-    const RosterItem = ({
-        item,
-        index,
-        isOnDeckSection,
-    }: {
-        item: RosterContact;
-        index: number;
-        isOnDeckSection: boolean;
-    }) => {
-        const person = toPerson(item, index);
-
-        return (
-            <TouchableOpacity style={styles.rosterItem} onPress={() => onPersonClick(person)}>
-                <View style={styles.leftSection}>
-                    <Text style={styles.rosterNumber}>{index + 1}</Text>
-                    <Image source={{ uri: person.img }} style={styles.avatar} />
-                    <View style={styles.rosterInfo}>
-                        <Text style={styles.rosterName}>{person.name}</Text>
-                        <View style={styles.statsRow}>
-                            <Text style={styles.rosterSub}>{person.sub}</Text>
-                            {person.socialRate && (
-                                <Text style={styles.socialRate}>★ {person.socialRate.toFixed(1)}</Text>
-                            )}
-                        </View>
-                    </View>
-                </View>
-                <View style={styles.rosterActions}>
-                    <TouchableOpacity
-                        style={[
-                            styles.actionBtn,
-                            isOnDeckSection ? styles.actionBtnYellow : styles.actionBtnGray,
-                        ]}
-                        onPress={() =>
-                            isOnDeckSection ? handleMoveToRoster(item) : handleMoveToOnDeck(item)
-                        }
-                    >
-                        {isOnDeckSection ? (
-                            <Star size={16} color="#F59E0B" fill="#F59E0B" />
-                        ) : (
-                            <StarOff size={16} color={COLORS.textSub} />
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtnGreen}>
-                        <Calendar size={16} color={COLORS.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtnBlue}>
-                        <MessageSquare size={16} color="#3B82F6" />
-                    </TouchableOpacity>
-                </View>
-            </TouchableOpacity>
-        );
+    const getInitials = (firstName: string, lastName: string): string => {
+        return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
     };
 
     if (loading) {
@@ -202,169 +88,200 @@ export default function RosterList({ onPersonClick }: RosterListProps) {
         );
     }
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.headerRow}>
-                <SortDropdown />
-            </View>
-
+    if (friends.length === 0) {
+        return (
             <ScrollView
-                style={styles.list}
-                showsVerticalScrollIndicator={false}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                style={styles.container}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={COLORS.primary}
+                    />
+                }
             >
-                {/* Roster Section */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Roster</Text>
-                    <Text style={styles.sectionCount}>{roster.length} players • Auto-invite</Text>
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyTitle}>No friends in roster</Text>
+                    <Text style={styles.emptySubtext}>
+                        Add friends from Availability to build your roster
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => navigation?.navigate("Availability")}
+                    >
+                        <Text style={styles.addButtonText}>Find Players</Text>
+                    </TouchableOpacity>
                 </View>
-                {roster.length > 0 ? (
-                    roster.map((item, index) => (
-                        <RosterItem key={item.id} item={item} index={index} isOnDeckSection={false} />
-                    ))
-                ) : (
-                    <View style={styles.emptySection}>
-                        <Text style={styles.emptyText}>No players in roster</Text>
-                        <Text style={styles.emptySubtext}>
-                            Add friends from Availability to your roster
+            </ScrollView>
+        );
+    }
+
+    return (
+        <ScrollView
+            style={styles.container}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor={COLORS.primary}
+                />
+            }
+        >
+            {friends.map((friend, index) => (
+                <View key={friend.id} style={styles.rosterItem}>
+                    <View style={styles.dragHandle}>
+                        <Menu size={20} color={COLORS.textSub} />
+                    </View>
+
+                    <Text style={styles.rankNumber}>{index + 1}</Text>
+
+                    <View style={styles.avatarContainer}>
+                        {friend.avatar ? (
+                            <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                        ) : (
+                            <View style={styles.avatarPlaceholder}>
+                                <Text style={styles.avatarInitials}>
+                                    {getInitials(friend.firstName, friend.lastName)}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.infoContainer}>
+                        <Text style={styles.name}>
+                            {friend.firstName} {friend.lastName}
+                        </Text>
+                        <Text style={styles.lastPlayed}>
+                            {formatLastPlayed(friend.friendsSince)}
                         </Text>
                     </View>
-                )}
 
-                {/* On Deck Section */}
-                <View style={[styles.sectionHeader, styles.onDeckHeader]}>
-                    <Text style={styles.sectionTitle}>On Deck</Text>
-                    <Text style={styles.sectionCount}>{onDeck.length} reserves • Manual select</Text>
-                </View>
-                <View style={styles.onDeckInfo}>
-                    <Text style={styles.onDeckInfoText}>
-                        Reserve players that can be manually selected if Roster fails to fill tee time
-                    </Text>
-                </View>
-                {onDeck.length > 0 ? (
-                    onDeck.map((item, index) => (
-                        <RosterItem key={item.id} item={item} index={index} isOnDeckSection={true} />
-                    ))
-                ) : (
-                    <View style={styles.emptySection}>
-                        <Text style={styles.emptyText}>No players on deck</Text>
+                    <View style={styles.actions}>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleInvite(friend)}
+                        >
+                            <Calendar size={18} color={COLORS.primary} strokeWidth={1.5} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleMessage(friend)}
+                        >
+                            <MessageCircle size={18} color={COLORS.primary} strokeWidth={1.5} />
+                        </TouchableOpacity>
                     </View>
-                )}
-
-                <View style={{ height: 120 }} />
-            </ScrollView>
-        </View>
+                </View>
+            ))}
+            <View style={{ height: 100 }} />
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.white },
-    loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-    headerRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-        zIndex: 100,
-    },
-    sortContainer: { position: "relative", zIndex: 100 },
-    sortButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        backgroundColor: "#F3F4F6",
-        gap: 4,
-    },
-    sortLabel: { fontSize: 13, color: COLORS.textMain, fontWeight: "500" },
-    sortMenu: {
-        position: "absolute",
-        top: 36,
-        left: 0,
+    container: {
+        flex: 1,
         backgroundColor: COLORS.white,
-        borderRadius: 8,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 5,
-        minWidth: 140,
-        zIndex: 1000,
     },
-    sortMenuItem: { paddingHorizontal: 14, paddingVertical: 10 },
-    sortMenuItemActive: { backgroundColor: "#E8F5E9" },
-    sortMenuText: { fontSize: 14, color: COLORS.textMain },
-    sortMenuTextActive: { color: COLORS.primary, fontWeight: "600" },
-    list: { flex: 1, paddingHorizontal: 16 },
-    sectionHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
         alignItems: "center",
-        paddingVertical: 12,
-        marginTop: 8,
     },
-    onDeckHeader: {
-        marginTop: 24,
-        borderTopWidth: 1,
-        borderTopColor: "#F3F4F6",
-        paddingTop: 16,
+    emptyContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 40,
+        paddingVertical: 60,
     },
-    sectionTitle: { fontSize: 16, fontWeight: "bold", color: COLORS.textMain },
-    sectionCount: { fontSize: 12, color: COLORS.textSub },
-    onDeckInfo: {
-        backgroundColor: "#FEF3C7",
-        padding: 10,
-        borderRadius: 8,
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: COLORS.textMain,
         marginBottom: 8,
     },
-    onDeckInfoText: { fontSize: 12, color: "#92400E" },
+    emptySubtext: {
+        fontSize: 14,
+        color: COLORS.textSub,
+        textAlign: "center",
+        marginBottom: 24,
+    },
+    addButton: {
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    addButtonText: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: COLORS.white,
+    },
     rosterItem: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
-        paddingVertical: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        backgroundColor: COLORS.white,
         borderBottomWidth: 1,
-        borderBottomColor: "#F9FAFB",
+        borderBottomColor: "#F3F4F6",
     },
-    leftSection: { flexDirection: "row", alignItems: "center", flex: 1 },
-    rosterNumber: { fontSize: 14, fontWeight: "bold", color: COLORS.textMain, width: 24 },
-    avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.divider },
-    rosterInfo: { flex: 1, marginLeft: 12 },
-    rosterName: { fontSize: 14, fontWeight: "bold", color: COLORS.textMain },
-    statsRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
-    rosterSub: { fontSize: 12, color: COLORS.textSub },
-    socialRate: { fontSize: 11, color: "#F59E0B", fontWeight: "600" },
-    rosterActions: { flexDirection: "row", gap: 4 },
-    actionBtn: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
+    dragHandle: {
+        padding: 8,
+        marginRight: 4,
+    },
+    rankNumber: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.textMain,
+        width: 24,
+    },
+    avatarContainer: {
+        marginLeft: 8,
+    },
+    avatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+    },
+    avatarPlaceholder: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "#E5E7EB",
         justifyContent: "center",
         alignItems: "center",
     },
-    actionBtnGray: { backgroundColor: "#F3F4F6" },
-    actionBtnYellow: { backgroundColor: "#FEF3C7" },
-    actionBtnGreen: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        justifyContent: "center",
-        alignItems: "center",
+    avatarInitials: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.textSub,
+    },
+    infoContainer: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    name: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: COLORS.textMain,
+    },
+    lastPlayed: {
+        fontSize: 13,
+        color: COLORS.textSub,
+        marginTop: 2,
+    },
+    actions: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    actionButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 8,
         backgroundColor: "#E8F5E9",
-    },
-    actionBtnBlue: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#E3F2FD",
     },
-    emptySection: { alignItems: "center", paddingVertical: 24 },
-    emptyText: { fontSize: 14, color: COLORS.textSub },
-    emptySubtext: { fontSize: 12, color: COLORS.textSub, marginTop: 4 },
 });

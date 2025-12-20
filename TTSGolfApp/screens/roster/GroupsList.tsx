@@ -1,24 +1,53 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, RefreshControl, TextInput, Modal } from "react-native";
-import { Users, Calendar, Plus, MoreVertical, Edit2, Trash2, X } from "lucide-react-native";
+import {
+    View,
+    Text,
+    ScrollView,
+    TouchableOpacity,
+    StyleSheet,
+    Alert,
+    RefreshControl,
+    TextInput,
+    Modal,
+    Image,
+    ActivityIndicator,
+} from "react-native";
+import { Users, Plus, Edit2, Trash2, X, Check, ArrowLeft } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
-import { Group } from "./types";
-import { rosterApi, RosterGroup } from "../../services/api";
+import { rosterApi, friendApi, RosterGroup, Friend } from "../../services/api";
 
 interface GroupsListProps {
     onGroupClick: (groupId: string) => void;
 }
 
-const GROUP_COLORS = ['#5DB075', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
+const GROUP_COLORS = [
+    "#5DB075",
+    "#3B82F6",
+    "#F59E0B",
+    "#EF4444",
+    "#8B5CF6",
+    "#EC4899",
+    "#14B8A6",
+];
+
+type CreateStep = "select" | "details";
 
 export default function GroupsList({ onGroupClick }: GroupsListProps) {
     const [groups, setGroups] = useState<RosterGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Create group flow
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [editingGroup, setEditingGroup] = useState<RosterGroup | null>(null);
+    const [createStep, setCreateStep] = useState<CreateStep>("select");
+    const [friends, setFriends] = useState<Friend[]>([]);
+    const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     const [newGroupName, setNewGroupName] = useState("");
     const [newGroupColor, setNewGroupColor] = useState(GROUP_COLORS[0]);
+    const [creating, setCreating] = useState(false);
+
+    // Edit group
+    const [editingGroup, setEditingGroup] = useState<RosterGroup | null>(null);
 
     useEffect(() => {
         loadGroups();
@@ -41,31 +70,81 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
         setRefreshing(false);
     }, []);
 
+    const openCreateModal = async () => {
+        setShowCreateModal(true);
+        setCreateStep("select");
+        setSelectedMembers([]);
+        setNewGroupName("");
+        setNewGroupColor(GROUP_COLORS[0]);
+
+        try {
+            const response = await friendApi.getFriends();
+            if (response.success) setFriends(response.friends);
+        } catch (error) {
+            console.error("Failed to load friends:", error);
+        }
+    };
+
+    const closeCreateModal = () => {
+        setShowCreateModal(false);
+        setCreateStep("select");
+        setSelectedMembers([]);
+        setNewGroupName("");
+        setEditingGroup(null);
+    };
+
+    const toggleMember = (id: string) => {
+        setSelectedMembers((prev) =>
+            prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+        );
+    };
+
+    const handleNextStep = () => {
+        if (selectedMembers.length === 0) {
+            Alert.alert("Select Members", "Please select at least one member for the group");
+            return;
+        }
+        setCreateStep("details");
+    };
+
     const handleCreateGroup = async () => {
         if (!newGroupName.trim()) {
             Alert.alert("Error", "Please enter a group name");
             return;
         }
+
+        setCreating(true);
         try {
-            const response = await rosterApi.createGroup({ name: newGroupName.trim(), color: newGroupColor });
+            const response = await rosterApi.createGroup({
+                name: newGroupName.trim(),
+                color: newGroupColor,
+            });
+
             if (response.success) {
-                setGroups(prev => [...prev, response.group]);
-                setShowCreateModal(false);
-                setNewGroupName("");
+                setGroups((prev) => [...prev, response.group]);
+                closeCreateModal();
+                Alert.alert("Success", `Group "${newGroupName}" created!`);
             }
         } catch (error) {
             Alert.alert("Error", "Failed to create group");
+        } finally {
+            setCreating(false);
         }
     };
 
     const handleUpdateGroup = async () => {
         if (!editingGroup || !newGroupName.trim()) return;
+
         try {
-            const response = await rosterApi.updateGroup(editingGroup.id, { name: newGroupName.trim(), color: newGroupColor });
+            const response = await rosterApi.updateGroup(editingGroup.id, {
+                name: newGroupName.trim(),
+                color: newGroupColor,
+            });
             if (response.success) {
-                setGroups(prev => prev.map(g => g.id === editingGroup.id ? response.group : g));
-                setEditingGroup(null);
-                setNewGroupName("");
+                setGroups((prev) =>
+                    prev.map((g) => (g.id === editingGroup.id ? response.group : g))
+                );
+                closeCreateModal();
             }
         } catch (error) {
             Alert.alert("Error", "Failed to update group");
@@ -73,80 +152,217 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
     };
 
     const handleDeleteGroup = (group: RosterGroup) => {
-        Alert.alert("Delete Group", `Delete "${group.name}"? Members will be moved to ungrouped.`, [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Delete",
-                style: "destructive",
-                onPress: async () => {
-                    try {
-                        await rosterApi.deleteGroup(group.id);
-                        setGroups(prev => prev.filter(g => g.id !== group.id));
-                    } catch (error) {
-                        Alert.alert("Error", "Failed to delete group");
-                    }
+        Alert.alert(
+            "Delete Group",
+            `Delete "${group.name}"? Members will be moved to ungrouped.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await rosterApi.deleteGroup(group.id);
+                            setGroups((prev) => prev.filter((g) => g.id !== group.id));
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to delete group");
+                        }
+                    },
                 },
-            },
-        ]);
+            ]
+        );
     };
 
     const openEditModal = (group: RosterGroup) => {
         setEditingGroup(group);
         setNewGroupName(group.name);
         setNewGroupColor(group.color);
+        setCreateStep("details");
+        setShowCreateModal(true);
     };
 
+    const getInitials = (firstName: string, lastName: string): string => {
+        return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+    };
 
-    const GroupModal = () => (
-        <Modal visible={showCreateModal || !!editingGroup} transparent animationType="fade">
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>{editingGroup ? 'Edit Group' : 'Create Group'}</Text>
-                        <TouchableOpacity onPress={() => { setShowCreateModal(false); setEditingGroup(null); setNewGroupName(""); }}>
-                            <X size={24} color={COLORS.textSub} />
-                        </TouchableOpacity>
-                    </View>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Group name"
-                        placeholderTextColor={COLORS.textSub}
-                        value={newGroupName}
-                        onChangeText={setNewGroupName}
-                        autoFocus
-                    />
-                    <Text style={styles.colorLabel}>Color</Text>
-                    <View style={styles.colorPicker}>
-                        {GROUP_COLORS.map(color => (
-                            <TouchableOpacity
-                                key={color}
-                                style={[styles.colorOption, { backgroundColor: color }, newGroupColor === color && styles.colorOptionSelected]}
-                                onPress={() => setNewGroupColor(color)}
-                            />
-                        ))}
-                    </View>
-                    <TouchableOpacity
-                        style={styles.modalButton}
-                        onPress={editingGroup ? handleUpdateGroup : handleCreateGroup}
+    const SelectMembersView = () => (
+        <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={closeCreateModal} style={styles.modalHeaderBtn}>
+                    <X size={24} color={COLORS.textMain} />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Select Members</Text>
+                <TouchableOpacity
+                    onPress={handleNextStep}
+                    style={styles.modalHeaderBtn}
+                    disabled={selectedMembers.length === 0}
+                >
+                    <Text
+                        style={[
+                            styles.nextText,
+                            selectedMembers.length === 0 && styles.nextTextDisabled,
+                        ]}
                     >
-                        <Text style={styles.modalButtonText}>{editingGroup ? 'Save Changes' : 'Create Group'}</Text>
-                    </TouchableOpacity>
-                </View>
+                        Next
+                    </Text>
+                </TouchableOpacity>
             </View>
-        </Modal>
+
+            <Text style={styles.selectedCount}>
+                {selectedMembers.length} selected
+            </Text>
+
+            <ScrollView style={styles.membersList} showsVerticalScrollIndicator={false}>
+                {friends.map((friend) => {
+                    const isSelected = selectedMembers.includes(friend.id);
+                    return (
+                        <TouchableOpacity
+                            key={friend.id}
+                            style={styles.memberItem}
+                            onPress={() => toggleMember(friend.id)}
+                        >
+                            <View style={styles.memberAvatar}>
+                                {friend.avatar ? (
+                                    <Image source={{ uri: friend.avatar }} style={styles.avatarImage} />
+                                ) : (
+                                    <View style={styles.avatarPlaceholder}>
+                                        <Text style={styles.avatarInitials}>
+                                            {getInitials(friend.firstName, friend.lastName)}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={styles.memberName}>
+                                {friend.firstName} {friend.lastName}
+                            </Text>
+                            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                                {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+                {friends.length === 0 && (
+                    <View style={styles.emptyMembers}>
+                        <Text style={styles.emptyText}>No friends to add</Text>
+                        <Text style={styles.emptySubtext}>
+                            Add friends from Availability first
+                        </Text>
+                    </View>
+                )}
+            </ScrollView>
+        </View>
+    );
+
+    const GroupDetailsView = () => (
+        <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+                <TouchableOpacity
+                    onPress={() => (editingGroup ? closeCreateModal() : setCreateStep("select"))}
+                    style={styles.modalHeaderBtn}
+                >
+                    <ArrowLeft size={24} color={COLORS.textMain} />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>
+                    {editingGroup ? "Edit Group" : "Group Details"}
+                </Text>
+                <View style={styles.modalHeaderBtn} />
+            </View>
+
+            <View style={styles.detailsContent}>
+                <Text style={styles.inputLabel}>Group Name</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Enter group name"
+                    placeholderTextColor={COLORS.textSub}
+                    value={newGroupName}
+                    onChangeText={setNewGroupName}
+                    autoFocus
+                />
+
+                <Text style={styles.inputLabel}>Color</Text>
+                <View style={styles.colorPicker}>
+                    {GROUP_COLORS.map((color) => (
+                        <TouchableOpacity
+                            key={color}
+                            style={[
+                                styles.colorOption,
+                                { backgroundColor: color },
+                                newGroupColor === color && styles.colorOptionSelected,
+                            ]}
+                            onPress={() => setNewGroupColor(color)}
+                        />
+                    ))}
+                </View>
+
+                {!editingGroup && (
+                    <View style={styles.membersPreview}>
+                        <Text style={styles.inputLabel}>
+                            Members ({selectedMembers.length})
+                        </Text>
+                        <View style={styles.membersAvatars}>
+                            {selectedMembers.slice(0, 5).map((id) => {
+                                const friend = friends.find((f) => f.id === id);
+                                if (!friend) return null;
+                                return (
+                                    <View key={id} style={styles.previewAvatar}>
+                                        {friend.avatar ? (
+                                            <Image
+                                                source={{ uri: friend.avatar }}
+                                                style={styles.previewAvatarImage}
+                                            />
+                                        ) : (
+                                            <View style={styles.previewAvatarPlaceholder}>
+                                                <Text style={styles.previewAvatarText}>
+                                                    {getInitials(friend.firstName, friend.lastName)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                );
+                            })}
+                            {selectedMembers.length > 5 && (
+                                <View style={styles.previewAvatarMore}>
+                                    <Text style={styles.previewAvatarMoreText}>
+                                        +{selectedMembers.length - 5}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                )}
+
+                <TouchableOpacity
+                    style={[styles.createButton, creating && styles.createButtonDisabled]}
+                    onPress={editingGroup ? handleUpdateGroup : handleCreateGroup}
+                    disabled={creating}
+                >
+                    {creating ? (
+                        <ActivityIndicator color={COLORS.white} />
+                    ) : (
+                        <Text style={styles.createButtonText}>
+                            {editingGroup ? "Save Changes" : "Create Group"}
+                        </Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </View>
     );
 
     return (
         <View style={styles.container}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
             >
                 {groups.length === 0 && !loading ? (
                     <View style={styles.emptyState}>
                         <Users size={48} color={COLORS.textSub} />
                         <Text style={styles.emptyTitle}>No Groups Yet</Text>
-                        <Text style={styles.emptyText}>Create groups to organize your golf buddies</Text>
+                        <Text style={styles.emptySubtext}>
+                            Create groups to organize your golf buddies
+                        </Text>
                     </View>
                 ) : (
                     groups.map((group) => (
@@ -155,7 +371,9 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                             style={styles.groupCard}
                             onPress={() => onGroupClick(group.id)}
                         >
-                            <View style={[styles.groupIcon, { backgroundColor: group.color + '20' }]}>
+                            <View
+                                style={[styles.groupIcon, { backgroundColor: group.color + "20" }]}
+                            >
                                 <Text style={[styles.groupInitials, { color: group.color }]}>
                                     {group.name.substring(0, 2).toUpperCase()}
                                 </Text>
@@ -165,20 +383,23 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                                 <View style={styles.groupMeta}>
                                     <View style={styles.groupMetaRow}>
                                         <Users size={12} color={COLORS.textSub} />
-                                        <Text style={styles.groupMetaText}>{group.memberCount} members</Text>
+                                        <Text style={styles.groupMetaText}>
+                                            {group.memberCount} members
+                                        </Text>
                                     </View>
-                                    {group.autoInvite && (
-                                        <View style={styles.autoInviteBadge}>
-                                            <Text style={styles.autoInviteText}>Auto-invite</Text>
-                                        </View>
-                                    )}
                                 </View>
                             </View>
                             <View style={styles.groupActions}>
-                                <TouchableOpacity style={styles.actionBtn} onPress={() => openEditModal(group)}>
+                                <TouchableOpacity
+                                    style={styles.actionBtn}
+                                    onPress={() => openEditModal(group)}
+                                >
                                     <Edit2 size={16} color={COLORS.textSub} />
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeleteGroup(group)}>
+                                <TouchableOpacity
+                                    style={styles.actionBtn}
+                                    onPress={() => handleDeleteGroup(group)}
+                                >
                                     <Trash2 size={16} color="#EF4444" />
                                 </TouchableOpacity>
                             </View>
@@ -188,20 +409,38 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                 <View style={{ height: 120 }} />
             </ScrollView>
 
-            <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
+            <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
                 <Plus size={28} color={COLORS.white} />
             </TouchableOpacity>
 
-            <GroupModal />
+            <Modal visible={showCreateModal} animationType="slide">
+                {createStep === "select" ? <SelectMembersView /> : <GroupDetailsView />}
+            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.white, paddingHorizontal: 16 },
-    emptyState: { alignItems: "center", paddingVertical: 60 },
-    emptyTitle: { fontSize: 18, fontWeight: "600", color: COLORS.textMain, marginTop: 16 },
-    emptyText: { fontSize: 14, color: COLORS.textSub, marginTop: 4 },
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.white,
+        paddingHorizontal: 16,
+    },
+    emptyState: {
+        alignItems: "center",
+        paddingVertical: 60,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: COLORS.textMain,
+        marginTop: 16,
+    },
+    emptySubtext: {
+        fontSize: 14,
+        color: COLORS.textSub,
+        marginTop: 4,
+    },
     groupCard: {
         flexDirection: "row",
         alignItems: "center",
@@ -212,21 +451,56 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#F3F4F6",
     },
-    groupIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: "center", alignItems: "center" },
-    groupInitials: { fontSize: 16, fontWeight: "bold" },
-    groupInfo: { flex: 1, marginLeft: 14 },
-    groupName: { fontSize: 16, fontWeight: "600", color: COLORS.textMain },
-    groupMeta: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
-    groupMetaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    groupMetaText: { fontSize: 12, color: COLORS.textSub },
-    autoInviteBadge: { backgroundColor: "#E8F5E9", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-    autoInviteText: { fontSize: 10, fontWeight: "500", color: COLORS.primary },
-    groupActions: { flexDirection: "row", gap: 8 },
-    actionBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "#F3F4F6", justifyContent: "center", alignItems: "center" },
+    groupIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    groupInitials: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    groupInfo: {
+        flex: 1,
+        marginLeft: 14,
+    },
+    groupName: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.textMain,
+    },
+    groupMeta: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: 4,
+    },
+    groupMetaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    groupMetaText: {
+        fontSize: 12,
+        color: COLORS.textSub,
+    },
+    groupActions: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    actionBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        backgroundColor: "#F3F4F6",
+        justifyContent: "center",
+        alignItems: "center",
+    },
     fab: {
         position: "absolute",
         bottom: 96,
-        right: 16,
+        right: 0,
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -239,10 +513,121 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
     },
-    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-    modalContent: { backgroundColor: COLORS.white, borderRadius: 16, padding: 20, width: "85%", maxWidth: 340 },
-    modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-    modalTitle: { fontSize: 18, fontWeight: "bold", color: COLORS.textMain },
+    // Modal styles
+    modalContainer: {
+        flex: 1,
+        backgroundColor: COLORS.white,
+        paddingTop: 50,
+    },
+    modalHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+    },
+    modalHeaderBtn: {
+        width: 60,
+        alignItems: "center",
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: "600",
+        color: COLORS.textMain,
+    },
+    nextText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.primary,
+    },
+    nextTextDisabled: {
+        color: COLORS.textSub,
+    },
+    selectedCount: {
+        fontSize: 14,
+        color: COLORS.textSub,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    membersList: {
+        flex: 1,
+        paddingHorizontal: 16,
+    },
+    memberItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+    },
+    memberAvatar: {
+        marginRight: 12,
+    },
+    avatarImage: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+    },
+    avatarPlaceholder: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: "#E5E7EB",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    avatarInitials: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: COLORS.textSub,
+    },
+    memberName: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: "500",
+        color: COLORS.textMain,
+    },
+    checkbox: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: "#E5E7EB",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    checkboxSelected: {
+        backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
+    },
+    emptyMembers: {
+        alignItems: "center",
+        paddingVertical: 40,
+    },
+    emptyText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.textMain,
+    },
+    emptySubtext: {
+        fontSize: 14,
+        color: COLORS.textSub,
+        marginTop: 4,
+    },
+    // Details view
+    detailsContent: {
+        flex: 1,
+        padding: 20,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: COLORS.textSub,
+        marginBottom: 8,
+        marginTop: 16,
+    },
     input: {
         backgroundColor: "#F3F4F6",
         borderRadius: 12,
@@ -250,12 +635,80 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         fontSize: 16,
         color: COLORS.textMain,
-        marginBottom: 16,
     },
-    colorLabel: { fontSize: 14, fontWeight: "500", color: COLORS.textSub, marginBottom: 8 },
-    colorPicker: { flexDirection: "row", gap: 10, marginBottom: 20 },
-    colorOption: { width: 32, height: 32, borderRadius: 16 },
-    colorOptionSelected: { borderWidth: 3, borderColor: COLORS.textMain },
-    modalButton: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
-    modalButtonText: { fontSize: 16, fontWeight: "600", color: COLORS.white },
+    colorPicker: {
+        flexDirection: "row",
+        gap: 12,
+    },
+    colorOption: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+    },
+    colorOptionSelected: {
+        borderWidth: 3,
+        borderColor: COLORS.textMain,
+    },
+    membersPreview: {
+        marginTop: 24,
+    },
+    membersAvatars: {
+        flexDirection: "row",
+        marginTop: 8,
+    },
+    previewAvatar: {
+        marginRight: -8,
+    },
+    previewAvatarImage: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 2,
+        borderColor: COLORS.white,
+    },
+    previewAvatarPlaceholder: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: "#E5E7EB",
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 2,
+        borderColor: COLORS.white,
+    },
+    previewAvatarText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: COLORS.textSub,
+    },
+    previewAvatarMore: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: COLORS.primary,
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 2,
+        borderColor: COLORS.white,
+    },
+    previewAvatarMoreText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: COLORS.white,
+    },
+    createButton: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: "center",
+        marginTop: 32,
+    },
+    createButtonDisabled: {
+        opacity: 0.6,
+    },
+    createButtonText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.white,
+    },
 });

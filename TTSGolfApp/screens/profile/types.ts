@@ -10,6 +10,9 @@ export interface UserProfile {
   avatar: string;
   equipment: Equipment;
   preferences: Preferences;
+  username?: string;
+  homeCourse?: string;
+  bio?: string;
 }
 
 export interface Equipment {
@@ -35,6 +38,9 @@ export const DEFAULT_USER: UserProfile = {
   handicap: "12",
   memberSince: "January 2024",
   avatar: "",
+  username: "",
+  homeCourse: "",
+  bio: "",
   equipment: {
     driver: "TaylorMade Stealth 2",
     irons: "Titleist T200",

@@ -1,4 +1,4 @@
-const pool = require("../config/database");
+const { pool } = require("../config/database");
 const logger = require("../config/logger");
 
 class RosterRepository {
@@ -63,9 +63,11 @@ class RosterRepository {
   async getOnDeck(userId) {
     const query = `
       SELECT r.*, 
-             u.first_name, u.last_name, u.username, u.avatar_url, u.handicap as user_handicap
+             u.first_name, u.last_name, u.username, 
+             p.avatar_url, p.handicap as user_handicap
       FROM roster r
       LEFT JOIN users u ON r.contact_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE r.user_id = $1 AND r.is_on_deck = true
       ORDER BY r.position ASC
     `;
@@ -137,9 +139,10 @@ class RosterRepository {
   // Get roster entry by ID
   async getRosterEntry(userId, rosterId) {
     const query = `
-      SELECT r.*, u.first_name, u.last_name, u.username, u.avatar_url
+      SELECT r.*, u.first_name, u.last_name, u.username, p.avatar_url
       FROM roster r
       LEFT JOIN users u ON r.contact_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE r.id = $1 AND r.user_id = $2
     `;
     const result = await pool.query(query, [rosterId, userId]);

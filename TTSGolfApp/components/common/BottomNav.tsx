@@ -24,7 +24,7 @@ const TABS = [
     { name: "Home", icon: Home, screen: "HomePage" },
     { name: "Availability", icon: Clock, screen: "Availability" },
     { name: "Messages", icon: MessageCircle, screen: "Messages" },
-    { name: "Roster", icon: Users, screen: "Roster" },
+    { name: "Players", icon: Users, screen: "Roster" },
     { name: "Profile", icon: User, screen: "Profile" },
 ];
 

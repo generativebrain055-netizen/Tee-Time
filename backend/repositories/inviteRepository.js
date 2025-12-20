@@ -1,4 +1,4 @@
-const pool = require("../config/database");
+const { pool } = require("../config/database");
 const logger = require("../config/logger");
 
 class InviteRepository {
@@ -129,9 +129,10 @@ class InviteRepository {
   // Get invites for a tee time
   async getInvitesByTeeTime(teeTimeId) {
     const query = `
-      SELECT i.*, u.first_name, u.last_name, u.username, u.avatar_url
+      SELECT i.*, u.first_name, u.last_name, u.username, p.avatar_url
       FROM invites i
       LEFT JOIN users u ON i.invitee_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE i.tee_time_id = $1
       ORDER BY i.position ASC
     `;
@@ -144,10 +145,11 @@ class InviteRepository {
     const query = `
       SELECT i.*, 
              t.course_name, t.course_location, t.tee_date, t.tee_time, t.invite_type, t.max_players,
-             u.first_name as inviter_first_name, u.last_name as inviter_last_name, u.avatar_url as inviter_avatar
+             u.first_name as inviter_first_name, u.last_name as inviter_last_name, p.avatar_url as inviter_avatar
       FROM invites i
       JOIN tee_times t ON i.tee_time_id = t.id
       JOIN users u ON i.inviter_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE i.invitee_user_id = $1 AND i.status = 'pending'
       ORDER BY t.tee_date ASC, t.tee_time ASC
     `;
@@ -244,9 +246,10 @@ class InviteRepository {
   // Get waitlist for tee time
   async getWaitlist(teeTimeId) {
     const query = `
-      SELECT i.*, u.first_name, u.last_name, u.avatar_url
+      SELECT i.*, u.first_name, u.last_name, p.avatar_url
       FROM invites i
       LEFT JOIN users u ON i.invitee_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
       WHERE i.tee_time_id = $1 AND i.status = 'waitlist'
       ORDER BY i.created_at ASC
     `;

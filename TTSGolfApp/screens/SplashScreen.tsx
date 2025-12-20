@@ -10,6 +10,7 @@ import {
   ImageStyle,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
 
 const { width, height } = Dimensions.get("window");
@@ -71,12 +72,32 @@ export default function SplashScreen({
       }),
     ]).start();
 
-    // Auto-navigate to Welcome screen after 1.5 seconds
-    const timer = setTimeout(() => {
-      navigation.replace("Welcome");
-    }, 1500);
+    // Check for existing session and navigate accordingly
+    const checkSession = async () => {
+      try {
+        const [accessToken, userStr] = await Promise.all([
+          AsyncStorage.getItem("accessToken"),
+          AsyncStorage.getItem("user"),
+        ]);
 
-    return () => clearTimeout(timer);
+        // Wait for animation to complete
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        if (accessToken && userStr) {
+          // User is logged in, go to Home
+          const user = JSON.parse(userStr);
+          navigation.replace("Home", { user });
+        } else {
+          // No session, go to Welcome
+          navigation.replace("Welcome");
+        }
+      } catch (error) {
+        console.error("Session check error:", error);
+        navigation.replace("Welcome");
+      }
+    };
+
+    checkSession();
   }, [navigation, fadeAnim, scaleAnim, rotateAnim]);
 
   const spin = rotateAnim.interpolate({

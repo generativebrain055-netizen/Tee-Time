@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -7,6 +7,8 @@ import {
     ScrollView,
     TouchableOpacity,
     Dimensions,
+    ActivityIndicator,
+    RefreshControl,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -18,6 +20,7 @@ import {
     Clock,
     Users,
 } from "lucide-react-native";
+import { teeTimeApi, TeeTime as ApiTeeTime } from "../services/api";
 
 // --- TYPES ---
 interface CalendarDay {
@@ -30,13 +33,13 @@ interface CalendarDay {
 }
 
 interface TeeTime {
-    id: number;
+    id: string;
     date: string;
     time: string;
     course: string;
     location: string;
     players: number;
-    status: "confirmed" | "pending";
+    status: "confirmed" | "pending" | "cancelled" | "completed";
 }
 
 // --- CONSTANTS ---
@@ -71,46 +74,6 @@ const MONTHS = [
     "October",
     "November",
     "December",
-];
-
-// --- MOCK TEE TIMES ---
-const MOCK_TEE_TIMES: TeeTime[] = [
-    {
-        id: 1,
-        date: "2024-12-3",
-        time: "8:30 AM",
-        course: "Pine Valley Golf Club",
-        location: "Pine Valley, NJ",
-        players: 4,
-        status: "confirmed",
-    },
-    {
-        id: 2,
-        date: "2024-12-13",
-        time: "10:00 AM",
-        course: "Torrey Pines",
-        location: "La Jolla, CA",
-        players: 3,
-        status: "confirmed",
-    },
-    {
-        id: 3,
-        date: "2024-12-13",
-        time: "2:30 PM",
-        course: "Pebble Beach",
-        location: "Pebble Beach, CA",
-        players: 4,
-        status: "pending",
-    },
-    {
-        id: 4,
-        date: "2024-12-25",
-        time: "9:00 AM",
-        course: "Augusta National",
-        location: "Augusta, GA",
-        players: 4,
-        status: "confirmed",
-    },
 ];
 
 // --- HELPER FUNCTIONS ---
@@ -169,20 +132,68 @@ export default function FullCalendarScreen({ navigation }: any) {
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
     const [selectedDate, setSelectedDate] = useState<Date | null>(today);
+    const [teeTimes, setTeeTimes] = useState<TeeTime[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const loadTeeTimes = useCallback(async () => {
+        try {
+            // Get start and end of current month view
+            const startDate = new Date(currentYear, currentMonth, 1);
+            const endDate = new Date(currentYear, currentMonth + 1, 0);
+
+            const start = startDate.toISOString().split('T')[0];
+            const end = endDate.toISOString().split('T')[0];
+
+            const response = await teeTimeApi.getCalendar(start, end);
+            if (response.success && response.calendar) {
+                // Convert calendar object to array of tee times
+                const allTeeTimes: TeeTime[] = [];
+                Object.entries(response.calendar).forEach(([dateStr, times]) => {
+                    (times as any[]).forEach((t: any) => {
+                        allTeeTimes.push({
+                            id: t.id,
+                            date: dateStr,
+                            time: t.teeTime,
+                            course: t.courseName,
+                            location: t.courseLocation || '',
+                            players: t.participantCount || 0,
+                            status: t.status || 'pending',
+                        });
+                    });
+                });
+                setTeeTimes(allTeeTimes);
+            }
+        } catch (error) {
+            console.error("Failed to load calendar:", error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [currentMonth, currentYear]);
+
+    useEffect(() => {
+        loadTeeTimes();
+    }, [loadTeeTimes]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadTeeTimes();
+    }, [loadTeeTimes]);
 
     // Create tee times map
     const teeTimesMap = useMemo(() => {
         const map = new Map<string, TeeTime[]>();
-        MOCK_TEE_TIMES.forEach((teeTime) => {
-            const [year, month, day] = teeTime.date.split("-").map(Number);
-            const key = `${year}-${month - 1}-${day}`;
+        teeTimes.forEach((teeTime) => {
+            const date = new Date(teeTime.date);
+            const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
             if (!map.has(key)) {
                 map.set(key, []);
             }
             map.get(key)!.push(teeTime);
         });
         return map;
-    }, []);
+    }, [teeTimes]);
 
     const calendarDays = useMemo(
         () => generateCalendarDays(currentYear, currentMonth, selectedDate, teeTimesMap),
@@ -347,6 +358,9 @@ export default function FullCalendarScreen({ navigation }: any) {
             <ScrollView
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+                }
             >
                 <CalendarView />
 
@@ -360,7 +374,9 @@ export default function FullCalendarScreen({ navigation }: any) {
                                 day: "numeric",
                             })}
                         </Text>
-                        {selectedDateTeeTimes.length > 0 ? (
+                        {loading ? (
+                            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
+                        ) : selectedDateTeeTimes.length > 0 ? (
                             selectedDateTeeTimes.map((teeTime) => (
                                 <TeeTimeCard key={teeTime.id} teeTime={teeTime} />
                             ))

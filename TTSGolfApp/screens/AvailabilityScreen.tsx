@@ -12,9 +12,9 @@ import {
     Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { Search, UserPlus, Check, Clock, MapPin, Users } from "lucide-react-native";
+import { Search, UserPlus, Check, Clock, MapPin, Users, Info } from "lucide-react-native";
 import { BottomNav } from "../components/common";
-import { friendApi, DiscoveredUser } from "../services/api";
+import { friendApi, rosterApi, DiscoveredUser } from "../services/api";
 
 const COLORS = {
     primary: "#5DB075",
@@ -36,6 +36,7 @@ export default function AvailabilityScreen({ navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [filter, setFilter] = useState<FilterType>("all");
     const [sendingRequest, setSendingRequest] = useState<string | null>(null);
+    const [addingToRoster, setAddingToRoster] = useState<string | null>(null);
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -90,6 +91,23 @@ export default function AvailabilityScreen({ navigation }: any) {
         navigation.navigate("FriendProfile", { userId: user.id, user });
     };
 
+    const handleAddToRoster = async (user: DiscoveredUser) => {
+        setAddingToRoster(user.id);
+        try {
+            const response = await rosterApi.addToRoster({
+                contactUserId: user.id,
+                contactName: `${user.firstName} ${user.lastName}`.trim(),
+            });
+            if (response.success) {
+                Alert.alert("Success", `${user.firstName} added to your roster!`);
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error.message || "Failed to add to roster");
+        } finally {
+            setAddingToRoster(null);
+        }
+    };
+
     const filteredUsers = users.filter((user) => {
         const matchesSearch =
             user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -103,7 +121,7 @@ export default function AvailabilityScreen({ navigation }: any) {
     });
 
     const getStatusButton = (user: DiscoveredUser) => {
-        if (sendingRequest === user.id) {
+        if (sendingRequest === user.id || addingToRoster === user.id) {
             return (
                 <View style={styles.statusButton}>
                     <ActivityIndicator size="small" color={COLORS.primary} />
@@ -114,8 +132,19 @@ export default function AvailabilityScreen({ navigation }: any) {
         switch (user.friendshipStatus) {
             case "friend":
                 return (
-                    <View style={[styles.statusButton, styles.friendButton]}>
-                        <Check size={18} color={COLORS.primary} />
+                    <View style={styles.friendActions}>
+                        <TouchableOpacity
+                            style={[styles.statusButton, styles.infoButton]}
+                            onPress={() => handleViewProfile(user)}
+                        >
+                            <Info size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.statusButton, styles.addRosterButton]}
+                            onPress={() => handleAddToRoster(user)}
+                        >
+                            <UserPlus size={16} color={COLORS.white} />
+                        </TouchableOpacity>
                     </View>
                 );
             case "requested":
@@ -327,7 +356,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     addButton: { backgroundColor: "#E8F5E9" },
-    friendButton: { backgroundColor: "#E8F5E9" },
+    infoButton: { backgroundColor: "#E8F5E9" },
+    friendActions: { flexDirection: "row", gap: 8 },
+    addRosterButton: { backgroundColor: COLORS.primary, width: 36, height: 36, borderRadius: 10 },
     requestedButton: { backgroundColor: "#FEF3C7" },
     pendingButton: { backgroundColor: COLORS.primary, paddingHorizontal: 12, width: "auto" },
     pendingText: { fontSize: 13, fontWeight: "600", color: COLORS.white },

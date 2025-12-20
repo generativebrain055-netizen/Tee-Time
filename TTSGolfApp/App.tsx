@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
@@ -44,6 +45,8 @@ interface UserData {
 interface NavigationParams {
   user?: UserData;
   chatInfo?: any;
+  userId?: string;
+  [key: string]: any; // Allow additional params
 }
 
 interface Navigation {
@@ -116,7 +119,13 @@ export default function App(): React.ReactElement {
           />
         );
       case "Roster":
-        return <RosterScreen key={`roster-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <RosterScreen
+            key={`roster-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
       case "Messages":
         return <MessagesScreen key={`messages-${screenKey}`} navigation={navigation as any} />;
       case "ChatDetail":
@@ -157,5 +166,5 @@ export default function App(): React.ReactElement {
     }
   };
 
-  return renderScreen();
+  return <SafeAreaProvider>{renderScreen()}</SafeAreaProvider>;
 }

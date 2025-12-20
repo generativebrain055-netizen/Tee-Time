@@ -1,92 +1,88 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    Image,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { BottomNav } from "../../components/common";
-import { RosterPerson } from "./types";
 import RosterList from "./RosterList";
 import GroupsList from "./GroupsList";
+import OnDeckList from "./OnDeckList";
 import RequestsList from "./RequestsList";
-import PersonDetail from "./PersonDetail";
-import GroupDetail from "./GroupDetail";
 
-export default function RosterScreen({ navigation }: any) {
-    const [activeTab, setActiveTab] = useState("Roster");
-    const [showGroupDetail, setShowGroupDetail] = useState(false);
-    const [showPersonDetail, setShowPersonDetail] = useState(false);
-    const [selectedPerson, setSelectedPerson] = useState<RosterPerson | null>(null);
+const TABS = ["Roster", "Groups", "On Deck", "Requests"];
 
-    const handlePersonClick = (person: RosterPerson) => {
-        setSelectedPerson(person);
-        setShowPersonDetail(true);
+export default function RosterScreen({ navigation, route }: any) {
+    const insets = useSafeAreaInsets();
+    const initialTab = route?.params?.initialTab || "Roster";
+    const [activeTab, setActiveTab] = useState(initialTab);
+
+    useEffect(() => {
+        if (route?.params?.initialTab) {
+            setActiveTab(route.params.initialTab);
+        }
+    }, [route?.params?.initialTab]);
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case "Roster":
+                return <RosterList navigation={navigation} />;
+            case "Groups":
+                return <GroupsList onGroupClick={() => { }} />;
+            case "On Deck":
+                return <OnDeckList navigation={navigation} />;
+            case "Requests":
+                return <RequestsList />;
+            default:
+                return <RosterList navigation={navigation} />;
+        }
     };
 
-    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+    return (
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar style="dark" />
 
-    const handleGroupClick = (groupId: string) => {
-        setSelectedGroupId(groupId);
-        setShowGroupDetail(true);
-    };
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigation?.goBack()}
+                >
+                    <ArrowLeft size={24} color={COLORS.textMain} strokeWidth={1.5} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Roster</Text>
+                <View style={styles.headerSpacer} />
+            </View>
 
-    const Header = () => (
-        <View style={styles.header}>
-            <View style={{ width: 40 }} />
-            <Text style={styles.headerTitle}>Roster</Text>
-            <TouchableOpacity>
-                <Text style={styles.headerAction}>Edit</Text>
-            </TouchableOpacity>
-        </View>
-    );
-
-    const TabBar = () => {
-        const tabs = ["Roster", "Groups", "Requests"];
-        return (
+            {/* Tab Bar */}
             <View style={styles.tabBar}>
-                {tabs.map((tab) => (
+                {TABS.map((tab) => (
                     <TouchableOpacity
                         key={tab}
                         style={styles.tabItem}
                         onPress={() => setActiveTab(tab)}
                     >
-                        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                        <Text
+                            style={[styles.tabText, activeTab === tab && styles.tabTextActive]}
+                        >
                             {tab}
                         </Text>
                         {activeTab === tab && <View style={styles.tabIndicator} />}
                     </TouchableOpacity>
                 ))}
             </View>
-        );
-    };
 
-    const renderContent = () => {
-        switch (activeTab) {
-            case "Roster":
-                return <RosterList onPersonClick={handlePersonClick} />;
-            case "Groups":
-                return <GroupsList onGroupClick={handleGroupClick} />;
-            case "Requests":
-                return <RequestsList />;
-            default:
-                return <RosterList onPersonClick={handlePersonClick} />;
-        }
-    };
-
-    if (showPersonDetail && selectedPerson) {
-        return <PersonDetail person={selectedPerson} onBack={() => setShowPersonDetail(false)} />;
-    }
-
-    if (showGroupDetail && selectedGroupId) {
-        return <GroupDetail groupId={selectedGroupId} onBack={() => { setShowGroupDetail(false); setSelectedGroupId(null); }} />;
-    }
-
-    return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
-            <Header />
-            <TabBar />
+            {/* Content */}
             {renderContent()}
-            <BottomNav activeTab="Roster" navigation={navigation} />
-        </SafeAreaView>
+
+            <BottomNav activeTab="Players" navigation={navigation} />
+        </View>
     );
 }
 
@@ -97,59 +93,51 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
+        justifyContent: "space-between",
         paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
-        backgroundColor: COLORS.white,
+        paddingVertical: 12,
+    },
+    backButton: {
+        padding: 4,
+        width: 40,
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
+        fontSize: 18,
+        fontWeight: "600",
         color: COLORS.textMain,
     },
-    headerAction: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
+    headerSpacer: {
+        width: 40,
     },
     tabBar: {
         flexDirection: "row",
         borderBottomWidth: 1,
         borderBottomColor: "#F3F4F6",
         backgroundColor: COLORS.white,
-        paddingHorizontal: 8,
     },
     tabItem: {
         flex: 1,
         paddingVertical: 12,
         position: "relative",
+        alignItems: "center",
     },
     tabText: {
         fontSize: 14,
-        fontWeight: "600",
+        fontWeight: "500",
         color: COLORS.textSub,
-        textAlign: "center",
     },
     tabTextActive: {
-        color: COLORS.primary,
+        color: COLORS.textMain,
+        fontWeight: "600",
     },
     tabIndicator: {
         position: "absolute",
         bottom: 0,
-        left: 8,
-        right: 8,
+        left: 16,
+        right: 16,
         height: 2,
         backgroundColor: COLORS.primary,
-    },
-    emptyState: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    emptyText: {
-        fontSize: 16,
-        color: COLORS.textSub,
+        borderRadius: 1,
     },
 });

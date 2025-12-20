@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
-const authController = require("../controllers/authController");
+// Use modular auth controllers (backward compatible)
+const authController = require("../controllers/auth");
 const { authenticate } = require("../middleware/auth");
 const { validateRequest } = require("../middleware/validator");
 const rateLimiter = require("../middleware/rateLimiter");
