@@ -111,6 +111,95 @@ class InviteRepository {
     }
   }
 
+  // Create multiple invites with expiry times (for roster invites)
+  async createBulkInvitesWithExpiry(teeTimeId, inviterId, invitees) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      
+      const invites = [];
+      for (let i = 0; i < invitees.length; i++) {
+        const inv = invitees[i];
+        const result = await client.query(
+          `INSERT INTO invites (tee_time_id, inviter_id, invitee_user_id, invitee_phone, invitee_name, position, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+          [
+            teeTimeId, 
+            inviterId, 
+            inv.userId || null, 
+            inv.phone || null, 
+            inv.name || null, 
+            inv.position || i,
+            inv.expiresAt || null
+          ]
+        );
+        invites.push(result.rows[0]);
+      }
+      
+      await client.query("COMMIT");
+      return invites;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Get next pending invite in queue (for roster sequential invites)
+  async getNextPendingInvite(teeTimeId) {
+    const query = `
+      SELECT i.*, u.first_name, u.last_name
+      FROM invites i
+      LEFT JOIN users u ON i.invitee_user_id = u.id
+      WHERE i.tee_time_id = $1 
+        AND i.status = 'pending'
+        AND i.expires_at IS NULL
+      ORDER BY i.position ASC
+      LIMIT 1
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    return result.rows[0];
+  }
+
+  // Activate an invite (set expiry time)
+  async activateInvite(inviteId, expiresAt) {
+    const query = `
+      UPDATE invites 
+      SET expires_at = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+    const result = await pool.query(query, [expiresAt, inviteId]);
+    return result.rows[0];
+  }
+
+  // Move all remaining pending invites to waitlist (for FCFS when full)
+  async moveRemainingToWaitlist(teeTimeId) {
+    const query = `
+      UPDATE invites 
+      SET status = 'waitlist', updated_at = NOW()
+      WHERE tee_time_id = $1 AND status = 'pending'
+      RETURNING *
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    return result.rows;
+  }
+
+  // Expire old pending invites (for cron job)
+  async expireOldInvites() {
+    const query = `
+      UPDATE invites 
+      SET status = 'expired', updated_at = NOW()
+      WHERE status = 'pending' 
+        AND expires_at IS NOT NULL 
+        AND expires_at < NOW()
+      RETURNING *
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
   // Get invite by ID
   async getInviteById(inviteId) {
     const query = `

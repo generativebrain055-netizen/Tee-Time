@@ -22,7 +22,7 @@ router.post(
     body("teeDate").isDate().withMessage("Valid date required (YYYY-MM-DD)"),
     body("teeTime").matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage("Valid time required (HH:MM)"),
     body("maxPlayers").optional().isInt({ min: 1, max: 8 }).withMessage("Max players must be 1-8"),
-    body("inviteType").optional().isIn(["roster", "fcfs", "open"]).withMessage("Invalid invite type"),
+    body("inviteType").optional().isIn(["roster", "fcfs", "open", "manual"]).withMessage("Invalid invite type"),
     body("notes").optional().trim()
   ],
   validateRequest,

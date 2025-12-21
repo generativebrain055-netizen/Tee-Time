@@ -52,21 +52,16 @@ interface Styles {
 export default function WelcomeScreen({
   navigation,
 }: WelcomeScreenProps): React.ReactElement {
-  // Animation values - start with visible state to prevent flicker
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideUpAnim = useRef(new Animated.Value(0)).current;
   const logoScaleAnim = useRef(new Animated.Value(1)).current;
   const buttonsSlideAnim = useRef(new Animated.Value(0)).current;
   const buttonsFadeAnim = useRef(new Animated.Value(1)).current;
 
-  // No entrance animation needed - content is already visible
-  // This prevents the flicker when transitioning from SplashScreen
-
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
-        {/* Logo Section */}
         <Animated.View
           style={[
             styles.logoSection,
@@ -88,7 +83,6 @@ export default function WelcomeScreen({
           <Text style={styles.tagline}>Golf scheduling made simple</Text>
         </Animated.View>
 
-        {/* Buttons Section */}
         <Animated.View
           style={[
             styles.buttonsSection,

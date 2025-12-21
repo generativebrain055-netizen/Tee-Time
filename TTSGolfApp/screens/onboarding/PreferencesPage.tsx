@@ -4,101 +4,170 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  StatusBar,
-  ScrollView,
-  ViewStyle,
-  TextStyle,
+  Modal,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, borderRadius, fontSize } from "../../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { ArrowLeft, ChevronDown, Check } from "lucide-react-native";
 import type { PreferencesPageProps, PreferencesData } from "../../types";
 
-interface TimeOption {
-  id: string;
+// Colors
+const COLORS = {
+  primary: "#5DB075",
+  primaryLight: "#E8F5E9",
+  white: "#FFFFFF",
+  black: "#000000",
+  textMain: "#1A1A1A",
+  textSub: "#6B7280",
+  textPlaceholder: "#9CA3AF",
+  border: "#E5E7EB",
+  surface: "#F9FAFB",
+};
+
+interface DropdownOption {
   label: string;
-  icon: string;
+  value: string;
 }
 
-interface PlayerCountOption {
-  id: string;
-  label: string;
-  count: string;
-}
-
-interface Styles {
-  container: ViewStyle;
-  header: ViewStyle;
-  skipText: TextStyle;
-  progressBarContainer: ViewStyle;
-  progressBarFill: ViewStyle;
-  content: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  section: ViewStyle;
-  sectionTitle: TextStyle;
-  optionRow: ViewStyle;
-  optionCard: ViewStyle;
-  optionCardSelected: ViewStyle;
-  optionIcon: TextStyle;
-  optionLabel: TextStyle;
-  optionLabelSelected: TextStyle;
-  toggleContainer: ViewStyle;
-  toggleOption: ViewStyle;
-  toggleOptionSelected: ViewStyle;
-  toggleText: TextStyle;
-  toggleTextSelected: TextStyle;
-  timeGrid: ViewStyle;
-  timeOption: ViewStyle;
-  timeOptionSelected: ViewStyle;
-  timeIcon: ViewStyle;
-  timeLabel: TextStyle;
-  timeLabelSelected: TextStyle;
-  footer: ViewStyle;
-  primaryBtn: ViewStyle;
-  primaryBtnText: TextStyle;
-}
-
-const TIME_OPTIONS: TimeOption[] = [
-  { id: "morning", label: "Morning", icon: "sunny" },
-  { id: "midday", label: "Midday", icon: "partly-sunny" },
-  { id: "afternoon", label: "Afternoon", icon: "cloudy" },
-  { id: "twilight", label: "Twilight", icon: "moon" },
+const TIME_OPTIONS: DropdownOption[] = [
+  { label: "Morning", value: "morning" },
+  { label: "Late morning", value: "late_morning" },
+  { label: "Afternoon", value: "afternoon" },
+  { label: "Evening", value: "evening" },
+  { label: "Morning, Late morning", value: "morning,late_morning" },
+  { label: "Afternoon, Evening", value: "afternoon,evening" },
+  { label: "Any time", value: "any" },
 ];
 
-const PLAYER_COUNT_OPTIONS: PlayerCountOption[] = [
-  { id: "solo", label: "Solo", count: "1" },
-  { id: "duo", label: "Duo", count: "2" },
-  { id: "trio", label: "Trio", count: "3" },
-  { id: "foursome", label: "Foursome", count: "4" },
+const PLAY_STYLE_OPTIONS: DropdownOption[] = [
+  { label: "Walk", value: "walk" },
+  { label: "Ride", value: "ride" },
+  { label: "Either", value: "either" },
 ];
+
+const PARTNER_COUNT_OPTIONS: DropdownOption[] = [
+  { label: "1", value: "1" },
+  { label: "2", value: "2" },
+  { label: "3", value: "3" },
+  { label: "4", value: "4" },
+];
+
+interface DropdownProps {
+  label: string;
+  value: string;
+  options: DropdownOption[];
+  onSelect: (value: string) => void;
+  placeholder?: string;
+}
+
+const Dropdown: React.FC<DropdownProps> = ({
+  label,
+  value,
+  options,
+  onSelect,
+  placeholder = "Select...",
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  return (
+    <View style={styles.dropdownContainer}>
+      <Text style={styles.dropdownLabel}>{label}</Text>
+      <TouchableOpacity
+        style={styles.dropdownButton}
+        onPress={() => setIsOpen(true)}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[
+            styles.dropdownButtonText,
+            !selectedOption && styles.dropdownPlaceholder,
+          ]}
+        >
+          {selectedOption?.label || placeholder}
+        </Text>
+        <ChevronDown size={20} color={COLORS.textSub} />
+      </TouchableOpacity>
+
+      <Modal
+        visible={isOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsOpen(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{label}</Text>
+            </View>
+            <FlatList
+              data={options}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.optionItem,
+                    item.value === value && styles.optionItemSelected,
+                  ]}
+                  onPress={() => {
+                    onSelect(item.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      item.value === value && styles.optionTextSelected,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                  {item.value === value && (
+                    <Check size={20} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+};
 
 export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   onNext,
   onBack,
   initialPreferences = {},
 }) => {
-  const [playStyle, setPlayStyle] = useState<"walk" | "ride" | "either">(
-    initialPreferences.playStyle || "walk"
+  const insets = useSafeAreaInsets();
+  const [preferredTime, setPreferredTime] = useState<string>(
+    initialPreferences.preferredTimes?.join(",") || ""
   );
-  const [preferredTimes, setPreferredTimes] = useState<string[]>(
-    initialPreferences.preferredTimes || []
+  const [playStyle, setPlayStyle] = useState<string>(
+    initialPreferences.playStyle || ""
   );
-  const [playerCount, setPlayerCount] = useState<string>(
-    String(initialPreferences.playerCount || "")
+  const [partnerCount, setPartnerCount] = useState<string>(
+    initialPreferences.playerCount || ""
   );
 
-  const toggleTimeOption = (id: string): void => {
-    setPreferredTimes((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
-    );
-  };
+  // Validation - all fields required
+  const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
 
   const handleNext = (): void => {
+    if (!isValid) return;
+
     const preferencesData: PreferencesData = {
-      playStyle,
-      preferredTimes,
-      playerCount,
+      playStyle: playStyle as "walk" | "ride" | "either",
+      preferredTimes: preferredTime.split(","),
+      playerCount: partnerCount,
     };
     onNext({ preferences: preferencesData });
   };
@@ -108,305 +177,225 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+      <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-
-        <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBarFill, { width: "85%" }]} />
-        </View>
-
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Your preferences</Text>
-        <Text style={styles.subtitle}>Tell us how you like to play</Text>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Play style</Text>
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.toggleOption,
-                playStyle === "walk" && styles.toggleOptionSelected,
-              ]}
-              onPress={() => setPlayStyle("walk")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  playStyle === "walk" && styles.toggleTextSelected,
-                ]}
-              >
-                Walk
-              </Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+              <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleOption,
-                playStyle === "ride" && styles.toggleOptionSelected,
-              ]}
-              onPress={() => setPlayStyle("ride")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  playStyle === "ride" && styles.toggleTextSelected,
-                ]}
-              >
-                Ride
-              </Text>
+            <View style={styles.progressBarContainer}>
+              <View style={[styles.progressBar, { width: "90%" }]} />
+            </View>
+            <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+              <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferred tee times</Text>
-          <View style={styles.timeGrid}>
-            {TIME_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.id}
-                style={[
-                  styles.timeOption,
-                  preferredTimes.includes(option.id) &&
-                    styles.timeOptionSelected,
-                ]}
-                onPress={() => toggleTimeOption(option.id)}
-              >
-                <View style={styles.timeIcon}>
-                  <Ionicons
-                    name={option.icon as any}
-                    size={24}
-                    color={
-                      preferredTimes.includes(option.id) ? "#5DB075" : "#666666"
-                    }
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.timeLabel,
-                    preferredTimes.includes(option.id) &&
-                      styles.timeLabelSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Main Content */}
+          <View style={styles.mainContent}>
+            <Text style={styles.title}>Playing preferences</Text>
+            <Text style={styles.subtitle}>Tell us how you like to play</Text>
+
+            {/* Dropdowns */}
+            <Dropdown
+              label="What time of day do you like to play?"
+              value={preferredTime}
+              options={TIME_OPTIONS}
+              onSelect={setPreferredTime}
+              placeholder="Select time..."
+            />
+
+            <Dropdown
+              label="Do you prefer to walk or ride?"
+              value={playStyle}
+              options={PLAY_STYLE_OPTIONS}
+              onSelect={setPlayStyle}
+              placeholder="Select preference..."
+            />
+
+            <Dropdown
+              label="How many partners do you usually play with?"
+              value={partnerCount}
+              options={PARTNER_COUNT_OPTIONS}
+              onSelect={setPartnerCount}
+              placeholder="Select number..."
+            />
+          </View>
+
+          {/* Bottom Section */}
+          <View style={styles.bottomSection}>
+            <TouchableOpacity
+              style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
+              onPress={handleNext}
+              disabled={!isValid}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.nextButtonText}>Next</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferred group size</Text>
-          <View style={styles.optionRow}>
-            {PLAYER_COUNT_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.id}
-                style={[
-                  styles.optionCard,
-                  playerCount === option.id && styles.optionCardSelected,
-                ]}
-                onPress={() => setPlayerCount(option.id)}
-              >
-                <Text
-                  style={[
-                    styles.optionIcon,
-                    playerCount === option.id && styles.optionLabelSelected,
-                  ]}
-                >
-                  {option.count}
-                </Text>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    playerCount === option.id && styles.optionLabelSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleNext}>
-          <Text style={styles.primaryBtnText}>Complete Setup</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create<Styles>({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.white,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
   },
   header: {
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
   },
-  skipText: {
-    color: "#666666",
-    fontSize: 16,
-    fontWeight: "600",
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
   },
   progressBarContainer: {
     flex: 1,
     height: 4,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: COLORS.border,
     borderRadius: 2,
-    marginHorizontal: 20,
+    marginHorizontal: 16,
   },
-  progressBarFill: {
+  progressBar: {
     height: "100%",
-    backgroundColor: "#5DB075",
+    backgroundColor: COLORS.primary,
     borderRadius: 2,
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
+  skipButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  skipText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textSub,
+  },
+  mainContent: {
+    flex: 1,
+    paddingTop: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#000000",
+    fontSize: 28,
+    fontWeight: "700",
+    color: COLORS.textMain,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666666",
-    marginBottom: 30,
+    fontSize: 15,
+    color: COLORS.textSub,
     lineHeight: 22,
+    marginBottom: 32,
   },
-  section: {
-    marginBottom: 30,
+  // Dropdown styles
+  dropdownContainer: {
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000000",
-    marginBottom: 15,
+  dropdownLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: COLORS.textMain,
+    marginBottom: 10,
   },
-  optionRow: {
+  dropdownButton: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-  },
-  optionCard: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
+    height: 56,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
-    borderRadius: 8,
+    borderColor: COLORS.border,
+    paddingHorizontal: 16,
   },
-  optionCardSelected: {
-    borderColor: "#5DB075",
-    backgroundColor: "#E8F5E9",
-  },
-  optionIcon: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#666666",
-    marginBottom: 4,
-  },
-  optionLabel: {
-    fontSize: 12,
-    color: "#666666",
-  },
-  optionLabelSelected: {
-    color: "#5DB075",
-  },
-  toggleContainer: {
-    flexDirection: "row",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 8,
-    padding: 4,
-  },
-  toggleOption: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 6,
-  },
-  toggleOptionSelected: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  toggleText: {
+  dropdownButtonText: {
     fontSize: 16,
-    color: "#666666",
-    fontWeight: "500",
+    color: COLORS.textMain,
   },
-  toggleTextSelected: {
-    color: "#5DB075",
+  dropdownPlaceholder: {
+    color: COLORS.textPlaceholder,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "60%",
+  },
+  modalHeader: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: COLORS.textMain,
+    textAlign: "center",
+  },
+  optionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface,
+  },
+  optionItemSelected: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  optionText: {
+    fontSize: 16,
+    color: COLORS.textMain,
+  },
+  optionTextSelected: {
+    color: COLORS.primary,
     fontWeight: "600",
   },
-  timeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  // Bottom section
+  bottomSection: {
+    paddingBottom: 32,
   },
-  timeOption: {
-    width: "48%",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-    borderRadius: 8,
-    gap: 10,
-  },
-  timeOptionSelected: {
-    borderColor: "#5DB075",
-    backgroundColor: "#E8F5E9",
-  },
-  timeIcon: {
-    width: 32,
-    alignItems: "center",
-  },
-  timeLabel: {
-    fontSize: 14,
-    color: "#666666",
-    fontWeight: "500",
-  },
-  timeLabelSelected: {
-    color: "#5DB075",
-  },
-  footer: {
-    padding: spacing.xl,
-    marginTop: "auto",
-  },
-  primaryBtn: {
-    backgroundColor: colors.buttonPrimary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: 18,
-    alignItems: "center",
+  nextButton: {
+    height: 56,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
     justifyContent: "center",
+    alignItems: "center",
   },
-  primaryBtnText: {
-    color: colors.white,
-    fontSize: fontSize.md,
-    fontWeight: "bold",
+  nextButtonDisabled: {
+    opacity: 0.6,
+  },
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.white,
   },
 });

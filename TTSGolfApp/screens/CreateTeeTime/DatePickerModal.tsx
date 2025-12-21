@@ -1,9 +1,12 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions } from "react-native";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
-import { COLORS, MONTHS, DAYS } from "./constants";
+import { COLORS, MONTHS } from "./constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// US standard: Sunday first
+const DAYS_US = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface DatePickerModalProps {
     visible: boolean;
@@ -27,10 +30,9 @@ export default function DatePickerModal({
     onNextMonth,
 }: DatePickerModalProps) {
     const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-    const getFirstDayOfMonth = (year: number, month: number) => {
-        const day = new Date(year, month, 1).getDay();
-        return day === 0 ? 6 : day - 1;
-    };
+
+    // Sunday = 0, which is correct for US format
+    const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
     const generateCalendarDays = () => {
         const days: (number | null)[] = [];
@@ -42,6 +44,8 @@ export default function DatePickerModal({
     };
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const isToday = (day: number) =>
         today.getDate() === day &&
         today.getMonth() === calendarMonth &&
@@ -51,6 +55,19 @@ export default function DatePickerModal({
         selectedDate?.getDate() === day &&
         selectedDate?.getMonth() === calendarMonth &&
         selectedDate?.getFullYear() === calendarYear;
+
+    const isPastDate = (day: number) => {
+        const date = new Date(calendarYear, calendarMonth, day);
+        date.setHours(0, 0, 0, 0);
+        return date < today;
+    };
+
+    const handleSelectDate = (day: number) => {
+        // Allow selecting today and future dates only
+        if (!isPastDate(day)) {
+            onSelectDate(day);
+        }
+    };
 
     return (
         <Modal visible={visible} transparent animationType="slide">
@@ -74,34 +91,41 @@ export default function DatePickerModal({
                     </View>
 
                     <View style={styles.calendarDaysHeader}>
-                        {DAYS.map((d, i) => (
+                        {DAYS_US.map((d, i) => (
                             <Text key={i} style={styles.calendarDayLabel}>{d}</Text>
                         ))}
                     </View>
 
                     <View style={styles.calendarGrid}>
-                        {generateCalendarDays().map((day, i) => (
-                            <TouchableOpacity
-                                key={i}
-                                style={[
-                                    styles.calendarDay,
-                                    day !== null && isToday(day) ? styles.calendarDayToday : undefined,
-                                    day !== null && isSelected(day) ? styles.calendarDaySelected : undefined,
-                                ]}
-                                onPress={() => day !== null && onSelectDate(day)}
-                                disabled={day === null}
-                            >
-                                <Text
+                        {generateCalendarDays().map((day, i) => {
+                            const isPast = day !== null && isPastDate(day);
+                            const isTodayDate = day !== null && isToday(day);
+                            const isSelectedDate = day !== null && isSelected(day);
+
+                            return (
+                                <TouchableOpacity
+                                    key={i}
                                     style={[
-                                        styles.calendarDayText,
-                                        day !== null && isToday(day) ? styles.calendarDayTodayText : undefined,
-                                        day !== null && isSelected(day) ? styles.calendarDaySelectedText : undefined,
+                                        styles.calendarDay,
+                                        isTodayDate && styles.calendarDayToday,
+                                        isSelectedDate && styles.calendarDaySelected,
                                     ]}
+                                    onPress={() => day !== null && handleSelectDate(day)}
+                                    disabled={day === null || isPast}
                                 >
-                                    {day !== null ? day : ""}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                                    <Text
+                                        style={[
+                                            styles.calendarDayText,
+                                            isPast && styles.calendarDayPastText,
+                                            isTodayDate && styles.calendarDayTodayText,
+                                            isSelectedDate && styles.calendarDaySelectedText,
+                                        ]}
+                                    >
+                                        {day !== null ? day : ""}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </View>
             </View>
@@ -134,6 +158,7 @@ const styles = StyleSheet.create({
     calendarDayToday: { backgroundColor: "#F3F4F6", borderRadius: 22 },
     calendarDaySelected: { backgroundColor: COLORS.primary, borderRadius: 22 },
     calendarDayText: { fontSize: 15, color: COLORS.text },
+    calendarDayPastText: { color: "#D1D5DB" },
     calendarDayTodayText: { fontWeight: "600" },
     calendarDaySelectedText: { color: COLORS.white, fontWeight: "600" },
 });

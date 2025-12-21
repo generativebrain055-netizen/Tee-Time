@@ -17,6 +17,3 @@ export {
   IconContainer,
   LogoBox,
 } from "./Container";
-
-// Modal components
-export { CountryCodeModal } from "./CountryCodeModal";

@@ -33,7 +33,7 @@ export interface TeeTime {
   teeDate: string;
   teeTime: string;
   maxPlayers: number;
-  inviteType: "roster" | "fcfs" | "open";
+  inviteType: "roster" | "fcfs" | "open" | "manual";
   status: "pending" | "confirmed" | "cancelled" | "completed";
   participantCount: number;
   creator?: { firstName: string; lastName: string };
@@ -151,6 +151,8 @@ export interface RosterGroup {
   autoInvite: boolean;
   maxMembers: number;
   isDefault: boolean;
+  isOwner?: boolean;
+  ownerId?: string;
 }
 
 export interface MemberProfile {
@@ -292,8 +294,12 @@ export const rosterApi = {
   getGroups: () =>
     apiCall<{ success: boolean; groups: RosterGroup[] }>(`${API_ENDPOINTS.ROSTER}/groups`),
 
+  // Get single group details
+  getGroup: (groupId: string) =>
+    apiCall<{ success: boolean; group: RosterGroup }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}`),
+
   // Create group
-  createGroup: (data: { name: string; description?: string; color?: string; icon?: string; autoInvite?: boolean; maxMembers?: number }) =>
+  createGroup: (data: { name: string; description?: string; color?: string; icon?: string; autoInvite?: boolean; maxMembers?: number; memberIds?: string[] }) =>
     apiCall<{ success: boolean; group: RosterGroup }>(`${API_ENDPOINTS.ROSTER}/groups`, {
       method: "POST",
       body: JSON.stringify(data),
@@ -398,10 +404,15 @@ export interface InviteResponse {
 
 export const inviteApi = {
   // Create invites
-  createInvites: (teeTimeId: string, invitees: Array<{ userId?: string; phone?: string; name?: string }>) =>
-    apiCall<{ success: boolean; invites: any[] }>(API_ENDPOINTS.INVITES, {
+  createInvites: (
+    teeTimeId: string, 
+    invitees: Array<{ userId?: string; phone?: string; name?: string; order?: number }>,
+    inviteType?: "roster" | "fcfs" | "manual",
+    responseWindow?: number
+  ) =>
+    apiCall<{ success: boolean; invites: any[]; message?: string }>(API_ENDPOINTS.INVITES, {
       method: "POST",
-      body: JSON.stringify({ teeTimeId, invitees }),
+      body: JSON.stringify({ teeTimeId, invitees, inviteType, responseWindow }),
     }),
 
   // Create invites from roster

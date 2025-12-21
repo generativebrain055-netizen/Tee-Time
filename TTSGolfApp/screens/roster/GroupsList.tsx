@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -11,6 +11,8 @@ import {
     Modal,
     Image,
     ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import { Users, Plus, Edit2, Trash2, X, Check, ArrowLeft } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
@@ -78,6 +80,7 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
         setNewGroupColor(GROUP_COLORS[0]);
 
         try {
+            // Load friends (which are the roster)
             const response = await friendApi.getFriends();
             if (response.success) setFriends(response.friends);
         } catch (error) {
@@ -115,18 +118,26 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
 
         setCreating(true);
         try {
+            // Create the group with member IDs
             const response = await rosterApi.createGroup({
                 name: newGroupName.trim(),
                 color: newGroupColor,
+                memberIds: selectedMembers, // Pass selected friend/user IDs
             });
 
             if (response.success) {
-                setGroups((prev) => [...prev, response.group]);
+                const newGroup = {
+                    ...response.group,
+                    memberCount: selectedMembers.length
+                };
+
+                setGroups((prev) => [...prev, newGroup]);
                 closeCreateModal();
-                Alert.alert("Success", `Group "${newGroupName}" created!`);
+                Alert.alert("Success", `Group "${newGroupName}" created with ${selectedMembers.length} members!`);
             }
-        } catch (error) {
-            Alert.alert("Error", "Failed to create group");
+        } catch (error: any) {
+            console.error("Create group error:", error);
+            Alert.alert("Error", error.message || "Failed to create group");
         } finally {
             setCreating(false);
         }
@@ -243,7 +254,7 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                 })}
                 {friends.length === 0 && (
                     <View style={styles.emptyMembers}>
-                        <Text style={styles.emptyText}>No friends to add</Text>
+                        <Text style={styles.emptyText}>No friends yet</Text>
                         <Text style={styles.emptySubtext}>
                             Add friends from Availability first
                         </Text>
@@ -254,7 +265,11 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
     );
 
     const GroupDetailsView = () => (
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+            style={styles.modalContainer}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={0}
+        >
             <View style={styles.modalHeader}>
                 <TouchableOpacity
                     onPress={() => (editingGroup ? closeCreateModal() : setCreateStep("select"))}
@@ -277,6 +292,8 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                     value={newGroupName}
                     onChangeText={setNewGroupName}
                     autoFocus
+                    blurOnSubmit={false}
+                    returnKeyType="done"
                 />
 
                 <Text style={styles.inputLabel}>Color</Text>
@@ -345,7 +362,7 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                     )}
                 </TouchableOpacity>
             </View>
-        </View>
+        </KeyboardAvoidingView>
     );
 
     return (
@@ -379,7 +396,14 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                                 </Text>
                             </View>
                             <View style={styles.groupInfo}>
-                                <Text style={styles.groupName}>{group.name}</Text>
+                                <View style={styles.groupNameRow}>
+                                    <Text style={styles.groupName}>{group.name}</Text>
+                                    {group.isOwner === false && (
+                                        <View style={styles.memberBadge}>
+                                            <Text style={styles.memberBadgeText}>Member</Text>
+                                        </View>
+                                    )}
+                                </View>
                                 <View style={styles.groupMeta}>
                                     <View style={styles.groupMetaRow}>
                                         <Users size={12} color={COLORS.textSub} />
@@ -389,20 +413,22 @@ export default function GroupsList({ onGroupClick }: GroupsListProps) {
                                     </View>
                                 </View>
                             </View>
-                            <View style={styles.groupActions}>
-                                <TouchableOpacity
-                                    style={styles.actionBtn}
-                                    onPress={() => openEditModal(group)}
-                                >
-                                    <Edit2 size={16} color={COLORS.textSub} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.actionBtn}
-                                    onPress={() => handleDeleteGroup(group)}
-                                >
-                                    <Trash2 size={16} color="#EF4444" />
-                                </TouchableOpacity>
-                            </View>
+                            {group.isOwner !== false && (
+                                <View style={styles.groupActions}>
+                                    <TouchableOpacity
+                                        style={styles.actionBtn}
+                                        onPress={() => openEditModal(group)}
+                                    >
+                                        <Edit2 size={16} color={COLORS.textSub} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.actionBtn}
+                                        onPress={() => handleDeleteGroup(group)}
+                                    >
+                                        <Trash2 size={16} color="#EF4444" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     ))
                 )}
@@ -446,10 +472,15 @@ const styles = StyleSheet.create({
         alignItems: "center",
         backgroundColor: COLORS.white,
         borderRadius: 12,
-        padding: 14,
-        marginVertical: 6,
+        padding: 16,
+        marginVertical: 8,
         borderWidth: 1,
         borderColor: "#F3F4F6",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 1,
     },
     groupIcon: {
         width: 48,
@@ -466,10 +497,26 @@ const styles = StyleSheet.create({
         flex: 1,
         marginLeft: 14,
     },
+    groupNameRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
     groupName: {
         fontSize: 16,
         fontWeight: "600",
         color: COLORS.textMain,
+    },
+    memberBadge: {
+        backgroundColor: "#E0E7FF",
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    memberBadgeText: {
+        fontSize: 10,
+        fontWeight: "600",
+        color: "#4F46E5",
     },
     groupMeta: {
         flexDirection: "row",

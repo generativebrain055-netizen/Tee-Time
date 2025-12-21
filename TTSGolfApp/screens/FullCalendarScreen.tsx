@@ -138,9 +138,10 @@ export default function FullCalendarScreen({ navigation }: any) {
 
     const loadTeeTimes = useCallback(async () => {
         try {
-            // Get start and end of current month view
-            const startDate = new Date(currentYear, currentMonth, 1);
-            const endDate = new Date(currentYear, currentMonth + 1, 0);
+            // Get a wider date range - 1 month before and 3 months after current view
+            // This ensures tee times are visible when navigating
+            const startDate = new Date(currentYear, currentMonth - 1, 1);
+            const endDate = new Date(currentYear, currentMonth + 4, 0); // 3 months ahead
 
             const start = startDate.toISOString().split('T')[0];
             const end = endDate.toISOString().split('T')[0];

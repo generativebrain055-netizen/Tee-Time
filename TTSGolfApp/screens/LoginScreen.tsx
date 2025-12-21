@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,44 +9,16 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
   Keyboard,
-  ViewStyle,
-  TextStyle,
+  StyleSheet,
   TextInput as RNTextInput,
-  ScrollView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import { ArrowLeft, X } from "lucide-react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 
-// Theme & Constants
-import {
-  colors,
-  spacing,
-  gradients,
-  headerStyles,
-  cardStyles,
-  buttonStyles,
-  messageStyles,
-  linkStyles,
-  footerStyles,
-  formStyles,
-} from "../theme";
-import { COUNTRY_CODES } from "../constants/countryCodes";
-import type { CountryCode } from "../types";
-
-// Shared Components
-import {
-  PrimaryButton,
-  OTPInput,
-  CountryCodeModal,
-  IconContainer,
-  LogoBox,
-} from "../components";
-
 // Hooks
-import { useAuth, useFadeIn, useSlideIn } from "../hooks";
+import { useAuth } from "../hooks";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -59,10 +31,7 @@ type RootStackParamList = {
   HomePage: undefined;
 };
 
-type LoginScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  "Login"
->;
+type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, "Login">;
 
 interface LoginScreenProps {
   navigation: LoginScreenNavigationProp;
@@ -70,53 +39,58 @@ interface LoginScreenProps {
 
 type LoginStep = "phone" | "otp";
 
-interface StepContent {
-  icon: string;
-  title: string;
-  subtitle: string;
-}
+// Colors
+const COLORS = {
+  primary: "#5DB075",
+  primaryLight: "#E8F5E9",
+  white: "#FFFFFF",
+  black: "#000000",
+  textMain: "#1A1A1A",
+  textSub: "#6B7280",
+  textPlaceholder: "#9CA3AF",
+  border: "#E5E7EB",
+  error: "#EF4444",
+  errorLight: "#FEF2F2",
+  errorBorder: "#FECACA",
+  surface: "#F9FAFB",
+};
 
-interface LocalStyles {
-  container: ViewStyle;
-  phoneInputWrapper: ViewStyle;
-  phoneInputRow: ViewStyle;
-  countryCodeButton: ViewStyle;
-  flagText: TextStyle;
-  countryCodeText: TextStyle;
-  phoneInput: TextStyle;
-}
+export default function LoginScreen({ navigation }: LoginScreenProps): React.ReactElement {
+  const insets = useSafeAreaInsets();
 
-export default function LoginScreen({
-  navigation,
-}: LoginScreenProps): React.ReactElement {
   // State
   const [phoneNumber, setPhoneNumber] = useState<string>("");
-  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
-    COUNTRY_CODES.find((c) => c.country === "United States") || COUNTRY_CODES[0]
-  );
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>("");
   const [currentStep, setCurrentStep] = useState<LoginStep>("phone");
   const [resendTimer, setResendTimer] = useState<number>(0);
+  const [inputFocused, setInputFocused] = useState<boolean>(false);
+  const [hasError, setHasError] = useState<boolean>(false);
+
+  // Refs
+  const phoneInputRef = useRef<RNTextInput>(null);
+  const otpInputRefs = useRef<(RNTextInput | null)[]>([]);
 
   // Auth hook
-  const { requestOtp, verifyOtp, loading, error, status, clearMessages } =
-    useAuth();
+  const { requestOtp, verifyOtp, loading, error, status, clearMessages } = useAuth();
 
   // Animations
-  const headerOpacity = useFadeIn(0);
-  const { translateAnim: cardTranslateY } = useSlideIn("bottom", 300);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   // Derived values
   const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const e164Phone = `${selectedCountry.code}${digitsOnly}`;
-  const isPhoneValid = digitsOnly.length >= 8;
-  const otpDigitsOnly = otpCode.replace(/\D/g, "");
-  const isOtpValid = otpDigitsOnly.length === 6;
+  const e164Phone = `+1${digitsOnly}`;
+  const isPhoneValid = digitsOnly.length >= 10;
+  const isOtpValid = otpCode.length === 6;
 
-  const primaryDisabled =
-    loading || (currentStep === "phone" ? !isPhoneValid : !isOtpValid);
+  // Format phone number for display
+  const formatPhoneDisplay = (phone: string): string => {
+    const cleaned = phone.replace(/\D/g, "");
+    if (cleaned.length === 0) return "";
+    if (cleaned.length <= 3) return `(${cleaned}`;
+    if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+  };
 
   // Resend timer effect
   useEffect(() => {
@@ -127,29 +101,51 @@ export default function LoginScreen({
     return () => clearInterval(timerId);
   }, [resendTimer]);
 
+  // Clear error when typing
+  useEffect(() => {
+    if (phoneNumber || otpCode) {
+      setHasError(false);
+    }
+  }, [phoneNumber, otpCode]);
+
   // Animate step transitions
-  const animateStepChange = (callback: () => void): void => {
-    Animated.sequence([
+  const animateStepChange = useCallback((callback: () => void): void => {
+    Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 150,
+        duration: 200,
         useNativeDriver: true,
       }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 150,
+      Animated.timing(slideAnim, {
+        toValue: -50,
+        duration: 200,
         useNativeDriver: true,
       }),
-    ]).start();
-
-    setTimeout(callback, 150);
-  };
+    ]).start(() => {
+      callback();
+      slideAnim.setValue(50);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [fadeAnim, slideAnim]);
 
   // Handlers
   const handleRequestOtp = async (isResend = false): Promise<void> => {
-    if (!isPhoneValid || loading) return;
+    if (!isPhoneValid || loading) {
+      setHasError(true);
+      return;
+    }
 
-    // Pass 'login' purpose for existing users only
     const result = await requestOtp(e164Phone, "login");
     if (result.success) {
       if (!isResend) {
@@ -157,6 +153,8 @@ export default function LoginScreen({
       }
       setOtpCode("");
       setResendTimer(result.resendAfterSeconds || 30);
+    } else {
+      setHasError(true);
     }
   };
 
@@ -168,10 +166,13 @@ export default function LoginScreen({
       setTimeout(() => {
         navigation?.navigate("Home", { user: result.user });
       }, 500);
+    } else {
+      setHasError(true);
     }
   };
 
   const handlePrimaryAction = (): void => {
+    Keyboard.dismiss();
     if (currentStep === "phone") handleRequestOtp();
     else if (currentStep === "otp") handleVerifyOtp();
   };
@@ -181,278 +182,383 @@ export default function LoginScreen({
     handleRequestOtp(true);
   };
 
-  const switchToPhone = (): void => {
-    animateStepChange(() => {
-      setCurrentStep("phone");
-      clearMessages();
-      setOtpCode("");
-    });
-  };
-
-  // Get dynamic content based on step
-  const getStepContent = (): StepContent => {
+  const handleBack = (): void => {
     if (currentStep === "otp") {
-      return {
-        icon: "keypad",
-        title: "Verify Your Number",
-        subtitle: `Enter the code sent to ${e164Phone}`,
-      };
+      animateStepChange(() => {
+        setCurrentStep("phone");
+        clearMessages();
+        setOtpCode("");
+        setHasError(false);
+      });
+    } else {
+      navigation.goBack();
     }
-    return {
-      icon: "call",
-      title: "Welcome Back!",
-      subtitle: "Enter your phone number to login",
-    };
   };
 
-  const stepContent = getStepContent();
+  const clearPhoneInput = (): void => {
+    setPhoneNumber("");
+    setHasError(false);
+    phoneInputRef.current?.focus();
+  };
+
+  // OTP input handler
+  const handleOtpChange = (text: string, index: number): void => {
+    const newOtp = otpCode.split("");
+    newOtp[index] = text;
+    const newOtpString = newOtp.join("").slice(0, 6);
+    setOtpCode(newOtpString);
+
+    // Auto-focus next input
+    if (text && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (key: string, index: number): void => {
+    if (key === "Backspace" && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const isButtonDisabled = loading || (currentStep === "phone" ? !isPhoneValid : !isOtpValid);
 
   return (
-    <LinearGradient
-      colors={gradients.primary as any}
-      style={styles.container}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <StatusBar style="light" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style="dark" />
 
-      {/* Header */}
-      <Animated.View
-        style={[styles.headerGradient, { opacity: headerOpacity }]}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <SafeAreaView style={styles.headerContent}>
-          <LogoBox
-            source={require("../assets/striplogo.png")}
-            width={160}
-            height={90}
-            imageWidth={140}
-            imageHeight={70}
-          />
-          <Text style={styles.appName}>Tee Time Social</Text>
-          <Text style={styles.tagline}>Golf scheduling made simple</Text>
-        </SafeAreaView>
-      </Animated.View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.content}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+                <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
+              </TouchableOpacity>
+            </View>
 
-      {/* Card */}
-      <Animated.View
-        style={[
-          styles.cardContainer,
-          { transform: [{ translateY: cardTranslateY }] },
-        ]}
-      >
-        <KeyboardAvoidingView
-          style={styles.keyboardAvoidContainer}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <ScrollView
-              style={styles.card}
-              contentContainerStyle={styles.cardScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              bounces={false}
+            {/* Main Content */}
+            <Animated.View
+              style={[
+                styles.mainContent,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateX: slideAnim }],
+                },
+              ]}
             >
-              <Animated.View
-                style={[styles.cardContent, { opacity: fadeAnim }]}
-              >
-                {/* Icon */}
-                <IconContainer icon={stepContent.icon} />
+              {/* Title */}
+              <Text style={styles.title}>Welcome back</Text>
+              <Text style={styles.subtitle}>
+                {currentStep === "phone"
+                  ? "Already created an account? Sign in here."
+                  : `Enter the code sent to ${formatPhoneDisplay(phoneNumber)}`}
+              </Text>
 
-                {/* Title */}
-                <Text style={styles.cardTitle}>{stepContent.title}</Text>
-                <Text style={styles.cardSubtitle}>{stepContent.subtitle}</Text>
-
-                {/* Phone Input with Country Code */}
-                {currentStep === "phone" && (
-                  <View style={styles.phoneInputWrapper}>
-                    <View style={styles.phoneInputRow}>
-                      <TouchableOpacity
-                        style={styles.countryCodeButton}
-                        onPress={() => setModalVisible(true)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.flagText}>
-                          {selectedCountry.flag}
-                        </Text>
-                        <Text style={styles.countryCodeText}>
-                          {selectedCountry.code}
-                        </Text>
-                        <Ionicons
-                          name="chevron-down"
-                          size={14}
-                          color={colors.textSecondary}
-                        />
-                      </TouchableOpacity>
-                      <RNTextInput
-                        style={styles.phoneInput}
-                        placeholder="3051234567"
-                        placeholderTextColor={colors.placeholder}
-                        keyboardType="phone-pad"
-                        value={phoneNumber}
-                        onChangeText={(text: string) =>
-                          setPhoneNumber(text.replace(/\D/g, ""))
-                        }
-                        maxLength={12}
-                      />
-                    </View>
-                  </View>
-                )}
-
-                {/* OTP Input */}
-                {currentStep === "otp" && (
-                  <>
-                    <OTPInput
-                      value={otpCode}
-                      onChangeText={setOtpCode}
-                      length={6}
+              {/* Phone Input */}
+              {currentStep === "phone" && (
+                <View style={styles.inputSection}>
+                  <View
+                    style={[
+                      styles.phoneInputContainer,
+                      inputFocused && styles.phoneInputContainerFocused,
+                      hasError && styles.phoneInputContainerError,
+                    ]}
+                  >
+                    <RNTextInput
+                      ref={phoneInputRef}
+                      style={[
+                        styles.phoneInput,
+                        hasError && styles.phoneInputError,
+                      ]}
+                      placeholder="(555) 123-4567"
+                      placeholderTextColor={COLORS.textPlaceholder}
+                      keyboardType="phone-pad"
+                      value={formatPhoneDisplay(phoneNumber)}
+                      onChangeText={(text) => setPhoneNumber(text.replace(/\D/g, ""))}
+                      maxLength={14}
+                      onFocus={() => setInputFocused(true)}
+                      onBlur={() => setInputFocused(false)}
                     />
-                    <TouchableOpacity
-                      style={styles.resendButton}
-                      onPress={handleResendOtp}
-                      disabled={resendTimer > 0 || loading}
-                    >
-                      <Text
+                    {phoneNumber.length > 0 && (
+                      <TouchableOpacity
+                        style={styles.clearButton}
+                        onPress={clearPhoneInput}
+                      >
+                        <View style={styles.clearButtonInner}>
+                          <X size={12} color={COLORS.textSub} strokeWidth={2} />
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {hasError && (
+                    <Text style={styles.errorText}>Please enter a valid phone number</Text>
+                  )}
+                </View>
+              )}
+
+              {/* OTP Input */}
+              {currentStep === "otp" && (
+                <View style={styles.inputSection}>
+                  <View style={styles.otpContainer}>
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <View
+                        key={index}
                         style={[
-                          styles.resendText,
-                          (resendTimer > 0 || loading) &&
-                          styles.resendTextDisabled,
+                          styles.otpBox,
+                          otpCode[index] && styles.otpBoxFilled,
+                          hasError && styles.otpBoxError,
                         ]}
                       >
-                        {resendTimer > 0
-                          ? `Resend in ${resendTimer}s`
-                          : "Resend Code"}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {/* Continue Button */}
-                <PrimaryButton
-                  title={currentStep === "otp" ? "Verify & Login" : "Continue"}
-                  onPress={handlePrimaryAction}
-                  disabled={primaryDisabled}
-                  loading={loading}
-                  icon="arrow-forward"
-                  style={styles.continueButton}
-                />
-
-                {/* Messages */}
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                {status ? (
-                  <Text style={styles.statusText}>{status}</Text>
-                ) : null}
-
-                {/* Terms */}
-                <Text style={styles.termsText}>
-                  By continuing, you agree to our{" "}
-                  <Text style={styles.termsLink}>Terms of Service</Text>
-                  {"\n"}and <Text style={styles.termsLink}>Privacy Policy</Text>
-                </Text>
-
-                {/* Change Phone Number */}
-                {currentStep === "otp" && (
-                  <TouchableOpacity
-                    style={styles.switchButton}
-                    onPress={switchToPhone}
-                  >
-                    <Text style={styles.switchText}>Change Phone Number</Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* Signup Link */}
-                {currentStep === "phone" && (
-                  <View style={styles.signupContainer}>
-                    <Text style={styles.signupText}>
-                      Don't have an account?{" "}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate("Onboarding")}
-                    >
-                      <Text style={styles.signupLink}>Sign Up</Text>
-                    </TouchableOpacity>
+                        <RNTextInput
+                          ref={(ref) => (otpInputRefs.current[index] = ref)}
+                          style={[
+                            styles.otpInput,
+                            hasError && styles.otpInputError,
+                          ]}
+                          keyboardType="number-pad"
+                          maxLength={1}
+                          value={otpCode[index] || ""}
+                          onChangeText={(text) => handleOtpChange(text, index)}
+                          onKeyPress={({ nativeEvent }) =>
+                            handleOtpKeyPress(nativeEvent.key, index)
+                          }
+                          autoFocus={index === 0}
+                        />
+                      </View>
+                    ))}
                   </View>
-                )}
-              </Animated.View>
-            </ScrollView>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Animated.View>
+                  {hasError && error && (
+                    <Text style={styles.errorText}>{error}</Text>
+                  )}
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          © 2025 Tee Time Social. All rights reserved.
-        </Text>
-      </View>
+                  {/* Resend */}
+                  <TouchableOpacity
+                    style={styles.resendButton}
+                    onPress={handleResendOtp}
+                    disabled={resendTimer > 0 || loading}
+                  >
+                    <Text
+                      style={[
+                        styles.resendText,
+                        (resendTimer > 0 || loading) && styles.resendTextDisabled,
+                      ]}
+                    >
+                      {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend code"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Animated.View>
 
-      {/* Country Code Modal */}
-      <CountryCodeModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onSelect={setSelectedCountry}
-        selectedCountry={selectedCountry}
-      />
-    </LinearGradient >
+            {/* Bottom Section */}
+            <View style={styles.bottomSection}>
+              {/* Next Button */}
+              <TouchableOpacity
+                style={[
+                  styles.nextButton,
+                  isButtonDisabled && styles.nextButtonDisabled,
+                ]}
+                onPress={handlePrimaryAction}
+                disabled={isButtonDisabled}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nextButtonText}>
+                  {currentStep === "otp" ? "Verify" : "Next"}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Sign Up Link */}
+              {currentStep === "phone" && (
+                <View style={styles.signupContainer}>
+                  <Text style={styles.signupText}>Don't have an account? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate("Onboarding")}>
+                    <Text style={styles.signupLink}>Sign up</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+
+    </View>
   );
 }
 
-// Local styles that extend shared styles
-const localStyles: LocalStyles = {
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.white,
   },
-  keyboardAvoidContainer: {
+  keyboardView: {
     flex: 1,
   },
-  phoneInputWrapper: {
-    width: "100%",
-    alignItems: "center",
-    marginBottom: spacing.lg,
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
   },
-  phoneInputRow: {
-    flexDirection: "row",
-    width: "100%",
+  header: {
     height: 56,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    overflow: "hidden",
+    justifyContent: "center",
   },
-  countryCodeButton: {
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  mainContent: {
+    flex: 1,
+    paddingTop: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: COLORS.textMain,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: COLORS.textSub,
+    lineHeight: 22,
+    marginBottom: 40,
+  },
+  inputSection: {
+    width: "100%",
+  },
+  // Phone Input
+  phoneInputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    backgroundColor: colors.primaryLight,
-    borderRightWidth: 1,
-    borderRightColor: colors.surfaceDark,
-    gap: 6,
+    height: 56,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 16,
   },
-  flagText: {
-    fontSize: 22,
+  phoneInputContainerFocused: {
+    borderColor: COLORS.textMain,
+    borderWidth: 1.5,
   },
-  countryCodeText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: colors.textPrimary,
+  phoneInputContainerError: {
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorLight,
   },
   phoneInput: {
     flex: 1,
     height: "100%",
-    paddingHorizontal: 16,
     fontSize: 16,
-    color: colors.textPrimary,
-    backgroundColor: "transparent",
+    color: COLORS.textMain,
+    fontWeight: "400",
   },
-};
-
-// Merge all styles
-const styles: Record<string, any> = {
-  ...localStyles,
-  ...headerStyles,
-  ...cardStyles,
-  ...formStyles,
-  ...buttonStyles,
-  ...messageStyles,
-  ...linkStyles,
-  ...footerStyles,
-};
+  phoneInputError: {
+    color: COLORS.error,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearButtonInner: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 13,
+    color: COLORS.error,
+    marginTop: 8,
+    marginLeft: 4,
+  },
+  // OTP Input
+  otpContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  otpBox: {
+    flex: 1,
+    height: 56,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  otpBoxFilled: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  otpBoxError: {
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorLight,
+  },
+  otpInput: {
+    width: "100%",
+    height: "100%",
+    fontSize: 24,
+    fontWeight: "600",
+    color: COLORS.textMain,
+    textAlign: "center",
+  },
+  otpInputError: {
+    color: COLORS.error,
+  },
+  resendButton: {
+    alignSelf: "center",
+    marginTop: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  resendText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: COLORS.primary,
+  },
+  resendTextDisabled: {
+    color: COLORS.textSub,
+  },
+  // Bottom Section
+  bottomSection: {
+    paddingBottom: 32,
+  },
+  nextButton: {
+    height: 56,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  nextButtonDisabled: {
+    backgroundColor: COLORS.primary,
+    opacity: 0.6,
+  },
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.white,
+  },
+  signupContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 20,
+  },
+  signupText: {
+    fontSize: 14,
+    color: COLORS.textSub,
+  },
+  signupLink: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.primary,
+  },
+});

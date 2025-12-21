@@ -15,6 +15,7 @@ import RosterList from "./RosterList";
 import GroupsList from "./GroupsList";
 import OnDeckList from "./OnDeckList";
 import RequestsList from "./RequestsList";
+import GroupDetail from "./GroupDetail";
 
 const TABS = ["Roster", "Groups", "On Deck", "Requests"];
 
@@ -22,6 +23,7 @@ export default function RosterScreen({ navigation, route }: any) {
     const insets = useSafeAreaInsets();
     const initialTab = route?.params?.initialTab || "Roster";
     const [activeTab, setActiveTab] = useState(initialTab);
+    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
     useEffect(() => {
         if (route?.params?.initialTab) {
@@ -29,12 +31,36 @@ export default function RosterScreen({ navigation, route }: any) {
         }
     }, [route?.params?.initialTab]);
 
+    const handleGroupClick = (groupId: string) => {
+        setSelectedGroupId(groupId);
+    };
+
+    const handleBackFromGroup = () => {
+        setSelectedGroupId(null);
+    };
+
+    const handleNavigateToCreateTeeTime = (groupId: string) => {
+        // Navigate to CreateTeeTime with group pre-selected
+        navigation?.navigate("CreateTeeTime", { preSelectedGroupId: groupId });
+    };
+
+    // Show GroupDetail if a group is selected
+    if (selectedGroupId) {
+        return (
+            <GroupDetail
+                groupId={selectedGroupId}
+                onBack={handleBackFromGroup}
+                onNavigateToCreateTeeTime={handleNavigateToCreateTeeTime}
+            />
+        );
+    }
+
     const renderContent = () => {
         switch (activeTab) {
             case "Roster":
                 return <RosterList navigation={navigation} />;
             case "Groups":
-                return <GroupsList onGroupClick={() => { }} />;
+                return <GroupsList onGroupClick={handleGroupClick} />;
             case "On Deck":
                 return <OnDeckList navigation={navigation} />;
             case "Requests":

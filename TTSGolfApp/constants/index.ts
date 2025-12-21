@@ -3,8 +3,6 @@
  * Re-exports all constants for cleaner imports
  */
 
-export { COUNTRY_CODES, getDefaultCountry } from "./countryCodes";
-
 export {
   ONBOARDING_STEPS,
   STEP_ORDER,

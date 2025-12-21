@@ -183,15 +183,19 @@ class RosterRepository {
 
   // ============ ROSTER GROUPS ============
 
-  // Get all groups for user
+  // Get all groups for user (owned + member of)
   async getGroups(userId) {
+    // Get groups the user owns OR groups where the user is a member
+    // A user is a member of a group if someone has them in their roster with that group_id
     const query = `
-      SELECT g.*, 
-             COUNT(r.id) as member_count,
-             (SELECT COUNT(*) FROM roster WHERE group_id = g.id AND is_on_deck = true) as on_deck_count
+      SELECT DISTINCT g.*, 
+             (SELECT COUNT(*) FROM roster WHERE group_id = g.id) as member_count,
+             (SELECT COUNT(*) FROM roster WHERE group_id = g.id AND is_on_deck = true) as on_deck_count,
+             CASE WHEN g.user_id = $1 THEN true ELSE false END as is_owner
       FROM roster_groups g
       LEFT JOIN roster r ON g.id = r.group_id
-      WHERE g.user_id = $1
+      WHERE g.user_id = $1 
+         OR r.contact_user_id = $1
       GROUP BY g.id
       ORDER BY g.position ASC, g.created_at ASC
     `;
@@ -255,9 +259,106 @@ class RosterRepository {
     return result.rows[0];
   }
 
+  // Add multiple members to a group by their user IDs (friend IDs)
+  async addMembersToGroup(userId, groupId, memberUserIds) {
+    const client = await pool.connect();
+    let addedCount = 0;
+    
+    try {
+      await client.query('BEGIN');
+      
+      for (const memberUserId of memberUserIds) {
+        // Find the roster entry for this friend
+        const rosterResult = await client.query(
+          `SELECT id FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
+          [userId, memberUserId]
+        );
+        
+        if (rosterResult.rows.length > 0) {
+          // Update the roster entry to belong to this group
+          await client.query(
+            `UPDATE roster SET group_id = $1, updated_at = NOW() WHERE id = $2`,
+            [groupId, rosterResult.rows[0].id]
+          );
+          addedCount++;
+        } else {
+          // Friend not in roster yet, add them
+          const posResult = await client.query(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM roster WHERE user_id = $1",
+            [userId]
+          );
+          const position = posResult.rows[0].next_pos;
+          
+          await client.query(
+            `INSERT INTO roster (user_id, contact_user_id, group_id, position)
+             VALUES ($1, $2, $3, $4)`,
+            [userId, memberUserId, groupId, position]
+          );
+          addedCount++;
+        }
+      }
+      
+      await client.query('COMMIT');
+      return addedCount;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // Get group members
   async getGroupMembers(userId, groupId) {
     return this.getRoster(userId, { groupId });
+  }
+
+  // Check if user has access to a group (owner or member)
+  async getGroupWithAccess(userId, groupId) {
+    const query = `
+      SELECT g.*, 
+             CASE WHEN g.user_id = $1 THEN true ELSE false END as is_owner
+      FROM roster_groups g
+      LEFT JOIN roster r ON g.id = r.group_id
+      WHERE g.id = $2 
+        AND (g.user_id = $1 OR r.contact_user_id = $1)
+      LIMIT 1
+    `;
+    const result = await pool.query(query, [userId, groupId]);
+    return result.rows[0];
+  }
+
+  // Get all members of a group (regardless of who owns the roster entries)
+  async getGroupMembersForGroup(groupId, sortBy = 'position') {
+    let orderBy = 'r.position ASC';
+    switch (sortBy) {
+      case 'socialRate':
+        orderBy = 'p.social_rate DESC NULLS LAST, r.position ASC';
+        break;
+      case 'handicap':
+        orderBy = 'COALESCE(r.contact_handicap, p.handicap) ASC NULLS LAST, r.position ASC';
+        break;
+      case 'name':
+        orderBy = "COALESCE(r.contact_name, u.first_name || ' ' || u.last_name) ASC";
+        break;
+    }
+
+    const query = `
+      SELECT r.*, 
+             u.first_name, u.last_name, u.username,
+             p.avatar_url, p.handicap as user_handicap, p.social_rate as profile_social_rate,
+             p.location, p.home_course, p.preferred_tee_time, p.walk_or_ride,
+             p.rounds_played, p.average_score,
+             g.name as group_name, g.color as group_color
+      FROM roster r
+      LEFT JOIN users u ON r.contact_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
+      LEFT JOIN roster_groups g ON r.group_id = g.id
+      WHERE r.group_id = $1
+      ORDER BY ${orderBy}
+    `;
+    const result = await pool.query(query, [groupId]);
+    return result.rows;
   }
 
   // Add member to group

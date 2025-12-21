@@ -209,7 +209,9 @@ class RosterController {
         onDeckCount: parseInt(g.on_deck_count) || 0,
         autoInvite: g.auto_invite,
         maxMembers: g.max_members,
-        isDefault: g.is_default
+        isDefault: g.is_default,
+        isOwner: g.is_owner,
+        ownerId: g.user_id
       }));
 
       res.json({ success: true, groups: formatted });
@@ -224,7 +226,7 @@ class RosterController {
   async createGroup(req, res) {
     try {
       const userId = req.user.id;
-      const { name, description, color, icon, autoInvite, maxMembers } = req.body;
+      const { name, description, color, icon, autoInvite, maxMembers, memberIds } = req.body;
 
       if (!name) {
         return res.status(400).json({ success: false, message: "Group name is required" });
@@ -234,6 +236,12 @@ class RosterController {
         name, description, color, icon, autoInvite, maxMembers
       });
 
+      // Add members to the group if provided
+      let memberCount = 0;
+      if (memberIds && Array.isArray(memberIds) && memberIds.length > 0) {
+        memberCount = await rosterRepository.addMembersToGroup(userId, group.id, memberIds);
+      }
+
       // Format the response to match frontend expectations
       const formatted = {
         id: group.id,
@@ -242,7 +250,7 @@ class RosterController {
         color: group.color,
         icon: group.icon,
         position: group.position,
-        memberCount: 0,
+        memberCount: memberCount,
         onDeckCount: 0,
         autoInvite: group.auto_invite,
         maxMembers: group.max_members,
@@ -315,7 +323,14 @@ class RosterController {
       const groupId = req.params.id;
       const { sortBy } = req.query;
 
-      const members = await rosterRepository.getRoster(userId, { groupId, sortBy });
+      // First check if user has access to this group (owner or member)
+      const groupCheck = await rosterRepository.getGroupWithAccess(userId, groupId);
+      if (!groupCheck) {
+        return res.status(403).json({ success: false, message: "Access denied to this group" });
+      }
+
+      // Get members - use the group owner's roster to get members
+      const members = await rosterRepository.getGroupMembersForGroup(groupId, sortBy);
       const formatted = this.formatRosterEntries(members || []);
 
       res.json({ success: true, members: formatted });

@@ -69,7 +69,6 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
   };
 
   const handleChange = (text: string): void => {
-    // Allow negative sign and decimal
     const cleaned = text.replace(/[^0-9.-]/g, "");
     setHandicap(cleaned);
     validateHandicap(cleaned);

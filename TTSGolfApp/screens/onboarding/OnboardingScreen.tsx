@@ -97,6 +97,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   ): Promise<void> => {
     if (isRegistering) return;
 
+    // Validate required fields
+    const missingFields: string[] = [];
+
+    if (!finalData.phoneNumber) missingFields.push("Phone number");
+    if (!finalData.firstName?.trim()) missingFields.push("First name");
+    if (!finalData.lastName?.trim()) missingFields.push("Last name");
+
+    // Validate preferences
+    if (!finalData.preferences) {
+      missingFields.push("Preferences");
+    } else {
+      if (!finalData.preferences.playerCount) missingFields.push("Preferred player count");
+      if (!finalData.preferences.playStyle) missingFields.push("Walk/Ride preference");
+      if (!finalData.preferences.preferredTimes || finalData.preferences.preferredTimes.length === 0) {
+        missingFields.push("Preferred time of day");
+      }
+    }
+
+    if (missingFields.length > 0) {
+      Alert.alert(
+        "Missing Information",
+        `Please complete the following fields:\n\n${missingFields.join("\n")}`
+      );
+      return;
+    }
+
     setIsRegistering(true);
     try {
       console.log("Registering user directly:", finalData);
@@ -116,7 +142,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           lastName: finalData.lastName,
           username: username,
           email: finalData.email || null,
-          handicap: finalData.handicap ? parseInt(finalData.handicap) : null,
+          handicap: finalData.handicap ? parseInt(finalData.handicap as string) : null,
         }),
       });
 

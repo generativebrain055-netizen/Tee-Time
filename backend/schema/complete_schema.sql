@@ -1,7 +1,7 @@
 -- ============================================================================
 -- TeeTime Golf App - Complete Database Schema
 -- ============================================================================
--- Version: 2.0
+-- Version: 2.1
 -- Last Updated: December 2024
 -- 
 -- Run this in Supabase SQL Editor after running drop_all_tables.sql
@@ -25,8 +25,6 @@ $$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- 1. USERS TABLE
--- Core user account information
--- Relationship: Central entity, referenced by all other tables
 -- ============================================================================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -52,12 +50,9 @@ CREATE TABLE users (
 CREATE INDEX idx_users_phone_number ON users(phone_number) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_username ON users(username) WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_is_active ON users(is_active) WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- 2. USER_PROFILES TABLE
--- Extended profile information (One-to-One with Users)
--- Relationship: User to Profile = One to One
 -- ============================================================================
 CREATE TABLE user_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -68,21 +63,17 @@ CREATE TABLE user_profiles (
     bio TEXT,
     location VARCHAR(255),
     home_course VARCHAR(255),
-    -- Equipment
     driver VARCHAR(100),
     irons VARCHAR(100),
     putter VARCHAR(100),
     ball VARCHAR(100),
-    -- Preferences
     preferred_tee_time VARCHAR(50),
     walk_or_ride VARCHAR(20) DEFAULT 'ride',
     playing_partner_preference VARCHAR(100),
-    -- Settings
     timezone VARCHAR(50) DEFAULT 'UTC',
     language VARCHAR(10) DEFAULT 'en',
     notification_preferences JSONB DEFAULT '{"email": true, "sms": true, "push": true}'::jsonb,
     privacy_settings JSONB DEFAULT '{"show_handicap": true, "show_location": true, "show_phone": false}'::jsonb,
-    -- Stats
     rounds_played INT DEFAULT 0,
     average_score DECIMAL(4,1),
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -92,11 +83,9 @@ CREATE TABLE user_profiles (
 
 CREATE INDEX idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX idx_user_profiles_handicap ON user_profiles(handicap);
-CREATE INDEX idx_user_profiles_location ON user_profiles(location);
 
 -- ============================================================================
 -- 3. DEVICES TABLE
--- User devices for push notifications and security
 -- ============================================================================
 CREATE TABLE devices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -124,12 +113,9 @@ CREATE TABLE devices (
 );
 
 CREATE INDEX idx_devices_user_id ON devices(user_id);
-CREATE INDEX idx_devices_fingerprint ON devices(device_fingerprint);
-CREATE INDEX idx_devices_is_trusted ON devices(is_trusted);
 
 -- ============================================================================
 -- 4. SESSIONS TABLE
--- User authentication sessions
 -- ============================================================================
 CREATE TABLE sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -151,14 +137,11 @@ CREATE TABLE sessions (
 );
 
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_device_id ON sessions(device_id);
 CREATE INDEX idx_sessions_access_token_hash ON sessions(access_token_hash);
 CREATE INDEX idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
-CREATE INDEX idx_sessions_is_active ON sessions(is_active) WHERE is_active = true;
 
 -- ============================================================================
 -- 5. OTP_REQUESTS TABLE
--- One-time password requests for authentication
 -- ============================================================================
 CREATE TABLE otp_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -178,12 +161,9 @@ CREATE TABLE otp_requests (
 );
 
 CREATE INDEX idx_otp_phone_number ON otp_requests(phone_number);
-CREATE INDEX idx_otp_user_id ON otp_requests(user_id);
-CREATE INDEX idx_otp_expires_at ON otp_requests(expires_at) WHERE is_verified = false;
 
 -- ============================================================================
 -- 6. MAGIC_LINKS TABLE
--- Magic link authentication tokens
 -- ============================================================================
 CREATE TABLE magic_links (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -205,16 +185,32 @@ CREATE TABLE magic_links (
     CONSTRAINT valid_magic_link_purpose CHECK (purpose IN ('login', 'signup', 'email_verification', 'password_reset'))
 );
 
-CREATE INDEX idx_magic_links_phone_number ON magic_links(phone_number);
 CREATE INDEX idx_magic_links_token_hash ON magic_links(token_hash);
-CREATE INDEX idx_magic_links_expires_at ON magic_links(expires_at) WHERE is_used = false;
 
 
 -- ============================================================================
--- 7. ROSTER TABLE
--- User's personal roster of golf buddies
--- Relationship: User to Roster = One to Many
--- Relationship: User to Roster Member = One to Many (via contact_user_id)
+-- 7. ROSTER_GROUPS TABLE (must be before roster for FK)
+-- ============================================================================
+CREATE TABLE roster_groups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    color VARCHAR(7) DEFAULT '#5DB075',
+    icon VARCHAR(50),
+    position INT DEFAULT 0,
+    is_default BOOLEAN DEFAULT false,
+    auto_invite BOOLEAN DEFAULT true,
+    max_members INT DEFAULT 20,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_group_name UNIQUE (user_id, name)
+);
+
+CREATE INDEX idx_roster_groups_user_id ON roster_groups(user_id);
+
+-- ============================================================================
+-- 8. ROSTER TABLE
 -- ============================================================================
 CREATE TABLE roster (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -224,9 +220,16 @@ CREATE TABLE roster (
     contact_name VARCHAR(100),
     contact_email VARCHAR(255),
     contact_handicap DECIMAL(4,1),
+    group_id UUID REFERENCES roster_groups(id) ON DELETE SET NULL,
     position INT NOT NULL DEFAULT 0,
     is_on_deck BOOLEAN DEFAULT false,
     is_favorite BOOLEAN DEFAULT false,
+    social_rate DECIMAL(3,2),
+    distance_to_course DECIMAL(5,2),
+    club_membership VARCHAR(255),
+    last_played_together TIMESTAMPTZ,
+    times_played_together INT DEFAULT 0,
+    invite_acceptance_rate DECIMAL(3,2),
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -238,30 +241,10 @@ CREATE INDEX idx_roster_user_id ON roster(user_id);
 CREATE INDEX idx_roster_contact_user_id ON roster(contact_user_id);
 CREATE INDEX idx_roster_position ON roster(user_id, position);
 CREATE INDEX idx_roster_on_deck ON roster(user_id, is_on_deck) WHERE is_on_deck = true;
-CREATE INDEX idx_roster_favorite ON roster(user_id, is_favorite) WHERE is_favorite = true;
-
--- ============================================================================
--- 8. ROSTER_GROUPS TABLE
--- Custom groups for organizing roster contacts
--- ============================================================================
-CREATE TABLE roster_groups (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    color VARCHAR(7) DEFAULT '#5DB075',
-    icon VARCHAR(50),
-    position INT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unique_group_name UNIQUE (user_id, name)
-);
-
-CREATE INDEX idx_roster_groups_user_id ON roster_groups(user_id);
+CREATE INDEX idx_roster_group_id ON roster(group_id);
 
 -- ============================================================================
 -- 9. ROSTER_GROUP_MEMBERS TABLE
--- Junction table for roster groups
 -- ============================================================================
 CREATE TABLE roster_group_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -276,8 +259,6 @@ CREATE INDEX idx_roster_group_members_roster_id ON roster_group_members(roster_i
 
 -- ============================================================================
 -- 10. TEE_TIMES TABLE
--- Scheduled tee times
--- Relationship: User to TeeTime (Creator) = One to Many
 -- ============================================================================
 CREATE TABLE tee_times (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -290,6 +271,7 @@ CREATE TABLE tee_times (
     holes INT DEFAULT 18,
     max_players INT DEFAULT 4 CHECK (max_players >= 1 AND max_players <= 8),
     invite_type VARCHAR(20) NOT NULL DEFAULT 'roster',
+    response_window INT DEFAULT 2, -- hours for roster invites
     status VARCHAR(20) DEFAULT 'pending',
     notes TEXT,
     booking_reference VARCHAR(100),
@@ -300,7 +282,7 @@ CREATE TABLE tee_times (
     cancelled_at TIMESTAMPTZ,
     cancelled_by UUID REFERENCES users(id),
     cancel_reason TEXT,
-    CONSTRAINT valid_invite_type CHECK (invite_type IN ('roster', 'fcfs', 'open')),
+    CONSTRAINT valid_invite_type CHECK (invite_type IN ('roster', 'fcfs', 'open', 'manual')),
     CONSTRAINT valid_tee_time_status CHECK (status IN ('pending', 'confirmed', 'cancelled', 'completed')),
     CONSTRAINT valid_holes CHECK (holes IN (9, 18))
 );
@@ -312,7 +294,6 @@ CREATE INDEX idx_tee_times_upcoming ON tee_times(tee_date, tee_time) WHERE statu
 
 -- ============================================================================
 -- 11. TEE_TIME_PARTICIPANTS TABLE
--- Confirmed participants in a tee time
 -- ============================================================================
 CREATE TABLE tee_time_participants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -335,9 +316,6 @@ CREATE INDEX idx_participants_user_id ON tee_time_participants(user_id);
 
 -- ============================================================================
 -- 12. INVITES TABLE
--- Invitations to tee times
--- Relationship: User to Invite (Creator) = One to Many
--- Relationship: Invite to TeeTime = Many to One
 -- ============================================================================
 CREATE TABLE invites (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -363,15 +341,12 @@ CREATE TABLE invites (
 CREATE INDEX idx_invites_tee_time_id ON invites(tee_time_id);
 CREATE INDEX idx_invites_inviter_id ON invites(inviter_id);
 CREATE INDEX idx_invites_invitee_user_id ON invites(invitee_user_id);
-CREATE INDEX idx_invites_invitee_phone ON invites(invitee_phone);
 CREATE INDEX idx_invites_status ON invites(status);
 CREATE INDEX idx_invites_pending ON invites(invitee_user_id, status) WHERE status = 'pending';
+CREATE INDEX idx_invites_expires ON invites(expires_at) WHERE status = 'pending' AND expires_at IS NOT NULL;
 
 -- ============================================================================
 -- 13. INVITE_RESPONSES TABLE
--- Response history for invites (supports multiple responses)
--- Relationship: User to Invite Response = One to Many
--- Relationship: Invite to Invite Response = One to Many
 -- ============================================================================
 CREATE TABLE invite_responses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -389,197 +364,10 @@ CREATE TABLE invite_responses (
 
 CREATE INDEX idx_invite_responses_invite_id ON invite_responses(invite_id);
 CREATE INDEX idx_invite_responses_user_id ON invite_responses(user_id);
-CREATE INDEX idx_invite_responses_created_at ON invite_responses(created_at DESC);
 
 
 -- ============================================================================
--- 14. LOGIN_LOGS TABLE
--- Authentication attempt logging
--- ============================================================================
-CREATE TABLE login_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    phone_number VARCHAR(20),
-    email VARCHAR(255),
-    login_method VARCHAR(50) NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    failure_reason VARCHAR(255),
-    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
-    ip_address INET,
-    user_agent TEXT,
-    device_fingerprint TEXT,
-    location JSONB,
-    attempted_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT valid_login_method CHECK (login_method IN ('password', 'otp', 'magic_link', 'google', 'apple', 'facebook')),
-    CONSTRAINT valid_login_status CHECK (status IN ('success', 'failed', 'blocked', 'suspicious', 'rate_limited'))
-);
-
-CREATE INDEX idx_login_logs_user_id ON login_logs(user_id);
-CREATE INDEX idx_login_logs_phone_number ON login_logs(phone_number);
-CREATE INDEX idx_login_logs_status ON login_logs(status);
-CREATE INDEX idx_login_logs_attempted_at ON login_logs(attempted_at DESC);
-
--- ============================================================================
--- 15. ANALYTICS_EVENTS TABLE
--- User activity tracking
--- ============================================================================
-CREATE TABLE analytics_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
-    event_name VARCHAR(100) NOT NULL,
-    event_category VARCHAR(50),
-    event_properties JSONB DEFAULT '{}'::jsonb,
-    session_id UUID,
-    ip_address INET,
-    user_agent TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_analytics_user_id ON analytics_events(user_id);
-CREATE INDEX idx_analytics_event_name ON analytics_events(event_name);
-CREATE INDEX idx_analytics_created_at ON analytics_events(created_at DESC);
-
--- ============================================================================
--- 16. NOTIFICATIONS TABLE
--- User notifications (push, email, SMS)
--- ============================================================================
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
-    type VARCHAR(50) NOT NULL,
-    channel VARCHAR(50),
-    title VARCHAR(255),
-    body TEXT NOT NULL,
-    data JSONB DEFAULT '{}'::jsonb,
-    action_url TEXT,
-    status VARCHAR(20) DEFAULT 'pending',
-    sent_at TIMESTAMPTZ,
-    delivered_at TIMESTAMPTZ,
-    read_at TIMESTAMPTZ,
-    failed_at TIMESTAMPTZ,
-    failure_reason TEXT,
-    attempts INT DEFAULT 0,
-    max_attempts INT DEFAULT 3,
-    scheduled_for TIMESTAMPTZ,
-    external_id VARCHAR(255),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT valid_notification_type CHECK (type IN ('push', 'email', 'sms', 'in_app')),
-    CONSTRAINT valid_notification_status CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'read', 'cancelled'))
-);
-
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_status ON notifications(status);
-CREATE INDEX idx_notifications_scheduled_for ON notifications(scheduled_for) WHERE status = 'pending';
-CREATE INDEX idx_notifications_unread ON notifications(user_id, read_at) WHERE read_at IS NULL;
-
--- ============================================================================
--- 17. RATE_LIMITS TABLE
--- Rate limiting for API protection
--- ============================================================================
-CREATE TABLE rate_limits (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    identifier_type VARCHAR(20) NOT NULL,
-    identifier_value VARCHAR(255) NOT NULL,
-    action VARCHAR(50) NOT NULL,
-    count INT DEFAULT 1,
-    window_start TIMESTAMPTZ DEFAULT NOW(),
-    window_duration_seconds INT NOT NULL,
-    max_attempts INT NOT NULL,
-    is_blocked BOOLEAN DEFAULT false,
-    blocked_until TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(identifier_type, identifier_value, action, window_start),
-    CONSTRAINT valid_identifier_type CHECK (identifier_type IN ('user', 'phone', 'ip', 'device'))
-);
-
-CREATE INDEX idx_rate_limits_identifier ON rate_limits(identifier_type, identifier_value);
-CREATE INDEX idx_rate_limits_blocked ON rate_limits(is_blocked, blocked_until) WHERE is_blocked = true;
-
--- ============================================================================
--- TRIGGERS - Auto-update updated_at timestamps
--- ============================================================================
-
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_devices_updated_at BEFORE UPDATE ON devices
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_roster_updated_at BEFORE UPDATE ON roster
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_roster_groups_updated_at BEFORE UPDATE ON roster_groups
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_tee_times_updated_at BEFORE UPDATE ON tee_times
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_invites_updated_at BEFORE UPDATE ON invites
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_rate_limits_updated_at BEFORE UPDATE ON rate_limits
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================================================
--- CLEANUP FUNCTION - Remove expired records
--- ============================================================================
-CREATE OR REPLACE FUNCTION cleanup_expired_records()
-RETURNS void AS $$
-BEGIN
-    -- Clean up expired OTPs
-    DELETE FROM otp_requests WHERE expires_at < NOW() AND is_verified = false;
-    
-    -- Clean up expired magic links
-    DELETE FROM magic_links WHERE expires_at < NOW() AND is_used = false;
-    
-    -- Clean up old login logs (keep 90 days)
-    DELETE FROM login_logs WHERE attempted_at < NOW() - INTERVAL '90 days';
-    
-    -- Clean up old analytics (keep 90 days)
-    DELETE FROM analytics_events WHERE created_at < NOW() - INTERVAL '90 days';
-    
-    -- Clean up expired sessions
-    DELETE FROM sessions WHERE expires_at < NOW() OR (is_active = false AND revoked_at < NOW() - INTERVAL '30 days');
-    
-    -- Unblock expired rate limits
-    UPDATE rate_limits SET is_blocked = false, blocked_until = NULL WHERE blocked_until < NOW();
-    
-    -- Expire old pending invites (7 days)
-    UPDATE invites SET status = 'expired', updated_at = NOW() 
-    WHERE status = 'pending' AND created_at < NOW() - INTERVAL '7 days';
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================================================
--- ROW LEVEL SECURITY (RLS)
--- ============================================================================
-
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE otp_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_group_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tee_times ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tee_time_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invite_responses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
-
--- ============================================================================
--- 18. FRIEND_REQUESTS TABLE - Friend request system
+-- 14. FRIEND_REQUESTS TABLE
 -- ============================================================================
 CREATE TABLE friend_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -597,10 +385,9 @@ CREATE TABLE friend_requests (
 
 CREATE INDEX idx_friend_requests_sender ON friend_requests(sender_id);
 CREATE INDEX idx_friend_requests_receiver ON friend_requests(receiver_id);
-CREATE INDEX idx_friend_requests_status ON friend_requests(status);
 
 -- ============================================================================
--- 19. FRIENDSHIPS TABLE - Confirmed friendships (bidirectional)
+-- 15. FRIENDSHIPS TABLE
 -- ============================================================================
 CREATE TABLE friendships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -615,7 +402,7 @@ CREATE INDEX idx_friendships_user ON friendships(user_id);
 CREATE INDEX idx_friendships_friend ON friendships(friend_id);
 
 -- ============================================================================
--- 20. GOLF_COURSES TABLE - Golf course database
+-- 16. GOLF_COURSES TABLE
 -- ============================================================================
 CREATE TABLE golf_courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -645,10 +432,9 @@ CREATE TABLE golf_courses (
 CREATE INDEX idx_golf_courses_name ON golf_courses(name);
 CREATE INDEX idx_golf_courses_city ON golf_courses(city);
 CREATE INDEX idx_golf_courses_location ON golf_courses(latitude, longitude);
-CREATE INDEX idx_golf_courses_google_place ON golf_courses(google_place_id);
 
 -- ============================================================================
--- 21. USER_FAVORITE_COURSES TABLE - User's favorite courses
+-- 17. USER_FAVORITE_COURSES TABLE
 -- ============================================================================
 CREATE TABLE user_favorite_courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -660,37 +446,216 @@ CREATE TABLE user_favorite_courses (
 
 CREATE INDEX idx_user_favorite_courses_user ON user_favorite_courses(user_id);
 
--- Triggers for new tables
+-- ============================================================================
+-- 18. ROSTER_MEMBER_HISTORY TABLE
+-- ============================================================================
+CREATE TABLE roster_member_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    roster_id UUID NOT NULL REFERENCES roster(id) ON DELETE CASCADE,
+    tee_time_id UUID REFERENCES tee_times(id) ON DELETE SET NULL,
+    invite_status VARCHAR(20),
+    played_together BOOLEAN DEFAULT false,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_roster_member_history_roster ON roster_member_history(roster_id);
+
+-- ============================================================================
+-- 19. WAIVER_WIRE TABLE
+-- ============================================================================
+CREATE TABLE waiver_wire (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    available_date DATE NOT NULL,
+    preferred_time VARCHAR(50),
+    preferred_course VARCHAR(255),
+    max_handicap INT,
+    notes TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    CONSTRAINT unique_waiver_date UNIQUE (user_id, available_date)
+);
+
+CREATE INDEX idx_waiver_wire_date ON waiver_wire(available_date) WHERE is_active = true;
+
+-- ============================================================================
+-- 20. LOGIN_LOGS TABLE
+-- ============================================================================
+CREATE TABLE login_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    phone_number VARCHAR(20),
+    email VARCHAR(255),
+    login_method VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    failure_reason VARCHAR(255),
+    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
+    ip_address INET,
+    user_agent TEXT,
+    device_fingerprint TEXT,
+    location JSONB,
+    attempted_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_login_method CHECK (login_method IN ('password', 'otp', 'magic_link', 'google', 'apple', 'facebook')),
+    CONSTRAINT valid_login_status CHECK (status IN ('success', 'failed', 'blocked', 'suspicious', 'rate_limited'))
+);
+
+CREATE INDEX idx_login_logs_user_id ON login_logs(user_id);
+CREATE INDEX idx_login_logs_attempted_at ON login_logs(attempted_at DESC);
+
+-- ============================================================================
+-- 21. NOTIFICATIONS TABLE
+-- ============================================================================
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
+    type VARCHAR(50) NOT NULL,
+    channel VARCHAR(50),
+    title VARCHAR(255),
+    body TEXT NOT NULL,
+    data JSONB DEFAULT '{}'::jsonb,
+    action_url TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    sent_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    read_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+    failure_reason TEXT,
+    attempts INT DEFAULT 0,
+    max_attempts INT DEFAULT 3,
+    scheduled_for TIMESTAMPTZ,
+    external_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_notification_type CHECK (type IN ('push', 'email', 'sms', 'in_app')),
+    CONSTRAINT valid_notification_status CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'read', 'cancelled'))
+);
+
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_status ON notifications(status);
+
+-- ============================================================================
+-- 22. ANALYTICS_EVENTS TABLE
+-- ============================================================================
+CREATE TABLE analytics_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
+    event_name VARCHAR(100) NOT NULL,
+    event_category VARCHAR(50),
+    event_properties JSONB DEFAULT '{}'::jsonb,
+    session_id UUID,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_analytics_user_id ON analytics_events(user_id);
+CREATE INDEX idx_analytics_event_name ON analytics_events(event_name);
+
+-- ============================================================================
+-- 23. RATE_LIMITS TABLE
+-- ============================================================================
+CREATE TABLE rate_limits (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    identifier_type VARCHAR(20) NOT NULL,
+    identifier_value VARCHAR(255) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    count INT DEFAULT 1,
+    window_start TIMESTAMPTZ DEFAULT NOW(),
+    window_duration_seconds INT NOT NULL,
+    max_attempts INT NOT NULL,
+    is_blocked BOOLEAN DEFAULT false,
+    blocked_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(identifier_type, identifier_value, action, window_start),
+    CONSTRAINT valid_identifier_type CHECK (identifier_type IN ('user', 'phone', 'ip', 'device'))
+);
+
+CREATE INDEX idx_rate_limits_identifier ON rate_limits(identifier_type, identifier_value);
+
+
+-- ============================================================================
+-- TRIGGERS
+-- ============================================================================
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_devices_updated_at BEFORE UPDATE ON devices
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_roster_updated_at BEFORE UPDATE ON roster
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_roster_groups_updated_at BEFORE UPDATE ON roster_groups
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tee_times_updated_at BEFORE UPDATE ON tee_times
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_invites_updated_at BEFORE UPDATE ON invites
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_friend_requests_updated_at BEFORE UPDATE ON friend_requests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_golf_courses_updated_at BEFORE UPDATE ON golf_courses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- RLS for new tables
+CREATE TRIGGER update_rate_limits_updated_at BEFORE UPDATE ON rate_limits
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- CLEANUP FUNCTION
+-- ============================================================================
+CREATE OR REPLACE FUNCTION cleanup_expired_records()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM otp_requests WHERE expires_at < NOW() AND is_verified = false;
+    DELETE FROM magic_links WHERE expires_at < NOW() AND is_used = false;
+    DELETE FROM login_logs WHERE attempted_at < NOW() - INTERVAL '90 days';
+    DELETE FROM analytics_events WHERE created_at < NOW() - INTERVAL '90 days';
+    DELETE FROM sessions WHERE expires_at < NOW() OR (is_active = false AND revoked_at < NOW() - INTERVAL '30 days');
+    UPDATE rate_limits SET is_blocked = false, blocked_until = NULL WHERE blocked_until < NOW();
+    UPDATE invites SET status = 'expired', updated_at = NOW() 
+        WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- ROW LEVEL SECURITY
+-- ============================================================================
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otp_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roster ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roster_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roster_group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tee_times ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tee_time_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invite_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE golf_courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_favorite_courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roster_member_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE waiver_wire ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- RELATIONSHIP SUMMARY
--- ============================================================================
--- 
--- User to Profile:           One to One    (user_profiles.user_id → users.id)
--- User to Roster:            One to Many   (roster.user_id → users.id)
--- User to Roster Member:     One to Many   (roster.contact_user_id → users.id)
--- User to Invite (Creator):  One to Many   (invites.inviter_id → users.id)
--- User to Invite Response:   One to Many   (invite_responses.user_id → users.id)
--- Invite to Invite Response: One to Many   (invite_responses.invite_id → invites.id)
--- Invite to TeeTime:         Many to One   (invites.tee_time_id → tee_times.id)
--- User to TeeTime (Creator): One to Many   (tee_times.creator_id → users.id)
--- User to Friend Request:    One to Many   (friend_requests.sender_id/receiver_id → users.id)
--- User to Friendship:        Many to Many  (friendships.user_id/friend_id → users.id)
--- User to Favorite Course:   Many to Many  (user_favorite_courses → users.id, golf_courses.id)
--- 
--- ============================================================================
-
--- ============================================================================
--- SCHEMA CREATION COMPLETE
+-- SCHEMA COMPLETE
 -- ============================================================================
