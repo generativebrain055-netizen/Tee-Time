@@ -1,5 +1,6 @@
 const { pool } = require("../config/database");
 const logger = require("../config/logger");
+const { createTeeDateTime } = require("../utils/dateUtils");
 
 class TeeTimeRepository {
   // Create a new tee time
@@ -261,7 +262,7 @@ class TeeTimeRepository {
     }
 
     // Check if tee time is in the past
-    const teeDateTime = new Date(`${teeTime.tee_date}T${teeTime.tee_time}`);
+    const teeDateTime = createTeeDateTime(teeTime.tee_date, teeTime.tee_time);
     if (teeDateTime < new Date()) {
       return this.updateStatus(teeTimeId, 'completed');
     }

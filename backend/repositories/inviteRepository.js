@@ -365,6 +365,169 @@ class InviteRepository {
       totalCount: parseInt(total_count),
     };
   }
+
+  // Get waitlist users with their user IDs for notifications
+  async getWaitlistUsersForNotification(teeTimeId) {
+    const query = `
+      SELECT i.id, i.invitee_user_id, i.invitee_phone, i.invitee_name,
+             u.first_name, u.last_name
+      FROM invites i
+      LEFT JOIN users u ON i.invitee_user_id = u.id
+      WHERE i.tee_time_id = $1 AND i.status = 'waitlist'
+      ORDER BY i.position ASC
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    return result.rows;
+  }
+
+  // Get users who haven't responded yet (for FCFS spot opened notification)
+  async getPendingInviteUsers(teeTimeId) {
+    const query = `
+      SELECT i.id, i.invitee_user_id, i.invitee_phone, i.invitee_name,
+             u.first_name, u.last_name
+      FROM invites i
+      LEFT JOIN users u ON i.invitee_user_id = u.id
+      WHERE i.tee_time_id = $1 AND i.status = 'pending'
+      ORDER BY i.position ASC
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    return result.rows;
+  }
+
+  // Reactivate waitlist invites as pending (when spot opens in FCFS)
+  async reactivateWaitlistInvites(teeTimeId, expiresAt = null) {
+    const query = `
+      UPDATE invites 
+      SET status = 'pending', expires_at = $2, updated_at = NOW()
+      WHERE tee_time_id = $1 AND status = 'waitlist'
+      RETURNING *
+    `;
+    const result = await pool.query(query, [teeTimeId, expiresAt]);
+    return result.rows;
+  }
+
+  // Accept FCFS invite with roster position tie-breaker
+  // Returns true if accepted, false if someone with higher roster position already accepted
+  async acceptFCFSWithTieBreaker(inviteId, userId, rosterPosition) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Get the invite and tee time info
+      const inviteResult = await client.query(
+        `SELECT i.*, t.max_players, t.creator_id
+         FROM invites i
+         JOIN tee_times t ON i.tee_time_id = t.id
+         WHERE i.id = $1`,
+        [inviteId]
+      );
+      const invite = inviteResult.rows[0];
+      if (!invite) {
+        await client.query("ROLLBACK");
+        return { success: false, reason: 'invite_not_found' };
+      }
+
+      // Get current participant count
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM tee_time_participants 
+         WHERE tee_time_id = $1 AND (status IS NULL OR status != 'cancelled')`,
+        [invite.tee_time_id]
+      );
+      const participantCount = parseInt(countResult.rows[0].count);
+
+      // Check if there's room
+      if (participantCount >= invite.max_players) {
+        await client.query("ROLLBACK");
+        return { success: false, reason: 'full' };
+      }
+
+      // Check for simultaneous accepts - get all accepted invites in the last few seconds
+      // with their roster positions
+      const recentAcceptsResult = await client.query(
+        `SELECT i.id, i.invitee_user_id, i.position as invite_position,
+                r.position as roster_position
+         FROM invites i
+         LEFT JOIN roster r ON r.user_id = $2 AND r.contact_user_id = i.invitee_user_id
+         WHERE i.tee_time_id = $1 
+           AND i.status = 'accepted'
+           AND i.updated_at > NOW() - INTERVAL '5 seconds'
+         ORDER BY COALESCE(r.position, 999999) ASC`,
+        [invite.tee_time_id, invite.creator_id]
+      );
+
+      // If there are recent accepts and we'd exceed max players, check roster position
+      const potentialCount = participantCount + recentAcceptsResult.rows.length + 1;
+      if (potentialCount > invite.max_players) {
+        // Check if this user has higher roster priority than any recent accept
+        const userRosterResult = await client.query(
+          `SELECT position FROM roster 
+           WHERE user_id = $1 AND contact_user_id = $2`,
+          [invite.creator_id, userId]
+        );
+        const userRosterPos = userRosterResult.rows[0]?.position ?? 999999;
+
+        // Find if any recent accept has lower priority (higher position number)
+        const lowerPriorityAccept = recentAcceptsResult.rows.find(
+          r => (r.roster_position ?? 999999) > userRosterPos
+        );
+
+        if (!lowerPriorityAccept) {
+          // This user doesn't have priority, move to waitlist
+          await client.query("ROLLBACK");
+          return { success: false, reason: 'tie_breaker_lost' };
+        }
+
+        // This user has priority - the lower priority accept will be moved to waitlist
+        // by a separate cleanup process
+      }
+
+      await client.query("COMMIT");
+      return { success: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Set FCFS deadline for all pending invites
+  async setFCFSDeadline(teeTimeId, deadline) {
+    const query = `
+      UPDATE invites 
+      SET expires_at = $2, updated_at = NOW()
+      WHERE tee_time_id = $1 AND status = 'pending'
+      RETURNING *
+    `;
+    const result = await pool.query(query, [teeTimeId, deadline]);
+    return result.rows;
+  }
+
+  // Get invites expiring soon (for deadline notifications)
+  async getInvitesExpiringSoon(hoursUntilExpiry) {
+    const query = `
+      SELECT i.*, t.course_name, t.course_location, t.tee_date, t.tee_time,
+             t.creator_id, t.invite_type
+      FROM invites i
+      JOIN tee_times t ON i.tee_time_id = t.id
+      WHERE i.status = 'pending'
+        AND i.expires_at IS NOT NULL
+        AND i.expires_at BETWEEN NOW() AND NOW() + INTERVAL '${hoursUntilExpiry} hours'
+        AND i.deadline_notification_sent = false
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
+  // Mark deadline notification as sent
+  async markDeadlineNotificationSent(inviteId) {
+    const query = `
+      UPDATE invites SET deadline_notification_sent = true
+      WHERE id = $1 RETURNING *
+    `;
+    const result = await pool.query(query, [inviteId]);
+    return result.rows[0];
+  }
 }
 
 module.exports = new InviteRepository();

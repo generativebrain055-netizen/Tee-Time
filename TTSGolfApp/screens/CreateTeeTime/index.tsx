@@ -176,6 +176,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
 
     const formatDateForApi = (date: Date | null) => {
         if (!date) return "";
+        // Use local date components to avoid timezone issues
         const y = date.getFullYear();
         const m = (date.getMonth() + 1).toString().padStart(2, "0");
         const d = date.getDate().toString().padStart(2, "0");

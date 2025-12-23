@@ -10,10 +10,10 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { StatusBar } from "expo-status-bar";
-import { Bell, Users, Calendar, CheckCircle, Trash2 } from "lucide-react-native";
+import { Bell, Users, Calendar, CheckCircle, Trash2, UserPlus, X } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { Header } from "../../components/common";
-import { notificationApi, AppNotification } from "../../services/api";
+import { notificationApi, friendApi, AppNotification } from "../../services/api";
 
 interface NotificationsScreenProps {
     navigation: any;
@@ -23,11 +23,17 @@ interface NotificationsScreenProps {
 const NotificationItem = memo(({
     item,
     onPress,
-    onDelete
+    onDelete,
+    onAcceptFriend,
+    onDeclineFriend,
+    onAcceptSpot
 }: {
     item: AppNotification;
     onPress: (item: AppNotification) => void;
     onDelete: (id: string) => void;
+    onAcceptFriend: (item: AppNotification) => void;
+    onDeclineFriend: (item: AppNotification) => void;
+    onAcceptSpot: (item: AppNotification) => void;
 }) => {
     const getIcon = () => {
         const notifType = item.data?.type;
@@ -39,6 +45,7 @@ const NotificationItem = memo(({
             case 'tee_time_invite':
             case 'tee_time_response':
             case 'check_in_reminder':
+            case 'spot_opened':
                 return <Calendar size={20} color={COLORS.primary} />;
             case 'no_show':
                 return <Bell size={20} color="#EF4444" />;
@@ -62,6 +69,12 @@ const NotificationItem = memo(({
         return date.toLocaleDateString();
     };
 
+    const notifType = item.data?.type;
+    const isFriendRequest = notifType === 'friend_request';
+    const isSpotOpened = notifType === 'spot_opened';
+    const isFriendRequestActionable = isFriendRequest && item.data?.requestId && !item.data?.responded;
+    const isSpotOpenedActionable = isSpotOpened && item.data?.teeTimeId && !item.data?.responded;
+
     return (
         <TouchableOpacity
             style={[styles.notificationItem, !item.isRead && styles.unreadItem]}
@@ -78,6 +91,40 @@ const NotificationItem = memo(({
                 <Text style={styles.body} numberOfLines={2}>
                     {item.body}
                 </Text>
+
+                {/* Friend Request Action Buttons */}
+                {isFriendRequestActionable && (
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity
+                            style={styles.acceptButton}
+                            onPress={() => onAcceptFriend(item)}
+                        >
+                            <UserPlus size={14} color={COLORS.white} />
+                            <Text style={styles.acceptButtonText}>Accept</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.declineButton}
+                            onPress={() => onDeclineFriend(item)}
+                        >
+                            <X size={14} color={COLORS.textSub} />
+                            <Text style={styles.declineButtonText}>Decline</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Spot Opened Action Button */}
+                {isSpotOpenedActionable && (
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity
+                            style={styles.acceptButton}
+                            onPress={() => onAcceptSpot(item)}
+                        >
+                            <Calendar size={14} color={COLORS.white} />
+                            <Text style={styles.acceptButtonText}>Accept Spot</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 <Text style={styles.time}>{getTimeAgo(item.createdAt)}</Text>
             </View>
             <View style={styles.actions}>
@@ -187,6 +234,11 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
                 }
                 break;
 
+            case 'spot_opened':
+                // Navigate to invites to accept the spot
+                navigation?.navigate("Invites");
+                break;
+
             default:
                 // No specific navigation
                 break;
@@ -215,6 +267,77 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
         );
     }, []);
 
+    const handleAcceptFriend = useCallback(async (item: AppNotification) => {
+        const requestId = item.data?.requestId;
+        if (!requestId) return;
+
+        try {
+            const response = await friendApi.respondToRequest(requestId, 'accepted');
+            if (response.success) {
+                Alert.alert("Friend Added!", "You are now friends!");
+                // Update the notification to show it's been responded to
+                setNotifications(prev =>
+                    prev.map(n => n.id === item.id
+                        ? { ...n, data: { ...n.data, responded: true }, isRead: true }
+                        : n
+                    )
+                );
+            }
+        } catch (error) {
+            console.error("Error accepting friend request:", error);
+            Alert.alert("Error", "Failed to accept friend request");
+        }
+    }, []);
+
+    const handleDeclineFriend = useCallback(async (item: AppNotification) => {
+        const requestId = item.data?.requestId;
+        if (!requestId) return;
+
+        Alert.alert(
+            "Decline Request",
+            "Are you sure you want to decline this friend request?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Decline",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const response = await friendApi.respondToRequest(requestId, 'declined');
+                            if (response.success) {
+                                // Update the notification to show it's been responded to
+                                setNotifications(prev =>
+                                    prev.map(n => n.id === item.id
+                                        ? { ...n, data: { ...n.data, responded: true }, isRead: true }
+                                        : n
+                                    )
+                                );
+                            }
+                        } catch (error) {
+                            console.error("Error declining friend request:", error);
+                            Alert.alert("Error", "Failed to decline friend request");
+                        }
+                    },
+                },
+            ]
+        );
+    }, []);
+
+    const handleAcceptSpot = useCallback(async (item: AppNotification) => {
+        const teeTimeId = item.data?.teeTimeId;
+        if (!teeTimeId) return;
+
+        // Navigate to invites screen where they can accept
+        // Mark notification as responded
+        setNotifications(prev =>
+            prev.map(n => n.id === item.id
+                ? { ...n, data: { ...n.data, responded: true }, isRead: true }
+                : n
+            )
+        );
+        navigation?.navigate("Invites");
+    }, [navigation]);
+
     const handleMarkAllRead = useCallback(async () => {
         try {
             await notificationApi.markAllAsRead();
@@ -231,8 +354,11 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
             item={item}
             onPress={handleNotificationPress}
             onDelete={handleDelete}
+            onAcceptFriend={handleAcceptFriend}
+            onDeclineFriend={handleDeclineFriend}
+            onAcceptSpot={handleAcceptSpot}
         />
-    ), [handleNotificationPress, handleDelete]);
+    ), [handleNotificationPress, handleDelete, handleAcceptFriend, handleDeclineFriend, handleAcceptSpot]);
 
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>
@@ -397,5 +523,39 @@ const styles = StyleSheet.create({
         color: COLORS.textSub,
         textAlign: "center",
         lineHeight: 20,
+    },
+    actionButtons: {
+        flexDirection: "row",
+        gap: 8,
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    acceptButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: COLORS.primary,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+    },
+    acceptButtonText: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: COLORS.white,
+    },
+    declineButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: "#F3F4F6",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+    },
+    declineButtonText: {
+        fontSize: 13,
+        fontWeight: "500",
+        color: COLORS.textSub,
     },
 });

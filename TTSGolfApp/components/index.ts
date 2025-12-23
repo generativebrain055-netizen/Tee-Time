@@ -17,3 +17,7 @@ export {
   IconContainer,
   LogoBox,
 } from "./Container";
+
+// Golf Course Autocomplete
+export { default as GolfCourseAutocomplete } from "./GolfCourseAutocomplete";
+export type { GolfCourse } from "./GolfCourseAutocomplete";

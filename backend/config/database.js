@@ -1,6 +1,14 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+
+/**
+ * PostgreSQL Type Parsers
+ * Override default parsing for DATE type to avoid timezone issues
+ * DATE (OID 1082) should be returned as string, not converted to JS Date
+ */
+// DATE type OID is 1082
+types.setTypeParser(1082, (val) => val); // Return DATE as string (YYYY-MM-DD)
 
 /**
  * PostgreSQL Connection Pool Configuration

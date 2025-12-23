@@ -1,6 +1,7 @@
 const { pool } = require("../config/database");
 const logger = require("../config/logger");
 const socialRateService = require("./socialRateService");
+const { formatDateLocal } = require("../utils/dateUtils");
 
 class AttendanceService {
   /**
@@ -270,9 +271,13 @@ class AttendanceService {
     
     // Use JavaScript local time instead of PostgreSQL LOCALTIME (which returns UTC)
     const now = new Date();
-    const today = now;
-    const teeDate = new Date(teeTime.tee_date);
-    const isToday = today.toDateString() === teeDate.toDateString();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Parse tee_date using formatDateLocal to get the correct date string, then create local date
+    const teeDateStr = formatDateLocal(teeTime.tee_date);
+    const [year, month, day] = teeDateStr.split('-').map(Number);
+    const teeDate = new Date(year, month - 1, day);
+    const isToday = today.getTime() === teeDate.getTime();
     
     if (!isToday) {
       // For past dates, check-in window is closed

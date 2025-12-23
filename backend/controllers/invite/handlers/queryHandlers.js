@@ -3,6 +3,7 @@
  */
 const inviteRepository = require("../../../repositories/inviteRepository");
 const logger = require("../../../config/logger");
+const { formatDateLocal } = require("../../../utils/dateUtils");
 
 /**
  * Get pending invites for user
@@ -17,10 +18,11 @@ const getPendingInvites = async (req, res) => {
             teeTimeId: i.tee_time_id,
             courseName: i.course_name,
             courseLocation: i.course_location,
-            teeDate: i.tee_date,
+            teeDate: formatDateLocal(i.tee_date),
             teeTime: i.tee_time,
             inviteType: i.invite_type,
             maxPlayers: i.max_players,
+            expiresAt: i.expires_at,
             inviter: {
                 firstName: i.inviter_first_name,
                 lastName: i.inviter_last_name,
@@ -48,7 +50,7 @@ const getSentInvites = async (req, res) => {
             id: i.id,
             teeTimeId: i.tee_time_id,
             courseName: i.course_name,
-            teeDate: i.tee_date,
+            teeDate: formatDateLocal(i.tee_date),
             teeTime: i.tee_time,
             status: i.status,
             invitee: {
@@ -110,7 +112,7 @@ const getUserResponseHistory = async (req, res) => {
             teeTime: {
                 id: h.tee_time_id,
                 courseName: h.course_name,
-                date: h.tee_date,
+                date: formatDateLocal(h.tee_date),
                 time: h.tee_time
             },
             createdAt: h.created_at

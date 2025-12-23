@@ -13,6 +13,9 @@ class FriendController {
         this.removeFriend = this.removeFriend.bind(this);
         this.discoverUsers = this.discoverUsers.bind(this);
         this.getUserProfile = this.getUserProfile.bind(this);
+        this.blockUser = this.blockUser.bind(this);
+        this.unblockUser = this.unblockUser.bind(this);
+        this.getBlockedUsers = this.getBlockedUsers.bind(this);
     }
 
     // POST /api/friends/request
@@ -23,6 +26,12 @@ class FriendController {
 
             if (senderId === receiverId) {
                 return res.status(400).json({ success: false, message: "Cannot send friend request to yourself" });
+            }
+
+            // Check if either user has blocked the other
+            const isBlocked = await friendRepository.isBlocked(senderId, receiverId);
+            if (isBlocked) {
+                return res.status(403).json({ success: false, message: "Unable to send friend request" });
             }
 
             // Check if already friends
@@ -39,13 +48,13 @@ class FriendController {
 
             const request = await friendRepository.sendFriendRequest(senderId, receiverId, message);
             
-            // Create notification for receiver
+            // Create notification for receiver with requestId for Add Back functionality
             await notificationService.notifyFriendRequest(receiverId, {
                 id: senderId,
                 firstName: req.user.firstName,
                 lastName: req.user.lastName,
                 avatar: req.user.avatar,
-            });
+            }, request.id);
             
             res.status(201).json({ success: true, request });
         } catch (error) {
@@ -261,6 +270,68 @@ class FriendController {
         } catch (error) {
             logger.error("Get user profile error:", error);
             res.status(500).json({ success: false, message: "Failed to get profile" });
+        }
+    }
+
+    // POST /api/friends/block/:id
+    async blockUser(req, res) {
+        try {
+            const userId = req.user.id;
+            const blockedUserId = req.params.id;
+
+            if (userId === blockedUserId) {
+                return res.status(400).json({ success: false, message: "Cannot block yourself" });
+            }
+
+            // Remove friendship if exists
+            await friendRepository.removeFriend(userId, blockedUserId);
+
+            // Add to blocked list
+            await friendRepository.blockUser(userId, blockedUserId);
+
+            logger.info(`User ${userId} blocked user ${blockedUserId}`);
+            res.json({ success: true, message: "User blocked successfully" });
+        } catch (error) {
+            logger.error("Block user error:", error);
+            res.status(500).json({ success: false, message: "Failed to block user" });
+        }
+    }
+
+    // DELETE /api/friends/block/:id
+    async unblockUser(req, res) {
+        try {
+            const userId = req.user.id;
+            const blockedUserId = req.params.id;
+
+            await friendRepository.unblockUser(userId, blockedUserId);
+
+            logger.info(`User ${userId} unblocked user ${blockedUserId}`);
+            res.json({ success: true, message: "User unblocked successfully" });
+        } catch (error) {
+            logger.error("Unblock user error:", error);
+            res.status(500).json({ success: false, message: "Failed to unblock user" });
+        }
+    }
+
+    // GET /api/friends/blocked
+    async getBlockedUsers(req, res) {
+        try {
+            const userId = req.user.id;
+            const blockedUsers = await friendRepository.getBlockedUsers(userId);
+
+            const formatted = blockedUsers.map(u => ({
+                id: u.blocked_user_id,
+                firstName: u.first_name,
+                lastName: u.last_name,
+                username: u.username,
+                avatar: u.avatar_url,
+                blockedAt: u.created_at
+            }));
+
+            res.json({ success: true, blockedUsers: formatted });
+        } catch (error) {
+            logger.error("Get blocked users error:", error);
+            res.status(500).json({ success: false, message: "Failed to get blocked users" });
         }
     }
 }

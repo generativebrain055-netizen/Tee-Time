@@ -1,6 +1,9 @@
 const attendanceService = require("../services/attendanceService");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
+const inviteManagementService = require("../services/inviteManagementService");
+const userRepository = require("../repositories/userRepository");
 const logger = require("../config/logger");
+const { createTeeDateTime } = require("../utils/dateUtils");
 
 class AttendanceController {
   constructor() {
@@ -233,7 +236,7 @@ class AttendanceController {
       }
 
       // Check if tee time has already passed
-      const teeDateTime = new Date(`${teeTime.tee_date}T${teeTime.tee_time}`);
+      const teeDateTime = createTeeDateTime(teeTime.tee_date, teeTime.tee_time);
       if (teeDateTime < new Date()) {
         return res.status(400).json({ success: false, message: "Cannot cancel past tee time" });
       }
@@ -263,6 +266,17 @@ class AttendanceController {
       // Remove from participants
       const removedParticipant = await teeTimeRepository.removeParticipantByUser(teeTimeId, userId);
       logger.info(`Removed participant result: ${JSON.stringify(removedParticipant)}`);
+
+      // Get user info for notification
+      const cancelledUser = await userRepository.findById(userId);
+      const cancelledUserInfo = {
+        id: userId,
+        firstName: cancelledUser?.first_name || '',
+        lastName: cancelledUser?.last_name || '',
+      };
+
+      // Trigger auto-reinvite based on invite type
+      await inviteManagementService.handlePlayerCancellation(teeTimeId, userId, cancelledUserInfo);
 
       res.json({
         success: true,

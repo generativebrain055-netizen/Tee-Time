@@ -21,7 +21,9 @@ import QRCodeScreen from "./screens/profile/QRCodeScreen";
 import ScanQRScreen from "./screens/profile/ScanQRScreen";
 import NotificationsScreen from "./screens/notifications";
 import TeeTimeDetailScreen from "./screens/TeeTimeDetailScreen";
+import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
 import CheckInScreen from "./screens/CheckInScreen";
+import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -32,6 +34,7 @@ type ScreenName =
   | "HomePage"
   | "Home"
   | "Roster"
+  | "RosterProfile"
   | "Messages"
   | "ChatDetail"
   | "FullCalendar"
@@ -47,6 +50,7 @@ type ScreenName =
   | "GroupProfile"
   | "Notifications"
   | "TeeTimeDetail"
+  | "TeeTimeHistory"
   | "CheckIn";
 
 interface UserData {
@@ -244,10 +248,25 @@ export default function App(): React.ReactElement {
             route={{ params: screenParams } as any}
           />
         );
+      case "TeeTimeHistory":
+        return (
+          <TeeTimeHistoryScreen
+            key={`tee-time-history-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "CheckIn":
         return (
           <CheckInScreen
             key={`check-in-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "RosterProfile":
+        return (
+          <RosterProfileScreen
+            key={`roster-profile-${screenKey}`}
             navigation={navigation as any}
             route={{ params: screenParams } as any}
           />

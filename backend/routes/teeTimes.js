@@ -80,4 +80,40 @@ router.get("/:id", teeTimeController.getTeeTime);
  */
 router.post("/:id/cancel", teeTimeController.cancelTeeTime);
 
+/**
+ * @route   POST /api/tee-times/:id/invites/:inviteId/skip
+ * @desc    Skip an invite and advance to next roster member
+ * @access  Private (organizer only)
+ */
+router.post("/:id/invites/:inviteId/skip", teeTimeController.skipInvite);
+
+/**
+ * @route   POST /api/tee-times/:id/on-deck-invites
+ * @desc    Send FCFS invites to selected On-Deck players
+ * @access  Private (organizer only)
+ */
+router.post(
+  "/:id/on-deck-invites",
+  [
+    body("playerIds").isArray({ min: 1 }).withMessage("At least one player ID required"),
+    body("deadline").optional().isISO8601().withMessage("Invalid deadline format")
+  ],
+  validateRequest,
+  teeTimeController.sendOnDeckInvites
+);
+
+/**
+ * @route   POST /api/tee-times/:id/fcfs-deadline
+ * @desc    Set FCFS response deadline for all pending invites
+ * @access  Private (organizer only)
+ */
+router.post(
+  "/:id/fcfs-deadline",
+  [
+    body("deadline").isISO8601().withMessage("Valid deadline required (ISO 8601 format)")
+  ],
+  validateRequest,
+  teeTimeController.setFCFSDeadline
+);
+
 module.exports = router;

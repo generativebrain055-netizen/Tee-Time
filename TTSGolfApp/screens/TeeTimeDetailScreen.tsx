@@ -22,6 +22,9 @@ import {
     Share2,
     X,
     CheckCircle,
+    AlertCircle,
+    SkipForward,
+    Hourglass,
 } from "lucide-react-native";
 import { Header } from "../components/common";
 import { teeTimeApi } from "../services/api";
@@ -63,6 +66,7 @@ interface Invite {
         avatar?: string;
     };
     position: number;
+    expiresAt?: string;
 }
 
 interface TeeTimeDetail {
@@ -155,15 +159,63 @@ const ParticipantItem = memo(({ participant, isCreator }: { participant: Partici
     </View>
 ));
 
-const InviteItem = memo(({ invite }: { invite: Invite }) => {
+const InviteItem = memo(({ invite, isCreator, onSkip }: { invite: Invite; isCreator: boolean; onSkip?: (inviteId: string) => void }) => {
+    const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
+
+    // Live countdown timer
+    useEffect(() => {
+        if (!invite.expiresAt || invite.status !== "pending") {
+            setTimeRemaining(null);
+            return;
+        }
+
+        const calculateTimeRemaining = () => {
+            const expiresAt = new Date(invite.expiresAt!);
+            const now = new Date();
+            const diffMs = expiresAt.getTime() - now.getTime();
+
+            if (diffMs <= 0) {
+                setTimeRemaining("Expired");
+                return;
+            }
+
+            const diffSecs = Math.floor(diffMs / 1000);
+            const diffMins = Math.floor(diffSecs / 60);
+            const diffHours = Math.floor(diffMins / 60);
+
+            if (diffMins < 1) {
+                setTimeRemaining(`${diffSecs}s left`);
+            } else if (diffMins < 60) {
+                const secs = diffSecs % 60;
+                setTimeRemaining(`${diffMins}m ${secs}s left`);
+            } else {
+                const mins = diffMins % 60;
+                setTimeRemaining(`${diffHours}h ${mins}m left`);
+            }
+        };
+
+        // Calculate immediately
+        calculateTimeRemaining();
+
+        // Update every second for accurate countdown
+        const interval = setInterval(calculateTimeRemaining, 1000);
+
+        return () => clearInterval(interval);
+    }, [invite.expiresAt, invite.status]);
+
     const getInviteStatusIcon = () => {
         switch (invite.status) {
             case "accepted":
-                return <UserCheck size={16} color={COLORS.confirmed} />;
+                return <UserCheck size={18} color={COLORS.confirmed} />;
             case "declined":
-                return <UserX size={16} color={COLORS.declined} />;
+                return <UserX size={18} color={COLORS.declined} />;
+            case "expired":
+                return <AlertCircle size={18} color={COLORS.textSub} />;
+            case "waitlist":
+                return <Hourglass size={18} color={COLORS.pending} />;
             default:
-                return <Clock size={16} color={COLORS.pending} />;
+                // Pending - show arrow/waiting indicator
+                return <Clock size={18} color={COLORS.pending} />;
         }
     };
 
@@ -173,13 +225,38 @@ const InviteItem = memo(({ invite }: { invite: Invite }) => {
                 return COLORS.confirmed;
             case "declined":
                 return COLORS.declined;
+            case "expired":
+                return COLORS.textSub;
+            case "waitlist":
+                return COLORS.pending;
             default:
                 return COLORS.pending;
         }
     };
 
+    const getStatusLabel = () => {
+        switch (invite.status) {
+            case "accepted":
+                return "Accepted";
+            case "declined":
+                return "Declined";
+            case "expired":
+                return "Timed Out";
+            case "waitlist":
+                return "Waitlist";
+            default:
+                return "Waiting...";
+        }
+    };
+
+    const isPending = invite.status === "pending";
+    const canSkip = isCreator && isPending;
+
     return (
         <View style={styles.inviteItem}>
+            <View style={[styles.statusIndicator, { backgroundColor: getInviteStatusColor() + "20" }]}>
+                {getInviteStatusIcon()}
+            </View>
             <View style={styles.participantAvatar}>
                 {invite.invitee.avatar ? (
                     <Image source={{ uri: invite.invitee.avatar }} style={styles.avatarImage} />
@@ -191,11 +268,25 @@ const InviteItem = memo(({ invite }: { invite: Invite }) => {
             </View>
             <View style={styles.participantInfo}>
                 <Text style={styles.participantName}>{invite.invitee.name}</Text>
-                <Text style={[styles.inviteStatus, { color: getInviteStatusColor() }]}>
-                    {invite.status.charAt(0).toUpperCase() + invite.status.slice(1)}
-                </Text>
+                <View style={styles.inviteStatusRow}>
+                    <Text style={[styles.inviteStatus, { color: getInviteStatusColor() }]}>
+                        {getStatusLabel()}
+                    </Text>
+                    {timeRemaining && (
+                        <Text style={styles.timeRemaining}>• {timeRemaining}</Text>
+                    )}
+                </View>
             </View>
-            {getInviteStatusIcon()}
+            {canSkip && onSkip && (
+                <TouchableOpacity
+                    style={styles.skipButton}
+                    onPress={() => onSkip(invite.id)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                    <SkipForward size={16} color={COLORS.pending} />
+                    <Text style={styles.skipButtonText}>Skip</Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 });
@@ -258,6 +349,51 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
         );
     }, [teeTimeId, navigation]);
 
+    const handleCheckIn = useCallback(() => {
+        if (!teeTime) return;
+        navigation.navigate("CheckIn", {
+            teeTimeId: teeTime.id,
+            courseName: teeTime.courseName,
+        });
+    }, [navigation, teeTime]);
+
+    const handleSkipInvite = useCallback(async (inviteId: string) => {
+        if (!teeTime) return;
+
+        const invitee = teeTime.invites.find(i => i.id === inviteId)?.invitee.name || "this person";
+
+        Alert.alert(
+            "Skip Invite",
+            `Skip ${invitee} and advance to the next roster member?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Skip",
+                    onPress: async () => {
+                        try {
+                            const response = await teeTimeApi.skipInvite(teeTime.id, inviteId);
+                            if (response.success) {
+                                // Update local state with new invites
+                                setTeeTime(prev => prev ? {
+                                    ...prev,
+                                    invites: response.invites
+                                } : null);
+
+                                if (response.nextInvite) {
+                                    Alert.alert("Skipped", `Now waiting for ${response.nextInvite.inviteeName}`);
+                                } else {
+                                    Alert.alert("Skipped", "No more roster members to invite");
+                                }
+                            }
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to skip invite");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [teeTime]);
+
     if (loading) {
         return (
             <View style={[styles.container, styles.centered]}>
@@ -278,13 +414,6 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
     const isCreator = currentUser?.id === teeTime.creator.id;
     const canCancel = isCreator && teeTime.status !== "cancelled" && teeTime.status !== "completed";
     const canCheckIn = isCreator && (teeTime.status === "confirmed" || teeTime.status === "in_progress");
-
-    const handleCheckIn = useCallback(() => {
-        navigation.navigate("CheckIn", {
-            teeTimeId: teeTime.id,
-            courseName: teeTime.courseName,
-        });
-    }, [navigation, teeTime]);
 
     return (
         <View style={styles.container}>
@@ -377,7 +506,12 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
                             Invites ({teeTime.invites.length})
                         </Text>
                         {teeTime.invites.map((invite) => (
-                            <InviteItem key={invite.id} invite={invite} />
+                            <InviteItem
+                                key={invite.id}
+                                invite={invite}
+                                isCreator={isCreator}
+                                onSkip={handleSkipInvite}
+                            />
                         ))}
                     </View>
                 )}
@@ -531,9 +665,40 @@ const styles = StyleSheet.create({
     inviteItem: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: COLORS.border,
+    },
+    statusIndicator: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 8,
+    },
+    inviteStatusRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    timeRemaining: {
+        fontSize: 12,
+        color: COLORS.textSub,
+    },
+    skipButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: COLORS.pendingBg,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    skipButtonText: {
+        fontSize: 12,
+        fontWeight: "500",
+        color: COLORS.pending,
     },
     participantAvatar: {
         width: 40,

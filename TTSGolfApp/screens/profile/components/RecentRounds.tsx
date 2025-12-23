@@ -6,6 +6,7 @@ import { TeeTime } from "../../../services/api";
 
 interface RecentRoundCardProps {
     teeTime: TeeTime;
+    onPress?: () => void;
 }
 
 const formatDate = (dateStr: string): string => {
@@ -17,8 +18,8 @@ const getInitials = (name: string): string => {
     return name?.split(" ").map(w => w[0]).join("").slice(0, 2) || "??";
 };
 
-export const RecentRoundCard = memo(({ teeTime }: RecentRoundCardProps) => (
-    <View style={styles.roundCard}>
+export const RecentRoundCard = memo(({ teeTime, onPress }: RecentRoundCardProps) => (
+    <TouchableOpacity style={styles.roundCard} onPress={onPress} activeOpacity={0.7}>
         <View style={styles.roundCardImage}>
             <Text style={styles.roundCardInitials}>{getInitials(teeTime.courseName)}</Text>
         </View>
@@ -27,15 +28,16 @@ export const RecentRoundCard = memo(({ teeTime }: RecentRoundCardProps) => (
             <Text style={styles.roundCardDate}>{formatDate(teeTime.teeDate)}</Text>
         </View>
         <ChevronRight size={20} color={COLORS.textSub} />
-    </View>
+    </TouchableOpacity>
 ));
 
 interface RecentRoundsProps {
     rounds: TeeTime[];
     onSeeAll?: () => void;
+    onRoundPress?: (teeTime: TeeTime) => void;
 }
 
-const RecentRounds = memo(({ rounds, onSeeAll }: RecentRoundsProps) => (
+const RecentRounds = memo(({ rounds, onSeeAll, onRoundPress }: RecentRoundsProps) => (
     <View style={styles.section}>
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent rounds</Text>
@@ -46,7 +48,13 @@ const RecentRounds = memo(({ rounds, onSeeAll }: RecentRoundsProps) => (
             )}
         </View>
         {rounds.length > 0 ? (
-            rounds.map((round) => <RecentRoundCard key={round.id} teeTime={round} />)
+            rounds.map((round) => (
+                <RecentRoundCard
+                    key={round.id}
+                    teeTime={round}
+                    onPress={() => onRoundPress?.(round)}
+                />
+            ))
         ) : (
             <View style={styles.emptyRounds}>
                 <Text style={styles.emptyText}>No recent rounds</Text>

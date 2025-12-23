@@ -20,4 +20,9 @@ router.delete("/:id", friendController.removeFriend);
 router.get("/discover", friendController.discoverUsers);
 router.get("/profile/:id", friendController.getUserProfile);
 
+// Block/Unblock
+router.post("/block/:id", friendController.blockUser);
+router.delete("/block/:id", friendController.unblockUser);
+router.get("/blocked", friendController.getBlockedUsers);
+
 module.exports = router;

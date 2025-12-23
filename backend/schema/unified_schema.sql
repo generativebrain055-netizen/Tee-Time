@@ -1,13 +1,14 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 4.0
+-- Version: 5.1
 -- Last Updated: December 2024
 -- 
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables
 -- 2. Creates all tables fresh
--- 3. Includes all migrations (social rate, attendance, profile, QR draft, etc.)
+-- 3. Includes all migrations (social rate, attendance, profile, QR draft, 
+--    blocked users, deadline notifications, etc.)
 -- 
 -- Run this in Supabase SQL Editor for a clean setup
 -- ============================================================================
@@ -47,6 +48,7 @@ DROP TABLE IF EXISTS user_favorite_courses CASCADE;
 DROP TABLE IF EXISTS golf_courses CASCADE;
 DROP TABLE IF EXISTS friendships CASCADE;
 DROP TABLE IF EXISTS friend_requests CASCADE;
+DROP TABLE IF EXISTS blocked_users CASCADE;
 DROP TABLE IF EXISTS invite_responses CASCADE;
 DROP TABLE IF EXISTS invites CASCADE;
 DROP TABLE IF EXISTS tee_time_participants CASCADE;
@@ -113,7 +115,6 @@ BEGIN
     RETURN (tee_date + tee_time)::TIMESTAMPTZ;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
-
 
 -- ============================================================================
 -- STEP 4: CREATE TABLES
@@ -283,7 +284,6 @@ CREATE TABLE magic_links (
 
 CREATE INDEX idx_magic_links_token_hash ON magic_links(token_hash);
 
-
 -- ============================================================================
 -- 7. ROSTER_GROUPS TABLE
 -- ============================================================================
@@ -420,9 +420,8 @@ CREATE TABLE tee_time_participants (
 CREATE INDEX idx_participants_tee_time_id ON tee_time_participants(tee_time_id);
 CREATE INDEX idx_participants_user_id ON tee_time_participants(user_id);
 
-
 -- ============================================================================
--- 12. INVITES TABLE
+-- 12. INVITES TABLE (with deadline_notification_sent)
 -- ============================================================================
 CREATE TABLE invites (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -440,6 +439,7 @@ CREATE TABLE invites (
     email_sent BOOLEAN DEFAULT false,
     email_sent_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
+    deadline_notification_sent BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT valid_invite_status CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'waitlist', 'cancelled'))
@@ -451,6 +451,8 @@ CREATE INDEX idx_invites_invitee_user_id ON invites(invitee_user_id);
 CREATE INDEX idx_invites_status ON invites(status);
 CREATE INDEX idx_invites_pending ON invites(invitee_user_id, status) WHERE status = 'pending';
 CREATE INDEX idx_invites_expires ON invites(expires_at) WHERE status = 'pending' AND expires_at IS NOT NULL;
+CREATE INDEX idx_invites_deadline_notification ON invites(expires_at, deadline_notification_sent) 
+    WHERE status = 'pending' AND expires_at IS NOT NULL;
 
 -- ============================================================================
 -- 13. INVITE_RESPONSES TABLE
@@ -473,7 +475,7 @@ CREATE INDEX idx_invite_responses_invite_id ON invite_responses(invite_id);
 CREATE INDEX idx_invite_responses_user_id ON invite_responses(user_id);
 
 -- ============================================================================
--- 14. SOCIAL_RATE_LOGS TABLE
+-- 14. SOCIAL_RATE_LOGS TABLE (with cancellation_confirmed reason)
 -- ============================================================================
 CREATE TABLE social_rate_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -533,7 +535,25 @@ CREATE INDEX idx_attendance_status ON tee_time_attendance(status);
 CREATE INDEX idx_attendance_pending ON tee_time_attendance(tee_time_id, status) WHERE status = 'pending';
 
 -- ============================================================================
--- 16. FRIEND_REQUESTS TABLE
+-- 16. BLOCKED_USERS TABLE
+-- ============================================================================
+CREATE TABLE blocked_users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_block UNIQUE (user_id, blocked_user_id),
+    CONSTRAINT no_self_block CHECK (user_id != blocked_user_id)
+);
+
+CREATE INDEX idx_blocked_users_user_id ON blocked_users(user_id);
+CREATE INDEX idx_blocked_users_blocked_user_id ON blocked_users(blocked_user_id);
+
+COMMENT ON TABLE blocked_users IS 'Stores user blocking relationships';
+
+-- ============================================================================
+-- 17. FRIEND_REQUESTS TABLE
 -- ============================================================================
 CREATE TABLE friend_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -553,7 +573,7 @@ CREATE INDEX idx_friend_requests_sender ON friend_requests(sender_id);
 CREATE INDEX idx_friend_requests_receiver ON friend_requests(receiver_id);
 
 -- ============================================================================
--- 17. FRIENDSHIPS TABLE
+-- 18. FRIENDSHIPS TABLE
 -- ============================================================================
 CREATE TABLE friendships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -567,9 +587,8 @@ CREATE TABLE friendships (
 CREATE INDEX idx_friendships_user ON friendships(user_id);
 CREATE INDEX idx_friendships_friend ON friendships(friend_id);
 
-
 -- ============================================================================
--- 18. GOLF_COURSES TABLE
+-- 19. GOLF_COURSES TABLE
 -- ============================================================================
 CREATE TABLE golf_courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -601,7 +620,7 @@ CREATE INDEX idx_golf_courses_city ON golf_courses(city);
 CREATE INDEX idx_golf_courses_location ON golf_courses(latitude, longitude);
 
 -- ============================================================================
--- 19. USER_FAVORITE_COURSES TABLE
+-- 20. USER_FAVORITE_COURSES TABLE
 -- ============================================================================
 CREATE TABLE user_favorite_courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -614,7 +633,7 @@ CREATE TABLE user_favorite_courses (
 CREATE INDEX idx_user_favorite_courses_user ON user_favorite_courses(user_id);
 
 -- ============================================================================
--- 20. ROSTER_MEMBER_HISTORY TABLE
+-- 21. ROSTER_MEMBER_HISTORY TABLE
 -- ============================================================================
 CREATE TABLE roster_member_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -629,7 +648,7 @@ CREATE TABLE roster_member_history (
 CREATE INDEX idx_roster_member_history_roster ON roster_member_history(roster_id);
 
 -- ============================================================================
--- 21. WAIVER_WIRE TABLE
+-- 22. WAIVER_WIRE TABLE
 -- ============================================================================
 CREATE TABLE waiver_wire (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -648,7 +667,7 @@ CREATE TABLE waiver_wire (
 CREATE INDEX idx_waiver_wire_date ON waiver_wire(available_date) WHERE is_active = true;
 
 -- ============================================================================
--- 22. LOGIN_LOGS TABLE
+-- 23. LOGIN_LOGS TABLE
 -- ============================================================================
 CREATE TABLE login_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -672,7 +691,7 @@ CREATE INDEX idx_login_logs_user_id ON login_logs(user_id);
 CREATE INDEX idx_login_logs_attempted_at ON login_logs(attempted_at DESC);
 
 -- ============================================================================
--- 23. NOTIFICATIONS TABLE
+-- 24. NOTIFICATIONS TABLE
 -- ============================================================================
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -696,14 +715,14 @@ CREATE TABLE notifications (
     external_id VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT valid_notification_type CHECK (type IN ('push', 'email', 'sms', 'in_app')),
-    CONSTRAINT valid_notification_status CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'read', 'cancelled'))
+    CONSTRAINT valid_notification_status CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'read'))
 );
 
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_status ON notifications(status);
 
 -- ============================================================================
--- 24. ANALYTICS_EVENTS TABLE
+-- 25. ANALYTICS_EVENTS TABLE
 -- ============================================================================
 CREATE TABLE analytics_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -722,7 +741,7 @@ CREATE INDEX idx_analytics_user_id ON analytics_events(user_id);
 CREATE INDEX idx_analytics_event_name ON analytics_events(event_name);
 
 -- ============================================================================
--- 25. RATE_LIMITS TABLE
+-- 26. RATE_LIMITS TABLE
 -- ============================================================================
 CREATE TABLE rate_limits (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -744,9 +763,8 @@ CREATE TABLE rate_limits (
 CREATE INDEX idx_rate_limits_identifier ON rate_limits(identifier_type, identifier_value);
 
 -- ============================================================================
--- 26. ROSTER_NOTIFICATIONS TABLE
+-- 27. ROSTER_NOTIFICATIONS TABLE
 -- ============================================================================
--- Tracks when users are added to someone's roster to send one-time notifications
 CREATE TABLE roster_notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     roster_id UUID NOT NULL REFERENCES roster(id) ON DELETE CASCADE,
@@ -764,11 +782,9 @@ CREATE INDEX idx_roster_notifications_user ON roster_notifications(notified_user
 CREATE INDEX idx_roster_notifications_pending ON roster_notifications(notified_user_id, notification_sent) 
     WHERE notification_sent = false;
 
-
 -- ============================================================================
--- 27. HANDICAP_LOGS TABLE
+-- 28. HANDICAP_LOGS TABLE
 -- ============================================================================
--- Tracks handicap changes for audit trail
 CREATE TABLE handicap_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -784,9 +800,8 @@ CREATE INDEX idx_handicap_logs_user ON handicap_logs(user_id);
 CREATE INDEX idx_handicap_logs_created ON handicap_logs(created_at DESC);
 
 -- ============================================================================
--- 28. CLUBS TABLE
+-- 29. CLUBS TABLE
 -- ============================================================================
--- Golf clubs directory
 CREATE TABLE clubs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -800,9 +815,8 @@ CREATE TABLE clubs (
 CREATE INDEX idx_clubs_name ON clubs(name);
 
 -- ============================================================================
--- 29. USER_CLUB_MEMBERSHIPS TABLE
+-- 30. USER_CLUB_MEMBERSHIPS TABLE
 -- ============================================================================
--- User club memberships
 CREATE TABLE user_club_memberships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -817,9 +831,8 @@ CREATE TABLE user_club_memberships (
 CREATE INDEX idx_user_club_memberships_user ON user_club_memberships(user_id);
 
 -- ============================================================================
--- 30. DRAFT_QR_CODES TABLE
+-- 31. DRAFT_QR_CODES TABLE
 -- ============================================================================
--- QR code tracking for "Get Drafted" feature
 CREATE TABLE draft_qr_codes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -839,9 +852,8 @@ CREATE INDEX idx_draft_qr_codes_hash ON draft_qr_codes(code_hash) WHERE is_activ
 CREATE INDEX idx_draft_qr_codes_active ON draft_qr_codes(user_id, is_active) WHERE is_active = true;
 
 -- ============================================================================
--- 31. GAME_SCORES TABLE
+-- 32. GAME_SCORES TABLE
 -- ============================================================================
--- Past game scores linked to completed tee times
 CREATE TABLE game_scores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -913,7 +925,7 @@ SELECT
     COALESCE(up.social_rate, 100) as current_score,
     COUNT(srl.id) FILTER (WHERE srl.reason = 'invite_accepted') as accepts,
     COUNT(srl.id) FILTER (WHERE srl.reason = 'invite_declined_late') as late_declines,
-    COUNT(srl.id) FILTER (WHERE srl.reason = 'cancellation_late') as late_cancellations,
+    COUNT(srl.id) FILTER (WHERE srl.reason IN ('cancellation_late', 'cancellation_confirmed')) as cancellations,
     COUNT(srl.id) FILTER (WHERE srl.reason = 'no_show') as no_shows,
     COALESCE(SUM(srl.delta) FILTER (WHERE srl.delta > 0), 0) as total_points_earned,
     ABS(COALESCE(SUM(srl.delta) FILTER (WHERE srl.delta < 0), 0)) as total_points_lost
@@ -978,6 +990,7 @@ ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invite_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE social_rate_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tee_time_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blocked_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE golf_courses ENABLE ROW LEVEL SECURITY;
@@ -999,7 +1012,8 @@ ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 -- SCHEMA COMPLETE
 -- ============================================================================
 -- 
--- Total Tables: 31
+-- Version: 5.1
+-- Total Tables: 32
 -- 
 -- Core Tables:
 --   1. users - User accounts
@@ -1014,32 +1028,39 @@ ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 --   8. roster - User's golf contacts
 --   9. roster_group_members - Group membership
 --   10. roster_notifications - Notify when added to roster
---   11. friend_requests - Friend request tracking
---   12. friendships - Confirmed friendships
+--   11. blocked_users - User blocking relationships
+--   12. friend_requests - Friend request tracking
+--   13. friendships - Confirmed friendships
 --
 -- Tee Time Tables:
---   13. tee_times - Scheduled golf rounds
---   14. tee_time_participants - Who's playing
---   15. invites - Tee time invitations
---   16. invite_responses - Invite response history
---   17. social_rate_logs - Social score changes
---   18. tee_time_attendance - Check-in tracking
+--   14. tee_times - Scheduled golf rounds (with check_in_reminder_sent)
+--   15. tee_time_participants - Who's playing
+--   16. invites - Tee time invitations (with deadline_notification_sent)
+--   17. invite_responses - Invite response history
+--   18. social_rate_logs - Social score changes (with cancellation_confirmed)
+--   19. tee_time_attendance - Check-in tracking
 --
 -- Supporting Tables:
---   19. golf_courses - Course directory
---   20. user_favorite_courses - Saved courses
---   21. roster_member_history - Play history
---   22. waiver_wire - Availability posting
---   23. login_logs - Security audit
---   24. notifications - Push/email/SMS
---   25. analytics_events - Usage tracking
---   26. rate_limits - API throttling
+--   20. golf_courses - Course directory
+--   21. user_favorite_courses - Saved courses
+--   22. roster_member_history - Play history
+--   23. waiver_wire - Availability posting
+--   24. login_logs - Security audit
+--   25. notifications - Push/email/SMS
+--   26. analytics_events - Usage tracking
+--   27. rate_limits - API throttling
 --
 -- Profile & Draft Tables:
---   27. handicap_logs - Handicap change audit trail
---   28. clubs - Golf clubs directory
---   29. user_club_memberships - User club memberships
---   30. draft_qr_codes - QR codes for "Get Drafted" feature
---   31. game_scores - Past game scores linked to tee times
+--   28. handicap_logs - Handicap change audit trail
+--   29. clubs - Golf clubs directory
+--   30. user_club_memberships - User club memberships
+--   31. draft_qr_codes - QR codes for "Get Drafted" feature
+--   32. game_scores - Past game scores linked to tee times
+--
+-- Migrations Included:
+--   - blocked_users table (user blocking)
+--   - cancellation_confirmed reason in social_rate_logs
+--   - check_in_reminder_sent column in tee_times
+--   - deadline_notification_sent column in invites
 --
 -- ============================================================================

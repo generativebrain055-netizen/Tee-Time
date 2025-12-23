@@ -8,12 +8,11 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { COLORS } from "../../constants/colors";
 import { BottomNav, Header } from "../../components/common";
-import RosterList from "./RosterList";
+import DraggableRosterScreen from "./DraggableRosterScreen";
 import GroupsList from "./GroupsList";
-import OnDeckList from "./OnDeckList";
 import RequestsList from "./RequestsList";
 
-const TABS = ["Roster", "Groups", "On Deck", "Requests"];
+const TABS = ["Roster", "Groups", "Requests"];
 
 export default function RosterScreen({ navigation, route }: any) {
     const initialTab = route?.params?.initialTab || "Roster";
@@ -33,15 +32,13 @@ export default function RosterScreen({ navigation, route }: any) {
     const renderContent = () => {
         switch (activeTab) {
             case "Roster":
-                return <RosterList navigation={navigation} />;
+                return <DraggableRosterScreen navigation={navigation} />;
             case "Groups":
                 return <GroupsList onGroupClick={handleGroupClick} />;
-            case "On Deck":
-                return <OnDeckList navigation={navigation} />;
             case "Requests":
                 return <RequestsList />;
             default:
-                return <RosterList navigation={navigation} />;
+                return <DraggableRosterScreen navigation={navigation} />;
         }
     };
 

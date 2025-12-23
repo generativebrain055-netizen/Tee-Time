@@ -64,7 +64,7 @@ class RosterRepository {
     const query = `
       SELECT r.*, 
              u.first_name, u.last_name, u.username, 
-             p.avatar_url, p.handicap as user_handicap
+             p.avatar_url, p.handicap as user_handicap, p.social_rate as profile_social_rate
       FROM roster r
       LEFT JOIN users u ON r.contact_user_id = u.id
       LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -563,7 +563,8 @@ class RosterRepository {
 
   // Get detailed member profile
   async getMemberProfile(userId, rosterId) {
-    const query = `
+    // First try to find by roster ID
+    let query = `
       SELECT r.*, 
              u.first_name, u.last_name, u.username, u.phone_number,
              p.avatar_url, p.handicap, p.social_rate, p.location, p.home_course,
@@ -580,7 +581,49 @@ class RosterRepository {
       LEFT JOIN roster_groups g ON r.group_id = g.id
       WHERE r.id = $1 AND r.user_id = $2
     `;
-    const result = await pool.query(query, [rosterId, userId]);
+    let result = await pool.query(query, [rosterId, userId]);
+    
+    // If not found by roster ID, try to find by contact_user_id (for friends without roster entry)
+    if (result.rows.length === 0) {
+      query = `
+        SELECT r.*, 
+               u.first_name, u.last_name, u.username, u.phone_number,
+               p.avatar_url, p.handicap, p.social_rate, p.location, p.home_course,
+               p.preferred_tee_time, p.walk_or_ride, p.playing_partner_preference,
+               p.rounds_played, p.average_score, p.bio,
+               p.driver, p.irons, p.putter, p.ball,
+               g.name as group_name, g.color as group_color,
+               (SELECT COUNT(*) FROM roster_member_history WHERE roster_id = r.id AND played_together = true) as times_played,
+               (SELECT COUNT(*) FROM roster_member_history WHERE roster_id = r.id AND invite_status = 'accepted') as invites_accepted,
+               (SELECT COUNT(*) FROM roster_member_history WHERE roster_id = r.id) as total_invites
+        FROM roster r
+        LEFT JOIN users u ON r.contact_user_id = u.id
+        LEFT JOIN user_profiles p ON u.id = p.user_id
+        LEFT JOIN roster_groups g ON r.group_id = g.id
+        WHERE r.contact_user_id = $1 AND r.user_id = $2
+      `;
+      result = await pool.query(query, [rosterId, userId]);
+    }
+    
+    // If still not found, try to get user profile directly (friend without roster entry)
+    if (result.rows.length === 0) {
+      query = `
+        SELECT 
+               u.id as contact_user_id,
+               u.first_name, u.last_name, u.username, u.phone_number,
+               p.avatar_url, p.handicap, p.social_rate, p.location, p.home_course,
+               p.preferred_tee_time, p.walk_or_ride, p.playing_partner_preference,
+               p.rounds_played, p.average_score, p.bio,
+               p.driver, p.irons, p.putter, p.ball,
+               NULL as group_name, NULL as group_color,
+               0 as times_played, 0 as invites_accepted, 0 as total_invites
+        FROM users u
+        LEFT JOIN user_profiles p ON u.id = p.user_id
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `;
+      result = await pool.query(query, [rosterId]);
+    }
+    
     return result.rows[0];
   }
 }

@@ -225,6 +225,58 @@ class FriendRepository {
         const result = await pool.query(query, [userId, viewerId]);
         return result.rows[0];
     }
+
+    // ============ BLOCK USERS ============
+
+    // Block a user
+    async blockUser(userId, blockedUserId) {
+        const query = `
+            INSERT INTO blocked_users (user_id, blocked_user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id, blocked_user_id) DO NOTHING
+            RETURNING *
+        `;
+        const result = await pool.query(query, [userId, blockedUserId]);
+        return result.rows[0];
+    }
+
+    // Unblock a user
+    async unblockUser(userId, blockedUserId) {
+        const query = `
+            DELETE FROM blocked_users 
+            WHERE user_id = $1 AND blocked_user_id = $2
+            RETURNING *
+        `;
+        const result = await pool.query(query, [userId, blockedUserId]);
+        return result.rows[0];
+    }
+
+    // Get blocked users
+    async getBlockedUsers(userId) {
+        const query = `
+            SELECT bu.*, u.first_name, u.last_name, u.username, p.avatar_url
+            FROM blocked_users bu
+            JOIN users u ON bu.blocked_user_id = u.id
+            LEFT JOIN user_profiles p ON u.id = p.user_id
+            WHERE bu.user_id = $1
+            ORDER BY bu.created_at DESC
+        `;
+        const result = await pool.query(query, [userId]);
+        return result.rows;
+    }
+
+    // Check if user is blocked
+    async isBlocked(userId, otherUserId) {
+        const query = `
+            SELECT EXISTS(
+                SELECT 1 FROM blocked_users 
+                WHERE (user_id = $1 AND blocked_user_id = $2)
+                   OR (user_id = $2 AND blocked_user_id = $1)
+            ) as is_blocked
+        `;
+        const result = await pool.query(query, [userId, otherUserId]);
+        return result.rows[0].is_blocked;
+    }
 }
 
 module.exports = new FriendRepository();

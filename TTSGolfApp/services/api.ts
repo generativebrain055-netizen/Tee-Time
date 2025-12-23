@@ -50,6 +50,7 @@ export interface Invite {
   teeDate: string;
   teeTime: string;
   status: "pending" | "accepted" | "declined" | "expired" | "waitlist";
+  expiresAt?: string;
   inviter?: { firstName: string; lastName: string; avatar?: string };
   invitee?: { userId?: string; phone?: string; name: string };
 }
@@ -429,6 +430,13 @@ export const teeTimeApi = {
       method: "POST",
     }),
 
+  // Skip invite and advance to next roster member
+  skipInvite: (teeTimeId: string, inviteId: string) =>
+    apiCall<{ success: boolean; message: string; skippedInviteId: string; nextInvite: any; invites: any[] }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/invites/${inviteId}/skip`,
+      { method: "POST" }
+    ),
+
   // Get calendar data
   getCalendar: (start: string, end: string) =>
     apiCall<{ success: boolean; calendar: Record<string, TeeTime[]> }>(
@@ -446,6 +454,26 @@ export const teeTimeApi = {
       `${API_ENDPOINTS.TEE_TIMES_HISTORY}${queryStr ? `?${queryStr}` : ''}`
     );
   },
+
+  // Send On-Deck invites as FCFS
+  sendOnDeckInvites: (teeTimeId: string, playerIds: string[], deadline?: string) =>
+    apiCall<{ success: boolean; message: string; invites: any[] }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/on-deck-invites`,
+      {
+        method: "POST",
+        body: JSON.stringify({ playerIds, deadline }),
+      }
+    ),
+
+  // Set FCFS deadline for all pending invites
+  setFCFSDeadline: (teeTimeId: string, deadline: string) =>
+    apiCall<{ success: boolean; message: string; deadline: string; updatedCount: number }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/fcfs-deadline`,
+      {
+        method: "POST",
+        body: JSON.stringify({ deadline }),
+      }
+    ),
 };
 
 // ============ INVITES API ============
@@ -662,6 +690,22 @@ export const friendApi = {
     apiCall<{ success: boolean; profile: DiscoveredUser & { bio?: string; averageScore?: number } }>(
       `${API_ENDPOINTS.FRIENDS}/profile/${userId}`
     ),
+
+  // Block a user
+  blockUser: (userId: string) =>
+    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.FRIENDS}/block/${userId}`, {
+      method: "POST",
+    }),
+
+  // Unblock a user
+  unblockUser: (userId: string) =>
+    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.FRIENDS}/block/${userId}`, {
+      method: "DELETE",
+    }),
+
+  // Get blocked users
+  getBlockedUsers: () =>
+    apiCall<{ success: boolean; blockedUsers: any[] }>(`${API_ENDPOINTS.FRIENDS}/blocked`),
 };
 
 // ============ COURSES API ============

@@ -1,5 +1,6 @@
 const socialRateService = require("../services/socialRateService");
 const logger = require("../config/logger");
+const { formatDateLocal } = require("../utils/dateUtils");
 
 class SocialRateController {
   constructor() {
@@ -59,7 +60,7 @@ class SocialRateController {
         teeTime: entry.tee_time_id ? {
           id: entry.tee_time_id,
           courseName: entry.course_name,
-          date: entry.tee_date,
+          date: formatDateLocal(entry.tee_date),
           time: entry.tee_time
         } : null,
         createdAt: entry.created_at

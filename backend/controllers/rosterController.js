@@ -2,6 +2,7 @@ const rosterRepository = require("../repositories/rosterRepository");
 const userRepository = require("../repositories/userRepository");
 const rosterNotificationService = require("../services/rosterNotificationService");
 const logger = require("../config/logger");
+const { formatDateLocal } = require("../utils/dateUtils");
 
 class RosterController {
   constructor() {
@@ -34,7 +35,8 @@ class RosterController {
   async getRoster(req, res) {
     try {
       const userId = req.user.id;
-      const roster = await rosterRepository.getRoster(userId);
+      const { sortBy } = req.query;
+      const roster = await rosterRepository.getRoster(userId, { sortBy });
       
       const formattedRoster = (roster || []).map((r, index) => ({
         id: r.id,
@@ -46,9 +48,12 @@ class RosterController {
           name: r.contact_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Unknown',
           email: r.contact_email,
           avatar: r.avatar_url,
-          handicap: r.user_handicap,
-          username: r.username
+          handicap: r.contact_handicap || r.user_handicap,
+          username: r.username,
+          socialRate: r.profile_social_rate || r.social_rate
         },
+        distanceToCourse: r.distance_to_course,
+        membership: r.club_membership,
         notes: r.notes,
         createdAt: r.created_at
       }));
@@ -75,8 +80,11 @@ class RosterController {
           phone: r.contact_phone,
           name: r.contact_name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Unknown',
           avatar: r.avatar_url,
-          handicap: r.user_handicap
-        }
+          handicap: r.contact_handicap || r.user_handicap,
+          socialRate: r.profile_social_rate || r.social_rate
+        },
+        distanceToCourse: r.distance_to_course,
+        membership: r.club_membership
       }));
 
       res.json({ success: true, onDeck: formatted });
@@ -464,7 +472,7 @@ class RosterController {
       }
 
       const formatted = {
-        id: profile.id,
+        id: profile.id || rosterId,
         position: profile.position,
         isOnDeck: profile.is_on_deck,
         groupId: profile.group_id,
@@ -473,7 +481,7 @@ class RosterController {
         contact: {
           userId: profile.contact_user_id,
           phone: profile.contact_phone || profile.phone_number,
-          name: profile.contact_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          name: profile.contact_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown',
           email: profile.contact_email,
           username: profile.username,
           avatar: profile.avatar_url,
@@ -484,11 +492,11 @@ class RosterController {
           socialRate: profile.social_rate || profile.profile_social_rate,
           roundsPlayed: profile.rounds_played,
           averageScore: profile.average_score,
-          timesPlayedTogether: profile.times_played || profile.times_played_together,
-          invitesAccepted: profile.invites_accepted,
-          totalInvites: profile.total_invites,
-          acceptanceRate: profile.total_invites > 0 
-            ? ((profile.invites_accepted / profile.total_invites) * 100).toFixed(0) + '%'
+          timesPlayedTogether: profile.times_played || profile.times_played_together || 0,
+          invitesAccepted: profile.invites_accepted || 0,
+          totalInvites: profile.total_invites || 0,
+          acceptanceRate: (profile.total_invites || 0) > 0 
+            ? (((profile.invites_accepted || 0) / profile.total_invites) * 100).toFixed(0) + '%'
             : 'N/A',
           lastPlayedTogether: profile.last_played_together
         },
@@ -529,7 +537,7 @@ class RosterController {
         id: h.id,
         teeTimeId: h.tee_time_id,
         courseName: h.course_name,
-        teeDate: h.tee_date,
+        teeDate: formatDateLocal(h.tee_date),
         teeTime: h.tee_time,
         inviteStatus: h.invite_status,
         playedTogether: h.played_together,

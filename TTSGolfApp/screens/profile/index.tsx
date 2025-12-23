@@ -23,6 +23,7 @@ import {
     MembershipCard,
     ProfileStats,
     RecentRounds,
+    BlockedUsersCard,
 } from "./components";
 
 // Utility functions
@@ -139,6 +140,14 @@ export default function ProfileScreen({ navigation }: any) {
         ]);
     }, [navigation]);
 
+    const handleRoundPress = useCallback((teeTime: TeeTime) => {
+        navigation?.navigate("TeeTimeDetail", { teeTimeId: teeTime.id });
+    }, [navigation]);
+
+    const handleSeeAllRounds = useCallback(() => {
+        navigation?.navigate("TeeTimeHistory");
+    }, [navigation]);
+
     // Loading state
     if (loading) {
         return (
@@ -196,7 +205,13 @@ export default function ProfileScreen({ navigation }: any) {
                     socialScore={formatScore(profile?.socialRate)}
                 />
 
-                <RecentRounds rounds={recentRounds} />
+                <RecentRounds
+                    rounds={recentRounds}
+                    onRoundPress={handleRoundPress}
+                    onSeeAll={handleSeeAllRounds}
+                />
+
+                <BlockedUsersCard onRefresh={onRefresh} />
 
                 <View style={{ height: 100 }} />
             </ScrollView>

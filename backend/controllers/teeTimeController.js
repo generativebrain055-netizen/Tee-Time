@@ -1,7 +1,9 @@
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const inviteRepository = require("../repositories/inviteRepository");
 const rosterRepository = require("../repositories/rosterRepository");
+const inviteManagementService = require("../services/inviteManagementService");
 const logger = require("../config/logger");
+const { formatDateLocal } = require("../utils/dateUtils");
 
 class TeeTimeController {
   constructor() {
@@ -13,6 +15,9 @@ class TeeTimeController {
     this.cancelTeeTime = this.cancelTeeTime.bind(this);
     this.getCalendar = this.getCalendar.bind(this);
     this.getHistory = this.getHistory.bind(this);
+    this.skipInvite = this.skipInvite.bind(this);
+    this.sendOnDeckInvites = this.sendOnDeckInvites.bind(this);
+    this.setFCFSDeadline = this.setFCFSDeadline.bind(this);
   }
 
   // POST /api/tee-times
@@ -36,7 +41,21 @@ class TeeTimeController {
         courseName, courseLocation, teeDate, teeTime, maxPlayers, inviteType, notes
       });
 
-      res.status(201).json({ success: true, teeTime: teeTimeData });
+      // Format the response to ensure date is returned correctly
+      const formattedTeeTime = {
+        id: teeTimeData.id,
+        courseName: teeTimeData.course_name,
+        courseLocation: teeTimeData.course_location,
+        teeDate: formatDateLocal(teeTimeData.tee_date),
+        teeTime: teeTimeData.tee_time,
+        maxPlayers: teeTimeData.max_players,
+        inviteType: teeTimeData.invite_type,
+        status: teeTimeData.status,
+        notes: teeTimeData.notes,
+        createdAt: teeTimeData.created_at
+      };
+
+      res.status(201).json({ success: true, teeTime: formattedTeeTime });
     } catch (error) {
       logger.error("Create tee time error:", error);
       res.status(500).json({ success: false, message: "Failed to create tee time" });
@@ -58,7 +77,7 @@ class TeeTimeController {
         id: t.id,
         courseName: t.course_name,
         courseLocation: t.course_location,
-        teeDate: t.tee_date,
+        teeDate: formatDateLocal(t.tee_date),
         teeTime: t.tee_time,
         maxPlayers: t.max_players,
         inviteType: t.invite_type,
@@ -97,7 +116,7 @@ class TeeTimeController {
           id: t.id,
           courseName: t.course_name,
           courseLocation: t.course_location,
-          teeDate: t.tee_date,
+          teeDate: formatDateLocal(t.tee_date),
           teeTime: t.tee_time,
           maxPlayers: t.max_players,
           inviteType: t.invite_type,
@@ -143,7 +162,7 @@ class TeeTimeController {
           id: teeTime.id,
           courseName: teeTime.course_name,
           courseLocation: teeTime.course_location,
-          teeDate: teeTime.tee_date,
+          teeDate: formatDateLocal(teeTime.tee_date),
           teeTime: teeTime.tee_time,
           maxPlayers: teeTime.max_players,
           inviteType: teeTime.invite_type,
@@ -223,7 +242,7 @@ class TeeTimeController {
       // Group by date
       const calendar = {};
       teeTimes.forEach(t => {
-        const dateKey = t.tee_date.toISOString().split('T')[0];
+        const dateKey = formatDateLocal(t.tee_date);
         if (!calendar[dateKey]) {
           calendar[dateKey] = [];
         }
@@ -261,7 +280,7 @@ class TeeTimeController {
         id: t.id,
         courseName: t.course_name,
         courseLocation: t.course_location,
-        teeDate: t.tee_date,
+        teeDate: formatDateLocal(t.tee_date),
         teeTime: t.tee_time,
         status: t.tee_time_status,
         userRole: t.user_role,
@@ -283,6 +302,145 @@ class TeeTimeController {
     } catch (error) {
       logger.error("Get tee time history error:", error);
       res.status(500).json({ success: false, message: "Failed to get history" });
+    }
+  }
+
+  // POST /api/tee-times/:id/invites/:inviteId/skip
+  // Manually skip an invite and advance to the next roster member
+  async skipInvite(req, res) {
+    try {
+      const userId = req.user.id;
+      const { id: teeTimeId, inviteId } = req.params;
+
+      // Verify user is the creator of this tee time
+      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
+      if (!teeTime) {
+        return res.status(404).json({ success: false, message: "Tee time not found" });
+      }
+      if (teeTime.creator_id !== userId) {
+        return res.status(403).json({ success: false, message: "Only the organizer can skip invites" });
+      }
+
+      // Get the invite to skip
+      const invite = await inviteRepository.getInviteById(inviteId);
+      if (!invite || invite.tee_time_id !== teeTimeId) {
+        return res.status(404).json({ success: false, message: "Invite not found" });
+      }
+
+      // Can only skip pending invites
+      if (invite.status !== 'pending') {
+        return res.status(400).json({ success: false, message: "Can only skip pending invites" });
+      }
+
+      // Mark the invite as skipped (using 'expired' status)
+      await inviteRepository.respondToInvite(inviteId, invite.invitee_user_id, 'expired');
+
+      // Get the next pending invite in the queue
+      const nextInvite = await inviteRepository.getNextPendingInvite(teeTimeId);
+
+      // If there's a next invite, activate it with a new expiry window
+      let activatedInvite = null;
+      if (nextInvite) {
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+        activatedInvite = await inviteRepository.activateInvite(nextInvite.id, expiresAt);
+      }
+
+      // Get updated invites list
+      const invites = await inviteRepository.getInvitesByTeeTime(teeTimeId);
+
+      res.json({ 
+        success: true, 
+        message: "Invite skipped, advanced to next member",
+        skippedInviteId: inviteId,
+        nextInvite: activatedInvite ? {
+          id: activatedInvite.id,
+          inviteeName: nextInvite.first_name ? `${nextInvite.first_name} ${nextInvite.last_name}` : nextInvite.invitee_name,
+          expiresAt: activatedInvite.expires_at
+        } : null,
+        invites: invites.map(i => ({
+          id: i.id,
+          status: i.status,
+          invitee: {
+            userId: i.invitee_user_id,
+            phone: i.invitee_phone,
+            name: i.invitee_name || `${i.first_name || ''} ${i.last_name || ''}`.trim(),
+            avatar: i.avatar_url
+          },
+          position: i.position,
+          expiresAt: i.expires_at
+        }))
+      });
+    } catch (error) {
+      logger.error("Skip invite error:", error);
+      res.status(500).json({ success: false, message: "Failed to skip invite" });
+    }
+  }
+
+  // POST /api/tee-times/:id/on-deck-invites
+  // Send FCFS invites to selected On-Deck players
+  async sendOnDeckInvites(req, res) {
+    try {
+      const userId = req.user.id;
+      const teeTimeId = req.params.id;
+      const { playerIds, deadline } = req.body;
+
+      const deadlineDate = deadline ? new Date(deadline) : null;
+      
+      const invites = await inviteManagementService.sendOnDeckInvites(
+        teeTimeId,
+        userId,
+        playerIds,
+        deadlineDate
+      );
+
+      res.status(201).json({
+        success: true,
+        message: `${invites.length} On-Deck invites sent (FCFS)`,
+        invites: invites.map(i => ({
+          id: i.id,
+          inviteeName: i.invitee_name,
+          expiresAt: i.expires_at
+        }))
+      });
+    } catch (error) {
+      logger.error("Send On-Deck invites error:", error);
+      res.status(500).json({ success: false, message: error.message || "Failed to send On-Deck invites" });
+    }
+  }
+
+  // POST /api/tee-times/:id/fcfs-deadline
+  // Set FCFS response deadline for all pending invites
+  async setFCFSDeadline(req, res) {
+    try {
+      const userId = req.user.id;
+      const teeTimeId = req.params.id;
+      const { deadline } = req.body;
+
+      // Verify user is the creator
+      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
+      if (!teeTime) {
+        return res.status(404).json({ success: false, message: "Tee time not found" });
+      }
+      if (teeTime.creator_id !== userId) {
+        return res.status(403).json({ success: false, message: "Only the organizer can set deadline" });
+      }
+
+      const deadlineDate = new Date(deadline);
+      if (deadlineDate <= new Date()) {
+        return res.status(400).json({ success: false, message: "Deadline must be in the future" });
+      }
+
+      const updatedInvites = await inviteRepository.setFCFSDeadline(teeTimeId, deadlineDate);
+
+      res.json({
+        success: true,
+        message: `Deadline set for ${updatedInvites.length} pending invites`,
+        deadline: deadlineDate,
+        updatedCount: updatedInvites.length
+      });
+    } catch (error) {
+      logger.error("Set FCFS deadline error:", error);
+      res.status(500).json({ success: false, message: "Failed to set deadline" });
     }
   }
 }

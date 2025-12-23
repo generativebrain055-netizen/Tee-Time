@@ -1,14 +1,14 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    TextInput,
 } from "react-native";
 import { Calendar, Clock } from "lucide-react-native";
 import { COLORS } from "./constants";
+import GolfCourseAutocomplete, { GolfCourse } from "../../components/GolfCourseAutocomplete";
 
 interface InviteDetailsStepProps {
     selectedDate: Date | null;
@@ -18,6 +18,7 @@ interface InviteDetailsStepProps {
     onOpenDatePicker: () => void;
     onOpenTimePicker: () => void;
     onLocationChange: (text: string) => void;
+    onCourseSelect?: (course: GolfCourse) => void;
     onGroupSizeChange: (size: number) => void;
 }
 
@@ -37,13 +38,24 @@ export default function InviteDetailsStep({
     onOpenDatePicker,
     onOpenTimePicker,
     onLocationChange,
+    onCourseSelect,
     onGroupSizeChange,
 }: InviteDetailsStepProps) {
+    const handleCourseSelect = useCallback((course: GolfCourse) => {
+        // Set the full location string (name + location)
+        const fullLocation = course.location && course.location !== "Custom entry"
+            ? `${course.name}, ${course.location}`
+            : course.name;
+        onLocationChange(fullLocation);
+        onCourseSelect?.(course);
+    }, [onLocationChange, onCourseSelect]);
+
     return (
         <ScrollView
             style={styles.content}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
         >
             {/* Date Picker */}
             <Text style={styles.label}>Pick a date</Text>
@@ -63,19 +75,14 @@ export default function InviteDetailsStep({
                 <Clock size={20} color={COLORS.textSub} strokeWidth={1.5} />
             </TouchableOpacity>
 
-            {/* Location Input - Simple text input */}
+            {/* Location Input - Golf Course Autocomplete */}
             <Text style={styles.label}>Pick a location</Text>
-            <View style={styles.inputBox}>
-                <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter golf course name"
-                    placeholderTextColor={COLORS.textSub}
-                    value={location}
-                    onChangeText={onLocationChange}
-                    autoCorrect={false}
-                    returnKeyType="done"
-                />
-            </View>
+            <GolfCourseAutocomplete
+                value={location}
+                onSelect={handleCourseSelect}
+                onChangeText={onLocationChange}
+                placeholder="Search golf courses..."
+            />
 
             {/* Group Size */}
             <Text style={styles.label}>Group size</Text>
@@ -121,6 +128,9 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: 20,
         paddingTop: 8,
+    },
+    scrollContent: {
+        paddingBottom: 200, // Extra space for autocomplete dropdown
     },
     label: {
         fontSize: 16,

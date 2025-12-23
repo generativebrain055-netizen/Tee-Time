@@ -40,18 +40,22 @@ class NotificationService {
 
   /**
    * Create friend request notification
+   * @param {string} receiverId - User receiving the notification
+   * @param {Object} sender - Sender info (id, firstName, lastName, avatar)
+   * @param {string} requestId - The friend request ID for responding
    */
-  async notifyFriendRequest(receiverId, sender) {
+  async notifyFriendRequest(receiverId, sender, requestId) {
     const senderName = `${sender.firstName || ""} ${sender.lastName || ""}`.trim() || "Someone";
     return this.createNotification({
       userId: receiverId,
       title: "New Friend Request",
-      body: `${senderName} wants to be your friend`,
+      body: `${senderName} wants to add you as a friend`,
       data: {
         type: "friend_request",
         senderId: sender.id,
         senderName,
         senderAvatar: sender.avatar || null,
+        requestId: requestId,
       },
     });
   }
@@ -79,11 +83,7 @@ class NotificationService {
    */
   async notifyTeeTimeInvite(userId, teeTime, inviter) {
     const inviterName = `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() || "Someone";
-    const dateStr = new Date(teeTime.date).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    const dateStr = this.formatDateForNotification(teeTime.date);
     return this.createNotification({
       userId,
       title: "Tee Time Invitation",
@@ -168,6 +168,128 @@ class NotificationService {
         teeTimeId: teeTime.id,
         action: "VIEW_SOCIAL_RATE",
       },
+    });
+  }
+
+  /**
+   * Notify organizer that roster is exhausted and prompt to use On-Deck players
+   */
+  async notifyRosterExhausted(organizerId, teeTime, spotsRemaining) {
+    const courseName = teeTime.course_name || teeTime.courseName || "the course";
+    return this.createNotification({
+      userId: organizerId,
+      title: "Roster Exhausted",
+      body: `Your tee time at ${courseName} has ${spotsRemaining} spot${spotsRemaining > 1 ? 's' : ''} remaining. Select from On-Deck players to fill.`,
+      data: {
+        type: "roster_exhausted",
+        teeTimeId: teeTime.id,
+        courseName,
+        spotsRemaining,
+        action: "SELECT_ON_DECK",
+      },
+    });
+  }
+
+  /**
+   * Notify organizer that a confirmed player has cancelled
+   */
+  async notifyPlayerCancelled(organizerId, teeTime, cancelledPlayer) {
+    const playerName = `${cancelledPlayer.firstName || ""} ${cancelledPlayer.lastName || ""}`.trim() || "A player";
+    const courseName = teeTime.course_name || teeTime.courseName || "the course";
+    return this.createNotification({
+      userId: organizerId,
+      title: "Player Cancelled",
+      body: `${playerName} has cancelled their spot for ${courseName}. A replacement invite is being sent.`,
+      data: {
+        type: "player_cancelled",
+        teeTimeId: teeTime.id,
+        cancelledPlayerId: cancelledPlayer.id,
+        cancelledPlayerName: playerName,
+        courseName,
+      },
+    });
+  }
+
+  /**
+   * Notify FCFS waitlist that a spot has opened up
+   */
+  async notifySpotOpened(userId, teeTime, organizer) {
+    const organizerName = `${organizer.firstName || ""} ${organizer.lastName || ""}`.trim() || "Someone";
+    const dateStr = this.formatDateForNotification(teeTime.tee_date);
+    return this.createNotification({
+      userId,
+      title: "Spot Opened Up! 🏌️",
+      body: `A spot has opened in ${organizerName}'s Tee Time on ${dateStr} at ${teeTime.course_name}. First to respond is in!`,
+      data: {
+        type: "spot_opened",
+        teeTimeId: teeTime.id,
+        organizerId: organizer.id,
+        organizerName,
+        courseName: teeTime.course_name,
+        date: teeTime.tee_date,
+        time: teeTime.tee_time,
+        action: "RESPOND_NOW",
+      },
+    });
+  }
+
+  /**
+   * Notify user that FCFS deadline is approaching
+   */
+  async notifyFCFSDeadlineApproaching(userId, teeTime, hoursRemaining) {
+    return this.createNotification({
+      userId,
+      title: "Response Deadline Approaching",
+      body: `Only ${hoursRemaining} hour${hoursRemaining > 1 ? 's' : ''} left to respond to the tee time at ${teeTime.course_name}!`,
+      data: {
+        type: "fcfs_deadline",
+        teeTimeId: teeTime.id,
+        courseName: teeTime.course_name,
+        hoursRemaining,
+        action: "RESPOND_NOW",
+      },
+    });
+  }
+
+  /**
+   * Notify organizer that tee time is not filled by deadline
+   */
+  async notifyTeeTimeNotFilled(organizerId, teeTime, spotsRemaining) {
+    return this.createNotification({
+      userId: organizerId,
+      title: "Tee Time Not Filled",
+      body: `Your tee time at ${teeTime.course_name} still has ${spotsRemaining} open spot${spotsRemaining > 1 ? 's' : ''}. Would you like to invite On-Deck players?`,
+      data: {
+        type: "tee_time_not_filled",
+        teeTimeId: teeTime.id,
+        courseName: teeTime.course_name,
+        spotsRemaining,
+        action: "SELECT_ON_DECK",
+      },
+    });
+  }
+
+  /**
+   * Helper to format date for notifications
+   * Uses UTC methods to avoid timezone shift with PostgreSQL DATE type
+   */
+  formatDateForNotification(date) {
+    if (!date) return '';
+    
+    let d;
+    if (typeof date === 'string') {
+      // Parse string date as local time
+      const [year, month, day] = date.split('-').map(Number);
+      d = new Date(year, month - 1, day);
+    } else {
+      // Date object from PostgreSQL - use UTC values to avoid shift
+      d = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    }
+    
+    return d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
     });
   }
 }

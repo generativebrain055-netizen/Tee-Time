@@ -4,6 +4,7 @@
 const twilio = require("twilio");
 const logger = require("../../config/logger");
 const inviteRepository = require("../../repositories/inviteRepository");
+const { formatDateLocal } = require("../../utils/dateUtils");
 
 let twilioClient = null;
 
@@ -30,11 +31,19 @@ const initTwilioClient = () => {
 initTwilioClient();
 
 /**
- * Format tee time date for SMS
+ * Format tee time date for SMS display
+ * Uses UTC to avoid timezone shift issues with PostgreSQL DATE type
  */
 const formatTeeTimeDate = (teeDate) => {
-    return new Date(teeDate).toLocaleDateString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric'
+    if (!teeDate) return '';
+    // If it's already a string in YYYY-MM-DD format, parse it correctly
+    const dateStr = typeof teeDate === 'string' ? teeDate : formatDateLocal(teeDate);
+    // Parse as UTC to avoid timezone shift
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        timeZone: 'UTC' // Use UTC to prevent shift
     });
 };
 
