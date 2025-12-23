@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { StatusBar } from "expo-status-bar";
-import { Bell, Users, Calendar, CheckCircle, Trash2, UserPlus, X } from "lucide-react-native";
+import { Bell, Users, Calendar, CheckCircle, Trash2, UserPlus, X, Clock } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { Header } from "../../components/common";
 import { notificationApi, friendApi, AppNotification } from "../../services/api";
@@ -26,7 +26,8 @@ const NotificationItem = memo(({
     onDelete,
     onAcceptFriend,
     onDeclineFriend,
-    onAcceptSpot
+    onAcceptSpot,
+    onSelectOnDeck
 }: {
     item: AppNotification;
     onPress: (item: AppNotification) => void;
@@ -34,7 +35,51 @@ const NotificationItem = memo(({
     onAcceptFriend: (item: AppNotification) => void;
     onDeclineFriend: (item: AppNotification) => void;
     onAcceptSpot: (item: AppNotification) => void;
+    onSelectOnDeck: (item: AppNotification) => void;
 }) => {
+    const [deadlineText, setDeadlineText] = useState<string | null>(null);
+    const [isUrgent, setIsUrgent] = useState(false);
+
+    // Live countdown for deadline
+    useEffect(() => {
+        const expiresAt = item.data?.expiresAt;
+        if (!expiresAt) {
+            setDeadlineText(null);
+            return;
+        }
+
+        const calculateDeadline = () => {
+            const deadline = new Date(expiresAt);
+            const now = new Date();
+            const diffMs = deadline.getTime() - now.getTime();
+
+            if (diffMs <= 0) {
+                setDeadlineText("Expired");
+                setIsUrgent(true);
+                return;
+            }
+
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+
+            setIsUrgent(diffHours < 1);
+
+            if (diffHours >= 24) {
+                const days = Math.floor(diffHours / 24);
+                setDeadlineText(`${days}d left to respond`);
+            } else if (diffHours >= 1) {
+                setDeadlineText(`${diffHours}h left to respond`);
+            } else {
+                setDeadlineText(`${diffMins}m left to respond`);
+            }
+        };
+
+        calculateDeadline();
+        const interval = setInterval(calculateDeadline, 60000); // Update every minute
+
+        return () => clearInterval(interval);
+    }, [item.data?.expiresAt]);
+
     const getIcon = () => {
         const notifType = item.data?.type;
         switch (notifType) {
@@ -47,6 +92,9 @@ const NotificationItem = memo(({
             case 'check_in_reminder':
             case 'spot_opened':
                 return <Calendar size={20} color={COLORS.primary} />;
+            case 'roster_exhausted':
+            case 'tee_time_not_filled':
+                return <Calendar size={20} color={COLORS.requested} />;
             case 'no_show':
                 return <Bell size={20} color="#EF4444" />;
             default:
@@ -72,8 +120,10 @@ const NotificationItem = memo(({
     const notifType = item.data?.type;
     const isFriendRequest = notifType === 'friend_request';
     const isSpotOpened = notifType === 'spot_opened';
+    const isRosterExhausted = notifType === 'roster_exhausted' || notifType === 'tee_time_not_filled';
     const isFriendRequestActionable = isFriendRequest && item.data?.requestId && !item.data?.responded;
     const isSpotOpenedActionable = isSpotOpened && item.data?.teeTimeId && !item.data?.responded;
+    const isRosterExhaustedActionable = isRosterExhausted && item.data?.teeTimeId && !item.data?.responded;
 
     return (
         <TouchableOpacity
@@ -91,6 +141,16 @@ const NotificationItem = memo(({
                 <Text style={styles.body} numberOfLines={2}>
                     {item.body}
                 </Text>
+
+                {/* Deadline indicator for tee time invites */}
+                {deadlineText && item.data?.type === 'tee_time_invite' && (
+                    <View style={[styles.deadlineBadge, isUrgent && styles.deadlineBadgeUrgent]}>
+                        <Clock size={12} color={isUrgent ? "#DC2626" : "#D97706"} />
+                        <Text style={[styles.deadlineBadgeText, isUrgent && styles.deadlineBadgeTextUrgent]}>
+                            {deadlineText}
+                        </Text>
+                    </View>
+                )}
 
                 {/* Friend Request Action Buttons */}
                 {isFriendRequestActionable && (
@@ -121,6 +181,19 @@ const NotificationItem = memo(({
                         >
                             <Calendar size={14} color={COLORS.white} />
                             <Text style={styles.acceptButtonText}>Accept Spot</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Roster Exhausted / Not Filled Action Button */}
+                {isRosterExhaustedActionable && (
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity
+                            style={[styles.acceptButton, { backgroundColor: COLORS.requested }]}
+                            onPress={() => onSelectOnDeck(item)}
+                        >
+                            <Users size={14} color={COLORS.white} />
+                            <Text style={styles.acceptButtonText}>Select On-Deck</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -239,6 +312,18 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
                 navigation?.navigate("Invites");
                 break;
 
+            case 'roster_exhausted':
+            case 'tee_time_not_filled':
+                // Navigate to On-Deck selection screen
+                if (item.data?.teeTimeId) {
+                    navigation?.navigate("SelectOnDeck", {
+                        teeTimeId: item.data.teeTimeId,
+                        spotsRemaining: item.data.spotsRemaining || 1,
+                        courseName: item.data.courseName
+                    });
+                }
+                break;
+
             default:
                 // No specific navigation
                 break;
@@ -338,6 +423,28 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
         navigation?.navigate("Invites");
     }, [navigation]);
 
+    const handleSelectOnDeck = useCallback(async (item: AppNotification) => {
+        const teeTimeId = item.data?.teeTimeId;
+        const spotsRemaining = item.data?.spotsRemaining || 1;
+        const courseName = item.data?.courseName;
+        if (!teeTimeId) return;
+
+        // Mark notification as responded
+        setNotifications(prev =>
+            prev.map(n => n.id === item.id
+                ? { ...n, data: { ...n.data, responded: true }, isRead: true }
+                : n
+            )
+        );
+
+        // Navigate to On-Deck selection screen
+        navigation?.navigate("SelectOnDeck", {
+            teeTimeId,
+            spotsRemaining,
+            courseName
+        });
+    }, [navigation]);
+
     const handleMarkAllRead = useCallback(async () => {
         try {
             await notificationApi.markAllAsRead();
@@ -357,8 +464,9 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
             onAcceptFriend={handleAcceptFriend}
             onDeclineFriend={handleDeclineFriend}
             onAcceptSpot={handleAcceptSpot}
+            onSelectOnDeck={handleSelectOnDeck}
         />
-    ), [handleNotificationPress, handleDelete, handleAcceptFriend, handleDeclineFriend, handleAcceptSpot]);
+    ), [handleNotificationPress, handleDelete, handleAcceptFriend, handleDeclineFriend, handleAcceptSpot, handleSelectOnDeck]);
 
     const renderEmpty = () => (
         <View style={styles.emptyContainer}>
@@ -557,5 +665,28 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: "500",
         color: COLORS.textSub,
+    },
+    deadlineBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: "#FEF3C7",
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        alignSelf: "flex-start",
+        marginTop: 4,
+        marginBottom: 2,
+    },
+    deadlineBadgeUrgent: {
+        backgroundColor: "#FEE2E2",
+    },
+    deadlineBadgeText: {
+        fontSize: 11,
+        fontWeight: "600",
+        color: "#D97706",
+    },
+    deadlineBadgeTextUrgent: {
+        color: "#DC2626",
     },
 });

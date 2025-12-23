@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
     View,
     Text,
@@ -6,12 +6,18 @@ import {
     ScrollView,
     TouchableOpacity,
     Image,
+    Switch,
+    Platform,
+    Modal,
+    TouchableWithoutFeedback,
 } from "react-native";
-import { Users, UserCheck, Check } from "lucide-react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Users, UserCheck, Check, Clock, Calendar } from "lucide-react-native";
 import { COLORS } from "./constants";
 import { Friend, RosterGroup } from "../../services/api";
 
 type TargetType = "roster" | "group";
+type PickerMode = "date" | "time" | null;
 
 interface FCFSInviteStepProps {
     friends: Friend[];
@@ -20,6 +26,8 @@ interface FCFSInviteStepProps {
     selectedGroupId: string | null;
     onTargetTypeChange: (type: TargetType) => void;
     onGroupSelect: (groupId: string | null) => void;
+    deadline: Date | null;
+    onDeadlineChange: (deadline: Date | null) => void;
 }
 
 export default function FCFSInviteStep({
@@ -29,9 +37,142 @@ export default function FCFSInviteStep({
     selectedGroupId,
     onTargetTypeChange,
     onGroupSelect,
+    deadline,
+    onDeadlineChange,
 }: FCFSInviteStepProps) {
+    const [hasDeadline, setHasDeadline] = useState(deadline !== null);
+    const [pickerMode, setPickerMode] = useState<PickerMode>(null);
+    const [tempDate, setTempDate] = useState<Date>(deadline || getDefaultDeadline());
+
+    function getDefaultDeadline(): Date {
+        const d = new Date();
+        d.setHours(d.getHours() + 24); // Default: 24 hours from now
+        return d;
+    }
+
+    const handleToggleDeadline = (value: boolean) => {
+        setHasDeadline(value);
+        if (value) {
+            const defaultDeadline = getDefaultDeadline();
+            setTempDate(defaultDeadline);
+            onDeadlineChange(defaultDeadline);
+        } else {
+            onDeadlineChange(null);
+        }
+    };
+
+    const openDatePicker = () => {
+        setPickerMode("date");
+    };
+
+    const openTimePicker = () => {
+        setPickerMode("time");
+    };
+
+    const closePicker = () => {
+        setPickerMode(null);
+    };
+
+    const handleDateTimeChange = (event: any, selectedValue?: Date) => {
+        if (Platform.OS === "android") {
+            // Android closes automatically on selection or cancel
+            setPickerMode(null);
+            if (event.type === "dismissed") return;
+        }
+
+        if (selectedValue) {
+            const newDate = new Date(tempDate);
+            if (pickerMode === "date") {
+                newDate.setFullYear(selectedValue.getFullYear());
+                newDate.setMonth(selectedValue.getMonth());
+                newDate.setDate(selectedValue.getDate());
+            } else if (pickerMode === "time") {
+                newDate.setHours(selectedValue.getHours());
+                newDate.setMinutes(selectedValue.getMinutes());
+            }
+            setTempDate(newDate);
+            onDeadlineChange(newDate);
+        }
+    };
+
+    const handleIOSConfirm = () => {
+        onDeadlineChange(tempDate);
+        setPickerMode(null);
+    };
+
+    const formatDeadlineDate = (date: Date): string => {
+        return date.toLocaleDateString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+        });
+    };
+
+    const formatDeadlineTime = (date: Date): string => {
+        return date.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
+    };
+
     const getInitials = (firstName: string, lastName: string): string => {
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+    };
+
+    // Render picker based on platform
+    const renderPicker = () => {
+        if (!pickerMode) return null;
+
+        if (Platform.OS === "android") {
+            return (
+                <DateTimePicker
+                    value={tempDate}
+                    mode={pickerMode}
+                    display="default"
+                    onChange={handleDateTimeChange}
+                    minimumDate={pickerMode === "date" ? new Date() : undefined}
+                />
+            );
+        }
+
+        // iOS - show in modal
+        return (
+            <Modal
+                visible={true}
+                transparent
+                animationType="slide"
+                onRequestClose={closePicker}
+            >
+                <TouchableWithoutFeedback onPress={closePicker}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.pickerModal}>
+                                <View style={styles.pickerHeader}>
+                                    <TouchableOpacity onPress={closePicker}>
+                                        <Text style={styles.pickerCancelText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <Text style={styles.pickerTitle}>
+                                        {pickerMode === "date" ? "Select Date" : "Select Time"}
+                                    </Text>
+                                    <TouchableOpacity onPress={handleIOSConfirm}>
+                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker
+                                    value={tempDate}
+                                    mode={pickerMode}
+                                    display="spinner"
+                                    onChange={handleDateTimeChange}
+                                    minimumDate={pickerMode === "date" ? new Date() : undefined}
+                                    style={styles.iosPicker}
+                                />
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+        );
     };
 
     return (
@@ -94,6 +235,52 @@ export default function FCFSInviteStep({
                     </ScrollView>
                 </View>
             )}
+
+            {/* Response Deadline */}
+            <View style={styles.deadlineSection}>
+                <View style={styles.deadlineHeader}>
+                    <View style={styles.deadlineHeaderLeft}>
+                        <Clock size={20} color={COLORS.primary} />
+                        <Text style={styles.deadlineTitle}>Set Response Deadline</Text>
+                    </View>
+                    <Switch
+                        value={hasDeadline}
+                        onValueChange={handleToggleDeadline}
+                        trackColor={{ false: "#E5E7EB", true: "#86EFAC" }}
+                        thumbColor={hasDeadline ? COLORS.primary : "#9CA3AF"}
+                    />
+                </View>
+                {hasDeadline && (
+                    <View style={styles.deadlineContent}>
+                        <Text style={styles.deadlineHint}>
+                            Invites will expire at this time. Unresponded invites will be cancelled.
+                        </Text>
+                        <View style={styles.deadlinePickers}>
+                            <TouchableOpacity
+                                style={[styles.deadlinePickerBtn, pickerMode === "date" && styles.deadlinePickerBtnActive]}
+                                onPress={openDatePicker}
+                            >
+                                <Calendar size={18} color={pickerMode === "date" ? COLORS.primary : COLORS.text} />
+                                <Text style={[styles.deadlinePickerText, pickerMode === "date" && styles.deadlinePickerTextActive]}>
+                                    {formatDeadlineDate(tempDate)}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.deadlinePickerBtn, pickerMode === "time" && styles.deadlinePickerBtnActive]}
+                                onPress={openTimePicker}
+                            >
+                                <Clock size={18} color={pickerMode === "time" ? COLORS.primary : COLORS.text} />
+                                <Text style={[styles.deadlinePickerText, pickerMode === "time" && styles.deadlinePickerTextActive]}>
+                                    {formatDeadlineTime(tempDate)}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+            </View>
+
+            {/* Date/Time Picker */}
+            {renderPicker()}
 
             {/* Preview of who will receive */}
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
@@ -246,6 +433,102 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.textSub,
         fontStyle: "italic",
+    },
+    deadlineSection: {
+        backgroundColor: "#F9FAFB",
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 16,
+    },
+    deadlineHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    deadlineHeaderLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    deadlineTitle: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: COLORS.text,
+    },
+    deadlineContent: {
+        marginTop: 12,
+    },
+    deadlineHint: {
+        fontSize: 13,
+        color: COLORS.textSub,
+        marginBottom: 12,
+    },
+    deadlinePickers: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    deadlinePickerBtn: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        backgroundColor: COLORS.white,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    deadlinePickerBtnActive: {
+        borderColor: COLORS.primary,
+        backgroundColor: "#F0FDF4",
+    },
+    deadlinePickerText: {
+        fontSize: 14,
+        fontWeight: "500",
+        color: COLORS.text,
+    },
+    deadlinePickerTextActive: {
+        color: COLORS.primary,
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "flex-end",
+    },
+    pickerModal: {
+        backgroundColor: COLORS.white,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 34,
+    },
+    pickerHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: "#E5E7EB",
+    },
+    pickerTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.text,
+    },
+    pickerCancelText: {
+        fontSize: 16,
+        color: COLORS.textSub,
+    },
+    pickerDoneText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: COLORS.primary,
+    },
+    iosPicker: {
+        height: 200,
     },
     playerList: {
         flex: 1,

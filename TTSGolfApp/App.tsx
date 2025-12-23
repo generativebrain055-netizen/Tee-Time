@@ -24,6 +24,7 @@ import TeeTimeDetailScreen from "./screens/TeeTimeDetailScreen";
 import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
 import CheckInScreen from "./screens/CheckInScreen";
 import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
+import SelectOnDeckScreen from "./screens/SelectOnDeckScreen";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -51,7 +52,8 @@ type ScreenName =
   | "Notifications"
   | "TeeTimeDetail"
   | "TeeTimeHistory"
-  | "CheckIn";
+  | "CheckIn"
+  | "SelectOnDeck";
 
 interface UserData {
   firstName: string;
@@ -267,6 +269,14 @@ export default function App(): React.ReactElement {
         return (
           <RosterProfileScreen
             key={`roster-profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "SelectOnDeck":
+        return (
+          <SelectOnDeckScreen
+            key={`select-on-deck-${screenKey}`}
             navigation={navigation as any}
             route={{ params: screenParams } as any}
           />

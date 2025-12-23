@@ -429,16 +429,33 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
 
         try {
             if (item.rosterId) {
+                // Has roster entry - use moveMember
                 await rosterApi.moveMember(item.rosterId, {
                     isOnDeck: movingToOnDeck,
                     newPosition: movingToOnDeck ? onDeckMembers.length : rosterMembers.length,
                 });
             } else {
-                await rosterApi.toggleOnDeck(item.friendId, movingToOnDeck);
+                // No roster entry (friend only) - need to add to roster first, then toggle
+                // The friend is already in roster via friendship, so use toggleOnDeck with the friend's user ID
+                // But toggleOnDeck expects a rosterId, so we need to add them to roster first
+                const addResult = await rosterApi.addToRoster({ contactUserId: item.friendId });
+                if (addResult.success && addResult.entry?.id) {
+                    // Now move to on-deck
+                    await rosterApi.moveMember(addResult.entry.id, {
+                        isOnDeck: movingToOnDeck,
+                        newPosition: movingToOnDeck ? onDeckMembers.length : rosterMembers.length,
+                    });
+                }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to move member:", error);
-            loadData(sortBy);
+            // If already in roster error, try to find and move
+            if (error?.message?.includes("already in roster")) {
+                // Reload to get the correct rosterId
+                loadData(sortBy);
+            } else {
+                loadData(sortBy);
+            }
         }
     }, [rosterMembers, onDeckMembers, loadData, sortBy, sortMembers]);
 

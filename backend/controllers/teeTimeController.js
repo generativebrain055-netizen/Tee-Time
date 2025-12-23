@@ -193,6 +193,7 @@ class TeeTimeController {
               avatar: i.avatar_url
             },
             position: i.position,
+            expiresAt: i.expires_at,
             smsSent: i.sms_sent
           }))
         }
@@ -431,6 +432,28 @@ class TeeTimeController {
       }
 
       const updatedInvites = await inviteRepository.setFCFSDeadline(teeTimeId, deadlineDate);
+
+      // Notify all pending invitees about the deadline
+      for (const invite of updatedInvites) {
+        if (invite.invitee_user_id) {
+          try {
+            const notificationService = require("../services/notificationService");
+            await notificationService.createNotification({
+              userId: invite.invitee_user_id,
+              title: "Response Deadline Set",
+              body: `You have until ${deadlineDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })} to respond to the tee time invitation.`,
+              data: {
+                type: "fcfs_deadline_set",
+                teeTimeId: teeTimeId,
+                expiresAt: deadlineDate.toISOString(),
+                courseName: teeTime.course_name,
+              },
+            });
+          } catch (notifyError) {
+            logger.error(`Failed to notify user ${invite.invitee_user_id} of deadline:`, notifyError);
+          }
+        }
+      }
 
       res.json({
         success: true,

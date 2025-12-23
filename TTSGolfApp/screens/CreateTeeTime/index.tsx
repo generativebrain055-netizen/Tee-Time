@@ -61,6 +61,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
     const [fcfsTargetType, setFcfsTargetType] = useState<FCFSTargetType>("roster");
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
     const [groupMembers, setGroupMembers] = useState<ExtendedFriend[]>([]);
+    const [fcfsDeadline, setFcfsDeadline] = useState<Date | null>(null);
 
     // Manual Invite state
     const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
@@ -309,8 +310,19 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
 
                 if (invitees.length > 0) {
                     console.log("FCFS invitees:", JSON.stringify(invitees, null, 2));
+                    console.log("FCFS deadline:", fcfsDeadline);
                     const inviteResponse = await inviteApi.createInvites(teeTimeId, invitees, "fcfs");
                     console.log("FCFS invite response:", inviteResponse);
+
+                    // Set deadline if specified
+                    if (fcfsDeadline) {
+                        try {
+                            await teeTimeApi.setFCFSDeadline(teeTimeId, fcfsDeadline.toISOString());
+                            console.log("FCFS deadline set successfully");
+                        } catch (deadlineError) {
+                            console.error("Failed to set FCFS deadline:", deadlineError);
+                        }
+                    }
                 } else {
                     console.log("No FCFS invitees to send");
                 }
@@ -514,6 +526,8 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
                     selectedGroupId={selectedGroupId}
                     onTargetTypeChange={setFcfsTargetType}
                     onGroupSelect={handleGroupSelect}
+                    deadline={fcfsDeadline}
+                    onDeadlineChange={setFcfsDeadline}
                 />
             )}
 

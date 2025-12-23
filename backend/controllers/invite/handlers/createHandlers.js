@@ -82,7 +82,7 @@ const createRosterInvites = async (req, res, teeTime, invitees, responseWindow =
         const firstInvite = createdInvites.find(i => i.position === 0);
         if (firstInvite) {
             if (firstInvite.invitee_user_id) {
-                // In-app notification for registered users
+                // In-app notification for registered users - include deadline
                 await notificationService.notifyTeeTimeInvite(
                     firstInvite.invitee_user_id,
                     {
@@ -95,7 +95,8 @@ const createRosterInvites = async (req, res, teeTime, invitees, responseWindow =
                         id: userId,
                         firstName: req.user.firstName,
                         lastName: req.user.lastName,
-                    }
+                    },
+                    firstInvite.expires_at // Pass the deadline
                 );
             } else if (firstInvite.invitee_phone) {
                 await sendInviteSms(firstInvite, teeTime, false, responseWindow);

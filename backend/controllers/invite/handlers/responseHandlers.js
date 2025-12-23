@@ -49,6 +49,41 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
  */
 const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
     if (participantCount < teeTime.max_players) {
+        // For FCFS invites: Use tie-breaker logic based on roster position
+        if (teeTime.invite_type === INVITE_TYPES.FCFS) {
+            const tieBreakerResult = await inviteRepository.acceptFCFSWithTieBreaker(
+                invite.id,
+                userId,
+                invite.position // roster position from invite
+            );
+
+            if (!tieBreakerResult.success) {
+                if (tieBreakerResult.reason === 'tie_breaker_lost') {
+                    // Someone with higher roster priority accepted at the same time
+                    await inviteRepository.moveToWaitlist(invite.id);
+                    logger.info(`User ${userId} lost FCFS tie-breaker for tee time ${invite.tee_time_id}, moved to waitlist`);
+                    return {
+                        success: true,
+                        message: "Someone with higher roster priority accepted at the same time. You've been added to the waitlist.",
+                        status: 'waitlist'
+                    };
+                } else if (tieBreakerResult.reason === 'full') {
+                    await inviteRepository.moveToWaitlist(invite.id);
+                    return {
+                        success: true,
+                        message: "Tee time is full. You've been added to the waitlist.",
+                        status: 'waitlist'
+                    };
+                } else {
+                    return {
+                        success: false,
+                        message: "Unable to process your response. Please try again.",
+                        status: 'error'
+                    };
+                }
+            }
+        }
+
         const user = await userRepository.findById(userId);
         await teeTimeRepository.addParticipant(
             invite.tee_time_id,

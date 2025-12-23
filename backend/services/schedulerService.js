@@ -1,4 +1,5 @@
 const checkInReminderService = require("./checkInReminderService");
+const fcfsDeadlineService = require("./fcfsDeadlineService");
 const logger = require("../config/logger");
 
 /**
@@ -8,12 +9,20 @@ const logger = require("../config/logger");
 class SchedulerService {
   constructor() {
     this.intervals = [];
+    this.isStarted = false;
   }
 
   /**
    * Start all scheduled tasks
+   * Delays initial run to ensure database connection is established
    */
   start() {
+    if (this.isStarted) {
+      logger.warn("Scheduler service already started");
+      return;
+    }
+    
+    this.isStarted = true;
     logger.info("Starting scheduler service...");
 
     // Check-in reminders - run every minute
@@ -27,12 +36,29 @@ class SchedulerService {
 
     this.intervals.push(checkInInterval);
 
-    // Run immediately on startup
-    checkInReminderService.processUpcomingTeeTimes().catch(err => {
-      logger.error("Initial check-in reminder processing failed:", err);
-    });
+    // FCFS deadline expiration - run every minute
+    const fcfsDeadlineInterval = setInterval(async () => {
+      try {
+        await fcfsDeadlineService.processExpiredInvites();
+      } catch (error) {
+        logger.error("Scheduled FCFS deadline processing failed:", error);
+      }
+    }, 60 * 1000); // Every 60 seconds
 
-    logger.info("Scheduler service started - check-in reminders running every minute");
+    this.intervals.push(fcfsDeadlineInterval);
+
+    // Delay initial run by 5 seconds to ensure database is ready
+    setTimeout(() => {
+      checkInReminderService.processUpcomingTeeTimes().catch(err => {
+        logger.error("Initial check-in reminder processing failed:", err);
+      });
+
+      fcfsDeadlineService.processExpiredInvites().catch(err => {
+        logger.error("Initial FCFS deadline processing failed:", err);
+      });
+    }, 5000);
+
+    logger.info("Scheduler service started - check-in reminders and FCFS deadlines running every minute");
   }
 
   /**
@@ -42,6 +68,7 @@ class SchedulerService {
     logger.info("Stopping scheduler service...");
     this.intervals.forEach(interval => clearInterval(interval));
     this.intervals = [];
+    this.isStarted = false;
   }
 }
 

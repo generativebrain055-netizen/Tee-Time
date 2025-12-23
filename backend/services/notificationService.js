@@ -81,13 +81,27 @@ class NotificationService {
   /**
    * Create tee time invite notification
    */
-  async notifyTeeTimeInvite(userId, teeTime, inviter) {
+  async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null) {
     const inviterName = `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() || "Someone";
     const dateStr = this.formatDateForNotification(teeTime.date);
+    
+    let body = `${inviterName} invited you to play on ${dateStr}`;
+    if (expiresAt) {
+      const deadline = new Date(expiresAt);
+      const deadlineStr = deadline.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      body += `. Respond by ${deadlineStr}`;
+    }
+    
     return this.createNotification({
       userId,
       title: "Tee Time Invitation",
-      body: `${inviterName} invited you to play on ${dateStr}`,
+      body,
       data: {
         type: "tee_time_invite",
         teeTimeId: teeTime.id,
@@ -96,6 +110,7 @@ class NotificationService {
         courseName: teeTime.courseName || null,
         date: teeTime.date,
         time: teeTime.time,
+        expiresAt: expiresAt || null,
       },
     });
   }
