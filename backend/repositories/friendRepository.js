@@ -5,14 +5,23 @@ class FriendRepository {
 
     // Send friend request
     async sendFriendRequest(senderId, receiverId, message = null) {
+        // First check if there's an existing friendship (shouldn't happen but just in case)
+        const friendshipCheck = await pool.query(
+            "SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2",
+            [senderId, receiverId]
+        );
+        if (friendshipCheck.rows.length > 0) {
+            throw new Error('Already friends with this user');
+        }
+
+        // Allow re-sending friend request even if previously declined/accepted
         const query = `
-            INSERT INTO friend_requests (sender_id, receiver_id, message)
-            VALUES ($1, $2, $3)
+            INSERT INTO friend_requests (sender_id, receiver_id, message, status)
+            VALUES ($1, $2, $3, 'pending')
             ON CONFLICT (sender_id, receiver_id) DO UPDATE SET
                 status = 'pending',
                 message = EXCLUDED.message,
                 updated_at = NOW()
-            WHERE friend_requests.status = 'declined'
             RETURNING *
         `;
         const result = await pool.query(query, [senderId, receiverId, message]);
@@ -154,19 +163,21 @@ class FriendRepository {
         let paramIndex = 2;
 
         if (location) {
-            whereClause += ` AND p.location ILIKE $${paramIndex}`;
-            params.push(`%${location}%`);
+            whereClause += " AND p.location ILIKE $" + paramIndex;
+            params.push("%" + location + "%");
             paramIndex++;
         }
 
         if (course) {
-            whereClause += ` AND p.home_course ILIKE $${paramIndex}`;
-            params.push(`%${course}%`);
+            whereClause += " AND p.home_course ILIKE $" + paramIndex;
+            params.push("%" + course + "%");
             paramIndex++;
         }
 
         params.push(limit, offset);
 
+        // Note: Only check for PENDING friend requests, not accepted/declined ones
+        // This allows re-adding friends after unfriending
         const query = `
             SELECT u.id, u.first_name, u.last_name, u.username,
                    p.handicap, p.avatar_url, p.location, p.home_course,
@@ -180,12 +191,11 @@ class FriendRepository {
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             LEFT JOIN friendships f ON f.user_id = $1 AND f.friend_id = u.id
-            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $1 AND fr_sent.receiver_id = u.id
-            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $1 AND fr_recv.sender_id = u.id
-            WHERE ${whereClause}
+            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $1 AND fr_sent.receiver_id = u.id AND fr_sent.status = 'pending'
+            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $1 AND fr_recv.sender_id = u.id AND fr_recv.status = 'pending'
+            WHERE ` + whereClause + `
             ORDER BY p.social_rate DESC NULLS LAST, u.first_name
-            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-        `;
+            LIMIT $` + paramIndex + ` OFFSET $` + (paramIndex + 1);
 
         const result = await pool.query(query, params);
         return result.rows;
@@ -208,8 +218,8 @@ class FriendRepository {
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             LEFT JOIN friendships f ON f.user_id = $2 AND f.friend_id = u.id
-            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $2 AND fr_sent.receiver_id = u.id
-            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $2 AND fr_recv.sender_id = u.id
+            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $2 AND fr_sent.receiver_id = u.id AND fr_sent.status = 'pending'
+            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $2 AND fr_recv.sender_id = u.id AND fr_recv.status = 'pending'
             WHERE u.id = $1 AND u.deleted_at IS NULL
         `;
         const result = await pool.query(query, [userId, viewerId]);

@@ -47,6 +47,7 @@ const findByEmail = async (email) => {
   return result.rows[0] || null;
 };
 
+
 /**
  * Find user by ID with profile
  * @param {string} userId
@@ -95,6 +96,7 @@ const findByUsername = async (username) => {
   return result.rows[0] || null;
 };
 
+
 /**
  * Create a new user with profile
  * @param {Object} userData
@@ -110,6 +112,11 @@ const create = async (userData) => {
     handicap,
     passwordHash,
     isVerified,
+    location,
+    homeCourse,
+    preferredTeeTime,
+    walkOrRide,
+    playingPartnerPreference,
   } = userData;
 
   const client = await getClient();
@@ -136,17 +143,36 @@ const create = async (userData) => {
     
     const user = userResult.rows[0];
     
-    // Create profile
+    // Create profile with all fields
     await client.query(
-      `INSERT INTO user_profiles (user_id, handicap)
-       VALUES ($1, $2)`,
-      [user.id, handicap ? parseFloat(handicap) : null]
+      `INSERT INTO user_profiles (
+        user_id, handicap, location, home_course, 
+        preferred_tee_time, walk_or_ride, playing_partner_preference
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        user.id, 
+        handicap ? parseFloat(handicap) : null,
+        location || null,
+        homeCourse || null,
+        preferredTeeTime || null,
+        walkOrRide || null,
+        playingPartnerPreference || null,
+      ]
     );
     
     await client.query('COMMIT');
     
     // Return user with profile data
-    return { ...user, handicap: handicap ? parseFloat(handicap) : null, social_rate: 5.0 };
+    return { 
+      ...user, 
+      handicap: handicap ? parseFloat(handicap) : null, 
+      social_rate: 5.0,
+      location,
+      home_course: homeCourse,
+      preferred_tee_time: preferredTeeTime,
+      walk_or_ride: walkOrRide,
+      playing_partner_preference: playingPartnerPreference,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -154,6 +180,7 @@ const create = async (userData) => {
     client.release();
   }
 };
+
 
 /**
  * Update user by ID (general update)
@@ -237,51 +264,104 @@ const updatePassword = async (userId, passwordHash) => {
 };
 
 /**
+ * Convert camelCase to snake_case
+ * @param {string} str
+ * @returns {string}
+ */
+const toSnakeCase = (str) => {
+  return str.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase());
+};
+
+
+/**
  * Update user profile
+ * Updates both users table and user_profiles table
  * @param {string} userId
  * @param {Object} updates
  * @returns {Promise<Object>}
  */
 const updateProfile = async (userId, updates) => {
-  const allowedFields = [
-    "first_name",
-    "last_name",
-    "email",
+  // Fields in users table
+  const userFields = ["first_name", "last_name", "email"];
+  
+  // Fields in user_profiles table
+  const profileFields = [
+    "handicap",
+    "location",
+    "home_course",
+    "bio",
+    "preferred_tee_time",
+    "walk_or_ride",
+    "playing_partner_preference",
     "avatar_url",
     "timezone",
     "language",
   ];
 
-  const fields = [];
-  const values = [];
-  let paramIndex = 1;
+  const client = await getClient();
 
-  Object.keys(updates).forEach((key) => {
-    const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-    if (allowedFields.includes(snakeKey)) {
-      fields.push(`${snakeKey} = $${paramIndex++}`);
-      values.push(updates[key]);
+  try {
+    await client.query('BEGIN');
+
+    // Build user table updates
+    const userUpdates = [];
+    const userValues = [];
+    let userParamIndex = 1;
+
+    Object.keys(updates).forEach((key) => {
+      const snakeKey = toSnakeCase(key);
+      if (userFields.includes(snakeKey)) {
+        userUpdates.push(snakeKey + " = $" + userParamIndex++);
+        userValues.push(updates[key]);
+      }
+    });
+
+    // Update users table if there are user fields
+    if (userUpdates.length > 0) {
+      userUpdates.push("updated_at = NOW()");
+      userValues.push(userId);
+      const userQuery = "UPDATE users SET " + userUpdates.join(", ") + " WHERE id = $" + userParamIndex + " AND deleted_at IS NULL";
+      await client.query(userQuery, userValues);
     }
-  });
 
-  if (fields.length === 0) {
-    throw new Error("No valid fields to update");
+    // Build profile table updates
+    const profileUpdates = [];
+    const profileValues = [];
+    let profileParamIndex = 1;
+
+    Object.keys(updates).forEach((key) => {
+      const snakeKey = toSnakeCase(key);
+      if (profileFields.includes(snakeKey)) {
+        profileUpdates.push(snakeKey + " = $" + profileParamIndex++);
+        // Handle handicap as float
+        if (snakeKey === 'handicap') {
+          profileValues.push(updates[key] !== null && updates[key] !== '' ? parseFloat(updates[key]) : null);
+        } else {
+          profileValues.push(updates[key]);
+        }
+      }
+    });
+
+    // Update user_profiles table if there are profile fields
+    if (profileUpdates.length > 0) {
+      profileUpdates.push("updated_at = NOW()");
+      profileValues.push(userId);
+      const profileQuery = "UPDATE user_profiles SET " + profileUpdates.join(", ") + " WHERE user_id = $" + profileParamIndex;
+      await client.query(profileQuery, profileValues);
+    }
+
+    await client.query('COMMIT');
+
+    // Return updated user with profile
+    return findById(userId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  fields.push(`updated_at = NOW()`);
-  values.push(userId);
-
-  const result = await query(
-    `UPDATE users 
-     SET ${fields.join(", ")} 
-     WHERE id = $${paramIndex} AND deleted_at IS NULL
-     RETURNING id, phone_number, email, first_name, last_name, 
-               avatar_url, timezone, language, updated_at`,
-    values
-  );
-
-  return result.rows[0];
 };
+
 
 /**
  * Update last login information
@@ -388,6 +468,7 @@ const softDelete = async (userId) => {
   );
 };
 
+
 /**
  * Check if phone number exists
  * @param {string} phoneNumber
@@ -435,6 +516,26 @@ const getStatistics = async () => {
   return result.rows[0];
 };
 
+/**
+ * Get public profile for another user (limited fields for privacy)
+ * @param {string} userId
+ * @returns {Promise<Object|null>}
+ */
+const getPublicProfile = async (userId) => {
+  const result = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.username,
+            p.handicap, p.social_rate, p.avatar_url, p.location, p.home_course,
+            p.preferred_tee_time, p.walk_or_ride, p.bio,
+            p.rounds_played, p.average_score
+     FROM users u
+     LEFT JOIN user_profiles p ON u.id = p.user_id
+     WHERE u.id = $1 AND u.deleted_at IS NULL AND u.is_active = true
+     LIMIT 1`,
+    [userId]
+  );
+  return result.rows[0] || null;
+};
+
 module.exports = {
   findByPhoneNumber,
   findByEmail,
@@ -453,4 +554,5 @@ module.exports = {
   phoneNumberExists,
   emailExists,
   getStatistics,
+  getPublicProfile,
 };

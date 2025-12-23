@@ -46,6 +46,7 @@ export interface ApiEndpoints {
   TEE_TIMES: string;
   TEE_TIMES_UPCOMING: string;
   TEE_TIMES_CALENDAR: string;
+  TEE_TIMES_HISTORY: string;
   // Invites
   INVITES: string;
   INVITES_FROM_ROSTER: string;
@@ -63,6 +64,18 @@ export interface ApiEndpoints {
   COURSES_NEARBY: string;
   COURSES_POPULAR: string;
   COURSES_FAVORITES: string;
+  // Social Rate
+  SOCIAL_RATE: string;
+  SOCIAL_RATE_HISTORY: string;
+  // Notifications
+  NOTIFICATIONS: string;
+  NOTIFICATIONS_UNREAD_COUNT: string;
+  NOTIFICATIONS_READ_ALL: string;
+  // Draft (QR Code)
+  DRAFT_QR: string;
+  DRAFT_QR_REGENERATE: string;
+  DRAFT_SCAN: string;
+  DRAFT_CONFIRM: string;
   // Health
   HEALTH: string;
 }
@@ -95,6 +108,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   TEE_TIMES: `${API_URL}/api/tee-times`,
   TEE_TIMES_UPCOMING: `${API_URL}/api/tee-times/upcoming`,
   TEE_TIMES_CALENDAR: `${API_URL}/api/tee-times/calendar`,
+  TEE_TIMES_HISTORY: `${API_URL}/api/tee-times/history`,
   // Invites
   INVITES: `${API_URL}/api/invites`,
   INVITES_FROM_ROSTER: `${API_URL}/api/invites/from-roster`,
@@ -112,6 +126,18 @@ export const API_ENDPOINTS: ApiEndpoints = {
   COURSES_NEARBY: `${API_URL}/api/courses/nearby`,
   COURSES_POPULAR: `${API_URL}/api/courses/popular`,
   COURSES_FAVORITES: `${API_URL}/api/courses/favorites`,
+  // Social Rate
+  SOCIAL_RATE: `${API_URL}/api/social-rate`,
+  SOCIAL_RATE_HISTORY: `${API_URL}/api/social-rate/history`,
+  // Notifications
+  NOTIFICATIONS: `${API_URL}/api/notifications`,
+  NOTIFICATIONS_UNREAD_COUNT: `${API_URL}/api/notifications/unread-count`,
+  NOTIFICATIONS_READ_ALL: `${API_URL}/api/notifications/read-all`,
+  // Draft (QR Code)
+  DRAFT_QR: `${API_URL}/api/draft/qr`,
+  DRAFT_QR_REGENERATE: `${API_URL}/api/draft/qr/regenerate`,
+  DRAFT_SCAN: `${API_URL}/api/draft/scan`,
+  DRAFT_CONFIRM: `${API_URL}/api/draft/confirm`,
   // Health
   HEALTH: `${API_URL}/health`,
 };

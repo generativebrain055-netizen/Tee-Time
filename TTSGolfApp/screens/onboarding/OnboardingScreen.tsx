@@ -132,6 +132,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         Math.random() * 1000
       )}`;
 
+      // Map preferences to backend format
+      const mapPreferredTime = (times: string[] | undefined): string => {
+        if (!times || times.length === 0) return "any";
+        const timeMap: Record<string, string> = {
+          "morning": "morning",
+          "late_morning": "midday",
+          "afternoon": "afternoon",
+          "evening": "evening",
+          "any": "any",
+        };
+        // Use first time preference or "any"
+        return timeMap[times[0]] || "any";
+      };
+
+      const mapGroupSize = (count: string | undefined): string => {
+        if (!count) return "any";
+        const sizeMap: Record<string, string> = {
+          "1": "solo",
+          "2": "twosome",
+          "3": "threesome",
+          "4": "foursome",
+        };
+        return sizeMap[count] || "any";
+      };
+
       // Register user directly via /auth/register endpoint (passwordless signup)
       const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: "POST",
@@ -143,6 +168,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           username: username,
           email: finalData.email || null,
           handicap: finalData.handicap ? parseInt(finalData.handicap as string) : null,
+          location: finalData.location?.name || null,
+          homeCourse: finalData.club?.name || null,
+          preferredTeeTime: mapPreferredTime(finalData.preferences?.preferredTimes),
+          walkOrRide: finalData.preferences?.playStyle || "either",
+          playingPartnerPreference: mapGroupSize(finalData.preferences?.playerCount),
         }),
       });
 

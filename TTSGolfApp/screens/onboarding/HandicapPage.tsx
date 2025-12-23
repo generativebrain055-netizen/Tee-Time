@@ -5,50 +5,36 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  StatusBar,
-  ScrollView,
-  ViewStyle,
-  TextStyle,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, borderRadius, fontSize } from "../../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { ArrowLeft, AlertCircle, HelpCircle } from "lucide-react-native";
 import type { HandicapPageProps } from "../../types";
 
-interface Styles {
-  container: ViewStyle;
-  header: ViewStyle;
-  skipText: TextStyle;
-  progressBarContainer: ViewStyle;
-  progressBarFill: ViewStyle;
-  content: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  inputContainer: ViewStyle;
-  input: TextStyle;
-  inputError: ViewStyle;
-  errorContainer: ViewStyle;
-  errorText: TextStyle;
-  infoCard: ViewStyle;
-  infoIcon: ViewStyle;
-  infoContent: ViewStyle;
-  infoTitle: TextStyle;
-  infoText: TextStyle;
-  rangeHints: ViewStyle;
-  rangeHint: ViewStyle;
-  rangeLabel: TextStyle;
-  rangeValue: TextStyle;
-  footer: ViewStyle;
-  primaryBtn: ViewStyle;
-  primaryBtnDisabled: ViewStyle;
-  primaryBtnText: TextStyle;
-}
+// Colors - consistent with LoginScreen
+const COLORS = {
+  primary: "#5DB075",
+  primaryLight: "#E8F5E9",
+  white: "#FFFFFF",
+  black: "#000000",
+  textMain: "#1A1A1A",
+  textSub: "#6B7280",
+  textPlaceholder: "#9CA3AF",
+  border: "#E5E7EB",
+  surface: "#F9FAFB",
+  error: "#EF4444",
+};
 
 export const HandicapPage: React.FC<HandicapPageProps> = ({
   onNext,
   onBack,
   initialHandicap = "",
 }) => {
+  const insets = useSafeAreaInsets();
   const [handicap, setHandicap] = useState<string>(initialHandicap);
   const [error, setError] = useState<string>("");
 
@@ -76,7 +62,7 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
 
   const handleNext = (): void => {
     if (!validateHandicap(handicap)) return;
-
+    Keyboard.dismiss();
     const handicapValue = handicap !== "" ? parseFloat(handicap) : null;
     onNext({ handicap: handicapValue });
   };
@@ -88,187 +74,201 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
   const isValid = handicap === "" || (error === "" && handicap !== "");
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+      <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.content}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+                <Text style={styles.skipText}>Skip</Text>
+              </TouchableOpacity>
+            </View>
 
-        <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBarFill, { width: "50%" }]} />
-        </View>
+            {/* Main Content */}
+            <View style={styles.mainContent}>
+              <Text style={styles.title}>What's your handicap?</Text>
+              <Text style={styles.subtitle}>
+                This helps us match you with players of similar skill
+              </Text>
 
-        <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
-      </View>
+              {/* Form */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Handicap index</Text>
+                <TextInput
+                  style={[styles.input, error && styles.inputError]}
+                  placeholder="Enter your handicap (e.g., 12.5)"
+                  placeholderTextColor={COLORS.textPlaceholder}
+                  value={handicap}
+                  onChangeText={handleChange}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                  onSubmitEditing={handleNext}
+                />
+                {error ? (
+                  <View style={styles.errorContainer}>
+                    <AlertCircle size={14} color={COLORS.error} />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                ) : null}
+              </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>What's your handicap?</Text>
-        <Text style={styles.subtitle}>
-          This helps us match you with players of similar skill
-        </Text>
+              {/* Info Card */}
+              <View style={styles.infoCard}>
+                <HelpCircle size={24} color={COLORS.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoTitle}>Don't have a handicap?</Text>
+                  <Text style={styles.infoText}>
+                    No worries! You can skip this for now and add it later in your profile settings.
+                  </Text>
+                </View>
+              </View>
 
-        <View style={[styles.inputContainer, error ? styles.inputError : null]}>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your handicap (e.g., 12.5)"
-            placeholderTextColor="#BDBDBD"
-            value={handicap}
-            onChangeText={handleChange}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            onSubmitEditing={handleNext}
-          />
-        </View>
+              {/* Range Hints */}
+              <View style={styles.rangeHints}>
+                <View style={styles.rangeHint}>
+                  <Text style={styles.rangeLabel}>Scratch</Text>
+                  <Text style={styles.rangeValue}>0</Text>
+                </View>
+                <View style={styles.rangeHint}>
+                  <Text style={styles.rangeLabel}>Average</Text>
+                  <Text style={styles.rangeValue}>15-20</Text>
+                </View>
+                <View style={styles.rangeHint}>
+                  <Text style={styles.rangeLabel}>Beginner</Text>
+                  <Text style={styles.rangeValue}>25+</Text>
+                </View>
+              </View>
+            </View>
 
-        {error ? (
-          <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle" size={16} color="#E53935" />
-            <Text style={styles.errorText}>{error}</Text>
+            {/* Bottom Section */}
+            <View style={styles.bottomSection}>
+              <TouchableOpacity
+                style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
+                onPress={handleNext}
+                disabled={!isValid}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nextButtonText}>
+                  {handicap ? "Next" : "Skip"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        ) : null}
-
-        <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
-            <Ionicons name="help-circle" size={24} color="#5DB075" />
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>Don't have a handicap?</Text>
-            <Text style={styles.infoText}>
-              No worries! You can skip this for now and add it later in your
-              profile settings.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.rangeHints}>
-          <View style={styles.rangeHint}>
-            <Text style={styles.rangeLabel}>Scratch</Text>
-            <Text style={styles.rangeValue}>0</Text>
-          </View>
-          <View style={styles.rangeHint}>
-            <Text style={styles.rangeLabel}>Average</Text>
-            <Text style={styles.rangeValue}>15-20</Text>
-          </View>
-          <View style={styles.rangeHint}>
-            <Text style={styles.rangeLabel}>Beginner</Text>
-            <Text style={styles.rangeValue}>25+</Text>
-          </View>
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.primaryBtn, !isValid && styles.primaryBtnDisabled]}
-          onPress={handleNext}
-          disabled={!isValid}
-        >
-          <Text style={styles.primaryBtnText}>
-            {handicap ? "Next" : "Skip"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create<Styles>({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: COLORS.white,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  skipText: {
-    color: "#666666",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  progressBarContainer: {
+  keyboardView: {
     flex: 1,
-    height: 4,
-    backgroundColor: "#E0E0E0",
-    borderRadius: 2,
-    marginHorizontal: 20,
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#5DB075",
-    borderRadius: 2,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  header: {
+    height: 56,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  skipButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  skipText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.textSub,
+  },
+  mainContent: {
+    flex: 1,
+    paddingTop: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#000000",
+    fontSize: 28,
+    fontWeight: "700",
+    color: COLORS.textMain,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666666",
-    marginBottom: 30,
+    fontSize: 15,
+    color: COLORS.textSub,
     lineHeight: 22,
+    marginBottom: 40,
   },
   inputContainer: {
-    marginBottom: 12,
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textSub,
+    marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-    borderRadius: 8,
-    paddingVertical: 16,
+    height: 56,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: "#000000",
+    color: COLORS.textMain,
   },
   inputError: {
-    borderColor: "#E53935",
+    borderWidth: 1,
+    borderColor: COLORS.error,
   },
   errorContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 20,
+    marginTop: 8,
   },
   errorText: {
-    fontSize: 14,
-    color: "#E53935",
+    fontSize: 13,
+    color: COLORS.error,
   },
   infoCard: {
     flexDirection: "row",
-    backgroundColor: "#E8F5E9",
-    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
     padding: 16,
-    marginTop: 20,
-    marginBottom: 30,
     gap: 12,
-  },
-  infoIcon: {
-    marginTop: 2,
+    marginBottom: 24,
   },
   infoContent: {
     flex: 1,
   },
   infoTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    color: "#000000",
+    color: COLORS.textMain,
     marginBottom: 4,
   },
   infoText: {
     fontSize: 14,
-    color: "#666666",
+    color: COLORS.textSub,
     lineHeight: 20,
   },
   rangeHints: {
@@ -276,38 +276,37 @@ const styles = StyleSheet.create<Styles>({
     justifyContent: "space-around",
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: "#E8E8E8",
+    borderTopColor: COLORS.border,
   },
   rangeHint: {
     alignItems: "center",
   },
   rangeLabel: {
     fontSize: 12,
-    color: "#666666",
+    color: COLORS.textSub,
     marginBottom: 4,
   },
   rangeValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#5DB075",
+    color: COLORS.primary,
   },
-  footer: {
-    padding: spacing.xl,
-    marginTop: "auto",
+  bottomSection: {
+    paddingBottom: 32,
   },
-  primaryBtn: {
-    backgroundColor: colors.buttonPrimary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: 18,
-    alignItems: "center",
+  nextButton: {
+    height: 56,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
     justifyContent: "center",
+    alignItems: "center",
   },
-  primaryBtnDisabled: {
-    opacity: 0.5,
+  nextButtonDisabled: {
+    opacity: 0.6,
   },
-  primaryBtnText: {
-    color: colors.white,
-    fontSize: fontSize.md,
-    fontWeight: "bold",
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.white,
   },
 });

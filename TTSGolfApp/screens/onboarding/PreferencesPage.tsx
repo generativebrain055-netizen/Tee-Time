@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, ChevronDown, Check } from "lucide-react-native";
 import type { PreferencesPageProps, PreferencesData } from "../../types";
 
-// Colors
+// Consistent colors with login screen
 const COLORS = {
   primary: "#5DB075",
   primaryLight: "#E8F5E9",
@@ -37,8 +37,6 @@ const TIME_OPTIONS: DropdownOption[] = [
   { label: "Late morning", value: "late_morning" },
   { label: "Afternoon", value: "afternoon" },
   { label: "Evening", value: "evening" },
-  { label: "Morning, Late morning", value: "morning,late_morning" },
-  { label: "Afternoon, Evening", value: "afternoon,evening" },
   { label: "Any time", value: "any" },
 ];
 
@@ -49,11 +47,13 @@ const PLAY_STYLE_OPTIONS: DropdownOption[] = [
 ];
 
 const PARTNER_COUNT_OPTIONS: DropdownOption[] = [
-  { label: "1", value: "1" },
-  { label: "2", value: "2" },
-  { label: "3", value: "3" },
-  { label: "4", value: "4" },
+  { label: "Solo (1 player)", value: "solo" },
+  { label: "Twosome (2 players)", value: "twosome" },
+  { label: "Threesome (3 players)", value: "threesome" },
+  { label: "Foursome (4 players)", value: "foursome" },
+  { label: "Any group size", value: "any" },
 ];
+
 
 interface DropdownProps {
   label: string;
@@ -72,6 +72,11 @@ const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value);
+
+  const handleSelect = useCallback((optionValue: string) => {
+    onSelect(optionValue);
+    setIsOpen(false);
+  }, [onSelect]);
 
   return (
     <View style={styles.dropdownContainer}>
@@ -116,10 +121,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                     styles.optionItem,
                     item.value === value && styles.optionItemSelected,
                   ]}
-                  onPress={() => {
-                    onSelect(item.value);
-                    setIsOpen(false);
-                  }}
+                  onPress={() => handleSelect(item.value)}
                 >
                   <Text
                     style={[
@@ -158,10 +160,9 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     initialPreferences.playerCount || ""
   );
 
-  // Validation - all fields required
   const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
 
-  const handleNext = (): void => {
+  const handleNext = useCallback((): void => {
     if (!isValid) return;
 
     const preferencesData: PreferencesData = {
@@ -170,11 +171,11 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
       playerCount: partnerCount,
     };
     onNext({ preferences: preferencesData });
-  };
+  }, [isValid, playStyle, preferredTime, partnerCount, onNext]);
 
-  const handleSkip = (): void => {
+  const handleSkip = useCallback((): void => {
     onNext({ preferences: null });
-  };
+  }, [onNext]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
@@ -185,7 +186,6 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.content}>
-          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={onBack}>
               <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
@@ -198,12 +198,10 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Main Content */}
           <View style={styles.mainContent}>
             <Text style={styles.title}>Playing preferences</Text>
             <Text style={styles.subtitle}>Tell us how you like to play</Text>
 
-            {/* Dropdowns */}
             <Dropdown
               label="What time of day do you like to play?"
               value={preferredTime}
@@ -221,15 +219,14 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             />
 
             <Dropdown
-              label="How many partners do you usually play with?"
+              label="Preferred group size"
               value={partnerCount}
               options={PARTNER_COUNT_OPTIONS}
               onSelect={setPartnerCount}
-              placeholder="Select number..."
+              placeholder="Select group size..."
             />
           </View>
 
-          {/* Bottom Section */}
           <View style={styles.bottomSection}>
             <TouchableOpacity
               style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
@@ -245,6 +242,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -307,7 +305,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 32,
   },
-  // Dropdown styles
   dropdownContainer: {
     marginBottom: 24,
   },
@@ -335,7 +332,6 @@ const styles = StyleSheet.create({
   dropdownPlaceholder: {
     color: COLORS.textPlaceholder,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -379,7 +375,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-  // Bottom section
   bottomSection: {
     paddingBottom: 32,
   },

@@ -20,6 +20,10 @@ const teeTimeRoutes = require("./routes/teeTimes");
 const inviteRoutes = require("./routes/invites");
 const friendRoutes = require("./routes/friends");
 const courseRoutes = require("./routes/courses");
+const socialRateRoutes = require("./routes/socialRate");
+const attendanceRoutes = require("./routes/attendance");
+const notificationRoutes = require("./routes/notifications");
+const draftRoutes = require("./routes/draft");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,9 +73,13 @@ app.get("/health", (req, res) => {
 app.use("/auth", authRoutes);
 app.use("/api/roster", rosterRoutes);
 app.use("/api/tee-times", teeTimeRoutes);
+app.use("/api/tee-times", attendanceRoutes); // Attendance routes under tee-times
 app.use("/api/invites", inviteRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/social-rate", socialRateRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/draft", draftRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

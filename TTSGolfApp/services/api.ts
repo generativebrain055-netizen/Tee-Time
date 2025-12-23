@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS, API_URL } from "../config/api";
+import { sessionManager } from "../utils/sessionManager";
 
 // Types
 export interface RosterContact {
@@ -84,8 +85,8 @@ const refreshAccessToken = async (): Promise<string | null> => {
       return data.accessToken;
     }
 
-    // Refresh failed - clear tokens
-    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+    // Refresh failed - clear tokens and trigger session expired
+    await sessionManager.handleSessionExpired();
     return null;
   } catch (error) {
     console.error("Token refresh failed:", error);
@@ -124,8 +125,8 @@ const apiCall = async <T>(
       }
       return retryData;
     }
-    // Token refresh failed
-    throw new Error("Session expired. Please login again.");
+    // Token refresh failed - session manager already handled redirect
+    throw new Error("Session expired");
   }
 
   const data = await response.json();
@@ -153,6 +154,17 @@ export interface RosterGroup {
   isDefault: boolean;
   isOwner?: boolean;
   ownerId?: string;
+  sortPreference?: 'position' | 'socialRate' | 'handicap' | 'name' | 'distance' | 'membership';
+}
+
+export interface AutoInviteMember {
+  id: string;
+  userId?: string;
+  phone?: string;
+  name: string;
+  avatar?: string;
+  handicap?: number;
+  socialRate?: number;
 }
 
 export interface MemberProfile {
@@ -312,6 +324,17 @@ export const rosterApi = {
       body: JSON.stringify(data),
     }),
 
+  // Update group sort preference
+  updateGroupSort: (groupId: string, sortBy: 'position' | 'socialRate' | 'handicap' | 'name' | 'distance' | 'membership') =>
+    apiCall<{ success: boolean; sortPreference: string }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}/sort`, {
+      method: "PUT",
+      body: JSON.stringify({ sortBy }),
+    }),
+
+  // Get auto-invite members for tee time creation
+  getAutoInviteMembers: (groupId: string) =>
+    apiCall<{ success: boolean; members: AutoInviteMember[]; count: number }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}/auto-invite`),
+
   // Delete group
   deleteGroup: (groupId: string) =>
     apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}`, {
@@ -345,6 +368,28 @@ export const rosterApi = {
 };
 
 // ============ TEE TIMES API ============
+
+export interface TeeTimeHistoryEntry {
+  id: string;
+  courseName: string;
+  courseLocation?: string;
+  teeDate: string;
+  teeTime: string;
+  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+  userRole: 'organizer' | 'participant';
+  participantStatus?: string;
+  attendanceStatus?: 'pending' | 'present' | 'no_show' | 'cancelled';
+  gameScore?: number;
+  holesPlayed?: number;
+  organizer: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar?: string;
+  };
+  participantCount: number;
+  maxPlayers: number;
+}
 
 export const teeTimeApi = {
   // Create tee time
@@ -389,6 +434,18 @@ export const teeTimeApi = {
     apiCall<{ success: boolean; calendar: Record<string, TeeTime[]> }>(
       `${API_ENDPOINTS.TEE_TIMES_CALENDAR}?start=${start}&end=${end}`
     ),
+
+  // Get complete tee time history
+  getHistory: (params?: { filter?: 'all' | 'upcoming' | 'completed' | 'cancelled' | 'no_show'; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.filter) query.append('filter', params.filter);
+    if (params?.limit) query.append('limit', params.limit.toString());
+    if (params?.offset) query.append('offset', params.offset.toString());
+    const queryStr = query.toString();
+    return apiCall<{ success: boolean; history: TeeTimeHistoryEntry[] }>(
+      `${API_ENDPOINTS.TEE_TIMES_HISTORY}${queryStr ? `?${queryStr}` : ''}`
+    );
+  },
 };
 
 // ============ INVITES API ============
@@ -677,4 +734,245 @@ export const courseApi = {
   // Get user's favorites
   getFavorites: () =>
     apiCall<{ success: boolean; courses: GolfCourse[] }>(API_ENDPOINTS.COURSES_FAVORITES),
+};
+
+// ============ SOCIAL RATE API ============
+
+export interface SocialRateStats {
+  totalAccepts: number;
+  totalLateDeclines: number;
+  totalLateCancellations: number;
+  totalNoShows: number;
+  totalEarned: number;
+  totalLost: number;
+}
+
+export interface SocialRateData {
+  currentScore: number;
+  stats: SocialRateStats;
+}
+
+export interface SocialRateLogEntry {
+  id: string;
+  delta: number;
+  previousScore: number;
+  newScore: number;
+  reason: string;
+  reasonDetails?: string;
+  teeTime?: {
+    id: string;
+    courseName: string;
+    date: string;
+    time: string;
+  };
+  createdAt: string;
+}
+
+export const socialRateApi = {
+  // Get current user's social rate
+  getCurrentScore: () =>
+    apiCall<{ success: boolean; socialRate: SocialRateData }>(API_ENDPOINTS.SOCIAL_RATE),
+
+  // Get score history
+  getHistory: (limit = 50, offset = 0) =>
+    apiCall<{ success: boolean; history: SocialRateLogEntry[] }>(
+      `${API_ENDPOINTS.SOCIAL_RATE_HISTORY}?limit=${limit}&offset=${offset}`
+    ),
+
+  // Get another user's score
+  getUserScore: (userId: string) =>
+    apiCall<{ success: boolean; socialRate: { userId: string; currentScore: number } }>(
+      `${API_ENDPOINTS.SOCIAL_RATE}/user/${userId}`
+    ),
+};
+
+// ============ ATTENDANCE API ============
+
+export interface AttendanceRecord {
+  id: string;
+  participantId: string;
+  userId?: string;
+  name: string;
+  avatar?: string;
+  isCreator: boolean;
+  status: 'pending' | 'present' | 'no_show' | 'cancelled';
+  checkedInAt?: string;
+  markedNoShowAt?: string;
+  penaltyApplied: boolean;
+}
+
+export interface AttendanceSummary {
+  total: number;
+  present: number;
+  noShow: number;
+  cancelled: number;
+  pending: number;
+}
+
+export const attendanceApi = {
+  // Get attendance for a tee time (organizer only)
+  getAttendance: (teeTimeId: string) =>
+    apiCall<{
+      success: boolean;
+      checkInAvailable: boolean;
+      checkInMessage?: string;
+      summary: AttendanceSummary;
+      attendance: AttendanceRecord[];
+    }>(`${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/attendance`),
+
+  // One-tap check-in all
+  checkInAll: (teeTimeId: string) =>
+    apiCall<{ success: boolean; message: string; checkedIn: number }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/check-in/all`,
+      { method: "POST" }
+    ),
+
+  // Update individual attendance
+  updateAttendance: (teeTimeId: string, attendanceId: string, status: 'present' | 'no_show') =>
+    apiCall<{ success: boolean; message: string; attendance: { id: string; status: string; penaltyApplied: boolean } }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/check-in/${attendanceId}`,
+      { method: "POST", body: JSON.stringify({ status }) }
+    ),
+
+  // Cancel own participation
+  cancelParticipation: (teeTimeId: string) =>
+    apiCall<{ success: boolean; message: string; penaltyApplied: boolean }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/cancel-participation`,
+      { method: "POST" }
+    ),
+};
+
+// ============ NOTIFICATIONS API ============
+
+export interface AppNotification {
+  id: string;
+  type: 'push' | 'email' | 'sms' | 'in_app';
+  channel?: string;
+  title: string;
+  body: string;
+  data: {
+    type?: string;
+    // Friend request data
+    senderId?: string;
+    senderName?: string;
+    senderAvatar?: string;
+    // Friend accepted data
+    userId?: string;
+    userName?: string;
+    userAvatar?: string;
+    // Roster add data
+    ownerId?: string;
+    ownerName?: string;
+    // Tee time invite data
+    teeTimeId?: string;
+    inviterId?: string;
+    inviterName?: string;
+    courseName?: string;
+    date?: string;
+    time?: string;
+    // Tee time response data
+    responderId?: string;
+    responderName?: string;
+    accepted?: boolean;
+    // Legacy fields
+    groupName?: string;
+    rosterId?: string;
+    [key: string]: any;
+  };
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
+export const notificationApi = {
+  // Get notifications
+  getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.append('limit', params.limit.toString());
+    if (params?.offset) query.append('offset', params.offset.toString());
+    if (params?.unreadOnly) query.append('unreadOnly', 'true');
+    const queryStr = query.toString();
+    return apiCall<{ success: boolean; notifications: AppNotification[] }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}${queryStr ? `?${queryStr}` : ''}`
+    );
+  },
+
+  // Get unread count
+  getUnreadCount: () =>
+    apiCall<{ success: boolean; count: number }>(API_ENDPOINTS.NOTIFICATIONS_UNREAD_COUNT),
+
+  // Mark notification as read
+  markAsRead: (notificationId: string) =>
+    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/read`, {
+      method: "PUT",
+    }),
+
+  // Mark all as read
+  markAllAsRead: () =>
+    apiCall<{ success: boolean; count: number; message: string }>(API_ENDPOINTS.NOTIFICATIONS_READ_ALL, {
+      method: "PUT",
+    }),
+
+  // Delete notification
+  deleteNotification: (notificationId: string) =>
+    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}`, {
+      method: "DELETE",
+    }),
+};
+
+
+// ============ DRAFT (QR CODE) API ============
+
+export interface DraftQRCode {
+  data: string;  // Base64 encoded QR payload
+  version: number;
+}
+
+export interface ScannedUser {
+  id: string;
+  name: string;
+  avatar?: string;
+  socialRate?: number;
+  handicap?: number;
+  homeCourse?: string;
+  location?: string;
+}
+
+export interface ScanResult {
+  success: boolean;
+  user?: ScannedUser;
+  mutualClubs?: string[];
+  confirmationRequired?: boolean;
+  message?: string;
+  code?: string;
+}
+
+export const draftApi = {
+  // Get or generate QR code for "Get Drafted"
+  getQRCode: () =>
+    apiCall<{ success: boolean; qrCode: DraftQRCode }>(API_ENDPOINTS.DRAFT_QR),
+
+  // Regenerate QR code (invalidates previous codes)
+  regenerateQRCode: () =>
+    apiCall<{ success: boolean; qrCode: DraftQRCode; message: string }>(
+      API_ENDPOINTS.DRAFT_QR_REGENERATE,
+      { method: "POST" }
+    ),
+
+  // Scan and validate a QR code
+  scanQRCode: (qrData: string) =>
+    apiCall<ScanResult>(API_ENDPOINTS.DRAFT_SCAN, {
+      method: "POST",
+      body: JSON.stringify({ qrData }),
+    }),
+
+  // Confirm adding scanned user to On-Deck
+  confirmDraft: (userId: string) =>
+    apiCall<{ success: boolean; message: string; entry: { id: string; userId: string; isOnDeck: boolean } }>(
+      API_ENDPOINTS.DRAFT_CONFIRM,
+      {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      }
+    ),
 };

@@ -35,12 +35,16 @@ const getCurrentUser = async (req, res, next) => {
         bio: user.bio,
         location: user.location,
         homeCourse: user.home_course,
-        preferredTeeTime: user.preferred_tee_time,
-        walkOrRide: user.walk_or_ride,
         roundsPlayed: user.rounds_played,
         averageScore: user.average_score,
         isVerified: user.is_verified,
         createdAt: user.created_at,
+        // Include preferences as nested object for frontend compatibility
+        preferences: {
+          preferredTeeTime: user.preferred_tee_time,
+          walkOrRide: user.walk_or_ride,
+          playingPartnerPreference: user.playing_partner_preference,
+        },
       },
     });
   } catch (error) {
@@ -55,7 +59,22 @@ const getCurrentUser = async (req, res, next) => {
 const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { firstName, lastName, email, handicap, location, equipment, preferences } = req.body;
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      handicap, 
+      location, 
+      homeCourse, 
+      bio, 
+      preferences 
+    } = req.body;
+
+    logger.info("📝 [PROFILE] Update request:", {
+      userId,
+      preferences,
+      body: req.body,
+    });
 
     // Build update object
     const updates = {};
@@ -63,8 +82,26 @@ const updateProfile = async (req, res, next) => {
     if (lastName !== undefined) updates.lastName = lastName;
     if (email !== undefined) updates.email = email;
     if (handicap !== undefined) updates.handicap = handicap;
+    if (location !== undefined) updates.location = location;
+    if (homeCourse !== undefined) updates.homeCourse = homeCourse;
+    if (bio !== undefined) updates.bio = bio;
+    
+    // Handle preferences
+    if (preferences) {
+      if (preferences.preferredTeeTime !== undefined) {
+        updates.preferredTeeTime = preferences.preferredTeeTime;
+      }
+      if (preferences.walkOrRide !== undefined) {
+        updates.walkOrRide = preferences.walkOrRide;
+      }
+      if (preferences.playingPartnerPreference !== undefined) {
+        updates.playingPartnerPreference = preferences.playingPartnerPreference;
+      }
+    }
 
-    const user = await userRepository.update(userId, updates);
+    logger.info("📝 [PROFILE] Updates to apply:", updates);
+
+    const user = await userRepository.updateProfile(userId, updates);
 
     if (!user) {
       return res.status(404).json({
@@ -72,6 +109,12 @@ const updateProfile = async (req, res, next) => {
         message: "User not found.",
       });
     }
+
+    logger.info("✅ [PROFILE] Updated user:", {
+      playing_partner_preference: user.playing_partner_preference,
+      preferred_tee_time: user.preferred_tee_time,
+      walk_or_ride: user.walk_or_ride,
+    });
 
     return res.json({
       success: true,
@@ -85,6 +128,15 @@ const updateProfile = async (req, res, next) => {
         username: user.username,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        location: user.location,
+        homeCourse: user.home_course,
+        bio: user.bio,
+        // Include preferences as nested object for frontend compatibility
+        preferences: {
+          preferredTeeTime: user.preferred_tee_time,
+          walkOrRide: user.walk_or_ride,
+          playingPartnerPreference: user.playing_partner_preference,
+        },
       },
     });
   } catch (error) {

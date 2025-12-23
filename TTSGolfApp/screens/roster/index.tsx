@@ -4,26 +4,20 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
-import { BottomNav } from "../../components/common";
+import { BottomNav, Header } from "../../components/common";
 import RosterList from "./RosterList";
 import GroupsList from "./GroupsList";
 import OnDeckList from "./OnDeckList";
 import RequestsList from "./RequestsList";
-import GroupDetail from "./GroupDetail";
 
 const TABS = ["Roster", "Groups", "On Deck", "Requests"];
 
 export default function RosterScreen({ navigation, route }: any) {
-    const insets = useSafeAreaInsets();
     const initialTab = route?.params?.initialTab || "Roster";
     const [activeTab, setActiveTab] = useState(initialTab);
-    const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
     useEffect(() => {
         if (route?.params?.initialTab) {
@@ -32,28 +26,9 @@ export default function RosterScreen({ navigation, route }: any) {
     }, [route?.params?.initialTab]);
 
     const handleGroupClick = (groupId: string) => {
-        setSelectedGroupId(groupId);
+        // Navigate to the new GroupProfileScreen
+        navigation?.navigate("GroupProfile", { groupId });
     };
-
-    const handleBackFromGroup = () => {
-        setSelectedGroupId(null);
-    };
-
-    const handleNavigateToCreateTeeTime = (groupId: string) => {
-        // Navigate to CreateTeeTime with group pre-selected
-        navigation?.navigate("CreateTeeTime", { preSelectedGroupId: groupId });
-    };
-
-    // Show GroupDetail if a group is selected
-    if (selectedGroupId) {
-        return (
-            <GroupDetail
-                groupId={selectedGroupId}
-                onBack={handleBackFromGroup}
-                onNavigateToCreateTeeTime={handleNavigateToCreateTeeTime}
-            />
-        );
-    }
 
     const renderContent = () => {
         switch (activeTab) {
@@ -71,20 +46,11 @@ export default function RosterScreen({ navigation, route }: any) {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.container}>
             <StatusBar style="dark" />
 
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation?.goBack()}
-                >
-                    <ArrowLeft size={24} color={COLORS.textMain} strokeWidth={1.5} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Roster</Text>
-                <View style={styles.headerSpacer} />
-            </View>
+            <Header title="Roster" onBack={() => navigation?.goBack()} />
 
             {/* Tab Bar */}
             <View style={styles.tabBar}>
@@ -116,25 +82,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: COLORS.white,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    backButton: {
-        padding: 4,
-        width: 40,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    headerSpacer: {
-        width: 40,
     },
     tabBar: {
         flexDirection: "row",

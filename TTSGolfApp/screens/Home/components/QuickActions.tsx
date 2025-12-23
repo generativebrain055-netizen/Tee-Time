@@ -1,18 +1,20 @@
 import React, { memo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { CalendarPlus, UserPlus, Search } from "lucide-react-native";
+import { CalendarPlus, UserPlus, Search, QrCode } from "lucide-react-native";
 import { COLORS } from "../constants";
 
 interface QuickActionsProps {
     onCreateTeeTime: () => void;
     onInvitePlayers: () => void;
     onFindAvailability: () => void;
+    onScanQR: () => void;
 }
 
 function QuickActions({
     onCreateTeeTime,
     onInvitePlayers,
     onFindAvailability,
+    onScanQR,
 }: QuickActionsProps) {
     return (
         <View style={styles.container}>
@@ -32,6 +34,14 @@ function QuickActions({
                     </View>
                     <Text style={styles.actionLabel}>Invite</Text>
                     <Text style={styles.actionLabel}>Players</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.actionCard} onPress={onScanQR}>
+                    <View style={styles.iconContainer}>
+                        <QrCode size={24} color={COLORS.primary} strokeWidth={1.5} />
+                    </View>
+                    <Text style={styles.actionLabel}>Scan</Text>
+                    <Text style={styles.actionLabel}>QR Code</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.actionCard} onPress={onFindAvailability}>
@@ -67,7 +77,7 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.white,
         borderRadius: 12,
         paddingVertical: 16,
-        paddingHorizontal: 12,
+        paddingHorizontal: 8,
         alignItems: "center",
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -76,11 +86,11 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     actionLabel: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: "500",
         color: COLORS.text,
         textAlign: "center",
-        lineHeight: 16,
+        lineHeight: 14,
     },
 });
 

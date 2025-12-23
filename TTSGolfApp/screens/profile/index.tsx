@@ -1,121 +1,127 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
-    Text,
     StyleSheet,
     ScrollView,
-    TouchableOpacity,
     Alert,
     ActivityIndicator,
+    RefreshControl,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ArrowLeft, Edit2 } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { BottomNav } from "../../components/common";
-import { UserProfile, DEFAULT_USER } from "./types";
-import { profileApi } from "../../services/api";
+import { profileApi, teeTimeApi, TeeTime } from "../../services/api";
+
+// Modular components
 import {
-    ProfilePhotoSection,
-    BasicInfoSection,
-    EquipmentSection,
-    PreferencesSection,
-    SignOutButton,
-} from "./ProfileSections";
+    ProfileBanner,
+    ProfileInfo,
+    ActionButtons,
+    PreferencesCard,
+    MembershipCard,
+    ProfileStats,
+    RecentRounds,
+} from "./components";
 
-export default function ProfileScreen({ navigation, route }: any) {
+// Utility functions
+import {
+    formatScore,
+    getPreferredTeeTimeDisplay,
+    getWalkOrRideDisplay,
+    getGroupSizeDisplay,
+    getInitials,
+    getFullName,
+} from "./utils";
+
+interface UserProfileData {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone: string;
+    location?: string;
+    handicap?: number | string;
+    avatar?: string;
+    homeCourse?: string;
+    bio?: string;
+    socialRate?: number | string;
+    roundsPlayed?: number;
+    preferences?: {
+        preferredTeeTime?: string;
+        walkOrRide?: string;
+        playingPartnerPreference?: string;
+    };
+}
+
+export default function ProfileScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
-    const [isEditMode, setIsEditMode] = useState(false);
-    const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER);
-    const [editedProfile, setEditedProfile] = useState<UserProfile>(profile);
+    const [profile, setProfile] = useState<UserProfileData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [recentRounds, setRecentRounds] = useState<TeeTime[]>([]);
 
-    useEffect(() => {
-        fetchProfile();
-    }, []);
-
-    const fetchProfile = async () => {
-        setLoading(true);
+    // Fetch profile data
+    const fetchProfile = useCallback(async () => {
         try {
-            // First try to get from API
-            const response = await profileApi.getCurrentUser();
-            if (response.success && response.user) {
-                const userData = response.user;
-                const fetchedProfile: UserProfile = {
-                    ...DEFAULT_USER,
-                    firstName: userData.firstName || DEFAULT_USER.firstName,
-                    lastName: userData.lastName || DEFAULT_USER.lastName,
-                    phone: userData.phoneNumber || DEFAULT_USER.phone,
-                    email: userData.email || DEFAULT_USER.email,
-                    handicap: userData.handicap?.toString() || DEFAULT_USER.handicap,
-                    username: userData.username || DEFAULT_USER.username,
-                    location: userData.location || DEFAULT_USER.location,
-                    homeCourse: userData.homeCourse || DEFAULT_USER.homeCourse,
-                    bio: userData.bio || DEFAULT_USER.bio,
-                };
-                setProfile(fetchedProfile);
-                setEditedProfile(fetchedProfile);
+            const [profileRes, teeTimesRes] = await Promise.all([
+                profileApi.getCurrentUser(),
+                teeTimeApi.getTeeTimes("completed").catch(() => ({ success: false, teeTimes: [] })),
+            ]);
+
+            if (profileRes.success && profileRes.user) {
+                const u = profileRes.user;
+                setProfile({
+                    id: u.id,
+                    firstName: u.firstName || "",
+                    lastName: u.lastName || "",
+                    email: u.email,
+                    phone: u.phoneNumber,
+                    location: u.location,
+                    handicap: u.handicap,
+                    avatar: u.avatarUrl,
+                    homeCourse: u.homeCourse,
+                    bio: u.bio,
+                    socialRate: u.socialRate,
+                    roundsPlayed: u.roundsPlayed,
+                    preferences: u.preferences,
+                });
             }
-        } catch (error) {
-            console.error("Error fetching profile from API:", error);
-            // Fallback to route params or stored user
-            try {
-                const storedUser = await AsyncStorage.getItem("user");
-                const userData = route?.params?.user || (storedUser ? JSON.parse(storedUser) : null);
-                if (userData) {
-                    setProfile({
-                        ...DEFAULT_USER,
-                        firstName: userData.firstName || DEFAULT_USER.firstName,
-                        lastName: userData.lastName || DEFAULT_USER.lastName,
-                        phone: userData.phoneNumber || DEFAULT_USER.phone,
-                        handicap: userData.handicap?.toString() || DEFAULT_USER.handicap,
-                    });
-                }
-            } catch (e) {
-                console.error("Error loading stored user:", e);
+
+            if (teeTimesRes.success) {
+                setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
+            }
+        } catch (error: any) {
+            // Don't log session expired errors - they're handled by sessionManager
+            if (error?.message !== "Session expired") {
+                console.error("Error fetching profile:", error);
             }
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const handleSave = async () => {
-        try {
-            const response = await profileApi.updateProfile({
-                firstName: editedProfile.firstName,
-                lastName: editedProfile.lastName,
-                email: editedProfile.email,
-                handicap: editedProfile.handicap ? parseInt(editedProfile.handicap) : undefined,
-            });
+    useEffect(() => {
+        fetchProfile();
+    }, [fetchProfile]);
 
-            if (response.success) {
-                setProfile(editedProfile);
-                setIsEditMode(false);
-                // Update stored user
-                const storedUser = await AsyncStorage.getItem("user");
-                if (storedUser) {
-                    const user = JSON.parse(storedUser);
-                    await AsyncStorage.setItem("user", JSON.stringify({
-                        ...user,
-                        firstName: editedProfile.firstName,
-                        lastName: editedProfile.lastName,
-                    }));
-                }
-                Alert.alert("Success", "Profile updated successfully!");
-            }
-        } catch (error) {
-            console.error("Error saving profile:", error);
-            Alert.alert("Error", "Failed to save profile. Please try again.");
-        }
-    };
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchProfile();
+        setRefreshing(false);
+    }, [fetchProfile]);
 
-    const handleCancel = () => {
-        setEditedProfile(profile);
-        setIsEditMode(false);
-    };
+    // Action handlers
+    const handleEditProfile = useCallback(() => {
+        navigation?.navigate("EditProfile", { profile });
+    }, [navigation, profile]);
 
-    const handleSignOut = () => {
+    const handleDraftViaQR = useCallback(() => {
+        navigation?.navigate("QRCode");
+    }, [navigation]);
+
+    const handleSignOut = useCallback(() => {
         Alert.alert("Sign Out", "Are you sure you want to sign out?", [
             { text: "Cancel", style: "cancel" },
             {
@@ -123,101 +129,79 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        await AsyncStorage.removeItem("accessToken");
-                        await AsyncStorage.removeItem("refreshToken");
-                        await AsyncStorage.removeItem("user");
-                        navigation?.navigate("Login");
+                        await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                        navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
                     } catch (error) {
                         console.error("Error signing out:", error);
                     }
                 },
             },
         ]);
-    };
+    }, [navigation]);
 
-    const handleChangePhoto = () => {
-        Alert.alert("Change Photo", "Choose an option", [
-            { text: "Take Photo", onPress: () => console.log("Camera") },
-            { text: "Choose from Library", onPress: () => console.log("Library") },
-            { text: "Cancel", style: "cancel" },
-        ]);
-    };
+    // Loading state
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+        );
+    }
 
-    const Header = () => (
-        <View style={styles.header}>
-            {isEditMode ? (
-                <>
-                    <TouchableOpacity style={styles.headerButton} onPress={handleCancel}>
-                        <ArrowLeft size={24} color={COLORS.textMain} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Edit Profile</Text>
-                    <TouchableOpacity style={styles.headerButton} onPress={handleSave}>
-                        <Text style={styles.saveText}>Save</Text>
-                    </TouchableOpacity>
-                </>
-            ) : (
-                <>
-                    <View style={{ width: 40 }} />
-                    <Text style={styles.headerTitle}>Profile</Text>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => {
-                            setEditedProfile(profile);
-                            setIsEditMode(true);
-                        }}
-                    >
-                        <Edit2 size={20} color={COLORS.primary} />
-                    </TouchableOpacity>
-                </>
-            )}
-        </View>
-    );
+    // Derived values
+    const fullName = getFullName(profile?.firstName, profile?.lastName);
+    const initials = getInitials(profile?.firstName, profile?.lastName);
+    const coursesPlayed = recentRounds.length > 0
+        ? new Set(recentRounds.map(r => r.courseName)).size
+        : 0;
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <StatusBar style="dark" />
-            <Header />
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                </View>
-            ) : (
-                <ScrollView
-                    style={styles.scrollView}
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <ProfilePhotoSection
-                        profile={isEditMode ? editedProfile : profile}
-                        isEditMode={isEditMode}
-                        onChangePhoto={handleChangePhoto}
-                    />
-                    <BasicInfoSection
-                        profile={profile}
-                        editedProfile={editedProfile}
-                        isEditMode={isEditMode}
-                        setEditedProfile={setEditedProfile}
-                    />
-                    <EquipmentSection
-                        profile={profile}
-                        editedProfile={editedProfile}
-                        isEditMode={isEditMode}
-                        setEditedProfile={setEditedProfile}
-                    />
-                    <PreferencesSection
-                        profile={profile}
-                        editedProfile={editedProfile}
-                        isEditMode={isEditMode}
-                        setEditedProfile={setEditedProfile}
-                    />
-                    {!isEditMode && (
-                        <SignOutButton onSignOut={handleSignOut} />
-                    )}
-                    <View style={{ height: 40 }} />
-                </ScrollView>
-            )}
-            {!isEditMode && <BottomNav activeTab="Profile" navigation={navigation} />}
+        <View style={styles.container}>
+            <StatusBar style="light" />
+
+            <ScrollView
+                style={styles.scrollView}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+                <ProfileBanner
+                    avatar={profile?.avatar}
+                    initials={initials}
+                    topInset={insets.top}
+                    onSignOut={handleSignOut}
+                />
+
+                <ProfileInfo
+                    fullName={fullName}
+                    location={profile?.location}
+                    handicap={profile?.handicap}
+                />
+
+                <ActionButtons
+                    onDraftViaQR={handleDraftViaQR}
+                    onEditProfile={handleEditProfile}
+                />
+
+                <PreferencesCard
+                    teeTimePreference={getPreferredTeeTimeDisplay(profile?.preferences?.preferredTeeTime)}
+                    walkOrRide={getWalkOrRideDisplay(profile?.preferences?.walkOrRide)}
+                    groupSize={getGroupSizeDisplay(profile?.preferences?.playingPartnerPreference)}
+                />
+
+                <MembershipCard homeCourse={profile?.homeCourse} />
+
+                <ProfileStats
+                    roundsPlayed={profile?.roundsPlayed || 0}
+                    coursesPlayed={coursesPlayed}
+                    socialScore={formatScore(profile?.socialRate)}
+                />
+
+                <RecentRounds rounds={recentRounds} />
+
+                <View style={{ height: 100 }} />
+            </ScrollView>
+
+            <BottomNav activeTab="Profile" navigation={navigation} />
         </View>
     );
 }
@@ -225,41 +209,13 @@ export default function ProfileScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.white,
+        backgroundColor: COLORS.bg,
     },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: COLORS.white,
-    },
-    headerButton: {
-        width: 40,
-        height: 40,
+    centered: {
         justifyContent: "center",
         alignItems: "center",
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-    },
-    saveText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
     },
     scrollView: {
         flex: 1,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
     },
 });

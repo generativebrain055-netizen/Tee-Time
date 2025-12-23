@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import {
-    ArrowLeft,
     Calendar,
     MapPin,
     Clock,
@@ -19,18 +18,9 @@ import {
     X,
     Users,
 } from "lucide-react-native";
+import { Header } from "../components/common";
 import { inviteApi, Invite } from "../services/api";
-
-const COLORS = {
-    primary: "#5DB075",
-    bg: "#F6F6F6",
-    white: "#FFFFFF",
-    text: "#1F2937",
-    textSub: "#6B7280",
-    border: "#E5E7EB",
-    success: "#10B981",
-    error: "#EF4444",
-};
+import { COLORS } from "../constants/colors";
 
 export default function InvitesScreen({ navigation }: any) {
     const [activeTab, setActiveTab] = useState<"pending" | "sent">("pending");
@@ -94,16 +84,6 @@ export default function InvitesScreen({ navigation }: any) {
         });
     };
 
-    const Header = () => (
-        <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation?.goBack()}>
-                <ArrowLeft size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Invites</Text>
-            <View style={{ width: 24 }} />
-        </View>
-    );
-
     const TabBar = () => (
         <View style={styles.tabBar}>
             <TouchableOpacity
@@ -164,10 +144,10 @@ export default function InvitesScreen({ navigation }: any) {
                     disabled={responding === invite.id}
                 >
                     {responding === invite.id ? (
-                        <ActivityIndicator size="small" color={COLORS.error} />
+                        <ActivityIndicator size="small" color={COLORS.red} />
                     ) : (
                         <>
-                            <X size={18} color={COLORS.error} />
+                            <X size={18} color={COLORS.red} />
                             <Text style={styles.declineBtnText}>Decline</Text>
                         </>
                     )}
@@ -216,7 +196,7 @@ export default function InvitesScreen({ navigation }: any) {
     return (
         <View style={styles.container}>
             <StatusBar style="dark" />
-            <Header />
+            <Header title="Invites" onBack={() => navigation?.goBack()} />
             <TabBar />
 
             <ScrollView
@@ -258,16 +238,6 @@ export default function InvitesScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.bg },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
-        backgroundColor: COLORS.white,
-    },
-    headerTitle: { fontSize: 18, fontWeight: "bold", color: COLORS.text },
     tabBar: {
         flexDirection: "row",
         backgroundColor: COLORS.white,
@@ -331,7 +301,7 @@ const styles = StyleSheet.create({
     },
     declineBtn: { backgroundColor: "#FEE2E2" },
     acceptBtn: { backgroundColor: COLORS.primary },
-    declineBtnText: { fontSize: 14, fontWeight: "600", color: COLORS.error },
+    declineBtnText: { fontSize: 14, fontWeight: "600", color: COLORS.red },
     acceptBtnText: { fontSize: 14, fontWeight: "600", color: COLORS.white },
     statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     status_pending: { backgroundColor: "#FEF3C7" },

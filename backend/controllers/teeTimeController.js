@@ -12,6 +12,7 @@ class TeeTimeController {
     this.getTeeTime = this.getTeeTime.bind(this);
     this.cancelTeeTime = this.cancelTeeTime.bind(this);
     this.getCalendar = this.getCalendar.bind(this);
+    this.getHistory = this.getHistory.bind(this);
   }
 
   // POST /api/tee-times
@@ -216,6 +217,47 @@ class TeeTimeController {
     } catch (error) {
       logger.error("Get calendar error:", error);
       res.status(500).json({ success: false, message: "Failed to get calendar" });
+    }
+  }
+
+  // GET /api/tee-times/history
+  async getHistory(req, res) {
+    try {
+      const userId = req.user.id;
+      const { filter = 'all', limit = 20, offset = 0 } = req.query;
+
+      const history = await teeTimeRepository.getTeeTimeHistory(userId, {
+        filter,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      });
+
+      const formatted = history.map(t => ({
+        id: t.id,
+        courseName: t.course_name,
+        courseLocation: t.course_location,
+        teeDate: t.tee_date,
+        teeTime: t.tee_time,
+        status: t.tee_time_status,
+        userRole: t.user_role,
+        participantStatus: t.participant_status,
+        attendanceStatus: t.attendance_status,
+        gameScore: t.game_score,
+        holesPlayed: t.holes_played,
+        organizer: {
+          id: t.creator_id,
+          firstName: t.creator_first_name,
+          lastName: t.creator_last_name,
+          avatar: t.creator_avatar
+        },
+        participantCount: parseInt(t.participant_count),
+        maxPlayers: t.max_players
+      }));
+
+      res.json({ success: true, history: formatted });
+    } catch (error) {
+      logger.error("Get tee time history error:", error);
+      res.status(500).json({ success: false, message: "Failed to get history" });
     }
   }
 }

@@ -10,20 +10,10 @@ import {
     Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { Home, Clock, MessageCircle, Users, User, Edit3 } from "lucide-react-native";
+import { MessageCircle, Edit3 } from "lucide-react-native";
 import { friendApi, Friend } from "../../services/api";
-
-const COLORS = {
-    primary: "#5DB075",
-    secondary: "#F6F6F6",
-    textMain: "#1F2937",
-    textSub: "#6B7280",
-    divider: "#E5E7EB",
-    white: "#FFFFFF",
-    bg: "#F6F6F6",
-    unreadBg: "#FFFFFF",
-    readBg: "#F9FAFB",
-};
+import { Header, BottomNav } from "../../components/common";
+import { COLORS } from "../../constants/colors";
 
 interface Conversation {
     id: string;
@@ -84,20 +74,15 @@ export default function MessagesScreen({ navigation }: any) {
                 recipientId: conversation.recipientId,
                 name: conversation.name,
                 subtitle: "Active now",
-                img: conversation.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${conversation.name}`,
+                img: conversation.avatar,
                 isGroup: conversation.isGroup,
             },
         });
     };
 
-    const Header = () => (
-        <View style={styles.header}>
-            <Text style={styles.headerTitle}>Messages</Text>
-            <TouchableOpacity style={styles.composeButton}>
-                <Edit3 size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-        </View>
-    );
+    const handleCompose = useCallback(() => {
+        // Navigate to compose or show friend list
+    }, []);
 
     const TabBar = () => {
         const tabs = ["All", "Tee Times", "Groups"];
@@ -193,69 +178,27 @@ export default function MessagesScreen({ navigation }: any) {
         );
     };
 
-    const BottomNav = () => {
-        const tabs = [
-            { name: "Home", icon: Home, screen: "HomePage" },
-            { name: "Availability", icon: Clock, screen: "Availability" },
-            { name: "Messages", icon: MessageCircle, screen: "Messages" },
-            { name: "Players", icon: Users, screen: "Roster" },
-            { name: "Profile", icon: User, screen: "Profile" },
-        ];
-
-        return (
-            <View style={styles.bottomNav}>
-                {tabs.map((tab) => {
-                    const IconComponent = tab.icon;
-                    const isActive = tab.name === "Messages";
-                    return (
-                        <TouchableOpacity
-                            key={tab.name}
-                            style={styles.bottomNavItem}
-                            onPress={() => {
-                                if (navigation && tab.screen && tab.name !== "Messages") {
-                                    navigation.navigate(tab.screen);
-                                }
-                            }}
-                        >
-                            <IconComponent
-                                size={24}
-                                color={isActive ? COLORS.primary : COLORS.textSub}
-                                strokeWidth={isActive ? 2.5 : 2}
-                            />
-                            <Text style={[styles.bottomNavLabel, { color: isActive ? COLORS.primary : COLORS.textSub }]}>
-                                {tab.name}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-        );
-    };
-
     return (
         <View style={styles.container}>
             <StatusBar style="dark" />
-            <Header />
+            <Header
+                title="Messages"
+                showBack={false}
+                rightComponent={
+                    <TouchableOpacity onPress={handleCompose}>
+                        <Edit3 size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                }
+            />
             <TabBar />
             {renderContent()}
-            <BottomNav />
+            <BottomNav activeTab="Messages" navigation={navigation} />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.bg },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
-        backgroundColor: COLORS.white,
-    },
-    headerTitle: { fontSize: 28, fontWeight: "bold", color: COLORS.textMain },
-    composeButton: { padding: 8 },
     tabBar: {
         flexDirection: "row",
         paddingHorizontal: 16,
@@ -318,16 +261,4 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     unreadCount: { fontSize: 12, fontWeight: "bold", color: COLORS.white },
-    bottomNav: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        paddingVertical: 12,
-        paddingBottom: 25,
-        backgroundColor: COLORS.white,
-        borderTopWidth: 1,
-        borderTopColor: "#F0F0F0",
-        elevation: 10,
-    },
-    bottomNavItem: { alignItems: "center" },
-    bottomNavLabel: { fontSize: 10, marginTop: 4, fontWeight: "500" },
 });

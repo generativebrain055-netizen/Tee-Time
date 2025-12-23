@@ -1,5 +1,6 @@
 const rosterRepository = require("../repositories/rosterRepository");
 const userRepository = require("../repositories/userRepository");
+const rosterNotificationService = require("../services/rosterNotificationService");
 const logger = require("../config/logger");
 
 class RosterController {
@@ -15,6 +16,8 @@ class RosterController {
     this.getGroups = this.getGroups.bind(this);
     this.createGroup = this.createGroup.bind(this);
     this.updateGroup = this.updateGroup.bind(this);
+    this.updateGroupSort = this.updateGroupSort.bind(this);
+    this.getAutoInviteMembers = this.getAutoInviteMembers.bind(this);
     this.deleteGroup = this.deleteGroup.bind(this);
     this.getGroupMembers = this.getGroupMembers.bind(this);
     this.updateMemberGroup = this.updateMemberGroup.bind(this);
@@ -99,6 +102,14 @@ class RosterController {
       const entry = await rosterRepository.addToRoster(userId, {
         contactUserId, contactPhone, contactName, contactEmail
       });
+
+      // Send notification to the added user (async, don't block response)
+      if (contactUserId) {
+        const user = await userRepository.findById(userId);
+        rosterNotificationService.sendRosterAddNotification(entry, user).catch(err => {
+          logger.error("Failed to send roster notification:", err);
+        });
+      }
 
       res.status(201).json({ success: true, entry });
     } catch (error) {
@@ -254,12 +265,16 @@ class RosterController {
         onDeckCount: 0,
         autoInvite: group.auto_invite,
         maxMembers: group.max_members,
-        isDefault: group.is_default
+        isDefault: group.is_default,
+        sortPreference: group.sort_preference || 'position'
       };
 
       res.status(201).json({ success: true, group: formatted });
     } catch (error) {
       logger.error("Create group error:", error);
+      if (error.code === "DUPLICATE_NAME") {
+        return res.status(400).json({ success: false, message: error.message, code: "DUPLICATE_NAME" });
+      }
       res.status(500).json({ success: false, message: "Failed to create group" });
     }
   }
@@ -288,13 +303,65 @@ class RosterController {
         onDeckCount: parseInt(group.on_deck_count) || 0,
         autoInvite: group.auto_invite,
         maxMembers: group.max_members,
-        isDefault: group.is_default
+        isDefault: group.is_default,
+        sortPreference: group.sort_preference || 'position'
       };
 
       res.json({ success: true, group: formatted });
     } catch (error) {
       logger.error("Update group error:", error);
+      if (error.code === "DUPLICATE_NAME") {
+        return res.status(400).json({ success: false, message: error.message, code: "DUPLICATE_NAME" });
+      }
       res.status(500).json({ success: false, message: "Failed to update group" });
+    }
+  }
+
+  // PUT /api/roster/groups/:id/sort
+  async updateGroupSort(req, res) {
+    try {
+      const userId = req.user.id;
+      const groupId = req.params.id;
+      const { sortBy } = req.body;
+
+      const validSorts = ['position', 'socialRate', 'handicap', 'name', 'distance', 'membership'];
+      if (!validSorts.includes(sortBy)) {
+        return res.status(400).json({ success: false, message: "Invalid sort option" });
+      }
+
+      const group = await rosterRepository.updateGroupSortPreference(userId, groupId, sortBy);
+      if (!group) {
+        return res.status(404).json({ success: false, message: "Group not found" });
+      }
+
+      res.json({ success: true, sortPreference: group.sort_preference });
+    } catch (error) {
+      logger.error("Update group sort error:", error);
+      res.status(500).json({ success: false, message: "Failed to update sort preference" });
+    }
+  }
+
+  // GET /api/roster/groups/:id/auto-invite
+  async getAutoInviteMembers(req, res) {
+    try {
+      const userId = req.user.id;
+      const groupId = req.params.id;
+
+      const members = await rosterRepository.getAutoInviteMembers(userId, groupId);
+      const formatted = members.map(m => ({
+        id: m.id,
+        userId: m.contact_user_id,
+        phone: m.contact_phone || m.phone_number,
+        name: m.contact_name || `${m.first_name || ''} ${m.last_name || ''}`.trim(),
+        avatar: m.avatar_url,
+        handicap: m.contact_handicap || m.user_handicap,
+        socialRate: m.social_rate
+      }));
+
+      res.json({ success: true, members: formatted, count: formatted.length });
+    } catch (error) {
+      logger.error("Get auto-invite members error:", error);
+      res.status(500).json({ success: false, message: "Failed to get auto-invite members" });
     }
   }
 

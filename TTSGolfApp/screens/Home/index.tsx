@@ -85,7 +85,7 @@ function HomePage({ navigation }: any) {
 
     // Stable callbacks - won't cause child re-renders
     const handleNotifications = useCallback(() => {
-        navigation?.navigate("Roster", { initialTab: "Requests" });
+        navigation?.navigate("Notifications");
     }, [navigation]);
 
     const handleCreateTeeTime = useCallback(() => {
@@ -98,6 +98,10 @@ function HomePage({ navigation }: any) {
 
     const handleFindAvailability = useCallback(() => {
         navigation?.navigate("Availability");
+    }, [navigation]);
+
+    const handleScanQR = useCallback(() => {
+        navigation?.navigate("ScanQR");
     }, [navigation]);
 
     const handleViewSchedule = useCallback(() => {
@@ -127,6 +131,7 @@ function HomePage({ navigation }: any) {
                     onCreateTeeTime={handleCreateTeeTime}
                     onInvitePlayers={handleInvitePlayers}
                     onFindAvailability={handleFindAvailability}
+                    onScanQR={handleScanQR}
                 />
                 <WeekCalendar weekDays={weekDays} onViewSchedule={handleViewSchedule} />
                 <NextTeeTime teeTime={nextTeeTime} currentUserId={user?.id} />

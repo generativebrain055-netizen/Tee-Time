@@ -1,18 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { sessionManager } from "./utils/sessionManager";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
-import LoginScreen from "./screens/LoginScreen";
+import LoginScreen from "./screens/login";
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
 import MessagesScreen from "./screens/Messages";
 import ChatDetailScreen from "./screens/ChatDetailScreen";
-import FullCalendarScreen from "./screens/FullCalendarScreen";
+import FullCalendarScreen from "./screens/calendar";
 import ProfileScreen from "./screens/profile";
 import CreateTeeTimeScreen from "./screens/CreateTeeTime";
 import InvitesScreen from "./screens/InvitesScreen";
 import AvailabilityScreen from "./screens/AvailabilityScreen";
-import FriendProfileScreen from "./screens/FriendProfileScreen";
+import FriendProfileScreen from "./screens/friend-profile";
+import GroupProfileScreen from "./screens/roster/group-profile";
+import EditProfileScreen from "./screens/profile/EditProfileScreen";
+import QRCodeScreen from "./screens/profile/QRCodeScreen";
+import ScanQRScreen from "./screens/profile/ScanQRScreen";
+import NotificationsScreen from "./screens/notifications";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -27,11 +34,16 @@ type ScreenName =
   | "ChatDetail"
   | "FullCalendar"
   | "Profile"
+  | "EditProfile"
+  | "QRCode"
+  | "ScanQR"
   | "CreateTeeTime"
   | "Invites"
   | "Availability"
   | "Community"
-  | "FriendProfile";
+  | "FriendProfile"
+  | "GroupProfile"
+  | "Notifications";
 
 interface UserData {
   firstName: string;
@@ -53,6 +65,7 @@ interface Navigation {
   navigate: (screen: ScreenName, params?: NavigationParams) => void;
   replace: (screen: ScreenName, params?: NavigationParams) => void;
   goBack: () => void;
+  reset: (options: { index: number; routes: Array<{ name: ScreenName; params?: NavigationParams }> }) => void;
 }
 
 export default function App(): React.ReactElement {
@@ -62,6 +75,18 @@ export default function App(): React.ReactElement {
   const [screenHistory, setScreenHistory] = useState<ScreenName[]>(["Splash"]);
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
+
+  // Set up session expired handler
+  useEffect(() => {
+    sessionManager.setOnSessionExpired(() => {
+      // Navigate to login when session expires
+      setUserData(null);
+      setScreenParams({});
+      setScreenHistory(["Login"]);
+      setScreenKey((prev) => prev + 1);
+      setCurrentScreen("Login");
+    });
+  }, []);
 
   const navigation: Navigation = {
     navigate: (screen: ScreenName, params?: NavigationParams) => {
@@ -95,6 +120,15 @@ export default function App(): React.ReactElement {
         setScreenKey((prev) => prev + 1);
         setCurrentScreen(previousScreen);
       }
+    },
+    reset: (options: { index: number; routes: Array<{ name: ScreenName; params?: NavigationParams }> }) => {
+      // Reset navigation stack to specified routes
+      const targetRoute = options.routes[options.index];
+      setUserData(null);
+      setScreenParams(targetRoute.params || {});
+      setScreenHistory([targetRoute.name]);
+      setScreenKey((prev) => prev + 1);
+      setCurrentScreen(targetRoute.name);
     },
   };
 
@@ -146,6 +180,28 @@ export default function App(): React.ReactElement {
             route={{ params: { user: userData } } as any}
           />
         );
+      case "EditProfile":
+        return (
+          <EditProfileScreen
+            key={`edit-profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "QRCode":
+        return (
+          <QRCodeScreen
+            key={`qr-code-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "ScanQR":
+        return (
+          <ScanQRScreen
+            key={`scan-qr-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "CreateTeeTime":
         return <CreateTeeTimeScreen key={`create-${screenKey}`} navigation={navigation as any} />;
       case "Invites":
@@ -159,6 +215,21 @@ export default function App(): React.ReactElement {
             key={`friend-profile-${screenKey}`}
             navigation={navigation as any}
             route={{ params: screenParams } as any}
+          />
+        );
+      case "GroupProfile":
+        return (
+          <GroupProfileScreen
+            key={`group-profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "Notifications":
+        return (
+          <NotificationsScreen
+            key={`notifications-${screenKey}`}
+            navigation={navigation as any}
           />
         );
       default:

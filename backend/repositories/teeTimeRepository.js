@@ -147,6 +147,94 @@ class TeeTimeRepository {
     const result = await pool.query(query, [userId, startDate, endDate]);
     return result.rows;
   }
+
+  // Remove participant by user ID
+  async removeParticipantByUser(teeTimeId, userId) {
+    const query = `
+      UPDATE tee_time_participants 
+      SET status = 'cancelled', cancelled_at = NOW()
+      WHERE tee_time_id = $1 AND user_id = $2
+      RETURNING *
+    `;
+    const result = await pool.query(query, [teeTimeId, userId]);
+    return result.rows[0];
+  }
+
+  // Get tee times in a specific time range (for cron jobs)
+  async getTeeTimesInRange(startTime, endTime, statuses = ['confirmed']) {
+    const query = `
+      SELECT * FROM tee_times
+      WHERE (tee_date + tee_time) BETWEEN $1 AND $2
+        AND status = ANY($3)
+    `;
+    const result = await pool.query(query, [startTime, endTime, statuses]);
+    return result.rows;
+  }
+
+  // Get in-progress tee times older than cutoff (for auto-complete)
+  async getInProgressTeeTimes(cutoffTime) {
+    const query = `
+      SELECT * FROM tee_times
+      WHERE status = 'in_progress'
+        AND (tee_date + tee_time) < $1
+        AND check_in_completed_at IS NULL
+    `;
+    const result = await pool.query(query, [cutoffTime]);
+    return result.rows;
+  }
+
+  // Get complete tee time history with attendance status
+  async getTeeTimeHistory(userId, options = {}) {
+    const { filter = 'all', limit = 20, offset = 0 } = options;
+    
+    let whereClause = `(t.creator_id = $1 OR ttp.user_id = $1)`;
+    
+    if (filter === 'upcoming') {
+      whereClause += ` AND t.tee_date >= CURRENT_DATE AND t.status NOT IN ('cancelled', 'completed')`;
+    } else if (filter === 'completed') {
+      whereClause += ` AND t.status = 'completed'`;
+    } else if (filter === 'cancelled') {
+      whereClause += ` AND (t.status = 'cancelled' OR ttp.status = 'cancelled')`;
+    } else if (filter === 'no_show') {
+      whereClause += ` AND tta.status = 'no_show'`;
+    }
+    
+    const query = `
+      SELECT DISTINCT ON (t.id)
+        t.id,
+        t.course_name,
+        t.course_location,
+        t.tee_date,
+        t.tee_time,
+        t.status as tee_time_status,
+        t.creator_id,
+        t.max_players,
+        u.first_name as creator_first_name,
+        u.last_name as creator_last_name,
+        up.avatar_url as creator_avatar,
+        ttp.status as participant_status,
+        tta.status as attendance_status,
+        gs.score as game_score,
+        gs.holes_played,
+        CASE 
+          WHEN t.creator_id = $1 THEN 'organizer'
+          ELSE 'participant'
+        END as user_role,
+        (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND status = 'confirmed') as participant_count
+      FROM tee_times t
+      LEFT JOIN tee_time_participants ttp ON t.id = ttp.tee_time_id AND ttp.user_id = $1
+      LEFT JOIN tee_time_attendance tta ON ttp.id = tta.participant_id
+      LEFT JOIN game_scores gs ON t.id = gs.tee_time_id AND gs.user_id = $1
+      LEFT JOIN users u ON t.creator_id = u.id
+      LEFT JOIN user_profiles up ON u.id = up.user_id
+      WHERE ${whereClause}
+      ORDER BY t.id, t.tee_date DESC, t.tee_time DESC
+      LIMIT $2 OFFSET $3
+    `;
+    
+    const result = await pool.query(query, [userId, limit, offset]);
+    return result.rows;
+  }
 }
 
 module.exports = new TeeTimeRepository();

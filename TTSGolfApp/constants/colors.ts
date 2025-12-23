@@ -17,7 +17,11 @@ export const COLORS = {
   pendingText: "#E65100",
   grayCircle: "#E5E5EA",
   red: "#EF4444",
+  error: "#EF4444",
+  success: "#10B981",
   placeholder: "#9CA3AF",
   unreadBg: "#FFFFFF",
   readBg: "#F9FAFB",
+  requested: "#F59E0B",
+  available: "#22C55E",
 };

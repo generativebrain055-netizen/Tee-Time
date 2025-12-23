@@ -207,6 +207,17 @@ class RosterRepository {
   async createGroup(userId, data) {
     const { name, description, color, icon, autoInvite, maxMembers } = data;
     
+    // Check for duplicate name (case-insensitive)
+    const existingName = await pool.query(
+      "SELECT id FROM roster_groups WHERE user_id = $1 AND LOWER(name) = LOWER($2)",
+      [userId, name]
+    );
+    if (existingName.rows.length > 0) {
+      const error = new Error("You already have a roster with this name");
+      error.code = "DUPLICATE_NAME";
+      throw error;
+    }
+    
     const posResult = await pool.query(
       "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM roster_groups WHERE user_id = $1",
       [userId]
@@ -227,7 +238,21 @@ class RosterRepository {
 
   // Update group
   async updateGroup(userId, groupId, data) {
-    const { name, description, color, icon, autoInvite, maxMembers } = data;
+    const { name, description, color, icon, autoInvite, maxMembers, sortPreference } = data;
+    
+    // Check for duplicate name if name is being changed
+    if (name) {
+      const existingName = await pool.query(
+        "SELECT id FROM roster_groups WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND id != $3",
+        [userId, name, groupId]
+      );
+      if (existingName.rows.length > 0) {
+        const error = new Error("You already have a roster with this name");
+        error.code = "DUPLICATE_NAME";
+        throw error;
+      }
+    }
+    
     const query = `
       UPDATE roster_groups 
       SET name = COALESCE($3, name),
@@ -236,14 +261,46 @@ class RosterRepository {
           icon = COALESCE($6, icon),
           auto_invite = COALESCE($7, auto_invite),
           max_members = COALESCE($8, max_members),
+          sort_preference = COALESCE($9, sort_preference),
           updated_at = NOW()
       WHERE id = $1 AND user_id = $2
       RETURNING *
     `;
     const result = await pool.query(query, [
-      groupId, userId, name, description, color, icon, autoInvite, maxMembers
+      groupId, userId, name, description, color, icon, autoInvite, maxMembers, sortPreference
     ]);
     return result.rows[0];
+  }
+
+  // Update group sort preference
+  async updateGroupSortPreference(userId, groupId, sortBy) {
+    const validSorts = ['position', 'socialRate', 'handicap', 'name', 'distance', 'membership'];
+    if (!validSorts.includes(sortBy)) {
+      throw new Error("Invalid sort option");
+    }
+    
+    const result = await pool.query(
+      `UPDATE roster_groups SET sort_preference = $3, updated_at = NOW() 
+       WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [groupId, userId, sortBy]
+    );
+    return result.rows[0];
+  }
+
+  // Get auto-invite members for a group (not on-deck)
+  async getAutoInviteMembers(userId, groupId) {
+    const query = `
+      SELECT r.*, 
+             u.first_name, u.last_name, u.username, u.phone_number,
+             p.avatar_url, p.handicap as user_handicap, p.social_rate
+      FROM roster r
+      LEFT JOIN users u ON r.contact_user_id = u.id
+      LEFT JOIN user_profiles p ON u.id = p.user_id
+      WHERE r.user_id = $1 AND r.group_id = $2 AND r.is_on_deck = false
+      ORDER BY r.position ASC
+    `;
+    const result = await pool.query(query, [userId, groupId]);
+    return result.rows;
   }
 
   // Delete group

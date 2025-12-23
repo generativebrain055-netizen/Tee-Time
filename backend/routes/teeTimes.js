@@ -59,6 +59,14 @@ router.get(
 );
 
 /**
+ * @route   GET /api/tee-times/history
+ * @desc    Get complete tee time history with attendance status
+ * @query   filter (all|upcoming|completed|cancelled|no_show), limit, offset
+ * @access  Private
+ */
+router.get("/history", teeTimeController.getHistory);
+
+/**
  * @route   GET /api/tee-times/:id
  * @desc    Get tee time details
  * @access  Private

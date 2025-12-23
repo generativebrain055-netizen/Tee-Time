@@ -7,10 +7,10 @@ import {
     ActivityIndicator,
     Alert,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft } from "lucide-react-native";
+import { StatusBar } from "expo-status-bar";
 import { teeTimeApi, inviteApi, friendApi, rosterApi, Friend, RosterGroup } from "../../services/api";
+import { Header } from "../../components/common";
 import { COLORS } from "./constants";
 import DatePickerModal from "./DatePickerModal";
 import TimePickerModal from "./TimePickerModal";
@@ -449,19 +449,11 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.container}>
             <StatusBar style="dark" />
 
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                    <ArrowLeft size={24} color={COLORS.text} strokeWidth={1.5} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
-                <View style={styles.headerSpacer} />
-            </View>
-
-            <View style={styles.divider} />
+            <Header title={getHeaderTitle()} onBack={handleBack} />
 
             {/* Content */}
             {step === 1 && (
@@ -577,29 +569,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: COLORS.bg,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    backButton: {
-        padding: 4,
-        width: 40,
-    },
-    headerTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    headerSpacer: {
-        width: 40,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: COLORS.border,
     },
     footer: {
         padding: 20,

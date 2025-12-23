@@ -90,6 +90,20 @@ router.post("/groups", rosterController.createGroup);
 router.put("/groups/:id", rosterController.updateGroup);
 
 /**
+ * @route   PUT /api/roster/groups/:id/sort
+ * @desc    Update group sort preference
+ * @access  Private
+ */
+router.put("/groups/:id/sort", rosterController.updateGroupSort);
+
+/**
+ * @route   GET /api/roster/groups/:id/auto-invite
+ * @desc    Get auto-invite members for tee time creation
+ * @access  Private
+ */
+router.get("/groups/:id/auto-invite", rosterController.getAutoInviteMembers);
+
+/**
  * @route   DELETE /api/roster/groups/:id
  * @desc    Delete a roster group
  * @access  Private

@@ -1,4 +1,5 @@
 const friendRepository = require("../repositories/friendRepository");
+const notificationService = require("../services/notificationService");
 const logger = require("../config/logger");
 
 class FriendController {
@@ -37,6 +38,15 @@ class FriendController {
             }
 
             const request = await friendRepository.sendFriendRequest(senderId, receiverId, message);
+            
+            // Create notification for receiver
+            await notificationService.notifyFriendRequest(receiverId, {
+                id: senderId,
+                firstName: req.user.firstName,
+                lastName: req.user.lastName,
+                avatar: req.user.avatar,
+            });
+            
             res.status(201).json({ success: true, request });
         } catch (error) {
             logger.error("Send friend request error:", error);
@@ -112,6 +122,17 @@ class FriendController {
             }
 
             const request = await friendRepository.respondToRequest(requestId, userId, response);
+            
+            // If accepted, notify the original sender
+            if (response === 'accepted' && request.sender_id) {
+                await notificationService.notifyFriendRequestAccepted(request.sender_id, {
+                    id: userId,
+                    firstName: req.user.firstName,
+                    lastName: req.user.lastName,
+                    avatar: req.user.avatar,
+                });
+            }
+            
             res.json({ 
                 success: true, 
                 message: response === 'accepted' ? 'Friend request accepted!' : 'Friend request declined',

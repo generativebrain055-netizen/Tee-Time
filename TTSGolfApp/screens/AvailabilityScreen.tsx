@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -12,20 +12,10 @@ import {
     Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { Search, UserPlus, Check, Clock, MapPin, Users, Info } from "lucide-react-native";
-import { BottomNav } from "../components/common";
-import { friendApi, rosterApi, DiscoveredUser } from "../services/api";
-
-const COLORS = {
-    primary: "#5DB075",
-    bg: "#F6F6F6",
-    white: "#FFFFFF",
-    text: "#1F2937",
-    textSub: "#9CA3AF",
-    border: "#E5E7EB",
-    available: "#22C55E",
-    requested: "#F59E0B",
-};
+import { Search, UserPlus, Clock, MapPin, Users, Info, Check, X } from "lucide-react-native";
+import { BottomNav, Header } from "../components/common";
+import { friendApi, DiscoveredUser } from "../services/api";
+import { COLORS } from "../constants/colors";
 
 type FilterType = "all" | "friends" | "nearby";
 
@@ -36,7 +26,10 @@ export default function AvailabilityScreen({ navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [filter, setFilter] = useState<FilterType>("all");
     const [sendingRequest, setSendingRequest] = useState<string | null>(null);
-    const [addingToRoster, setAddingToRoster] = useState<string | null>(null);
+    const [respondingTo, setRespondingTo] = useState<string | null>(null);
+
+    // Cache pending requests to get request IDs
+    const pendingRequestsCache = useRef<Map<string, string>>(new Map());
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -45,9 +38,23 @@ export default function AvailabilityScreen({ navigation }: any) {
                 params.location = searchQuery;
                 params.course = searchQuery;
             }
-            const response = await friendApi.discoverUsers(params);
-            if (response.success) {
-                setUsers(response.users);
+
+            // Fetch users and pending requests in parallel
+            const [usersResponse, pendingResponse] = await Promise.all([
+                friendApi.discoverUsers(params),
+                friendApi.getPendingRequests(),
+            ]);
+
+            if (usersResponse.success) {
+                setUsers(usersResponse.users);
+            }
+
+            // Cache pending request IDs by sender ID
+            if (pendingResponse.success && pendingResponse.requests) {
+                pendingRequestsCache.current.clear();
+                pendingResponse.requests.forEach((req: any) => {
+                    pendingRequestsCache.current.set(req.sender.id, req.id);
+                });
             }
         } catch (error) {
             console.error("Failed to fetch users:", error);
@@ -91,20 +98,78 @@ export default function AvailabilityScreen({ navigation }: any) {
         navigation.navigate("FriendProfile", { userId: user.id, user });
     };
 
-    const handleAddToRoster = async (user: DiscoveredUser) => {
-        setAddingToRoster(user.id);
+    const handleAcceptRequest = async (userId: string) => {
+        setRespondingTo(userId);
         try {
-            const response = await rosterApi.addToRoster({
-                contactUserId: user.id,
-                contactName: `${user.firstName} ${user.lastName}`.trim(),
-            });
+            // Get the request ID from cache
+            let requestId = pendingRequestsCache.current.get(userId);
+
+            // If not in cache, fetch pending requests to find it
+            if (!requestId) {
+                const pendingRes = await friendApi.getPendingRequests();
+                if (pendingRes.success && pendingRes.requests) {
+                    const request = pendingRes.requests.find((r: any) => r.sender.id === userId);
+                    if (request) {
+                        requestId = request.id;
+                        pendingRequestsCache.current.set(userId, request.id);
+                    }
+                }
+            }
+
+            if (!requestId) {
+                Alert.alert("Error", "Friend request not found");
+                return;
+            }
+
+            const response = await friendApi.respondToRequest(requestId, "accepted");
             if (response.success) {
-                Alert.alert("Success", `${user.firstName} added to your roster!`);
+                setUsers((prev) =>
+                    prev.map((u) => (u.id === userId ? { ...u, friendshipStatus: "friend" } : u))
+                );
+                pendingRequestsCache.current.delete(userId);
+                Alert.alert("Success", "Friend request accepted!");
             }
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to add to roster");
+            Alert.alert("Error", error.message || "Failed to accept request");
         } finally {
-            setAddingToRoster(null);
+            setRespondingTo(null);
+        }
+    };
+
+    const handleRejectRequest = async (userId: string) => {
+        setRespondingTo(userId);
+        try {
+            // Get the request ID from cache
+            let requestId = pendingRequestsCache.current.get(userId);
+
+            // If not in cache, fetch pending requests to find it
+            if (!requestId) {
+                const pendingRes = await friendApi.getPendingRequests();
+                if (pendingRes.success && pendingRes.requests) {
+                    const request = pendingRes.requests.find((r: any) => r.sender.id === userId);
+                    if (request) {
+                        requestId = request.id;
+                        pendingRequestsCache.current.set(userId, request.id);
+                    }
+                }
+            }
+
+            if (!requestId) {
+                Alert.alert("Error", "Friend request not found");
+                return;
+            }
+
+            const response = await friendApi.respondToRequest(requestId, "declined");
+            if (response.success) {
+                setUsers((prev) =>
+                    prev.map((u) => (u.id === userId ? { ...u, friendshipStatus: "none" } : u))
+                );
+                pendingRequestsCache.current.delete(userId);
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error.message || "Failed to decline request");
+        } finally {
+            setRespondingTo(null);
         }
     };
 
@@ -121,7 +186,7 @@ export default function AvailabilityScreen({ navigation }: any) {
     });
 
     const getStatusButton = (user: DiscoveredUser) => {
-        if (sendingRequest === user.id || addingToRoster === user.id) {
+        if (sendingRequest === user.id || respondingTo === user.id) {
             return (
                 <View style={styles.statusButton}>
                     <ActivityIndicator size="small" color={COLORS.primary} />
@@ -131,21 +196,14 @@ export default function AvailabilityScreen({ navigation }: any) {
 
         switch (user.friendshipStatus) {
             case "friend":
+                // Friends only show info button - they're already in roster
                 return (
-                    <View style={styles.friendActions}>
-                        <TouchableOpacity
-                            style={[styles.statusButton, styles.infoButton]}
-                            onPress={() => handleViewProfile(user)}
-                        >
-                            <Info size={18} color={COLORS.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.statusButton, styles.addRosterButton]}
-                            onPress={() => handleAddToRoster(user)}
-                        >
-                            <UserPlus size={16} color={COLORS.white} />
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                        style={[styles.statusButton, styles.infoButton]}
+                        onPress={() => handleViewProfile(user)}
+                    >
+                        <Info size={18} color={COLORS.primary} />
+                    </TouchableOpacity>
                 );
             case "requested":
                 return (
@@ -154,13 +212,22 @@ export default function AvailabilityScreen({ navigation }: any) {
                     </View>
                 );
             case "pending":
+                // Show accept/reject buttons for incoming friend requests
                 return (
-                    <TouchableOpacity
-                        style={[styles.statusButton, styles.pendingButton]}
-                        onPress={() => handleViewProfile(user)}
-                    >
-                        <Text style={styles.pendingText}>Accept</Text>
-                    </TouchableOpacity>
+                    <View style={styles.pendingActions}>
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.acceptButton]}
+                            onPress={() => handleAcceptRequest(user.id)}
+                        >
+                            <Check size={18} color={COLORS.white} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.rejectButton]}
+                            onPress={() => handleRejectRequest(user.id)}
+                        >
+                            <X size={18} color={COLORS.white} />
+                        </TouchableOpacity>
+                    </View>
                 );
             default:
                 return (
@@ -178,10 +245,10 @@ export default function AvailabilityScreen({ navigation }: any) {
         <View style={styles.container}>
             <StatusBar style="dark" />
 
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Availability</Text>
-                <Text style={styles.headerSubtitle}>Find golfers near you</Text>
-            </View>
+            <Header
+                title="Availability"
+                showBack={false}
+            />
 
             <View style={styles.searchContainer}>
                 <View style={styles.searchBox}>
@@ -275,14 +342,6 @@ export default function AvailabilityScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.bg },
-    header: {
-        paddingHorizontal: 20,
-        paddingTop: 50,
-        paddingBottom: 12,
-        backgroundColor: COLORS.white,
-    },
-    headerTitle: { fontSize: 24, fontWeight: "bold", color: COLORS.text },
-    headerSubtitle: { fontSize: 14, color: COLORS.textSub, marginTop: 2 },
     searchContainer: { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: COLORS.white },
     searchBox: {
         flexDirection: "row",
@@ -357,9 +416,22 @@ const styles = StyleSheet.create({
     },
     addButton: { backgroundColor: "#E8F5E9" },
     infoButton: { backgroundColor: "#E8F5E9" },
-    friendActions: { flexDirection: "row", gap: 8 },
-    addRosterButton: { backgroundColor: COLORS.primary, width: 36, height: 36, borderRadius: 10 },
     requestedButton: { backgroundColor: "#FEF3C7" },
-    pendingButton: { backgroundColor: COLORS.primary, paddingHorizontal: 12, width: "auto" },
-    pendingText: { fontSize: 13, fontWeight: "600", color: COLORS.white },
+    pendingActions: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    actionButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    acceptButton: {
+        backgroundColor: COLORS.primary,
+    },
+    rejectButton: {
+        backgroundColor: "#EF4444",
+    },
 });

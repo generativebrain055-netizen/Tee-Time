@@ -79,7 +79,19 @@ const setPassword = async (req, res, next) => {
  */
 const registerUser = async (req, res, next) => {
   try {
-    const { phoneNumber, firstName, lastName, username, email, handicap } = req.body;
+    const { 
+      phoneNumber, 
+      firstName, 
+      lastName, 
+      username, 
+      email, 
+      handicap,
+      location,
+      homeCourse,
+      preferredTeeTime,
+      walkOrRide,
+      playingPartnerPreference,
+    } = req.body;
 
     logger.info("📝 [BACKEND] Direct user registration:", {
       phoneNumber,
@@ -88,6 +100,11 @@ const registerUser = async (req, res, next) => {
       username,
       email,
       handicap,
+      location,
+      homeCourse,
+      preferredTeeTime,
+      walkOrRide,
+      playingPartnerPreference,
     });
 
     // Check if user already exists
@@ -111,7 +128,7 @@ const registerUser = async (req, res, next) => {
       }
     }
 
-    // Create new user (passwordless)
+    // Create new user (passwordless) with all profile data
     const user = await userRepository.create({
       phoneNumber,
       firstName,
@@ -121,6 +138,11 @@ const registerUser = async (req, res, next) => {
       handicap: handicap ? parseInt(handicap) : null,
       passwordHash: null,
       isVerified: true,
+      location: location || null,
+      homeCourse: homeCourse || null,
+      preferredTeeTime: preferredTeeTime || null,
+      walkOrRide: walkOrRide || null,
+      playingPartnerPreference: playingPartnerPreference || null,
     });
 
     logger.info("✅ [BACKEND] User registered successfully:", {
@@ -140,6 +162,11 @@ const registerUser = async (req, res, next) => {
         lastName: user.last_name,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        location: user.location,
+        homeCourse: user.home_course,
+        preferredTeeTime: user.preferred_tee_time,
+        walkOrRide: user.walk_or_ride,
+        playingPartnerPreference: user.playing_partner_preference,
       },
     });
   } catch (error) {
