@@ -10,6 +10,8 @@ interface TeeTimesListProps {
     selectedDate: Date | null;
     teeTimes: TeeTime[];
     loading: boolean;
+    onTeeTimePress?: (teeTimeId: string) => void;
+    onCancelSuccess?: () => void;
 }
 
 const EmptyState = memo(() => (
@@ -19,7 +21,7 @@ const EmptyState = memo(() => (
     </View>
 ));
 
-const TeeTimesList = memo(({ selectedDate, teeTimes, loading }: TeeTimesListProps) => {
+const TeeTimesList = memo(({ selectedDate, teeTimes, loading, onTeeTimePress, onCancelSuccess }: TeeTimesListProps) => {
     if (!selectedDate) return null;
 
     return (
@@ -29,7 +31,14 @@ const TeeTimesList = memo(({ selectedDate, teeTimes, loading }: TeeTimesListProp
             {loading ? (
                 <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={styles.loader} />
             ) : teeTimes.length > 0 ? (
-                teeTimes.map((teeTime) => <TeeTimeCard key={teeTime.id} teeTime={teeTime} />)
+                teeTimes.map((teeTime) => (
+                    <TeeTimeCard
+                        key={teeTime.id}
+                        teeTime={teeTime}
+                        onPress={onTeeTimePress}
+                        onCancelSuccess={onCancelSuccess}
+                    />
+                ))
             ) : (
                 <EmptyState />
             )}

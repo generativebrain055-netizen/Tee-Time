@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const userRepository = require("../../repositories/userRepository");
 const sessionService = require("../../services/sessionService");
+const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const logger = require("../../config/logger");
 
 /**
@@ -57,6 +58,16 @@ const login = async (req, res, next) => {
 
     // Reset failed login attempts
     await userRepository.resetFailedLoginAttempts(user.id);
+
+    // Mark past tee times as completed
+    try {
+      const completedTeeTimes = await teeTimeRepository.markPastTeeTimesCompleted();
+      if (completedTeeTimes.length > 0) {
+        logger.info(`Auto-completed ${completedTeeTimes.length} past tee times on login`);
+      }
+    } catch (err) {
+      logger.error("Error marking past tee times as completed:", err);
+    }
 
     // Create session
     const { accessToken, refreshToken, device } = await sessionService.createSession({

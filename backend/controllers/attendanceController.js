@@ -30,7 +30,45 @@ class AttendanceController {
 
       // Check if check-in is available
       const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      const attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      
+      // Auto-initialize attendance records if they don't exist
+      let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      if (attendance.length === 0) {
+        await attendanceService.initializeAttendance(teeTimeId);
+        attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      }
+      
+      // If still no attendance records, get participants directly
+      if (attendance.length === 0) {
+        const participants = await teeTimeRepository.getParticipants(teeTimeId);
+        const formatted = participants.map(p => ({
+          id: p.id,
+          participantId: p.id,
+          userId: p.user_id,
+          name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
+          avatar: p.avatar_url,
+          isCreator: p.is_creator,
+          status: 'pending',
+          checkedInAt: null,
+          markedNoShowAt: null,
+          penaltyApplied: false
+        }));
+        
+        return res.json({
+          success: true,
+          checkInAvailable: checkInStatus.available,
+          checkInMessage: checkInStatus.reason,
+          summary: {
+            total: formatted.length,
+            present: 0,
+            noShow: 0,
+            cancelled: 0,
+            pending: formatted.length
+          },
+          attendance: formatted
+        });
+      }
+      
       const summary = await attendanceService.getAttendanceSummary(teeTimeId);
 
       const formatted = attendance.map(a => ({
@@ -84,10 +122,23 @@ class AttendanceController {
         return res.status(403).json({ success: false, message: "Only organizer can check in" });
       }
 
-      // Verify check-in is available
-      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      if (!checkInStatus.available) {
-        return res.status(400).json({ success: false, message: checkInStatus.reason });
+      // Initialize attendance records if they don't exist
+      let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      if (attendance.length === 0) {
+        await attendanceService.initializeAttendance(teeTimeId);
+        attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      }
+
+      // If still no attendance, mark all participants as present directly
+      if (attendance.length === 0) {
+        const participants = await teeTimeRepository.getParticipants(teeTimeId);
+        // Complete the tee time
+        await attendanceService.completeCheckIn(teeTimeId, userId);
+        return res.json({
+          success: true,
+          message: "All participants checked in successfully",
+          checkedIn: participants.length
+        });
       }
 
       const result = await attendanceService.checkInAll(teeTimeId, userId);
@@ -127,10 +178,10 @@ class AttendanceController {
         return res.status(403).json({ success: false, message: "Only organizer can update attendance" });
       }
 
-      // Verify check-in is available
-      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      if (!checkInStatus.available) {
-        return res.status(400).json({ success: false, message: checkInStatus.reason });
+      // Initialize attendance records if they don't exist
+      let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      if (attendance.length === 0) {
+        await attendanceService.initializeAttendance(teeTimeId);
       }
 
       let result;
@@ -164,10 +215,14 @@ class AttendanceController {
       const userId = req.user.id;
       const teeTimeId = req.params.id;
 
+      logger.info(`Cancel participation request: userId=${userId}, teeTimeId=${teeTimeId}`);
+
       const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
       if (!teeTime) {
         return res.status(404).json({ success: false, message: "Tee time not found" });
       }
+
+      logger.info(`Tee time found: creator_id=${teeTime.creator_id}, status=${teeTime.status}`);
 
       // Cannot cancel if user is organizer
       if (teeTime.creator_id === userId) {
@@ -183,22 +238,38 @@ class AttendanceController {
         return res.status(400).json({ success: false, message: "Cannot cancel past tee time" });
       }
 
-      // Calculate if penalty applies (within 24h)
-      const hoursUntilTeeTime = (teeDateTime - new Date()) / (1000 * 60 * 60);
-      const penaltyApplies = hoursUntilTeeTime <= 24;
+      // Apply penalty based on tee time status
+      let penaltyApplied = false;
+      let penaltyMessage = "";
+      
+      if (teeTime.status === 'confirmed') {
+        // -10 points for cancelling a confirmed tee time
+        const socialRateService = require("../services/socialRateService");
+        await socialRateService.applyConfirmedCancellationPenalty(userId, teeTimeId);
+        penaltyApplied = true;
+        penaltyMessage = "A -10 Social Rate penalty was applied for cancelling a confirmed tee time.";
+      } else {
+        // Check if late cancellation penalty applies (within 24h)
+        const hoursUntilTeeTime = (teeDateTime - new Date()) / (1000 * 60 * 60);
+        if (hoursUntilTeeTime <= 24) {
+          penaltyApplied = true;
+          penaltyMessage = "A -5 Social Rate penalty was applied for late cancellation.";
+        }
+      }
 
-      // Handle cancellation
-      await attendanceService.handleCancellation(teeTimeId, userId, teeDateTime);
+      // Handle cancellation (updates attendance record if exists)
+      await attendanceService.handleCancellation(teeTimeId, userId, teeDateTime, teeTime.status);
 
       // Remove from participants
-      await teeTimeRepository.removeParticipantByUser(teeTimeId, userId);
+      const removedParticipant = await teeTimeRepository.removeParticipantByUser(teeTimeId, userId);
+      logger.info(`Removed participant result: ${JSON.stringify(removedParticipant)}`);
 
       res.json({
         success: true,
-        message: penaltyApplies 
-          ? "Participation cancelled. A -5 Social Rate penalty was applied for late cancellation."
+        message: penaltyApplied 
+          ? `Participation cancelled. ${penaltyMessage}`
           : "Participation cancelled successfully.",
-        penaltyApplied: penaltyApplies
+        penaltyApplied
       });
     } catch (error) {
       logger.error("Cancel participation error:", error);

@@ -4,8 +4,10 @@
 import { Dimensions } from "react-native";
 
 export const SCREEN_WIDTH = Dimensions.get("window").width;
-export const CALENDAR_WIDTH = SCREEN_WIDTH - 40;
-export const DAY_CELL_WIDTH = Math.floor(CALENDAR_WIDTH / 7);
+// Account for card margins (20*2) and card padding (20*2)
+export const CALENDAR_CONTENT_WIDTH = SCREEN_WIDTH - 40 - 40;
+// Use floor to avoid fractional pixels causing overflow
+export const DAY_CELL_WIDTH = Math.floor(CALENDAR_CONTENT_WIDTH / 7);
 
 export const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

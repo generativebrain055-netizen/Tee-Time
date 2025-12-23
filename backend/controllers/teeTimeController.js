@@ -21,6 +21,17 @@ class TeeTimeController {
       const userId = req.user.id;
       const { courseName, courseLocation, teeDate, teeTime, maxPlayers, inviteType, notes } = req.body;
 
+      // Validate tee time is not in the past
+      const now = new Date();
+      const teeDateTime = new Date(`${teeDate}T${teeTime}`);
+      
+      if (teeDateTime < now) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Cannot create a tee time in the past" 
+        });
+      }
+
       const teeTimeData = await teeTimeRepository.createTeeTime(userId, {
         courseName, courseLocation, teeDate, teeTime, maxPlayers, inviteType, notes
       });
@@ -37,6 +48,9 @@ class TeeTimeController {
     try {
       const userId = req.user.id;
       const { status } = req.query;
+
+      // Update past tee times to completed status
+      await teeTimeRepository.markPastTeeTimesCompleted();
 
       const teeTimes = await teeTimeRepository.getUserTeeTimes(userId, status);
       
@@ -70,6 +84,9 @@ class TeeTimeController {
     try {
       const userId = req.user.id;
       const limit = parseInt(req.query.limit) || 10;
+
+      // Update past tee times to completed status
+      await teeTimeRepository.markPastTeeTimesCompleted();
 
       const teeTimes = await teeTimeRepository.getUpcomingTeeTimes(userId, limit);
       
@@ -195,6 +212,12 @@ class TeeTimeController {
         return res.status(400).json({ success: false, message: "start and end dates required" });
       }
 
+      // Update past tee times to completed status in database
+      const updated = await teeTimeRepository.markPastTeeTimesCompleted();
+      if (updated.length > 0) {
+        logger.info(`Auto-completed ${updated.length} past tee times`);
+      }
+
       const teeTimes = await teeTimeRepository.getTeeTimesByDateRange(userId, start, end);
       
       // Group by date
@@ -207,9 +230,11 @@ class TeeTimeController {
         calendar[dateKey].push({
           id: t.id,
           courseName: t.course_name,
+          courseLocation: t.course_location,
           teeTime: t.tee_time,
           status: t.status,
-          participantCount: parseInt(t.participant_count)
+          participantCount: parseInt(t.participant_count),
+          creatorId: t.creator_id
         });
       });
 

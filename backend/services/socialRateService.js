@@ -6,6 +6,7 @@ const POINT_VALUES = {
   INVITE_ACCEPTED: 2,
   INVITE_DECLINED_LATE: -1,
   CANCELLATION_LATE: -5,
+  CANCELLATION_CONFIRMED: -10,  // Cancelling a confirmed tee time
   NO_SHOW: -10,
   INITIAL_SCORE: 100
 };
@@ -15,6 +16,7 @@ const REASONS = {
   INVITE_ACCEPTED: 'invite_accepted',
   INVITE_DECLINED_LATE: 'invite_declined_late',
   CANCELLATION_LATE: 'cancellation_late',
+  CANCELLATION_CONFIRMED: 'cancellation_confirmed',
   NO_SHOW: 'no_show',
   INITIAL_SCORE: 'initial_score',
   ADMIN_ADJUSTMENT: 'admin_adjustment'
@@ -127,6 +129,24 @@ class SocialRateService {
       reason: REASONS.CANCELLATION_LATE,
       teeTimeId,
       reasonDetails: `Cancelled ${Math.abs(Math.floor(hoursUntilTeeTime))}h before tee time`
+    });
+  }
+
+  /**
+   * Apply penalty for cancelling a confirmed tee time (-10 points)
+   */
+  async applyConfirmedCancellationPenalty(userId, teeTimeId) {
+    // Check idempotency using tee_time_id + reason
+    const existing = await this.findLogEntryByTeeTime(userId, teeTimeId, REASONS.CANCELLATION_CONFIRMED);
+    if (existing) {
+      logger.info(`Confirmed cancellation penalty already applied for user ${userId}, tee time ${teeTimeId}`);
+      return existing.new_score;
+    }
+
+    return this.adjustScore(userId, POINT_VALUES.CANCELLATION_CONFIRMED, {
+      reason: REASONS.CANCELLATION_CONFIRMED,
+      teeTimeId,
+      reasonDetails: 'Cancelled confirmed tee time'
     });
   }
 

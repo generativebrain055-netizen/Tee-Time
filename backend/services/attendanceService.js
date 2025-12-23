@@ -163,29 +163,30 @@ class AttendanceService {
   /**
    * Handle user cancellation (before tee time)
    */
-  async handleCancellation(teeTimeId, userId, teeDateTime) {
+  async handleCancellation(teeTimeId, userId, teeDateTime, teeTimeStatus = 'pending') {
+    // Try to update attendance record if it exists
     const attendance = await this.getAttendanceByUser(teeTimeId, userId);
     
-    if (!attendance) {
-      logger.warn(`No attendance record found for user ${userId} in tee time ${teeTimeId}`);
-      return null;
+    if (attendance) {
+      const query = `
+        UPDATE tee_time_attendance 
+        SET status = 'cancelled', updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `;
+      await pool.query(query, [attendance.id]);
+      logger.info(`User ${userId} cancelled attendance record for tee time ${teeTimeId}`);
+    } else {
+      logger.info(`No attendance record found for user ${userId} in tee time ${teeTimeId} - skipping attendance update`);
     }
 
-    // Apply late cancellation penalty if within 24h
-    if (userId) {
+    // Apply late cancellation penalty if within 24h AND not a confirmed tee time
+    // (confirmed tee times get -10 penalty applied in controller)
+    if (userId && teeTimeStatus !== 'confirmed') {
       await socialRateService.applyLateCancellationPenalty(userId, teeTimeId, teeDateTime);
     }
-
-    const query = `
-      UPDATE tee_time_attendance 
-      SET status = 'cancelled', updated_at = NOW()
-      WHERE id = $1
-      RETURNING *
-    `;
-    const result = await pool.query(query, [attendance.id]);
     
-    logger.info(`User ${userId} cancelled attendance for tee time ${teeTimeId}`);
-    return result.rows[0];
+    return attendance;
   }
 
 
@@ -258,7 +259,7 @@ class AttendanceService {
     const query = `
       SELECT 
         tt.*,
-        (tt.tee_date + tt.tee_time) as tee_datetime
+        tt.tee_time as tee_time_value
       FROM tee_times tt
       WHERE tt.id = $1
     `;
@@ -267,12 +268,37 @@ class AttendanceService {
     
     if (!teeTime) return { available: false, reason: 'Tee time not found' };
     
-    const teeDateTime = new Date(teeTime.tee_datetime);
+    // Use JavaScript local time instead of PostgreSQL LOCALTIME (which returns UTC)
     const now = new Date();
-    const minutesUntilTeeTime = (teeDateTime - now) / (1000 * 60);
+    const today = now;
+    const teeDate = new Date(teeTime.tee_date);
+    const isToday = today.toDateString() === teeDate.toDateString();
     
-    // Check-in available from 5 minutes before to 60 minutes after
-    if (minutesUntilTeeTime > 5) {
+    if (!isToday) {
+      // For past dates, check-in window is closed
+      if (teeDate < today) {
+        return { available: false, reason: 'Check-in window closed' };
+      }
+      // For future dates, check-in not available yet
+      return { available: false, reason: 'Check-in not available yet' };
+    }
+    
+    // Calculate minutes until tee time using JavaScript local time
+    const currentTimeStr = now.toTimeString().slice(0, 8); // HH:MM:SS
+    const teeTimeStr = teeTime.tee_time_value; // HH:MM:SS from DB
+    
+    // Parse times to calculate difference
+    const [currentH, currentM, currentS] = currentTimeStr.split(':').map(Number);
+    const [teeH, teeM, teeS] = teeTimeStr.split(':').map(Number);
+    
+    const currentMinutes = currentH * 60 + currentM + currentS / 60;
+    const teeMinutes = teeH * 60 + teeM + teeS / 60;
+    const minutesUntilTeeTime = teeMinutes - currentMinutes;
+    
+    logger.debug(`Check-in availability: current=${currentTimeStr}, teeTime=${teeTimeStr}, minutesUntil=${minutesUntilTeeTime.toFixed(1)}`);
+    
+    // Check-in available from 30 minutes before to 60 minutes after
+    if (minutesUntilTeeTime > 30) {
       return { available: false, reason: 'Check-in not available yet' };
     }
     

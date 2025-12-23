@@ -20,6 +20,8 @@ import EditProfileScreen from "./screens/profile/EditProfileScreen";
 import QRCodeScreen from "./screens/profile/QRCodeScreen";
 import ScanQRScreen from "./screens/profile/ScanQRScreen";
 import NotificationsScreen from "./screens/notifications";
+import TeeTimeDetailScreen from "./screens/TeeTimeDetailScreen";
+import CheckInScreen from "./screens/CheckInScreen";
 import { OnboardingScreen } from "./screens/onboarding";
 
 type ScreenName =
@@ -43,7 +45,9 @@ type ScreenName =
   | "Community"
   | "FriendProfile"
   | "GroupProfile"
-  | "Notifications";
+  | "Notifications"
+  | "TeeTimeDetail"
+  | "CheckIn";
 
 interface UserData {
   firstName: string;
@@ -230,6 +234,22 @@ export default function App(): React.ReactElement {
           <NotificationsScreen
             key={`notifications-${screenKey}`}
             navigation={navigation as any}
+          />
+        );
+      case "TeeTimeDetail":
+        return (
+          <TeeTimeDetailScreen
+            key={`tee-time-detail-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "CheckIn":
+        return (
+          <CheckInScreen
+            key={`check-in-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       default:

@@ -38,10 +38,10 @@ class TeeTimeRepository {
   async getUserTeeTimes(userId, status = null) {
     let query = `
       SELECT DISTINCT t.*, u.first_name as creator_first_name, u.last_name as creator_last_name,
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id) as participant_count
+             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
       FROM tee_times t
       JOIN users u ON t.creator_id = u.id
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id
+      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
       WHERE (t.creator_id = $1 OR p.user_id = $1)
     `;
     const params = [userId];
@@ -61,10 +61,10 @@ class TeeTimeRepository {
   async getUpcomingTeeTimes(userId, limit = 10) {
     const query = `
       SELECT DISTINCT t.*, u.first_name as creator_first_name, u.last_name as creator_last_name,
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id) as participant_count
+             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
       FROM tee_times t
       JOIN users u ON t.creator_id = u.id
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id
+      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
       WHERE (t.creator_id = $1 OR p.user_id = $1)
         AND t.tee_date >= CURRENT_DATE
         AND t.status IN ('pending', 'confirmed')
@@ -137,9 +137,9 @@ class TeeTimeRepository {
   async getTeeTimesByDateRange(userId, startDate, endDate) {
     const query = `
       SELECT DISTINCT t.*, 
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id) as participant_count
+             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
       FROM tee_times t
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id
+      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
       WHERE (t.creator_id = $1 OR p.user_id = $1)
         AND t.tee_date BETWEEN $2 AND $3
       ORDER BY t.tee_date ASC, t.tee_time ASC
@@ -235,6 +235,56 @@ class TeeTimeRepository {
     const result = await pool.query(query, [userId, limit, offset]);
     return result.rows;
   }
+
+  // Mark past tee times as completed
+  async markPastTeeTimesCompleted() {
+    const query = `
+      UPDATE tee_times 
+      SET status = 'completed', updated_at = NOW()
+      WHERE status IN ('pending', 'confirmed')
+        AND (
+          tee_date < CURRENT_DATE 
+          OR (tee_date = CURRENT_DATE AND tee_time::time < CURRENT_TIME::time)
+        )
+      RETURNING id, tee_date, tee_time, status
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+
+  // Check and update tee time status based on invite responses
+  async checkAndUpdateStatus(teeTimeId) {
+    // Get tee time info
+    const teeTime = await this.getTeeTimeById(teeTimeId);
+    if (!teeTime || teeTime.status === 'completed' || teeTime.status === 'cancelled') {
+      return null;
+    }
+
+    // Check if tee time is in the past
+    const teeDateTime = new Date(`${teeTime.tee_date}T${teeTime.tee_time}`);
+    if (teeDateTime < new Date()) {
+      return this.updateStatus(teeTimeId, 'completed');
+    }
+
+    // Check if all invites have been responded to
+    const inviteQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+        COUNT(*) FILTER (WHERE status = 'accepted') as accepted_count
+      FROM invites
+      WHERE tee_time_id = $1
+    `;
+    const inviteResult = await pool.query(inviteQuery, [teeTimeId]);
+    const { pending_count, accepted_count } = inviteResult.rows[0];
+
+    // If no pending invites and at least one accepted, mark as confirmed
+    if (parseInt(pending_count) === 0 && parseInt(accepted_count) > 0) {
+      return this.updateStatus(teeTimeId, 'confirmed');
+    }
+
+    return null;
+  }
 }
+
 
 module.exports = new TeeTimeRepository();

@@ -13,6 +13,9 @@ const logger = require("./config/logger");
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { logApiRequest } = require("./middleware/analytics");
 
+// Import services
+const schedulerService = require("./services/schedulerService");
+
 // Import routes
 const authRoutes = require("./routes/auth");
 const rosterRoutes = require("./routes/roster");
@@ -92,6 +95,10 @@ const gracefulShutdown = async (signal) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);
   
   try {
+    // Stop scheduler
+    schedulerService.stop();
+    logger.info('Scheduler stopped');
+    
     // Close database connections
     await pool.end();
     logger.info('Database connections closed');
@@ -111,6 +118,9 @@ const startServer = async () => {
   try {
     // Test database connection
     await testConnection();
+    
+    // Start scheduler for background tasks
+    schedulerService.start();
     
     // Start listening
     app.listen(PORT, () => {

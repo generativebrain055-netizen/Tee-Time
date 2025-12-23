@@ -135,6 +135,41 @@ class NotificationService {
       },
     });
   }
+
+  /**
+   * Create check-in reminder notification for organizer
+   * Sent 5 minutes before tee time
+   */
+  async notifyCheckInReminder(organizerId, teeTime) {
+    return this.createNotification({
+      userId: organizerId,
+      type: "push",
+      title: "Is Everyone Here? ⛳",
+      body: `Your tee time at ${teeTime.courseName} starts in 5 minutes. Tap to confirm attendance.`,
+      data: {
+        type: "check_in_reminder",
+        teeTimeId: teeTime.id,
+        courseName: teeTime.courseName,
+        action: "OPEN_CHECK_IN",
+      },
+    });
+  }
+
+  /**
+   * Create no-show notification for user
+   */
+  async notifyNoShow(userId, teeTime) {
+    return this.createNotification({
+      userId,
+      title: "Attendance Update",
+      body: `You were marked as a no-show for ${teeTime.courseName}. Your Social Rate has been updated.`,
+      data: {
+        type: "no_show",
+        teeTimeId: teeTime.id,
+        action: "VIEW_SOCIAL_RATE",
+      },
+    });
+  }
 }
 
 module.exports = new NotificationService();

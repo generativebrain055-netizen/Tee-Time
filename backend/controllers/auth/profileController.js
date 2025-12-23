@@ -1,4 +1,5 @@
 const userRepository = require("../../repositories/userRepository");
+const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const logger = require("../../config/logger");
 
 /**
@@ -18,6 +19,16 @@ const getCurrentUser = async (req, res, next) => {
         success: false,
         message: "User not found.",
       });
+    }
+
+    // Mark past tee times as completed on app load
+    try {
+      const completedTeeTimes = await teeTimeRepository.markPastTeeTimesCompleted();
+      if (completedTeeTimes.length > 0) {
+        logger.info(`Auto-completed ${completedTeeTimes.length} past tee times on getCurrentUser`);
+      }
+    } catch (err) {
+      logger.error("Error marking past tee times as completed:", err);
     }
 
     return res.json({

@@ -38,7 +38,10 @@ const NotificationItem = memo(({
                 return <Users size={20} color={COLORS.primary} />;
             case 'tee_time_invite':
             case 'tee_time_response':
+            case 'check_in_reminder':
                 return <Calendar size={20} color={COLORS.primary} />;
+            case 'no_show':
+                return <Bell size={20} color="#EF4444" />;
             default:
                 return <Bell size={20} color={COLORS.primary} />;
         }
@@ -160,6 +163,21 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
                 if (item.data?.teeTimeId) {
                     navigation?.navigate("TeeTimeDetail", { teeTimeId: item.data.teeTimeId });
                 }
+                break;
+
+            case 'check_in_reminder':
+                // Navigate to the check-in screen
+                if (item.data?.teeTimeId) {
+                    navigation?.navigate("CheckIn", {
+                        teeTimeId: item.data.teeTimeId,
+                        courseName: item.data.courseName
+                    });
+                }
+                break;
+
+            case 'no_show':
+                // Navigate to social rate history
+                navigation?.navigate("Profile");
                 break;
 
             case 'roster_add':

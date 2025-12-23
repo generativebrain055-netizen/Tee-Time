@@ -116,6 +116,9 @@ class InviteController {
                 result = await handleMaybe(invite, userId);
             }
 
+            // Check and update tee time status after response
+            await teeTimeRepository.checkAndUpdateStatus(invite.tee_time_id);
+
             return res.json(result);
         } catch (error) {
             logger.error("Respond to invite error:", error);

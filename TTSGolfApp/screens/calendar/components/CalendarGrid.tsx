@@ -2,7 +2,7 @@ import React, { memo, useCallback } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { CalendarDay } from "../types";
-import { CALENDAR_COLORS, DAY_CELL_WIDTH, DAYS_OF_WEEK, MONTHS } from "../constants";
+import { CALENDAR_COLORS, MONTHS } from "../constants";
 
 interface DayCellProps {
     item: CalendarDay;
@@ -72,8 +72,10 @@ const CalendarGrid = memo(({
 
         {/* Days of Week */}
         <View style={styles.weekRow}>
-            {DAYS_OF_WEEK.map((day) => (
-                <Text key={day} style={styles.weekDayText}>{day}</Text>
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <View key={day} style={styles.weekDayCell}>
+                    <Text style={styles.weekDayText}>{day}</Text>
+                </View>
             ))}
         </View>
 
@@ -92,7 +94,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
         marginTop: 20,
         borderRadius: 20,
-        padding: 20,
+        padding: 16,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -112,31 +114,32 @@ const styles = StyleSheet.create({
     },
     weekRow: {
         flexDirection: "row",
-        justifyContent: "flex-start",
         marginBottom: 10,
     },
+    weekDayCell: {
+        flex: 1,
+        alignItems: "center",
+    },
     weekDayText: {
-        width: DAY_CELL_WIDTH,
         textAlign: "center",
         color: CALENDAR_COLORS.textSecondary,
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: "500",
     },
     calendarGrid: {
         flexDirection: "row",
         flexWrap: "wrap",
-        justifyContent: "flex-start",
     },
     dayCell: {
-        width: DAY_CELL_WIDTH,
-        height: 50,
+        width: "14.285%",
+        aspectRatio: 1,
         justifyContent: "center",
         alignItems: "center",
-        marginBottom: 8,
+        marginBottom: 4,
     },
     dayCellInner: {
-        width: 40,
-        height: 40,
+        width: 36,
+        height: 36,
         borderRadius: 12,
         justifyContent: "center",
         alignItems: "center",
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
     },
     eventDot: {
         position: "absolute",
-        bottom: 4,
+        bottom: 2,
         width: 4,
         height: 4,
         borderRadius: 2,

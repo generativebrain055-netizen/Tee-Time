@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const userRepository = require("../../repositories/userRepository");
 const otpRepository = require("../../repositories/otpRepository");
+const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const twilioService = require("../../services/twilioService");
 const sessionService = require("../../services/sessionService");
 const logger = require("../../config/logger");
@@ -150,6 +151,16 @@ const loginUserAfterOTP = async (req, res, phoneNumber) => {
         success: false,
         message: "User not found. Please sign up first.",
       });
+    }
+
+    // Mark past tee times as completed
+    try {
+      const completedTeeTimes = await teeTimeRepository.markPastTeeTimesCompleted();
+      if (completedTeeTimes.length > 0) {
+        logger.info(`Auto-completed ${completedTeeTimes.length} past tee times on OTP login`);
+      }
+    } catch (err) {
+      logger.error("Error marking past tee times as completed:", err);
     }
 
     const { accessToken, refreshToken } = await sessionService.createSession({

@@ -375,6 +375,7 @@ CREATE TABLE tee_times (
     booking_reference VARCHAR(100),
     estimated_cost DECIMAL(10,2),
     weather_conditions JSONB,
+    check_in_reminder_sent BOOLEAN DEFAULT false,
     check_in_started_at TIMESTAMPTZ,
     check_in_completed_at TIMESTAMPTZ,
     check_in_completed_by UUID REFERENCES users(id),
@@ -392,6 +393,7 @@ CREATE INDEX idx_tee_times_creator_id ON tee_times(creator_id);
 CREATE INDEX idx_tee_times_date ON tee_times(tee_date);
 CREATE INDEX idx_tee_times_status ON tee_times(status);
 CREATE INDEX idx_tee_times_upcoming ON tee_times(tee_date, tee_time) WHERE status IN ('pending', 'confirmed');
+CREATE INDEX idx_tee_times_reminder_sent ON tee_times(check_in_reminder_sent) WHERE check_in_reminder_sent = false;
 
 -- ============================================================================
 -- 11. TEE_TIME_PARTICIPANTS TABLE
@@ -490,6 +492,7 @@ CREATE TABLE social_rate_logs (
         'invite_accepted',
         'invite_declined_late',
         'cancellation_late',
+        'cancellation_confirmed',
         'no_show',
         'initial_score',
         'admin_adjustment'

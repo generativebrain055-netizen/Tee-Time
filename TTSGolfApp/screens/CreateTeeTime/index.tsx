@@ -199,6 +199,25 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
                 Alert.alert("Missing Info", "Please fill in date and location");
                 return;
             }
+
+            // Validate tee time is not in the past
+            const now = new Date();
+            const teeDateTime = new Date(selectedDate);
+            const timeParts = selectedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (timeParts) {
+                let hour = parseInt(timeParts[1]);
+                const minute = parseInt(timeParts[2]);
+                const period = timeParts[3].toUpperCase();
+                if (period === "PM" && hour !== 12) hour += 12;
+                if (period === "AM" && hour === 12) hour = 0;
+                teeDateTime.setHours(hour, minute, 0, 0);
+            }
+
+            if (teeDateTime < now) {
+                Alert.alert("Invalid Time", "Cannot create a tee time in the past. Please select a future date and time.");
+                return;
+            }
+
             setStep(2);
         } else if (step === 2) {
             setStep(3);

@@ -19,6 +19,8 @@ export interface TeeTime {
     location: string;
     players: number;
     status: "confirmed" | "pending" | "cancelled" | "completed";
+    creatorId?: string;
+    isOrganizer?: boolean;
 }
 
 export type TeeTimesMap = Map<string, TeeTime[]>;

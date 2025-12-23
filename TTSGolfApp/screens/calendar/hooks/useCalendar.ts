@@ -6,6 +6,8 @@ import { teeTimeApi } from "../../../services/api";
 import { TeeTime, TeeTimesMap } from "../types";
 import { createTeeTimesMap, generateCalendarDays, getDateKey } from "../utils";
 
+export type StatusFilter = "all" | "pending" | "confirmed" | "completed";
+
 export const useCalendar = () => {
     const today = new Date();
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -14,6 +16,7 @@ export const useCalendar = () => {
     const [teeTimes, setTeeTimes] = useState<TeeTime[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
     const loadTeeTimes = useCallback(async () => {
         try {
@@ -63,16 +66,27 @@ export const useCalendar = () => {
         [teeTimes]
     );
 
+    // Filter tee times by status
+    const filteredTeeTimes = useMemo(() => {
+        if (statusFilter === "all") return teeTimes;
+        return teeTimes.filter((tt) => tt.status === statusFilter);
+    }, [teeTimes, statusFilter]);
+
+    const filteredTeeTimesMap: TeeTimesMap = useMemo(
+        () => createTeeTimesMap(filteredTeeTimes),
+        [filteredTeeTimes]
+    );
+
     const calendarDays = useMemo(
-        () => generateCalendarDays(currentYear, currentMonth, selectedDate, teeTimesMap),
-        [currentYear, currentMonth, selectedDate, teeTimesMap]
+        () => generateCalendarDays(currentYear, currentMonth, selectedDate, filteredTeeTimesMap),
+        [currentYear, currentMonth, selectedDate, filteredTeeTimesMap]
     );
 
     const selectedDateTeeTimes = useMemo(() => {
         if (!selectedDate) return [];
         const key = getDateKey(selectedDate);
-        return teeTimesMap.get(key) || [];
-    }, [selectedDate, teeTimesMap]);
+        return filteredTeeTimesMap.get(key) || [];
+    }, [selectedDate, filteredTeeTimesMap]);
 
     const handlePrevMonth = useCallback(() => {
         if (currentMonth === 0) {
@@ -108,6 +122,8 @@ export const useCalendar = () => {
         refreshing,
         calendarDays,
         selectedDateTeeTimes,
+        statusFilter,
+        setStatusFilter,
         onRefresh,
         handlePrevMonth,
         handleNextMonth,

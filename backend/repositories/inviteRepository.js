@@ -345,6 +345,26 @@ class InviteRepository {
     const result = await pool.query(query, [teeTimeId]);
     return result.rows;
   }
+
+  // Check if all invites have been responded to (accepted or declined)
+  async checkAllInvitesResponded(teeTimeId) {
+    const query = `
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+        COUNT(*) FILTER (WHERE status IN ('accepted', 'declined', 'expired')) as responded_count,
+        COUNT(*) as total_count
+      FROM invites
+      WHERE tee_time_id = $1
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    const { pending_count, responded_count, total_count } = result.rows[0];
+    return {
+      allResponded: parseInt(pending_count) === 0 && parseInt(total_count) > 0,
+      pendingCount: parseInt(pending_count),
+      respondedCount: parseInt(responded_count),
+      totalCount: parseInt(total_count),
+    };
+  }
 }
 
 module.exports = new InviteRepository();
