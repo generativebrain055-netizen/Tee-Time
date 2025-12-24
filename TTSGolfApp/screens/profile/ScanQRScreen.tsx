@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useCallback, memo, useRef, useEffect } from "react";
 import {
     View,
     Text,
@@ -8,10 +8,11 @@ import {
     ActivityIndicator,
     Modal,
     Image,
+    Dimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { X, Check, UserPlus } from "lucide-react-native";
+import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
+import { X, UserPlus } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../constants/colors";
 import { draftApi, ScannedUser } from "../../services/api";
@@ -19,6 +20,9 @@ import { draftApi, ScannedUser } from "../../services/api";
 interface Props {
     navigation: any;
 }
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const SCAN_AREA_SIZE = SCREEN_WIDTH * 0.7;
 
 function ScanQRScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
@@ -28,36 +32,59 @@ function ScanQRScreen({ navigation }: Props) {
     const [scannedUser, setScannedUser] = useState<ScannedUser | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirming, setConfirming] = useState(false);
+    const [cameraReady, setCameraReady] = useState(false);
+    const lastScannedData = useRef<string>("");
+    const scanCooldown = useRef(false);
 
-    const handleBarCodeScanned = useCallback(async ({ data }: { data: string }) => {
-        if (scanned || processing) return;
+    const handleBarCodeScanned = useCallback(({ type, data }: { type: string; data: string }) => {
+        // Prevent rapid duplicate scans
+        if (scanned || processing || scanCooldown.current) return;
+        if (lastScannedData.current === data) return;
 
+        console.log("=== QR CODE DETECTED ===");
+        console.log("Type:", type);
+        console.log("Data:", data);
+
+        scanCooldown.current = true;
+        lastScannedData.current = data;
         setScanned(true);
         setProcessing(true);
 
-        try {
-            const result = await draftApi.scanQRCode(data);
+        // Process the scan
+        (async () => {
+            try {
+                const result = await draftApi.scanQRCode(data);
 
-            if (result.success && result.user) {
-                setScannedUser(result.user);
-                setShowConfirmModal(true);
-            } else {
+                if (result.success && result.user) {
+                    setScannedUser(result.user);
+                    setShowConfirmModal(true);
+                } else {
+                    Alert.alert(
+                        "Invalid QR Code",
+                        result.message || "This QR code is not valid or has expired.",
+                        [{ text: "Try Again", onPress: resetScanner }]
+                    );
+                }
+            } catch (error: any) {
                 Alert.alert(
-                    "Invalid QR Code",
-                    result.message || "This QR code is not valid or has expired.",
-                    [{ text: "Try Again", onPress: () => setScanned(false) }]
+                    "Scan Failed",
+                    error.message || "Failed to process QR code",
+                    [{ text: "Try Again", onPress: resetScanner }]
                 );
+            } finally {
+                setProcessing(false);
             }
-        } catch (error: any) {
-            Alert.alert(
-                "Scan Failed",
-                error.message || "Failed to process QR code",
-                [{ text: "Try Again", onPress: () => setScanned(false) }]
-            );
-        } finally {
-            setProcessing(false);
-        }
+        })();
     }, [scanned, processing]);
+
+    const resetScanner = useCallback(() => {
+        setScanned(false);
+        lastScannedData.current = "";
+        // Add cooldown to prevent immediate re-scan
+        setTimeout(() => {
+            scanCooldown.current = false;
+        }, 1000);
+    }, []);
 
     const handleConfirmDraft = useCallback(async () => {
         if (!scannedUser) return;
@@ -88,14 +115,15 @@ function ScanQRScreen({ navigation }: Props) {
     const handleCancelConfirm = useCallback(() => {
         setShowConfirmModal(false);
         setScannedUser(null);
-        setScanned(false);
-    }, []);
+        resetScanner();
+    }, [resetScanner]);
 
     // Permission handling
     if (!permission) {
         return (
-            <View style={styles.container}>
+            <View style={[styles.container, styles.centered]}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Checking camera permission...</Text>
             </View>
         );
     }
@@ -120,46 +148,75 @@ function ScanQRScreen({ navigation }: Props) {
         <View style={styles.container}>
             <StatusBar style="light" />
 
+            {/* Camera - Full screen */}
             <CameraView
-                style={StyleSheet.absoluteFillObject}
-                barcodeScannerSettings={{
-                    barcodeTypes: ["qr"],
-                }}
+                style={styles.camera}
+                facing="back"
                 onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                barcodeScannerSettings={{
+                    barcodeTypes: ["qr", "aztec", "ean13", "ean8", "code128", "code39", "code93", "datamatrix", "pdf417", "upc_e"],
+                }}
+                onCameraReady={() => {
+                    console.log("Camera is ready");
+                    setCameraReady(true);
+                }}
             />
 
             {/* Overlay */}
-            <View style={styles.overlay}>
-                {/* Top section */}
-                <View style={[styles.overlaySection, { paddingTop: insets.top + 16 }]}>
-                    <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-                        <X size={28} color={COLORS.white} />
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Scan QR Code</Text>
+            <View style={styles.overlay} pointerEvents="box-none">
+                {/* Top dark area */}
+                <View style={[styles.darkArea, { paddingTop: insets.top }]}>
+                    <View style={styles.header}>
+                        <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+                            <X size={28} color="#fff" />
+                        </TouchableOpacity>
+                        <Text style={styles.title}>Scan QR Code</Text>
+                        <View style={{ width: 44 }} />
+                    </View>
                     <Text style={styles.subtitle}>
-                        Point your camera at a player's QR code to add them to your On-Deck list
+                        Position the QR code within the frame
                     </Text>
                 </View>
 
-                {/* Scanner frame */}
-                <View style={styles.scannerFrame}>
-                    <View style={styles.cornerTL} />
-                    <View style={styles.cornerTR} />
-                    <View style={styles.cornerBL} />
-                    <View style={styles.cornerBR} />
-                    {processing && (
-                        <View style={styles.processingOverlay}>
-                            <ActivityIndicator size="large" color={COLORS.white} />
-                            <Text style={styles.processingText}>Processing...</Text>
-                        </View>
-                    )}
+                {/* Middle row with scan area */}
+                <View style={styles.middleRow}>
+                    <View style={styles.darkSide} />
+                    <View style={styles.scanArea}>
+                        {/* Corner markers */}
+                        <View style={[styles.corner, styles.topLeft]} />
+                        <View style={[styles.corner, styles.topRight]} />
+                        <View style={[styles.corner, styles.bottomLeft]} />
+                        <View style={[styles.corner, styles.bottomRight]} />
+
+                        {/* Processing indicator */}
+                        {processing && (
+                            <View style={styles.processingBox}>
+                                <ActivityIndicator size="large" color="#fff" />
+                                <Text style={styles.processingText}>Processing...</Text>
+                            </View>
+                        )}
+
+                        {/* Camera status */}
+                        {!cameraReady && (
+                            <View style={styles.processingBox}>
+                                <ActivityIndicator size="small" color={COLORS.primary} />
+                                <Text style={styles.processingText}>Starting camera...</Text>
+                            </View>
+                        )}
+                    </View>
+                    <View style={styles.darkSide} />
                 </View>
 
-                {/* Bottom section */}
-                <View style={[styles.overlaySection, { paddingBottom: insets.bottom + 32 }]}>
+                {/* Bottom dark area */}
+                <View style={[styles.darkArea, styles.bottomArea, { paddingBottom: insets.bottom + 20 }]}>
                     <Text style={styles.hint}>
                         Ask the player to show their QR code from their profile
                     </Text>
+                    {scanned && !processing && (
+                        <TouchableOpacity style={styles.rescanBtn} onPress={resetScanner}>
+                            <Text style={styles.rescanText}>Tap to Scan Again</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
 
@@ -192,23 +249,23 @@ function ScanQRScreen({ navigation }: Props) {
 
                         <View style={styles.modalActions}>
                             <TouchableOpacity
-                                style={styles.cancelModalButton}
+                                style={styles.cancelModalBtn}
                                 onPress={handleCancelConfirm}
                                 disabled={confirming}
                             >
                                 <Text style={styles.cancelModalText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.confirmButton}
+                                style={styles.confirmBtn}
                                 onPress={handleConfirmDraft}
                                 disabled={confirming}
                             >
                                 {confirming ? (
-                                    <ActivityIndicator size="small" color={COLORS.white} />
+                                    <ActivityIndicator size="small" color="#fff" />
                                 ) : (
                                     <>
-                                        <UserPlus size={20} color={COLORS.white} />
-                                        <Text style={styles.confirmButtonText}>Add Player</Text>
+                                        <UserPlus size={20} color="#fff" />
+                                        <Text style={styles.confirmBtnText}>Add Player</Text>
                                     </>
                                 )}
                             </TouchableOpacity>
@@ -232,9 +289,14 @@ const styles = StyleSheet.create({
         alignItems: "center",
         padding: 32,
     },
+    loadingText: {
+        color: "#fff",
+        marginTop: 16,
+        fontSize: 14,
+    },
     permissionText: {
         fontSize: 16,
-        color: COLORS.white,
+        color: "#fff",
         textAlign: "center",
         marginBottom: 24,
     },
@@ -248,7 +310,7 @@ const styles = StyleSheet.create({
     permissionButtonText: {
         fontSize: 16,
         fontWeight: "600",
-        color: COLORS.white,
+        color: "#fff",
     },
     cancelButton: {
         paddingVertical: 12,
@@ -257,100 +319,116 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: COLORS.textSub,
     },
+    camera: {
+        flex: 1,
+    },
     overlay: {
         ...StyleSheet.absoluteFillObject,
-        justifyContent: "space-between",
     },
-    overlaySection: {
+    darkArea: {
         backgroundColor: "rgba(0,0,0,0.6)",
-        padding: 24,
         alignItems: "center",
+        paddingHorizontal: 20,
     },
-    closeButton: {
-        position: "absolute",
-        top: 60,
-        left: 20,
+    header: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        paddingTop: 16,
+        paddingBottom: 8,
+    },
+    closeBtn: {
         padding: 8,
     },
     title: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: "bold",
-        color: COLORS.white,
-        marginTop: 40,
-        marginBottom: 8,
+        color: "#fff",
     },
     subtitle: {
         fontSize: 14,
         color: "rgba(255,255,255,0.8)",
-        textAlign: "center",
-        lineHeight: 20,
+        paddingBottom: 20,
     },
-    scannerFrame: {
-        width: 280,
-        height: 280,
-        alignSelf: "center",
+    middleRow: {
+        flexDirection: "row",
+        height: SCAN_AREA_SIZE,
+    },
+    darkSide: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.6)",
+    },
+    scanArea: {
+        width: SCAN_AREA_SIZE,
+        height: SCAN_AREA_SIZE,
         position: "relative",
     },
-    cornerTL: {
+    corner: {
         position: "absolute",
+        width: 30,
+        height: 30,
+        borderColor: COLORS.primary,
+    },
+    topLeft: {
         top: 0,
         left: 0,
-        width: 40,
-        height: 40,
         borderTopWidth: 4,
         borderLeftWidth: 4,
-        borderColor: COLORS.primary,
         borderTopLeftRadius: 12,
     },
-    cornerTR: {
-        position: "absolute",
+    topRight: {
         top: 0,
         right: 0,
-        width: 40,
-        height: 40,
         borderTopWidth: 4,
         borderRightWidth: 4,
-        borderColor: COLORS.primary,
         borderTopRightRadius: 12,
     },
-    cornerBL: {
-        position: "absolute",
+    bottomLeft: {
         bottom: 0,
         left: 0,
-        width: 40,
-        height: 40,
         borderBottomWidth: 4,
         borderLeftWidth: 4,
-        borderColor: COLORS.primary,
         borderBottomLeftRadius: 12,
     },
-    cornerBR: {
-        position: "absolute",
+    bottomRight: {
         bottom: 0,
         right: 0,
-        width: 40,
-        height: 40,
         borderBottomWidth: 4,
         borderRightWidth: 4,
-        borderColor: COLORS.primary,
         borderBottomRightRadius: 12,
     },
-    processingOverlay: {
+    processingBox: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.7)",
+        backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "center",
         alignItems: "center",
-        borderRadius: 12,
     },
     processingText: {
-        color: COLORS.white,
-        marginTop: 12,
+        color: "#fff",
+        marginTop: 10,
         fontSize: 14,
     },
+    bottomArea: {
+        flex: 1,
+        justifyContent: "center",
+    },
     hint: {
-        fontSize: 13,
+        fontSize: 14,
         color: "rgba(255,255,255,0.7)",
         textAlign: "center",
+    },
+    rescanBtn: {
+        marginTop: 20,
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        backgroundColor: COLORS.primary,
+        borderRadius: 25,
+    },
+    rescanText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#fff",
     },
     modalOverlay: {
         flex: 1,
@@ -360,7 +438,7 @@ const styles = StyleSheet.create({
         padding: 24,
     },
     modalContent: {
-        backgroundColor: COLORS.white,
+        backgroundColor: "#fff",
         borderRadius: 20,
         padding: 24,
         width: "100%",
@@ -389,7 +467,7 @@ const styles = StyleSheet.create({
     avatarInitial: {
         fontSize: 32,
         fontWeight: "bold",
-        color: COLORS.white,
+        color: "#fff",
     },
     userName: {
         fontSize: 20,
@@ -418,7 +496,7 @@ const styles = StyleSheet.create({
         gap: 12,
         width: "100%",
     },
-    cancelModalButton: {
+    cancelModalBtn: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
@@ -430,7 +508,7 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         color: COLORS.textSub,
     },
-    confirmButton: {
+    confirmBtn: {
         flex: 1,
         flexDirection: "row",
         paddingVertical: 14,
@@ -440,9 +518,9 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 8,
     },
-    confirmButtonText: {
+    confirmBtnText: {
         fontSize: 16,
         fontWeight: "600",
-        color: COLORS.white,
+        color: "#fff",
     },
 });

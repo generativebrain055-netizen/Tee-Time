@@ -19,32 +19,37 @@ import {
     Users,
     UserCheck,
     UserX,
-    Share2,
     X,
     CheckCircle,
     AlertCircle,
     SkipForward,
     Hourglass,
+    Flag,
+    ChevronLeft,
+    MoreHorizontal,
+    Navigation,
 } from "lucide-react-native";
-import { Header } from "../components/common";
 import { teeTimeApi } from "../services/api";
 import { useAuthStore } from "../stores";
+import { LinearGradient } from "expo-linear-gradient";
 
 const COLORS = {
     primary: "#5DB075",
-    bg: "#F6F6F6",
+    primaryDark: "#4A9660",
+    bg: "#F8FAFC",
     white: "#FFFFFF",
     text: "#1C1C1E",
-    textSub: "#8A8A8E",
-    border: "#E5E5EA",
-    confirmed: "#2E7D32",
-    confirmedBg: "#E8F5E9",
-    pending: "#E65100",
-    pendingBg: "#FFF3E0",
-    declined: "#C62828",
-    declinedBg: "#FFEBEE",
-    completed: "#616161",
-    completedBg: "#E0E0E0",
+    textSub: "#6B7280",
+    textLight: "#9CA3AF",
+    border: "#E5E7EB",
+    confirmed: "#059669",
+    confirmedBg: "#D1FAE5",
+    pending: "#D97706",
+    pendingBg: "#FEF3C7",
+    declined: "#DC2626",
+    declinedBg: "#FEE2E2",
+    completed: "#6B7280",
+    completedBg: "#F3F4F6",
 };
 
 interface Participant {
@@ -92,37 +97,34 @@ interface TeeTimeDetail {
 const getStatusConfig = (status: string) => {
     switch (status) {
         case "confirmed":
-            return { label: "Confirmed", color: COLORS.confirmed, bg: COLORS.confirmedBg };
+            return { label: "Confirmed", color: COLORS.confirmed, bg: COLORS.confirmedBg, icon: CheckCircle };
         case "completed":
-            return { label: "Completed", color: COLORS.completed, bg: COLORS.completedBg };
+            return { label: "Completed", color: COLORS.completed, bg: COLORS.completedBg, icon: CheckCircle };
         case "cancelled":
-            return { label: "Cancelled", color: COLORS.declined, bg: COLORS.declinedBg };
+            return { label: "Cancelled", color: COLORS.declined, bg: COLORS.declinedBg, icon: X };
         default:
-            return { label: "Pending", color: COLORS.pending, bg: COLORS.pendingBg };
+            return { label: "Pending", color: COLORS.pending, bg: COLORS.pendingBg, icon: Clock };
     }
 };
 
 const getInviteTypeLabel = (type: string) => {
     switch (type) {
-        case "fcfs":
-            return "First Come First Serve";
-        case "roster":
-            return "Roster Order";
-        case "manual":
-            return "Manual Selection";
-        default:
-            return type || "Standard";
+        case "fcfs": return "First Come First Serve";
+        case "roster": return "Roster Order";
+        case "manual": return "Manual Selection";
+        default: return type || "Standard";
     }
 };
 
 const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-    });
+    return {
+        day: date.toLocaleDateString("en-US", { weekday: "short" }),
+        date: date.getDate(),
+        month: date.toLocaleDateString("en-US", { month: "short" }),
+        year: date.getFullYear(),
+        full: date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+    };
 };
 
 const formatTime = (timeStr: string) => {
@@ -134,157 +136,94 @@ const formatTime = (timeStr: string) => {
     return `${hour12}:${minutes} ${ampm}`;
 };
 
-const ParticipantItem = memo(({ participant, isCreator }: { participant: Participant; isCreator: boolean }) => (
-    <View style={styles.participantItem}>
-        <View style={styles.participantAvatar}>
-            {participant.avatar ? (
-                <Image source={{ uri: participant.avatar }} style={styles.avatarImage} />
-            ) : (
-                <Text style={styles.avatarInitial}>
-                    {participant.name?.charAt(0)?.toUpperCase() || "?"}
-                </Text>
-            )}
+// Avatar component
+const Avatar = memo(({ uri, name, size = 44 }: { uri?: string; name: string; size?: number }) => {
+    const initial = name?.charAt(0)?.toUpperCase() || "?";
+    return uri ? (
+        <Image source={{ uri }} style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]} />
+    ) : (
+        <View style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]}>
+            <Text style={[styles.avatarInitial, { fontSize: size * 0.4 }]}>{initial}</Text>
         </View>
+    );
+});
+
+// Participant Card
+const ParticipantCard = memo(({ participant }: { participant: Participant }) => (
+    <View style={styles.participantCard}>
+        <Avatar uri={participant.avatar} name={participant.name} size={48} />
         <View style={styles.participantInfo}>
             <Text style={styles.participantName}>{participant.name}</Text>
-            {participant.handicap !== undefined && (
-                <Text style={styles.participantHandicap}>HCP {participant.handicap}</Text>
-            )}
-        </View>
-        {participant.isCreator && (
-            <View style={styles.creatorBadge}>
-                <Text style={styles.creatorBadgeText}>Organizer</Text>
+            <View style={styles.participantMeta}>
+                {participant.handicap !== undefined && (
+                    <View style={styles.handicapBadge}>
+                        <Text style={styles.handicapText}>HCP {participant.handicap}</Text>
+                    </View>
+                )}
+                {participant.isCreator && (
+                    <View style={styles.organizerBadge}>
+                        <Text style={styles.organizerText}>Organizer</Text>
+                    </View>
+                )}
             </View>
-        )}
+        </View>
+        <UserCheck size={20} color={COLORS.confirmed} />
     </View>
 ));
 
-const InviteItem = memo(({ invite, isCreator, onSkip }: { invite: Invite; isCreator: boolean; onSkip?: (inviteId: string) => void }) => {
+// Invite Card with countdown
+const InviteCard = memo(({ invite, isCreator, onSkip }: { invite: Invite; isCreator: boolean; onSkip?: (id: string) => void }) => {
     const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
 
-    // Live countdown timer
     useEffect(() => {
         if (!invite.expiresAt || invite.status !== "pending") {
             setTimeRemaining(null);
             return;
         }
 
-        const calculateTimeRemaining = () => {
-            const expiresAt = new Date(invite.expiresAt!);
-            const now = new Date();
-            const diffMs = expiresAt.getTime() - now.getTime();
-
-            if (diffMs <= 0) {
-                setTimeRemaining("Expired");
-                return;
-            }
-
-            const diffSecs = Math.floor(diffMs / 1000);
-            const diffMins = Math.floor(diffSecs / 60);
-            const diffHours = Math.floor(diffMins / 60);
-
-            if (diffMins < 1) {
-                setTimeRemaining(`${diffSecs}s left`);
-            } else if (diffMins < 60) {
-                const secs = diffSecs % 60;
-                setTimeRemaining(`${diffMins}m ${secs}s left`);
-            } else {
-                const mins = diffMins % 60;
-                setTimeRemaining(`${diffHours}h ${mins}m left`);
-            }
+        const calculate = () => {
+            const diff = new Date(invite.expiresAt!).getTime() - Date.now();
+            if (diff <= 0) { setTimeRemaining("Expired"); return; }
+            const mins = Math.floor(diff / 60000);
+            const hours = Math.floor(mins / 60);
+            setTimeRemaining(hours >= 1 ? `${hours}h ${mins % 60}m` : `${mins}m`);
         };
 
-        // Calculate immediately
-        calculateTimeRemaining();
-
-        // Update every second for accurate countdown
-        const interval = setInterval(calculateTimeRemaining, 1000);
-
+        calculate();
+        const interval = setInterval(calculate, 60000);
         return () => clearInterval(interval);
     }, [invite.expiresAt, invite.status]);
 
-    const getInviteStatusIcon = () => {
+    const getStatusStyle = () => {
         switch (invite.status) {
-            case "accepted":
-                return <UserCheck size={18} color={COLORS.confirmed} />;
-            case "declined":
-                return <UserX size={18} color={COLORS.declined} />;
-            case "expired":
-                return <AlertCircle size={18} color={COLORS.textSub} />;
-            case "waitlist":
-                return <Hourglass size={18} color={COLORS.pending} />;
-            default:
-                // Pending - show arrow/waiting indicator
-                return <Clock size={18} color={COLORS.pending} />;
+            case "accepted": return { color: COLORS.confirmed, bg: COLORS.confirmedBg, icon: UserCheck, label: "Accepted" };
+            case "declined": return { color: COLORS.declined, bg: COLORS.declinedBg, icon: UserX, label: "Declined" };
+            case "expired": return { color: COLORS.textSub, bg: COLORS.completedBg, icon: AlertCircle, label: "Expired" };
+            case "waitlist": return { color: COLORS.pending, bg: COLORS.pendingBg, icon: Hourglass, label: "Waitlist" };
+            default: return { color: COLORS.pending, bg: COLORS.pendingBg, icon: Clock, label: "Pending" };
         }
     };
 
-    const getInviteStatusColor = () => {
-        switch (invite.status) {
-            case "accepted":
-                return COLORS.confirmed;
-            case "declined":
-                return COLORS.declined;
-            case "expired":
-                return COLORS.textSub;
-            case "waitlist":
-                return COLORS.pending;
-            default:
-                return COLORS.pending;
-        }
-    };
-
-    const getStatusLabel = () => {
-        switch (invite.status) {
-            case "accepted":
-                return "Accepted";
-            case "declined":
-                return "Declined";
-            case "expired":
-                return "Timed Out";
-            case "waitlist":
-                return "Waitlist";
-            default:
-                return "Waiting...";
-        }
-    };
-
-    const isPending = invite.status === "pending";
-    const canSkip = isCreator && isPending;
+    const status = getStatusStyle();
+    const StatusIcon = status.icon;
 
     return (
-        <View style={styles.inviteItem}>
-            <View style={[styles.statusIndicator, { backgroundColor: getInviteStatusColor() + "20" }]}>
-                {getInviteStatusIcon()}
+        <View style={styles.inviteCard}>
+            <View style={[styles.inviteStatusDot, { backgroundColor: status.bg }]}>
+                <StatusIcon size={16} color={status.color} />
             </View>
-            <View style={styles.participantAvatar}>
-                {invite.invitee.avatar ? (
-                    <Image source={{ uri: invite.invitee.avatar }} style={styles.avatarImage} />
-                ) : (
-                    <Text style={styles.avatarInitial}>
-                        {invite.invitee.name?.charAt(0)?.toUpperCase() || "?"}
-                    </Text>
-                )}
-            </View>
-            <View style={styles.participantInfo}>
-                <Text style={styles.participantName}>{invite.invitee.name}</Text>
+            <Avatar uri={invite.invitee.avatar} name={invite.invitee.name} size={44} />
+            <View style={styles.inviteInfo}>
+                <Text style={styles.inviteName}>{invite.invitee.name}</Text>
                 <View style={styles.inviteStatusRow}>
-                    <Text style={[styles.inviteStatus, { color: getInviteStatusColor() }]}>
-                        {getStatusLabel()}
-                    </Text>
-                    {timeRemaining && (
-                        <Text style={styles.timeRemaining}>• {timeRemaining}</Text>
-                    )}
+                    <Text style={[styles.inviteStatusText, { color: status.color }]}>{status.label}</Text>
+                    {timeRemaining && <Text style={styles.inviteTime}>• {timeRemaining}</Text>}
                 </View>
             </View>
-            {canSkip && onSkip && (
-                <TouchableOpacity
-                    style={styles.skipButton}
-                    onPress={() => onSkip(invite.id)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                    <SkipForward size={16} color={COLORS.pending} />
-                    <Text style={styles.skipButtonText}>Skip</Text>
+            {isCreator && invite.status === "pending" && onSkip && (
+                <TouchableOpacity style={styles.skipBtn} onPress={() => onSkip(invite.id)}>
+                    <SkipForward size={14} color={COLORS.pending} />
+                    <Text style={styles.skipBtnText}>Skip</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -303,9 +242,7 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
     const loadTeeTime = useCallback(async () => {
         try {
             const response = await teeTimeApi.getTeeTime(teeTimeId);
-            if (response.success) {
-                setTeeTime(response.teeTime);
-            }
+            if (response.success) setTeeTime(response.teeTime);
         } catch (error) {
             console.error("Failed to load tee time:", error);
             Alert.alert("Error", "Failed to load tee time details");
@@ -315,83 +252,48 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
         }
     }, [teeTimeId]);
 
-    useEffect(() => {
-        loadTeeTime();
-    }, [loadTeeTime]);
+    useEffect(() => { loadTeeTime(); }, [loadTeeTime]);
 
-    const handleRefresh = useCallback(() => {
-        setRefreshing(true);
-        loadTeeTime();
-    }, [loadTeeTime]);
+    const handleRefresh = useCallback(() => { setRefreshing(true); loadTeeTime(); }, [loadTeeTime]);
 
     const handleCancel = useCallback(async () => {
-        Alert.alert(
-            "Cancel Tee Time",
-            "Are you sure you want to cancel this tee time? All participants will be notified.",
-            [
-                { text: "No", style: "cancel" },
-                {
-                    text: "Yes, Cancel",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const response = await teeTimeApi.cancelTeeTime(teeTimeId);
-                            if (response.success) {
-                                Alert.alert("Cancelled", "Tee time has been cancelled");
-                                navigation.goBack();
-                            }
-                        } catch (error) {
-                            Alert.alert("Error", "Failed to cancel tee time");
-                        }
-                    },
+        Alert.alert("Cancel Tee Time", "Are you sure? All participants will be notified.", [
+            { text: "No", style: "cancel" },
+            {
+                text: "Yes, Cancel", style: "destructive",
+                onPress: async () => {
+                    try {
+                        const response = await teeTimeApi.cancelTeeTime(teeTimeId);
+                        if (response.success) { Alert.alert("Cancelled", "Tee time has been cancelled"); navigation.goBack(); }
+                    } catch { Alert.alert("Error", "Failed to cancel tee time"); }
                 },
-            ]
-        );
+            },
+        ]);
     }, [teeTimeId, navigation]);
 
     const handleCheckIn = useCallback(() => {
         if (!teeTime) return;
-        navigation.navigate("CheckIn", {
-            teeTimeId: teeTime.id,
-            courseName: teeTime.courseName,
-        });
+        navigation.navigate("CheckIn", { teeTimeId: teeTime.id, courseName: teeTime.courseName });
     }, [navigation, teeTime]);
 
     const handleSkipInvite = useCallback(async (inviteId: string) => {
         if (!teeTime) return;
-
         const invitee = teeTime.invites.find(i => i.id === inviteId)?.invitee.name || "this person";
-
-        Alert.alert(
-            "Skip Invite",
-            `Skip ${invitee} and advance to the next roster member?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Skip",
-                    onPress: async () => {
-                        try {
-                            const response = await teeTimeApi.skipInvite(teeTime.id, inviteId);
-                            if (response.success) {
-                                // Update local state with new invites
-                                setTeeTime(prev => prev ? {
-                                    ...prev,
-                                    invites: response.invites
-                                } : null);
-
-                                if (response.nextInvite) {
-                                    Alert.alert("Skipped", `Now waiting for ${response.nextInvite.inviteeName}`);
-                                } else {
-                                    Alert.alert("Skipped", "No more roster members to invite");
-                                }
-                            }
-                        } catch (error) {
-                            Alert.alert("Error", "Failed to skip invite");
+        Alert.alert("Skip Invite", `Skip ${invitee} and advance to next?`, [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Skip",
+                onPress: async () => {
+                    try {
+                        const response = await teeTimeApi.skipInvite(teeTime.id, inviteId);
+                        if (response.success) {
+                            setTeeTime(prev => prev ? { ...prev, invites: response.invites } : null);
+                            Alert.alert("Skipped", response.nextInvite ? `Now waiting for ${response.nextInvite.inviteeName}` : "No more roster members");
                         }
-                    },
+                    } catch { Alert.alert("Error", "Failed to skip invite"); }
                 },
-            ]
-        );
+            },
+        ]);
     }, [teeTime]);
 
     if (loading) {
@@ -411,145 +313,150 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
     }
 
     const statusConfig = getStatusConfig(teeTime.status);
+    const StatusIcon = statusConfig.icon;
     const isCreator = currentUser?.id === teeTime.creator.id;
-    const canCancel = isCreator && teeTime.status !== "cancelled" && teeTime.status !== "completed";
-    const canCheckIn = isCreator && (teeTime.status === "confirmed" || teeTime.status === "in_progress");
+    const canCancel = isCreator && !["cancelled", "completed"].includes(teeTime.status);
+    const canCheckIn = isCreator && ["confirmed", "in_progress"].includes(teeTime.status);
+    const dateInfo = formatDate(teeTime.teeDate);
+    const spotsLeft = teeTime.maxPlayers - teeTime.participants.length;
 
     return (
         <View style={styles.container}>
-            <StatusBar style="dark" />
-            <Header title="Tee Time Details" onBack={() => navigation.goBack()} />
+            <StatusBar style="light" />
 
             <ScrollView
                 style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.white} />}
             >
-                {/* Status Badge */}
-                <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-                    <Text style={[styles.statusText, { color: statusConfig.color }]}>
-                        {statusConfig.label}
-                    </Text>
-                </View>
+                {/* Hero Header */}
+                <View style={styles.heroSection}>
+                    <LinearGradient colors={["#5DB075", "#3D8B55"]} style={styles.heroGradient}>
+                        {/* Back Button */}
+                        <TouchableOpacity style={[styles.backBtn, { top: insets.top + 8 }]} onPress={() => navigation.goBack()}>
+                            <ChevronLeft size={24} color={COLORS.white} />
+                        </TouchableOpacity>
 
-                {/* Course Info */}
-                <View style={styles.section}>
-                    <View style={styles.courseHeader}>
-                        <MapPin size={24} color={COLORS.primary} />
-                        <View style={styles.courseInfo}>
-                            <Text style={styles.courseName}>{teeTime.courseName}</Text>
+                        {/* Status Badge */}
+                        <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+                            <StatusIcon size={14} color={statusConfig.color} />
+                            <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+                        </View>
+
+                        {/* Course Info */}
+                        <View style={styles.heroContent}>
+                            <View style={styles.courseIconCircle}>
+                                <Flag size={28} color={COLORS.white} />
+                            </View>
+                            <Text style={styles.courseName}>{teeTime.courseName || "Golf Course"}</Text>
                             {teeTime.courseLocation && (
-                                <Text style={styles.courseLocation}>{teeTime.courseLocation}</Text>
+                                <View style={styles.locationRow}>
+                                    <MapPin size={14} color="rgba(255,255,255,0.8)" />
+                                    <Text style={styles.locationText}>{teeTime.courseLocation}</Text>
+                                </View>
                             )}
                         </View>
+
+                        {/* Date/Time Cards */}
+                        <View style={styles.dateTimeRow}>
+                            <View style={styles.dateCard}>
+                                <Calendar size={18} color={COLORS.primary} />
+                                <View style={styles.dateCardText}>
+                                    <Text style={styles.dateCardLabel}>Date</Text>
+                                    <Text style={styles.dateCardValue}>{dateInfo.full}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.timeCard}>
+                                <Clock size={18} color={COLORS.primary} />
+                                <View style={styles.dateCardText}>
+                                    <Text style={styles.dateCardLabel}>Tee Time</Text>
+                                    <Text style={styles.dateCardValue}>{formatTime(teeTime.teeTime)}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </LinearGradient>
+                </View>
+
+                {/* Quick Stats */}
+                <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{teeTime.participants.length}/{teeTime.maxPlayers}</Text>
+                        <Text style={styles.statLabel}>Players</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{spotsLeft}</Text>
+                        <Text style={styles.statLabel}>Spots Left</Text>
+                    </View>
+                    <View style={styles.statDivider} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>{getInviteTypeLabel(teeTime.inviteType).split(" ")[0]}</Text>
+                        <Text style={styles.statLabel}>Invite Type</Text>
                     </View>
                 </View>
 
-                {/* Date & Time */}
+                {/* Participants Section */}
                 <View style={styles.section}>
-                    <View style={styles.row}>
-                        <View style={styles.infoItem}>
-                            <Calendar size={20} color={COLORS.textSub} />
-                            <Text style={styles.infoText}>{formatDate(teeTime.teeDate)}</Text>
+                    <View style={styles.sectionHeader}>
+                        <Users size={18} color={COLORS.primary} />
+                        <Text style={styles.sectionTitle}>Confirmed Players</Text>
+                        <View style={styles.countBadge}>
+                            <Text style={styles.countText}>{teeTime.participants.length}</Text>
                         </View>
                     </View>
-                    <View style={styles.row}>
-                        <View style={styles.infoItem}>
-                            <Clock size={20} color={COLORS.textSub} />
-                            <Text style={styles.infoText}>{formatTime(teeTime.teeTime)}</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Invite Type & Group Size */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Details</Text>
-                    <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Invite Type</Text>
-                        <Text style={styles.detailValue}>{getInviteTypeLabel(teeTime.inviteType)}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Group Size</Text>
-                        <Text style={styles.detailValue}>
-                            {teeTime.participants.length} / {teeTime.maxPlayers} players
-                        </Text>
-                    </View>
-                    {teeTime.notes && (
-                        <View style={styles.notesContainer}>
-                            <Text style={styles.detailLabel}>Notes</Text>
-                            <Text style={styles.notesText}>{teeTime.notes}</Text>
-                        </View>
-                    )}
-                </View>
-
-                {/* Participants */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>
-                        Participants ({teeTime.participants.length})
-                    </Text>
-                    {teeTime.participants.map((participant) => (
-                        <ParticipantItem
-                            key={participant.id}
-                            participant={participant}
-                            isCreator={participant.isCreator}
-                        />
+                    {teeTime.participants.map((p) => (
+                        <ParticipantCard key={p.id} participant={p} />
                     ))}
                 </View>
 
-                {/* Pending Invites */}
+                {/* Invites Section */}
                 {teeTime.invites.length > 0 && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>
-                            Invites ({teeTime.invites.length})
-                        </Text>
+                        <View style={styles.sectionHeader}>
+                            <Clock size={18} color={COLORS.pending} />
+                            <Text style={styles.sectionTitle}>Pending Invites</Text>
+                            <View style={[styles.countBadge, { backgroundColor: COLORS.pendingBg }]}>
+                                <Text style={[styles.countText, { color: COLORS.pending }]}>{teeTime.invites.length}</Text>
+                            </View>
+                        </View>
                         {teeTime.invites.map((invite) => (
-                            <InviteItem
-                                key={invite.id}
-                                invite={invite}
-                                isCreator={isCreator}
-                                onSkip={handleSkipInvite}
-                            />
+                            <InviteCard key={invite.id} invite={invite} isCreator={isCreator} onSkip={handleSkipInvite} />
                         ))}
+                    </View>
+                )}
+
+                {/* Notes Section */}
+                {teeTime.notes && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Notes</Text>
+                        <Text style={styles.notesText}>{teeTime.notes}</Text>
                     </View>
                 )}
 
                 {/* Organizer */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Organized by</Text>
-                    <View style={styles.organizerRow}>
-                        <View style={styles.participantAvatar}>
-                            {teeTime.creator.avatar ? (
-                                <Image source={{ uri: teeTime.creator.avatar }} style={styles.avatarImage} />
-                            ) : (
-                                <Text style={styles.avatarInitial}>
-                                    {teeTime.creator.firstName?.charAt(0)?.toUpperCase() || "?"}
-                                </Text>
-                            )}
-                        </View>
-                        <Text style={styles.organizerName}>
-                            {teeTime.creator.firstName} {teeTime.creator.lastName}
-                        </Text>
+                    <View style={styles.organizerCard}>
+                        <Avatar uri={teeTime.creator.avatar} name={`${teeTime.creator.firstName} ${teeTime.creator.lastName}`} size={48} />
+                        <Text style={styles.organizerName}>{teeTime.creator.firstName} {teeTime.creator.lastName}</Text>
                     </View>
                 </View>
 
-                {/* Check-In Button */}
-                {canCheckIn && (
-                    <TouchableOpacity style={styles.checkInButton} onPress={handleCheckIn}>
-                        <CheckCircle size={20} color={COLORS.white} />
-                        <Text style={styles.checkInButtonText}>Check In Players</Text>
-                    </TouchableOpacity>
-                )}
-
-                {/* Cancel Button */}
-                {canCancel && (
-                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                        <X size={20} color={COLORS.declined} />
-                        <Text style={styles.cancelButtonText}>Cancel Tee Time</Text>
-                    </TouchableOpacity>
-                )}
+                {/* Action Buttons */}
+                <View style={styles.actionsSection}>
+                    {canCheckIn && (
+                        <TouchableOpacity style={styles.primaryBtn} onPress={handleCheckIn}>
+                            <CheckCircle size={20} color={COLORS.white} />
+                            <Text style={styles.primaryBtnText}>Check In Players</Text>
+                        </TouchableOpacity>
+                    )}
+                    {canCancel && (
+                        <TouchableOpacity style={styles.dangerBtn} onPress={handleCancel}>
+                            <X size={20} color={COLORS.declined} />
+                            <Text style={styles.dangerBtnText}>Cancel Tee Time</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -557,234 +464,82 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
     );
 }
 
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 20,
-    },
-    errorText: {
-        fontSize: 16,
-        color: COLORS.textSub,
-    },
-    statusBadge: {
-        alignSelf: "flex-start",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        marginBottom: 20,
-    },
-    statusText: {
-        fontSize: 14,
-        fontWeight: "600",
-    },
-    section: {
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 12,
-    },
-    courseHeader: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-    },
-    courseInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    courseName: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-    },
-    courseLocation: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        marginTop: 4,
-    },
-    row: {
-        marginBottom: 12,
-    },
-    infoItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    infoText: {
-        fontSize: 15,
-        color: COLORS.text,
-    },
-    detailRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    detailLabel: {
-        fontSize: 14,
-        color: COLORS.textSub,
-    },
-    detailValue: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.text,
-    },
-    notesContainer: {
-        marginTop: 12,
-    },
-    notesText: {
-        fontSize: 14,
-        color: COLORS.text,
-        marginTop: 4,
-        lineHeight: 20,
-    },
-    participantItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    inviteItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    statusIndicator: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 8,
-    },
-    inviteStatusRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    timeRemaining: {
-        fontSize: 12,
-        color: COLORS.textSub,
-    },
-    skipButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        backgroundColor: COLORS.pendingBg,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    skipButtonText: {
-        fontSize: 12,
-        fontWeight: "500",
-        color: COLORS.pending,
-    },
-    participantAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        overflow: "hidden",
-    },
-    avatarImage: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-    },
-    avatarInitial: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    participantInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    participantName: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.text,
-    },
-    participantHandicap: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    inviteStatus: {
-        fontSize: 13,
-        marginTop: 2,
-    },
-    creatorBadge: {
-        backgroundColor: COLORS.confirmedBg,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    creatorBadgeText: {
-        fontSize: 12,
-        fontWeight: "500",
-        color: COLORS.confirmed,
-    },
-    organizerRow: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    organizerName: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.text,
-        marginLeft: 12,
-    },
-    checkInButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: COLORS.primary,
-        borderRadius: 12,
-        paddingVertical: 14,
-        gap: 8,
-        marginBottom: 12,
-    },
-    checkInButtonText: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    cancelButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: COLORS.declinedBg,
-        borderRadius: 12,
-        paddingVertical: 14,
-        gap: 8,
-    },
-    cancelButtonText: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.declined,
-    },
+    container: { flex: 1, backgroundColor: COLORS.bg },
+    centered: { justifyContent: "center", alignItems: "center" },
+    scrollView: { flex: 1 },
+    errorText: { fontSize: 16, color: COLORS.textSub },
+
+    // Hero Section
+    heroSection: { marginBottom: -30 },
+    heroGradient: { paddingTop: 100, paddingBottom: 50, paddingHorizontal: 20, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+    backBtn: { position: "absolute", left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center", zIndex: 10 },
+    statusBadge: { flexDirection: "row", alignItems: "center", alignSelf: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginBottom: 20 },
+    statusText: { fontSize: 13, fontWeight: "600" },
+    heroContent: { alignItems: "center", marginBottom: 24 },
+    courseIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+    courseName: { fontSize: 24, fontWeight: "800", color: COLORS.white, textAlign: "center", marginBottom: 8 },
+    locationRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    locationText: { fontSize: 14, color: "rgba(255,255,255,0.85)" },
+    dateTimeRow: { flexDirection: "row", gap: 12 },
+    dateCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: COLORS.white, borderRadius: 14, padding: 14 },
+    timeCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: COLORS.white, borderRadius: 14, padding: 14 },
+    dateCardText: { flex: 1 },
+    dateCardLabel: { fontSize: 11, color: COLORS.textSub, textTransform: "uppercase", letterSpacing: 0.5 },
+    dateCardValue: { fontSize: 14, fontWeight: "600", color: COLORS.text, marginTop: 2 },
+
+    // Stats Row
+    statsRow: { flexDirection: "row", backgroundColor: COLORS.white, marginHorizontal: 20, marginTop: 16, borderRadius: 16, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+    statItem: { flex: 1, alignItems: "center" },
+    statValue: { fontSize: 20, fontWeight: "700", color: COLORS.text },
+    statLabel: { fontSize: 12, color: COLORS.textSub, marginTop: 4 },
+    statDivider: { width: 1, backgroundColor: COLORS.border, marginVertical: 4 },
+
+    // Sections
+    section: { backgroundColor: COLORS.white, marginHorizontal: 20, marginTop: 16, borderRadius: 16, padding: 16 },
+    sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+    sectionTitle: { fontSize: 16, fontWeight: "700", color: COLORS.text, flex: 1 },
+    countBadge: { backgroundColor: COLORS.confirmedBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    countText: { fontSize: 13, fontWeight: "600", color: COLORS.confirmed },
+
+    // Participant Card
+    participantCard: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    participantInfo: { flex: 1, marginLeft: 12 },
+    participantName: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+    participantMeta: { flexDirection: "row", gap: 8, marginTop: 4 },
+    handicapBadge: { backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    handicapText: { fontSize: 12, fontWeight: "500", color: COLORS.textSub },
+    organizerBadge: { backgroundColor: COLORS.confirmedBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    organizerText: { fontSize: 12, fontWeight: "500", color: COLORS.confirmed },
+
+    // Invite Card
+    inviteCard: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    inviteStatusDot: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center", marginRight: 8 },
+    inviteInfo: { flex: 1, marginLeft: 12 },
+    inviteName: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+    inviteStatusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+    inviteStatusText: { fontSize: 13, fontWeight: "500" },
+    inviteTime: { fontSize: 12, color: COLORS.textSub },
+    skipBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.pendingBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+    skipBtnText: { fontSize: 12, fontWeight: "600", color: COLORS.pending },
+
+    // Avatar
+    avatar: { backgroundColor: COLORS.border },
+    avatarPlaceholder: { backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center" },
+    avatarInitial: { fontWeight: "700", color: COLORS.white },
+
+    // Notes
+    notesText: { fontSize: 14, color: COLORS.text, lineHeight: 22 },
+
+    // Organizer
+    organizerCard: { flexDirection: "row", alignItems: "center", gap: 12 },
+    organizerName: { fontSize: 15, fontWeight: "600", color: COLORS.text },
+
+    // Actions
+    actionsSection: { paddingHorizontal: 20, marginTop: 20, gap: 12 },
+    primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.primary, borderRadius: 14, paddingVertical: 16 },
+    primaryBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.white },
+    dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.declinedBg, borderRadius: 14, paddingVertical: 16 },
+    dangerBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.declined },
 });
