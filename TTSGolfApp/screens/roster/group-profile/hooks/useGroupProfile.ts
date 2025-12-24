@@ -28,15 +28,14 @@ export const useGroupProfile = (groupId: string) => {
 
     const loadGroupData = useCallback(async () => {
         try {
-            const [groupsRes, membersRes, teeTimesRes] = await Promise.all([
-                rosterApi.getGroups(),
+            const [groupRes, membersRes, teeTimesRes] = await Promise.all([
+                rosterApi.getGroup(groupId),
                 rosterApi.getGroupMembers(groupId),
                 teeTimeApi.getUpcoming(5),
             ]);
 
-            if (groupsRes.success) {
-                const foundGroup = groupsRes.groups.find(g => g.id === groupId);
-                if (foundGroup) setGroup(foundGroup);
+            if (groupRes.success && groupRes.group) {
+                setGroup(groupRes.group);
             }
 
             if (membersRes.success) setMembers(membersRes.members);

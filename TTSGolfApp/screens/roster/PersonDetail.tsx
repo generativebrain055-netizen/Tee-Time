@@ -79,6 +79,16 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
     }, [person.id, person.name, onBack, onRemoved]);
 
     const handleBlock = useCallback(() => {
+        const targetUserId = profile?.contact?.userId;
+
+        if (!targetUserId) {
+            Alert.alert(
+                "Cannot Block",
+                "This contact is not a registered user and cannot be blocked. You can remove them from your roster instead."
+            );
+            return;
+        }
+
         Alert.alert(
             "Block User",
             `Block ${person.name}? They will be removed from your roster and won't be able to:\n\n• Send you friend requests\n• Invite you to tee times\n• See your availability`,
@@ -92,7 +102,7 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
                             // Remove from roster first
                             await rosterApi.removeFromRoster(person.id);
                             // Then block the user
-                            await friendApi.blockUser(profile?.contact?.userId || person.id);
+                            await friendApi.blockUser(targetUserId);
                             Alert.alert("Blocked", `${person.name} has been blocked.`);
                             onRemoved?.();
                             onBack();

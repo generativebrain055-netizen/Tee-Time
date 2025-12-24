@@ -1,36 +1,110 @@
-import React, { memo, useCallback } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
-import { UserPlus, ChevronRight } from "lucide-react-native";
+import React, { memo, useCallback, useState } from "react";
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, Modal, TouchableWithoutFeedback } from "react-native";
+import { UserPlus, ChevronRight, MoreVertical, UserMinus, Ban } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { RosterContact } from "../../../../services/api";
 import { getMemberInitials } from "../utils";
 
 interface MemberCardProps {
     member: RosterContact;
+    isOwner?: boolean;
     onPress: () => void;
+    onRemove: () => void;
+    onBlock: () => void;
 }
 
-const MemberCard = memo(({ member, onPress }: MemberCardProps) => {
+const MemberCard = memo(({ member, isOwner, onPress, onRemove, onBlock }: MemberCardProps) => {
+    const [showMenu, setShowMenu] = useState(false);
     const name = member.contact?.name || "Unknown";
     const initials = getMemberInitials(name);
 
     return (
-        <TouchableOpacity style={styles.card} onPress={onPress}>
-            {member.contact?.avatar ? (
-                <Image source={{ uri: member.contact.avatar }} style={styles.avatar} />
-            ) : (
-                <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitials}>{initials}</Text>
-                </View>
-            )}
-            <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                {member.contact?.handicap != null && (
-                    <Text style={styles.handicap}>Handicap: {member.contact.handicap}</Text>
+        <>
+            <TouchableOpacity style={styles.card} onPress={onPress}>
+                {member.contact?.avatar ? (
+                    <Image source={{ uri: member.contact.avatar }} style={styles.avatar} />
+                ) : (
+                    <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarInitials}>{initials}</Text>
+                    </View>
                 )}
-            </View>
-            <ChevronRight size={20} color={COLORS.textSub} />
-        </TouchableOpacity>
+                <View style={styles.info}>
+                    <Text style={styles.name} numberOfLines={1}>{name}</Text>
+                    {member.contact?.handicap != null && (
+                        <Text style={styles.handicap}>Handicap: {member.contact.handicap}</Text>
+                    )}
+                </View>
+                {isOwner !== false ? (
+                    <TouchableOpacity
+                        style={styles.menuButton}
+                        onPress={() => setShowMenu(true)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MoreVertical size={20} color={COLORS.textSub} />
+                    </TouchableOpacity>
+                ) : (
+                    <ChevronRight size={20} color={COLORS.textSub} />
+                )}
+            </TouchableOpacity>
+
+            {/* Member Action Menu */}
+            <Modal
+                visible={showMenu}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowMenu(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
+                    <View style={styles.menuOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.menuContainer}>
+                                <Text style={styles.menuTitle}>{name}</Text>
+
+                                <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={() => {
+                                        setShowMenu(false);
+                                        onPress();
+                                    }}
+                                >
+                                    <ChevronRight size={20} color={COLORS.textMain} />
+                                    <Text style={styles.menuItemText}>View Profile</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={() => {
+                                        setShowMenu(false);
+                                        onRemove();
+                                    }}
+                                >
+                                    <UserMinus size={20} color="#F59E0B" />
+                                    <Text style={[styles.menuItemText, { color: "#F59E0B" }]}>Remove from Group</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={() => {
+                                        setShowMenu(false);
+                                        onBlock();
+                                    }}
+                                >
+                                    <Ban size={20} color="#EF4444" />
+                                    <Text style={[styles.menuItemText, { color: "#EF4444" }]}>Block User</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.menuItem, styles.menuItemCancel]}
+                                    onPress={() => setShowMenu(false)}
+                                >
+                                    <Text style={styles.menuItemCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+        </>
     );
 });
 
@@ -39,9 +113,11 @@ interface Props {
     isOwner?: boolean;
     onAddPress: () => void;
     onMemberPress: (member: RosterContact) => void;
+    onRemoveMember?: (member: RosterContact) => void;
+    onBlockMember?: (member: RosterContact) => void;
 }
 
-const MembersList = memo(({ members, isOwner, onAddPress, onMemberPress }: Props) => (
+const MembersList = memo(({ members, isOwner, onAddPress, onMemberPress, onRemoveMember, onBlockMember }: Props) => (
     <View style={styles.section}>
         <View style={styles.header}>
             <Text style={styles.title}>Members ({members.length})</Text>
@@ -66,7 +142,10 @@ const MembersList = memo(({ members, isOwner, onAddPress, onMemberPress }: Props
                 <MemberCard
                     key={member.id}
                     member={member}
+                    isOwner={isOwner}
                     onPress={() => onMemberPress(member)}
+                    onRemove={() => onRemoveMember?.(member)}
+                    onBlock={() => onBlockMember?.(member)}
                 />
             ))
         ) : (
@@ -192,6 +271,56 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "500",
         color: COLORS.primary,
+    },
+    menuButton: {
+        padding: 4,
+    },
+    menuOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+    },
+    menuContainer: {
+        backgroundColor: COLORS.white,
+        borderRadius: 16,
+        width: "100%",
+        maxWidth: 320,
+        overflow: "hidden",
+    },
+    menuTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+        color: COLORS.textMain,
+        textAlign: "center",
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+    },
+    menuItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+    },
+    menuItemText: {
+        fontSize: 15,
+        fontWeight: "500",
+        color: COLORS.textMain,
+    },
+    menuItemCancel: {
+        justifyContent: "center",
+        borderBottomWidth: 0,
+        backgroundColor: "#F9FAFB",
+    },
+    menuItemCancelText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: COLORS.textSub,
     },
 });
 

@@ -2,11 +2,11 @@
  * Group Profile Screen - Modular Implementation
  */
 import React, { useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../constants/colors";
-import { RosterContact } from "../../../services/api";
+import { RosterContact, rosterApi, friendApi } from "../../../services/api";
 
 import { useGroupProfile } from "./hooks/useGroupProfile";
 import {
@@ -61,6 +61,68 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
             navigation?.navigate("FriendProfile", { userId: member.contact.userId });
         }
     }, [navigation]);
+
+    const handleRemoveMember = useCallback((member: RosterContact) => {
+        const name = member.contact?.name || "this member";
+        Alert.alert(
+            "Remove from Group",
+            `Remove ${name} from this group? They will still be in your roster.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            // Remove from group by setting group to null
+                            await rosterApi.updateMemberGroup(member.id, null);
+                            Alert.alert("Removed", `${name} has been removed from the group.`);
+                            onRefresh();
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to remove member from group");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [onRefresh]);
+
+    const handleBlockMember = useCallback((member: RosterContact) => {
+        const name = member.contact?.name || "this user";
+        const userId = member.contact?.userId;
+
+        if (!userId) {
+            Alert.alert(
+                "Cannot Block",
+                "This contact is not a registered user and cannot be blocked. You can remove them from the group instead."
+            );
+            return;
+        }
+
+        Alert.alert(
+            "Block User",
+            `Block ${name}? They will be removed from your roster and won't be able to:\n\n• Send you friend requests\n• Invite you to tee times\n• See your availability`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            // Remove from roster first
+                            await rosterApi.removeFromRoster(member.id);
+                            // Then block the user
+                            await friendApi.blockUser(userId);
+                            Alert.alert("Blocked", `${name} has been blocked.`);
+                            onRefresh();
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to block user");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [onRefresh]);
 
     // Loading state
     if (loading) {
@@ -131,6 +193,8 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     isOwner={group.isOwner}
                     onAddPress={openAddPeopleModal}
                     onMemberPress={handleMemberPress}
+                    onRemoveMember={handleRemoveMember}
+                    onBlockMember={handleBlockMember}
                 />
 
                 <View style={styles.bottomSpacer} />

@@ -76,6 +76,13 @@ router.put(
 router.get("/groups", rosterController.getGroups);
 
 /**
+ * @route   GET /api/roster/groups/:id
+ * @desc    Get a single roster group by ID
+ * @access  Private
+ */
+router.get("/groups/:id", rosterController.getGroup);
+
+/**
  * @route   POST /api/roster/groups
  * @desc    Create a new roster group
  * @access  Private

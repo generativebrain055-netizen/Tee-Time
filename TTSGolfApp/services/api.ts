@@ -953,6 +953,12 @@ export const notificationApi = {
       method: "PUT",
     }),
 
+  // Mark notification as responded (for actionable notifications)
+  markAsResponded: (notificationId: string) =>
+    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/responded`, {
+      method: "PUT",
+    }),
+
   // Mark all as read
   markAllAsRead: () =>
     apiCall<{ success: boolean; count: number; message: string }>(API_ENDPOINTS.NOTIFICATIONS_READ_ALL, {

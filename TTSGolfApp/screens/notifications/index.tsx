@@ -359,8 +359,11 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
         try {
             const response = await friendApi.respondToRequest(requestId, 'accepted');
             if (response.success) {
+                // Mark notification as responded in the database
+                await notificationApi.markAsResponded(item.id);
+
                 Alert.alert("Friend Added!", "You are now friends!");
-                // Update the notification to show it's been responded to
+                // Update the notification locally
                 setNotifications(prev =>
                     prev.map(n => n.id === item.id
                         ? { ...n, data: { ...n.data, responded: true }, isRead: true }
@@ -390,7 +393,10 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
                         try {
                             const response = await friendApi.respondToRequest(requestId, 'declined');
                             if (response.success) {
-                                // Update the notification to show it's been responded to
+                                // Mark notification as responded in the database
+                                await notificationApi.markAsResponded(item.id);
+
+                                // Update the notification locally
                                 setNotifications(prev =>
                                     prev.map(n => n.id === item.id
                                         ? { ...n, data: { ...n.data, responded: true }, isRead: true }
@@ -412,8 +418,14 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
         const teeTimeId = item.data?.teeTimeId;
         if (!teeTimeId) return;
 
-        // Navigate to invites screen where they can accept
-        // Mark notification as responded
+        // Mark notification as responded in the database
+        try {
+            await notificationApi.markAsResponded(item.id);
+        } catch (error) {
+            console.error("Error marking notification as responded:", error);
+        }
+
+        // Update local state
         setNotifications(prev =>
             prev.map(n => n.id === item.id
                 ? { ...n, data: { ...n.data, responded: true }, isRead: true }
@@ -429,7 +441,14 @@ export default function NotificationsScreen({ navigation }: NotificationsScreenP
         const courseName = item.data?.courseName;
         if (!teeTimeId) return;
 
-        // Mark notification as responded
+        // Mark notification as responded in the database
+        try {
+            await notificationApi.markAsResponded(item.id);
+        } catch (error) {
+            console.error("Error marking notification as responded:", error);
+        }
+
+        // Update local state
         setNotifications(prev =>
             prev.map(n => n.id === item.id
                 ? { ...n, data: { ...n.data, responded: true }, isRead: true }

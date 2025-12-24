@@ -192,6 +192,8 @@ CREATE TABLE devices (
     device_type VARCHAR(50),
     os VARCHAR(50),
     os_version VARCHAR(50),
+    browser VARCHAR(100),
+    browser_version VARCHAR(50),
     app_version VARCHAR(50),
     is_native_app BOOLEAN DEFAULT false,
     user_agent TEXT,

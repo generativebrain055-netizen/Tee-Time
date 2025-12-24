@@ -15,6 +15,7 @@ class RosterController {
     this.toggleOnDeck = this.toggleOnDeck.bind(this);
     this.searchUsers = this.searchUsers.bind(this);
     this.getGroups = this.getGroups.bind(this);
+    this.getGroup = this.getGroup.bind(this);
     this.createGroup = this.createGroup.bind(this);
     this.updateGroup = this.updateGroup.bind(this);
     this.updateGroupSort = this.updateGroupSort.bind(this);
@@ -238,6 +239,42 @@ class RosterController {
       logger.error("Get groups error:", error);
       // Return empty groups on error (table might not exist yet)
       res.json({ success: true, groups: [] });
+    }
+  }
+
+  // GET /api/roster/groups/:id
+  async getGroup(req, res) {
+    try {
+      const userId = req.user.id;
+      const groupId = req.params.id;
+      
+      const groups = await rosterRepository.getGroups(userId);
+      const group = (groups || []).find(g => g.id === groupId);
+      
+      if (!group) {
+        return res.status(404).json({ success: false, message: "Group not found" });
+      }
+
+      const formatted = {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        color: group.color,
+        icon: group.icon,
+        position: group.position,
+        memberCount: parseInt(group.member_count) || 0,
+        onDeckCount: parseInt(group.on_deck_count) || 0,
+        autoInvite: group.auto_invite,
+        maxMembers: group.max_members,
+        isDefault: group.is_default,
+        isOwner: group.is_owner,
+        ownerId: group.user_id
+      };
+
+      res.json({ success: true, group: formatted });
+    } catch (error) {
+      logger.error("Get group error:", error);
+      res.status(500).json({ success: false, message: "Failed to get group" });
     }
   }
 

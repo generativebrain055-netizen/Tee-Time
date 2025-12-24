@@ -82,7 +82,7 @@ export default function App(): React.ReactElement {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>("Splash");
   const [userData, setUserData] = useState<UserData | null>(null);
   const [screenParams, setScreenParams] = useState<NavigationParams>({});
-  const [screenHistory, setScreenHistory] = useState<ScreenName[]>(["Splash"]);
+  const [screenHistory, setScreenHistory] = useState<{ screen: ScreenName; params: NavigationParams }[]>([{ screen: "Splash", params: {} }]);
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
 
@@ -92,7 +92,7 @@ export default function App(): React.ReactElement {
       // Navigate to login when session expires
       setUserData(null);
       setScreenParams({});
-      setScreenHistory(["Login"]);
+      setScreenHistory([{ screen: "Login", params: {} }]);
       setScreenKey((prev) => prev + 1);
       setCurrentScreen("Login");
     });
@@ -106,9 +106,10 @@ export default function App(): React.ReactElement {
         // Clear user data when navigating to auth screens
         setUserData(null);
       }
-      setScreenParams(params || {});
+      const navParams = params || {};
+      setScreenParams(navParams);
       setScreenKey((prev) => prev + 1); // Force remount
-      setScreenHistory((prev) => [...prev, screen]);
+      setScreenHistory((prev) => [...prev, { screen, params: navParams }]);
       setCurrentScreen(screen);
     },
     replace: (screen: ScreenName, params?: NavigationParams) => {
@@ -118,6 +119,8 @@ export default function App(): React.ReactElement {
         // Clear user data when navigating to auth screens
         setUserData(null);
       }
+      const navParams = params || {};
+      setScreenParams(navParams);
       setScreenKey((prev) => prev + 1); // Force remount
       setCurrentScreen(screen);
     },
@@ -125,18 +128,20 @@ export default function App(): React.ReactElement {
       if (screenHistory.length > 1) {
         const newHistory = [...screenHistory];
         newHistory.pop(); // Remove current screen
-        const previousScreen = newHistory[newHistory.length - 1];
+        const previousEntry = newHistory[newHistory.length - 1];
         setScreenHistory(newHistory);
+        setScreenParams(previousEntry.params); // Restore previous screen's params
         setScreenKey((prev) => prev + 1);
-        setCurrentScreen(previousScreen);
+        setCurrentScreen(previousEntry.screen);
       }
     },
     reset: (options: { index: number; routes: Array<{ name: ScreenName; params?: NavigationParams }> }) => {
       // Reset navigation stack to specified routes
       const targetRoute = options.routes[options.index];
+      const navParams = targetRoute.params || {};
       setUserData(null);
-      setScreenParams(targetRoute.params || {});
-      setScreenHistory([targetRoute.name]);
+      setScreenParams(navParams);
+      setScreenHistory([{ screen: targetRoute.name, params: navParams }]);
       setScreenKey((prev) => prev + 1);
       setCurrentScreen(targetRoute.name);
     },

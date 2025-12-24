@@ -6,6 +6,7 @@ class NotificationController {
     this.getNotifications = this.getNotifications.bind(this);
     this.getUnreadCount = this.getUnreadCount.bind(this);
     this.markAsRead = this.markAsRead.bind(this);
+    this.markAsResponded = this.markAsResponded.bind(this);
     this.markAllAsRead = this.markAllAsRead.bind(this);
     this.deleteNotification = this.deleteNotification.bind(this);
   }
@@ -90,6 +91,34 @@ class NotificationController {
     } catch (error) {
       logger.error("Mark as read error:", error);
       res.status(500).json({ success: false, message: "Failed to mark notification as read" });
+    }
+  }
+
+  // PUT /api/notifications/:id/responded
+  async markAsResponded(req, res) {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+
+      // Update the notification data to include responded: true
+      const result = await pool.query(
+        `UPDATE notifications 
+         SET data = COALESCE(data, '{}'::jsonb) || '{"responded": true}'::jsonb,
+             read_at = COALESCE(read_at, NOW()),
+             status = 'read'
+         WHERE id = $1 AND user_id = $2
+         RETURNING id, data`,
+        [notificationId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, message: "Notification not found" });
+      }
+
+      res.json({ success: true, message: "Notification marked as responded" });
+    } catch (error) {
+      logger.error("Mark as responded error:", error);
+      res.status(500).json({ success: false, message: "Failed to mark notification as responded" });
     }
   }
 
