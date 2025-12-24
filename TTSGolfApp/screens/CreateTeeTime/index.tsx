@@ -84,10 +84,41 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
                 rosterApi.getOnDeck(),
             ]);
 
+            // Get on-deck user IDs to filter them out from roster
+            const onDeckUserIds = new Set<string>();
+            let onDeck: ExtendedFriend[] = [];
+
+            if (onDeckRes.success && onDeckRes.onDeck) {
+                // Convert on-deck roster contacts to Friend format
+                onDeck = onDeckRes.onDeck.map(m => ({
+                    id: m.contact.userId || m.id,
+                    rosterId: m.id,
+                    firstName: m.contact.name?.split(' ')[0] || '',
+                    lastName: m.contact.name?.split(' ').slice(1).join(' ') || '',
+                    username: m.contact.username,
+                    handicap: m.contact.handicap,
+                    avatar: m.contact.avatar,
+                    phone: m.contact.phone,
+                    friendshipStatus: 'friend' as const,
+                    friendsSince: '',
+                }));
+
+                // Track on-deck user IDs
+                onDeckRes.onDeck.forEach(m => {
+                    if (m.contact.userId) {
+                        onDeckUserIds.add(m.contact.userId);
+                    }
+                });
+
+                setOnDeckFriends(onDeck);
+            }
+
             if (friendsRes.success) {
-                setFriends(friendsRes.friends);
-                // Initialize ordered players with friend IDs
-                setOrderedPlayers(friendsRes.friends.map(f => f.id));
+                // Filter out on-deck players from friends for roster invite
+                const rosterFriends = friendsRes.friends.filter(f => !onDeckUserIds.has(f.id));
+                setFriends(rosterFriends);
+                // Initialize ordered players with roster friend IDs only
+                setOrderedPlayers(rosterFriends.map(f => f.id));
                 // Add to all loaded players - friends have valid user UUIDs
                 setAllLoadedPlayers(prev => {
                     const existingIds = new Set(prev.map(p => p.id));
@@ -102,22 +133,9 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
             if (groupsRes.success) {
                 setGroups(groupsRes.groups);
             }
-            if (onDeckRes.success) {
-                // Convert on-deck roster contacts to Friend format
-                const onDeck: ExtendedFriend[] = onDeckRes.onDeck.map(m => ({
-                    id: m.contact.userId || m.id, // Use roster ID as fallback for display
-                    rosterId: m.id,
-                    firstName: m.contact.name?.split(' ')[0] || '',
-                    lastName: m.contact.name?.split(' ').slice(1).join(' ') || '',
-                    username: m.contact.username,
-                    handicap: m.contact.handicap,
-                    avatar: m.contact.avatar,
-                    phone: m.contact.phone,
-                    friendshipStatus: 'friend' as const,
-                    friendsSince: '',
-                }));
-                setOnDeckFriends(onDeck);
-                // Add to all loaded players
+
+            // Add on-deck to all loaded players
+            if (onDeck.length > 0) {
                 setAllLoadedPlayers(prev => {
                     const existingIds = new Set(prev.map(p => p.id));
                     const newPlayers = onDeck.filter(f => !existingIds.has(f.id));
