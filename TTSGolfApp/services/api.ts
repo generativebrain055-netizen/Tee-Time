@@ -51,6 +51,8 @@ export interface Invite {
   teeTime: string;
   status: "pending" | "accepted" | "declined" | "expired" | "waitlist";
   expiresAt?: string;
+  inviteType?: string;
+  maxPlayers?: number;
   inviter?: { firstName: string; lastName: string; avatar?: string };
   invitee?: { userId?: string; phone?: string; name: string };
 }
