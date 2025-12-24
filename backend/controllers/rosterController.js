@@ -37,7 +37,8 @@ class RosterController {
     try {
       const userId = req.user.id;
       const { sortBy } = req.query;
-      const roster = await rosterRepository.getRoster(userId, { sortBy });
+      // Only get non-on-deck roster entries
+      const roster = await rosterRepository.getRoster(userId, { sortBy, isOnDeck: false });
       
       const formattedRoster = (roster || []).map((r, index) => ({
         id: r.id,

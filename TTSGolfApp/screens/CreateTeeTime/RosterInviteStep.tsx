@@ -21,6 +21,7 @@ interface RosterInviteStepProps {
 }
 
 const RESPONSE_WINDOWS = [
+    { value: 0.0333, label: "2 minutes (TEST)" }, // ~2 minutes for testing
     { value: 1, label: "1 hour" },
     { value: 2, label: "2 hours" },
     { value: 3, label: "3 hours" },
@@ -96,7 +97,7 @@ export default function RosterInviteStep({
                 Invite order (drag to reorder)
             </Text>
             <Text style={styles.sectionHint}>
-                Players will be invited in this order. Each player has {responseWindow} hour(s) to respond before the next is invited.
+                Players will be invited in this order. Each player has {getSelectedLabel()} to respond before the next is invited.
             </Text>
 
             <ScrollView style={styles.playerList} showsVerticalScrollIndicator={false}>

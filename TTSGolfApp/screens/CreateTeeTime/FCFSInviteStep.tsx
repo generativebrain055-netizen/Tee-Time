@@ -255,6 +255,55 @@ export default function FCFSInviteStep({
                         <Text style={styles.deadlineHint}>
                             Invites will expire at this time. Unresponded invites will be cancelled.
                         </Text>
+
+                        {/* Quick Test Presets */}
+                        <View style={styles.quickPresets}>
+                            <TouchableOpacity
+                                style={styles.quickPresetBtn}
+                                onPress={() => {
+                                    const d = new Date();
+                                    d.setMinutes(d.getMinutes() + 2);
+                                    setTempDate(d);
+                                    onDeadlineChange(d);
+                                }}
+                            >
+                                <Text style={styles.quickPresetText}>2 min</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.quickPresetBtn}
+                                onPress={() => {
+                                    const d = new Date();
+                                    d.setMinutes(d.getMinutes() + 5);
+                                    setTempDate(d);
+                                    onDeadlineChange(d);
+                                }}
+                            >
+                                <Text style={styles.quickPresetText}>5 min</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.quickPresetBtn}
+                                onPress={() => {
+                                    const d = new Date();
+                                    d.setHours(d.getHours() + 1);
+                                    setTempDate(d);
+                                    onDeadlineChange(d);
+                                }}
+                            >
+                                <Text style={styles.quickPresetText}>1 hr</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.quickPresetBtn}
+                                onPress={() => {
+                                    const d = new Date();
+                                    d.setHours(d.getHours() + 24);
+                                    setTempDate(d);
+                                    onDeadlineChange(d);
+                                }}
+                            >
+                                <Text style={styles.quickPresetText}>24 hr</Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <View style={styles.deadlinePickers}>
                             <TouchableOpacity
                                 style={[styles.deadlinePickerBtn, pickerMode === "date" && styles.deadlinePickerBtnActive]}
@@ -462,6 +511,24 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: COLORS.textSub,
         marginBottom: 12,
+    },
+    quickPresets: {
+        flexDirection: "row",
+        gap: 8,
+        marginBottom: 12,
+    },
+    quickPresetBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: "#E0F2FE",
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: "#7DD3FC",
+    },
+    quickPresetText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#0284C7",
     },
     deadlinePickers: {
         flexDirection: "row",

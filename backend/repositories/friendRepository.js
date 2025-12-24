@@ -141,15 +141,38 @@ class FriendRepository {
         return result.rows[0].are_friends;
     }
 
-    // Remove friend
+    // Remove friend (also removes from roster)
     async removeFriend(userId, friendId) {
-        const query = `
-            DELETE FROM friendships 
-            WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)
-            RETURNING *
-        `;
-        const result = await pool.query(query, [userId, friendId]);
-        return result.rows.length > 0;
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Delete friendship
+            const friendshipQuery = `
+                DELETE FROM friendships 
+                WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)
+                RETURNING *
+            `;
+            const friendshipResult = await client.query(friendshipQuery, [userId, friendId]);
+
+            // Also remove from both users' rosters
+            await client.query(
+                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
+                [userId, friendId]
+            );
+            await client.query(
+                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
+                [friendId, userId]
+            );
+
+            await client.query('COMMIT');
+            return friendshipResult.rows.length > 0;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     // ============ DISCOVER USERS ============
@@ -228,16 +251,38 @@ class FriendRepository {
 
     // ============ BLOCK USERS ============
 
-    // Block a user
+    // Block a user (also removes from roster)
     async blockUser(userId, blockedUserId) {
-        const query = `
-            INSERT INTO blocked_users (user_id, blocked_user_id)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id, blocked_user_id) DO NOTHING
-            RETURNING *
-        `;
-        const result = await pool.query(query, [userId, blockedUserId]);
-        return result.rows[0];
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Add to blocked list
+            await client.query(
+                `INSERT INTO blocked_users (user_id, blocked_user_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT (user_id, blocked_user_id) DO NOTHING`,
+                [userId, blockedUserId]
+            );
+
+            // Remove from both users' rosters
+            await client.query(
+                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
+                [userId, blockedUserId]
+            );
+            await client.query(
+                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
+                [blockedUserId, userId]
+            );
+
+            await client.query('COMMIT');
+            return { user_id: userId, blocked_user_id: blockedUserId };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
     }
 
     // Unblock a user

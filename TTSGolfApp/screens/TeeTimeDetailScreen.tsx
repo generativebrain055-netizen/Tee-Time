@@ -9,6 +9,8 @@ import {
     Alert,
     RefreshControl,
     Image,
+    Modal,
+    FlatList,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,8 +30,9 @@ import {
     ChevronLeft,
     MoreHorizontal,
     Navigation,
+    UserPlus,
 } from "lucide-react-native";
-import { teeTimeApi } from "../services/api";
+import { teeTimeApi, rosterApi, inviteApi, friendApi } from "../services/api";
 import { useAuthStore } from "../stores";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -239,6 +242,13 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Add Players Modal state
+    const [showAddPlayersModal, setShowAddPlayersModal] = useState(false);
+    const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
+    const [loadingPlayers, setLoadingPlayers] = useState(false);
+    const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+    const [inviting, setInviting] = useState(false);
+
     const loadTeeTime = useCallback(async () => {
         try {
             const response = await teeTimeApi.getTeeTime(teeTimeId);
@@ -295,6 +305,133 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
             },
         ]);
     }, [teeTime]);
+
+    const loadAvailablePlayers = useCallback(async () => {
+        setLoadingPlayers(true);
+        try {
+            const [rosterResponse, onDeckResponse, friendsResponse] = await Promise.all([
+                rosterApi.getRoster(),
+                rosterApi.getOnDeck(),
+                friendApi.getFriends()
+            ]);
+
+            const allPlayers: any[] = [];
+            const addedIds = new Set<string>();
+
+            // Add friends first
+            if (friendsResponse.success && friendsResponse.friends) {
+                friendsResponse.friends.forEach((friend: any) => {
+                    if (!addedIds.has(friend.id)) {
+                        addedIds.add(friend.id);
+                        allPlayers.push({
+                            id: friend.id,
+                            name: `${friend.firstName || ''} ${friend.lastName || ''}`.trim() || 'Unknown',
+                            avatar: friend.avatar,
+                            handicap: friend.handicap,
+                            phone: friend.phone,
+                            source: 'friend'
+                        });
+                    }
+                });
+            }
+
+            // Add roster contacts (may include non-friends)
+            if (rosterResponse.success && rosterResponse.roster) {
+                rosterResponse.roster.forEach((entry: any) => {
+                    const id = entry.contact?.userId || entry.id;
+                    if (id && !addedIds.has(id)) {
+                        addedIds.add(id);
+                        allPlayers.push({
+                            id: id,
+                            name: entry.contact?.name || 'Unknown',
+                            avatar: entry.contact?.avatar,
+                            handicap: entry.contact?.handicap,
+                            phone: entry.contact?.phone,
+                            source: 'roster'
+                        });
+                    }
+                });
+            }
+
+            // Add on-deck players
+            if (onDeckResponse.success && onDeckResponse.onDeck) {
+                onDeckResponse.onDeck.forEach((entry: any) => {
+                    const id = entry.contact?.userId || entry.id;
+                    if (id && !addedIds.has(id)) {
+                        addedIds.add(id);
+                        allPlayers.push({
+                            id: id,
+                            name: entry.contact?.name || 'Unknown',
+                            avatar: entry.contact?.avatar,
+                            handicap: entry.contact?.handicap,
+                            phone: entry.contact?.phone,
+                            source: 'on-deck'
+                        });
+                    }
+                });
+            }
+
+            // Filter out players already in tee time
+            const existingPlayerIds = new Set([
+                ...teeTime!.participants.map(p => p.userId),
+                ...teeTime!.invites.filter(i => i.invitee.userId).map(i => i.invitee.userId)
+            ]);
+
+            const filtered = allPlayers.filter(p => p.id && !existingPlayerIds.has(p.id));
+            setAvailablePlayers(filtered);
+        } catch (error) {
+            console.error("Failed to load players:", error);
+            Alert.alert("Error", "Failed to load available players");
+        } finally {
+            setLoadingPlayers(false);
+        }
+    }, [teeTime]);
+
+    const handleAddPlayers = useCallback(() => {
+        setShowAddPlayersModal(true);
+        setSelectedPlayerIds([]);
+        loadAvailablePlayers();
+    }, [loadAvailablePlayers]);
+
+    const handleSendInvites = useCallback(async () => {
+        if (selectedPlayerIds.length === 0) {
+            Alert.alert("No Selection", "Please select at least one player to invite");
+            return;
+        }
+
+        setInviting(true);
+        try {
+            const invitees = selectedPlayerIds.map(playerId => {
+                const player = availablePlayers.find(p => p.id === playerId);
+                return {
+                    userId: player?.id,
+                    phone: player?.phone,
+                    name: player?.name
+                };
+            }).filter(inv => inv.userId || inv.phone);
+
+            const response = await inviteApi.createInvites(teeTime!.id, invitees, "manual");
+
+            if (response.success) {
+                Alert.alert("Success", `Invited ${selectedPlayerIds.length} player(s)!`);
+                setShowAddPlayersModal(false);
+                setSelectedPlayerIds([]);
+                loadTeeTime();
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error.message || "Failed to send invites");
+        } finally {
+            setInviting(false);
+        }
+    }, [selectedPlayerIds, availablePlayers, teeTime, loadTeeTime]);
+
+    const togglePlayerSelection = useCallback((playerId: string) => {
+        setSelectedPlayerIds(prev =>
+            prev.includes(playerId)
+                ? prev.filter(id => id !== playerId)
+                : [...prev, playerId]
+        );
+    }, []);
 
     if (loading) {
         return (
@@ -425,6 +562,15 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
                     </View>
                 )}
 
+                {/* Add More Players Button - Only for creator if spots available */}
+                {isCreator && spotsLeft > 0 && (
+                    <TouchableOpacity style={styles.addPlayersBtn} onPress={handleAddPlayers}>
+                        <UserPlus size={20} color={COLORS.primary} />
+                        <Text style={styles.addPlayersBtnText}>Invite More Players</Text>
+                        <Text style={styles.addPlayersBtnSub}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} available</Text>
+                    </TouchableOpacity>
+                )}
+
                 {/* Notes Section */}
                 {teeTime.notes && (
                     <View style={styles.section}>
@@ -460,6 +606,92 @@ export default function TeeTimeDetailScreen({ route, navigation }: any) {
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+
+            {/* Add Players Modal */}
+            <Modal visible={showAddPlayersModal} transparent animationType="slide">
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContainer, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Invite Players</Text>
+                            <TouchableOpacity onPress={() => setShowAddPlayersModal(false)} style={styles.modalCloseBtn}>
+                                <X size={24} color={COLORS.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {loadingPlayers ? (
+                            <View style={styles.modalLoading}>
+                                <ActivityIndicator size="large" color={COLORS.primary} />
+                                <Text style={styles.modalLoadingText}>Loading players...</Text>
+                            </View>
+                        ) : availablePlayers.length === 0 ? (
+                            <View style={styles.modalEmpty}>
+                                <Users size={48} color={COLORS.textSub} />
+                                <Text style={styles.modalEmptyText}>No available players</Text>
+                                <Text style={styles.modalEmptySubtext}>All your roster and on-deck players are already invited or participating</Text>
+                            </View>
+                        ) : (
+                            <>
+                                <Text style={styles.modalSubtitle}>
+                                    Select players from your roster or on-deck list ({selectedPlayerIds.length} selected)
+                                </Text>
+                                <FlatList
+                                    data={availablePlayers}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item }) => {
+                                        const isSelected = selectedPlayerIds.includes(item.id);
+                                        return (
+                                            <TouchableOpacity
+                                                style={[styles.playerItem, isSelected && styles.playerItemSelected]}
+                                                onPress={() => togglePlayerSelection(item.id)}
+                                            >
+                                                <Avatar uri={item.avatar} name={item.name} size={44} />
+                                                <View style={styles.playerItemInfo}>
+                                                    <Text style={styles.playerItemName}>{item.name}</Text>
+                                                    <View style={styles.playerItemMeta}>
+                                                        {item.handicap !== undefined && (
+                                                            <Text style={styles.playerItemHandicap}>HCP: {item.handicap}</Text>
+                                                        )}
+                                                        <Text style={styles.playerItemSource}>• {item.source}</Text>
+                                                    </View>
+                                                </View>
+                                                <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                                                    {isSelected && <CheckCircle size={20} color={COLORS.primary} />}
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    }}
+                                    style={styles.playersList}
+                                />
+                                <View style={styles.modalActions}>
+                                    <TouchableOpacity
+                                        style={styles.modalCancelBtn}
+                                        onPress={() => setShowAddPlayersModal(false)}
+                                        disabled={inviting}
+                                    >
+                                        <Text style={styles.modalCancelText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.modalSendBtn, selectedPlayerIds.length === 0 && styles.modalSendBtnDisabled]}
+                                        onPress={handleSendInvites}
+                                        disabled={inviting || selectedPlayerIds.length === 0}
+                                    >
+                                        {inviting ? (
+                                            <ActivityIndicator size="small" color={COLORS.white} />
+                                        ) : (
+                                            <>
+                                                <UserPlus size={18} color={COLORS.white} />
+                                                <Text style={styles.modalSendText}>
+                                                    Send Invite{selectedPlayerIds.length !== 1 ? 's' : ''} ({selectedPlayerIds.length})
+                                                </Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -542,4 +774,38 @@ const styles = StyleSheet.create({
     primaryBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.white },
     dangerBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.declinedBg, borderRadius: 14, paddingVertical: 16 },
     dangerBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.declined },
+
+    // Add Players Button
+    addPlayersBtn: { backgroundColor: COLORS.white, marginHorizontal: 20, marginTop: 16, borderRadius: 16, padding: 20, alignItems: "center", borderWidth: 2, borderColor: COLORS.primary, borderStyle: "dashed" },
+    addPlayersBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.primary, marginTop: 8 },
+    addPlayersBtnSub: { fontSize: 13, color: COLORS.textSub, marginTop: 4 },
+
+    // Modal
+    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+    modalContainer: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%", paddingHorizontal: 20 },
+    modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+    modalTitle: { fontSize: 22, fontWeight: "700", color: COLORS.text },
+    modalCloseBtn: { padding: 4 },
+    modalSubtitle: { fontSize: 14, color: COLORS.textSub, marginBottom: 16 },
+    modalLoading: { alignItems: "center", paddingVertical: 60 },
+    modalLoadingText: { fontSize: 14, color: COLORS.textSub, marginTop: 12 },
+    modalEmpty: { alignItems: "center", paddingVertical: 60 },
+    modalEmptyText: { fontSize: 18, fontWeight: "600", color: COLORS.text, marginTop: 16 },
+    modalEmptySubtext: { fontSize: 14, color: COLORS.textSub, marginTop: 8, textAlign: "center", paddingHorizontal: 20 },
+    playersList: { maxHeight: 400, marginBottom: 16 },
+    playerItem: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 12, marginBottom: 8, backgroundColor: COLORS.bg, borderWidth: 2, borderColor: "transparent" },
+    playerItemSelected: { backgroundColor: "#E8F5E9", borderColor: COLORS.primary },
+    playerItemInfo: { flex: 1, marginLeft: 12 },
+    playerItemName: { fontSize: 16, fontWeight: "600", color: COLORS.text },
+    playerItemMeta: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 6 },
+    playerItemHandicap: { fontSize: 13, color: COLORS.primary, fontWeight: "500" },
+    playerItemSource: { fontSize: 13, color: COLORS.textSub },
+    checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: COLORS.border, justifyContent: "center", alignItems: "center" },
+    checkboxSelected: { borderColor: COLORS.primary, backgroundColor: "transparent" },
+    modalActions: { flexDirection: "row", gap: 12, paddingTop: 16 },
+    modalCancelBtn: { flex: 1, paddingVertical: 16, borderRadius: 12, backgroundColor: COLORS.bg, alignItems: "center" },
+    modalCancelText: { fontSize: 16, fontWeight: "600", color: COLORS.textSub },
+    modalSendBtn: { flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 16, borderRadius: 12, backgroundColor: COLORS.primary },
+    modalSendBtnDisabled: { backgroundColor: COLORS.textLight },
+    modalSendText: { fontSize: 16, fontWeight: "600", color: COLORS.white },
 });

@@ -242,80 +242,89 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
 
     const loadData = useCallback(async (sort: SortOption = "position") => {
         try {
-            const friendsRes = await friendApi.getFriends();
+            const [friendsRes, rosterRes, onDeckRes] = await Promise.all([
+                friendApi.getFriends(),
+                rosterApi.getRoster(sort),
+                rosterApi.getOnDeck()
+            ]);
 
-            if (friendsRes.success && friendsRes.friends) {
-                const rosterRes = await rosterApi.getRoster(sort);
-                const onDeckRes = await rosterApi.getOnDeck();
+            if (!friendsRes.success) {
+                console.error("Failed to load friends");
+                return;
+            }
 
-                const friendsMap = new Map(friendsRes.friends.map(f => [f.id, f]));
+            const friends = friendsRes.friends || [];
+            const rosterEntries = rosterRes.roster || [];
+            const onDeckEntries = onDeckRes.onDeck || [];
 
-                // Process roster entries with additional sort fields
-                const roster: RosterMember[] = (rosterRes.roster || [])
-                    .filter((r: any) => !r.isOnDeck)
-                    .map((r: any, idx: number) => {
-                        const friend = friendsMap.get(r.contact?.userId);
-                        return {
-                            id: r.id,
-                            rosterId: r.id,
-                            firstName: r.contact?.name?.split(' ')[0] || friend?.firstName || '',
-                            lastName: r.contact?.name?.split(' ').slice(1).join(' ') || friend?.lastName || '',
-                            avatar: r.contact?.avatar || friend?.avatar,
-                            isOnDeck: false,
-                            position: r.position ?? idx,
-                            friendId: r.contact?.userId || r.id,
-                            socialRate: r.contact?.socialRate,
-                            handicap: r.contact?.handicap,
-                            distance: r.distanceToCourse,
-                            membership: r.membership,
-                        };
-                    });
+            // Create maps for quick lookup
+            const rosterByUserId = new Map<string, any>();
+            rosterEntries.forEach((r: any) => {
+                if (r.contact?.userId) {
+                    rosterByUserId.set(r.contact.userId, r);
+                }
+            });
 
-                const onDeck: RosterMember[] = (onDeckRes.onDeck || []).map((r: any, idx: number) => ({
-                    id: r.id,
-                    rosterId: r.id,
-                    firstName: r.contact?.name?.split(' ')[0] || '',
-                    lastName: r.contact?.name?.split(' ').slice(1).join(' ') || '',
-                    avatar: r.contact?.avatar,
-                    isOnDeck: true,
-                    position: r.position ?? idx,
-                    friendId: r.contact?.userId || r.id,
-                    socialRate: r.contact?.socialRate,
-                    handicap: r.contact?.handicap,
-                    distance: r.distanceToCourse,
-                    membership: r.membership,
-                }));
+            const onDeckByUserId = new Map<string, any>();
+            onDeckEntries.forEach((r: any) => {
+                if (r.contact?.userId) {
+                    onDeckByUserId.set(r.contact.userId, r);
+                }
+            });
 
-                if (roster.length === 0 && friendsRes.friends.length > 0) {
-                    const friendsAsRoster = friendsRes.friends.map((f, idx) => ({
-                        id: f.id,
-                        rosterId: undefined,
-                        firstName: f.firstName,
-                        lastName: f.lastName,
-                        avatar: f.avatar,
-                        isOnDeck: false,
-                        position: idx,
-                        friendId: f.id,
-                        socialRate: undefined,
-                        handicap: undefined,
-                        distance: undefined,
-                        membership: undefined,
-                    }));
-                    setRosterMembers(friendsAsRoster);
-                } else {
-                    // Sort is already applied from backend, but apply client-side for immediate feedback
-                    setRosterMembers(sortMembers(roster, sort));
+            // Build on-deck list from on-deck entries
+            const onDeck: RosterMember[] = onDeckEntries.map((r: any, idx: number) => ({
+                id: r.id,
+                rosterId: r.id,
+                firstName: r.contact?.name?.split(' ')[0] || '',
+                lastName: r.contact?.name?.split(' ').slice(1).join(' ') || '',
+                avatar: r.contact?.avatar,
+                isOnDeck: true,
+                position: r.position ?? idx,
+                friendId: r.contact?.userId || r.id,
+                socialRate: r.contact?.socialRate,
+                handicap: r.contact?.handicap,
+                distance: r.distanceToCourse,
+                membership: r.membership,
+            }));
+
+            // Build roster list - friends who are NOT in on-deck
+            const roster: RosterMember[] = [];
+
+            friends.forEach((friend, idx) => {
+                // Skip if this friend is in on-deck
+                if (onDeckByUserId.has(friend.id)) {
+                    return;
                 }
 
-                setOnDeckMembers(sortMembers(onDeck, sort));
-            }
+                const rosterEntry = rosterByUserId.get(friend.id);
+
+                roster.push({
+                    id: rosterEntry?.id || friend.id,
+                    rosterId: rosterEntry?.id,
+                    firstName: friend.firstName || '',
+                    lastName: friend.lastName || '',
+                    avatar: rosterEntry?.contact?.avatar || friend.avatar,
+                    isOnDeck: false,
+                    position: rosterEntry?.position ?? idx,
+                    friendId: friend.id,
+                    socialRate: rosterEntry?.contact?.socialRate || friend.socialRate,
+                    handicap: rosterEntry?.contact?.handicap || friend.handicap,
+                    distance: rosterEntry?.distanceToCourse,
+                    membership: rosterEntry?.membership,
+                });
+            });
+
+            setRosterMembers(sortMembers(roster, sort));
+            setOnDeckMembers(sortMembers(onDeck, sort));
+
         } catch (error) {
             console.error("Failed to load roster data:", error);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [sortMembers]);
 
     // Client-side sorting function
     const sortMembers = useCallback((members: RosterMember[], sort: SortOption): RosterMember[] => {

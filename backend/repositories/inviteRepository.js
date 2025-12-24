@@ -528,6 +528,20 @@ class InviteRepository {
     const result = await pool.query(query, [inviteId]);
     return result.rows[0];
   }
+
+  // Get pending invites for a tee time (invites that haven't expired or been responded to)
+  async getPendingInvitesByTeeTime(teeTimeId) {
+    const query = `
+      SELECT i.*, u.first_name, u.last_name
+      FROM invites i
+      LEFT JOIN users u ON i.invitee_user_id = u.id
+      WHERE i.tee_time_id = $1 
+        AND i.status = 'pending'
+      ORDER BY i.position ASC
+    `;
+    const result = await pool.query(query, [teeTimeId]);
+    return result.rows;
+  }
 }
 
 module.exports = new InviteRepository();
