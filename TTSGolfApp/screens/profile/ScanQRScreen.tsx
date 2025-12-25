@@ -1,4 +1,4 @@
-import React, { useState, useCallback, memo, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
     View,
     Text,
@@ -9,10 +9,11 @@ import {
     Modal,
     Image,
     Dimensions,
+    Animated,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
-import { X, UserPlus } from "lucide-react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { X, UserPlus, Camera, AlertCircle } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../constants/colors";
 import { draftApi, ScannedUser } from "../../services/api";
@@ -21,10 +22,10 @@ interface Props {
     navigation: any;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const SCAN_AREA_SIZE = SCREEN_WIDTH * 0.7;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const SCAN_AREA_SIZE = Math.min(SCREEN_WIDTH * 0.7, 280);
 
-function ScanQRScreen({ navigation }: Props) {
+export default function ScanQRScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
@@ -33,17 +34,57 @@ function ScanQRScreen({ navigation }: Props) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
+    const [lastDetection, setLastDetection] = useState<string>("");
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
 
-    const handleBarCodeScanned = useCallback(({ type, data }: { type: string; data: string }) => {
-        // Prevent rapid duplicate scans
-        if (scanned || processing || scanCooldown.current) return;
-        if (lastScannedData.current === data) return;
+    // Animated scan line
+    const scanLineAnim = useRef(new Animated.Value(0)).current;
 
-        console.log("=== QR CODE DETECTED ===");
+    useEffect(() => {
+        // Animate scan line
+        const animation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(scanLineAnim, {
+                    toValue: 1,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(scanLineAnim, {
+                    toValue: 0,
+                    duration: 2000,
+                    useNativeDriver: true,
+                }),
+            ])
+        );
+        animation.start();
+        return () => animation.stop();
+    }, []);
+
+    const handleBarCodeScanned = useCallback(({ type, data }: { type: string; data: string }) => {
+        // Update last detection for debugging
+        setLastDetection(`${type}: ${data.substring(0, 30)}...`);
+
+        console.log("=== BARCODE SCANNED ===");
         console.log("Type:", type);
         console.log("Data:", data);
+        console.log("Data length:", data.length);
+        console.log("Scanned state:", scanned);
+        console.log("Processing state:", processing);
+        console.log("Cooldown:", scanCooldown.current);
+
+        // Prevent rapid duplicate scans
+        if (scanned || processing || scanCooldown.current) {
+            console.log("Scan blocked - already processing or in cooldown");
+            return;
+        }
+
+        if (lastScannedData.current === data) {
+            console.log("Scan blocked - duplicate data");
+            return;
+        }
+
+        console.log("=== PROCESSING QR CODE ===");
 
         scanCooldown.current = true;
         lastScannedData.current = data;
@@ -53,12 +94,16 @@ function ScanQRScreen({ navigation }: Props) {
         // Process the scan
         (async () => {
             try {
+                console.log("Calling draftApi.scanQRCode with data:", data.substring(0, 50) + "...");
                 const result = await draftApi.scanQRCode(data);
+                console.log("Scan result:", result);
 
                 if (result.success && result.user) {
+                    console.log("User found:", result.user);
                     setScannedUser(result.user);
                     setShowConfirmModal(true);
                 } else {
+                    console.log("Scan failed:", result.message);
                     Alert.alert(
                         "Invalid QR Code",
                         result.message || "This QR code is not valid or has expired.",
@@ -66,9 +111,10 @@ function ScanQRScreen({ navigation }: Props) {
                     );
                 }
             } catch (error: any) {
+                console.error("Scan error:", error);
                 Alert.alert(
                     "Scan Failed",
-                    error.message || "Failed to process QR code",
+                    error.message || "Failed to process QR code. Make sure you're scanning a valid TeeTime QR code.",
                     [{ text: "Try Again", onPress: resetScanner }]
                 );
             } finally {
@@ -83,7 +129,7 @@ function ScanQRScreen({ navigation }: Props) {
         // Add cooldown to prevent immediate re-scan
         setTimeout(() => {
             scanCooldown.current = false;
-        }, 1000);
+        }, 2000);
     }, []);
 
     const handleConfirmDraft = useCallback(async () => {
@@ -102,11 +148,12 @@ function ScanQRScreen({ navigation }: Props) {
             }
         } catch (error: any) {
             Alert.alert("Error", error.message || "Failed to add player");
+            setShowConfirmModal(false);
+            resetScanner();
         } finally {
             setConfirming(false);
-            setShowConfirmModal(false);
         }
-    }, [scannedUser, navigation]);
+    }, [scannedUser, navigation, resetScanner]);
 
     const handleClose = useCallback(() => {
         navigation.goBack();
@@ -131,8 +178,10 @@ function ScanQRScreen({ navigation }: Props) {
     if (!permission.granted) {
         return (
             <View style={[styles.container, styles.centered]}>
+                <Camera size={64} color={COLORS.textSub} style={{ marginBottom: 24 }} />
+                <Text style={styles.permissionTitle}>Camera Access Required</Text>
                 <Text style={styles.permissionText}>
-                    Camera permission is required to scan QR codes
+                    To scan QR codes, we need access to your camera.
                 </Text>
                 <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
                     <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -144,6 +193,11 @@ function ScanQRScreen({ navigation }: Props) {
         );
     }
 
+    const scanLineTranslate = scanLineAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, SCAN_AREA_SIZE - 4],
+    });
+
     return (
         <View style={styles.container}>
             <StatusBar style="light" />
@@ -154,12 +208,13 @@ function ScanQRScreen({ navigation }: Props) {
                 facing="back"
                 onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                 barcodeScannerSettings={{
-                    barcodeTypes: ["qr", "aztec", "ean13", "ean8", "code128", "code39", "code93", "datamatrix", "pdf417", "upc_e"],
+                    barcodeTypes: ["qr"],
                 }}
                 onCameraReady={() => {
                     console.log("Camera is ready");
                     setCameraReady(true);
                 }}
+                enableTorch={false}
             />
 
             {/* Overlay */}
@@ -170,7 +225,7 @@ function ScanQRScreen({ navigation }: Props) {
                         <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
                             <X size={28} color="#fff" />
                         </TouchableOpacity>
-                        <Text style={styles.title}>Scan QR Code</Text>
+                        <Text style={styles.title}>Scan to Draft</Text>
                         <View style={{ width: 44 }} />
                     </View>
                     <Text style={styles.subtitle}>
@@ -188,6 +243,16 @@ function ScanQRScreen({ navigation }: Props) {
                         <View style={[styles.corner, styles.bottomLeft]} />
                         <View style={[styles.corner, styles.bottomRight]} />
 
+                        {/* Animated scan line */}
+                        {cameraReady && !scanned && (
+                            <Animated.View
+                                style={[
+                                    styles.scanLine,
+                                    { transform: [{ translateY: scanLineTranslate }] },
+                                ]}
+                            />
+                        )}
+
                         {/* Processing indicator */}
                         {processing && (
                             <View style={styles.processingBox}>
@@ -196,11 +261,18 @@ function ScanQRScreen({ navigation }: Props) {
                             </View>
                         )}
 
-                        {/* Camera status */}
+                        {/* Camera starting */}
                         {!cameraReady && (
                             <View style={styles.processingBox}>
                                 <ActivityIndicator size="small" color={COLORS.primary} />
                                 <Text style={styles.processingText}>Starting camera...</Text>
+                            </View>
+                        )}
+
+                        {/* Debug: Show last detection */}
+                        {__DEV__ && lastDetection && (
+                            <View style={styles.debugBox}>
+                                <Text style={styles.debugText}>{lastDetection}</Text>
                             </View>
                         )}
                     </View>
@@ -212,7 +284,7 @@ function ScanQRScreen({ navigation }: Props) {
                     <Text style={styles.hint}>
                         Ask the player to show their QR code from their profile
                     </Text>
-                    {scanned && !processing && (
+                    {scanned && !processing && !showConfirmModal && (
                         <TouchableOpacity style={styles.rescanBtn} onPress={resetScanner}>
                             <Text style={styles.rescanText}>Tap to Scan Again</Text>
                         </TouchableOpacity>
@@ -230,16 +302,32 @@ function ScanQRScreen({ navigation }: Props) {
                             ) : (
                                 <View style={styles.avatarPlaceholder}>
                                     <Text style={styles.avatarInitial}>
-                                        {scannedUser?.name?.charAt(0) || "?"}
+                                        {scannedUser?.name?.charAt(0)?.toUpperCase() || "?"}
                                     </Text>
                                 </View>
                             )}
-                            <Text style={styles.userName}>{scannedUser?.name}</Text>
-                            {scannedUser?.handicap !== undefined && (
-                                <Text style={styles.userHandicap}>Handicap: {scannedUser.handicap}</Text>
-                            )}
+                            <Text style={styles.userName}>{scannedUser?.name || "Unknown"}</Text>
+
+                            <View style={styles.userStats}>
+                                {scannedUser?.handicap !== undefined && scannedUser?.handicap !== null && (
+                                    <View style={styles.statBadge}>
+                                        <Text style={styles.statLabel}>Handicap</Text>
+                                        <Text style={styles.statValue}>{scannedUser.handicap}</Text>
+                                    </View>
+                                )}
+                                {scannedUser?.socialRate !== undefined && (
+                                    <View style={styles.statBadge}>
+                                        <Text style={styles.statLabel}>Social Rate</Text>
+                                        <Text style={styles.statValue}>{scannedUser.socialRate}</Text>
+                                    </View>
+                                )}
+                            </View>
+
                             {scannedUser?.homeCourse && (
-                                <Text style={styles.userCourse}>{scannedUser.homeCourse}</Text>
+                                <Text style={styles.userCourse}>🏌️ {scannedUser.homeCourse}</Text>
+                            )}
+                            {scannedUser?.location && (
+                                <Text style={styles.userLocation}>📍 {scannedUser.location}</Text>
                             )}
                         </View>
 
@@ -277,8 +365,6 @@ function ScanQRScreen({ navigation }: Props) {
     );
 }
 
-export default memo(ScanQRScreen);
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -294,11 +380,18 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 14,
     },
-    permissionText: {
-        fontSize: 16,
+    permissionTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
         color: "#fff",
+        marginBottom: 8,
+    },
+    permissionText: {
+        fontSize: 15,
+        color: "rgba(255,255,255,0.7)",
         textAlign: "center",
-        marginBottom: 24,
+        marginBottom: 32,
+        lineHeight: 22,
     },
     permissionButton: {
         backgroundColor: COLORS.primary,
@@ -326,7 +419,7 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
     },
     darkArea: {
-        backgroundColor: "rgba(0,0,0,0.6)",
+        backgroundColor: "rgba(0,0,0,0.7)",
         alignItems: "center",
         paddingHorizontal: 20,
     },
@@ -349,7 +442,7 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 14,
         color: "rgba(255,255,255,0.8)",
-        paddingBottom: 20,
+        paddingBottom: 24,
     },
     middleRow: {
         flexDirection: "row",
@@ -357,17 +450,18 @@ const styles = StyleSheet.create({
     },
     darkSide: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.6)",
+        backgroundColor: "rgba(0,0,0,0.7)",
     },
     scanArea: {
         width: SCAN_AREA_SIZE,
         height: SCAN_AREA_SIZE,
         position: "relative",
+        overflow: "hidden",
     },
     corner: {
         position: "absolute",
-        width: 30,
-        height: 30,
+        width: 35,
+        height: 35,
         borderColor: COLORS.primary,
     },
     topLeft: {
@@ -375,39 +469,53 @@ const styles = StyleSheet.create({
         left: 0,
         borderTopWidth: 4,
         borderLeftWidth: 4,
-        borderTopLeftRadius: 12,
+        borderTopLeftRadius: 16,
     },
     topRight: {
         top: 0,
         right: 0,
         borderTopWidth: 4,
         borderRightWidth: 4,
-        borderTopRightRadius: 12,
+        borderTopRightRadius: 16,
     },
     bottomLeft: {
         bottom: 0,
         left: 0,
         borderBottomWidth: 4,
         borderLeftWidth: 4,
-        borderBottomLeftRadius: 12,
+        borderBottomLeftRadius: 16,
     },
     bottomRight: {
         bottom: 0,
         right: 0,
         borderBottomWidth: 4,
         borderRightWidth: 4,
-        borderBottomRightRadius: 12,
+        borderBottomRightRadius: 16,
+    },
+    scanLine: {
+        position: "absolute",
+        left: 10,
+        right: 10,
+        height: 3,
+        backgroundColor: COLORS.primary,
+        borderRadius: 2,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 8,
     },
     processingBox: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.6)",
         justifyContent: "center",
         alignItems: "center",
+        borderRadius: 8,
     },
     processingText: {
         color: "#fff",
-        marginTop: 10,
+        marginTop: 12,
         fontSize: 14,
+        fontWeight: "500",
     },
     bottomArea: {
         flex: 1,
@@ -417,10 +525,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "rgba(255,255,255,0.7)",
         textAlign: "center",
+        lineHeight: 20,
     },
     rescanBtn: {
-        marginTop: 20,
-        paddingHorizontal: 28,
+        marginTop: 24,
+        paddingHorizontal: 32,
         paddingVertical: 14,
         backgroundColor: COLORS.primary,
         borderRadius: 25,
@@ -432,61 +541,83 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.7)",
+        backgroundColor: "rgba(0,0,0,0.8)",
         justifyContent: "center",
         alignItems: "center",
         padding: 24,
     },
     modalContent: {
         backgroundColor: "#fff",
-        borderRadius: 20,
-        padding: 24,
+        borderRadius: 24,
+        padding: 28,
         width: "100%",
-        maxWidth: 340,
+        maxWidth: 360,
         alignItems: "center",
     },
     userInfo: {
         alignItems: "center",
-        marginBottom: 20,
+        marginBottom: 24,
     },
     avatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        marginBottom: 12,
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        marginBottom: 16,
     },
     avatarPlaceholder: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 90,
+        height: 90,
+        borderRadius: 45,
         backgroundColor: COLORS.primary,
         justifyContent: "center",
         alignItems: "center",
-        marginBottom: 12,
+        marginBottom: 16,
     },
     avatarInitial: {
-        fontSize: 32,
+        fontSize: 36,
         fontWeight: "bold",
         color: "#fff",
     },
     userName: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: "bold",
         color: COLORS.textMain,
-        marginBottom: 4,
+        marginBottom: 12,
     },
-    userHandicap: {
-        fontSize: 14,
+    userStats: {
+        flexDirection: "row",
+        gap: 12,
+        marginBottom: 12,
+    },
+    statBadge: {
+        backgroundColor: COLORS.bg,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
+        alignItems: "center",
+    },
+    statLabel: {
+        fontSize: 11,
+        color: COLORS.textSub,
+        marginBottom: 2,
+    },
+    statValue: {
+        fontSize: 16,
+        fontWeight: "bold",
         color: COLORS.primary,
-        fontWeight: "600",
     },
     userCourse: {
+        fontSize: 14,
+        color: COLORS.textSub,
+        marginTop: 4,
+    },
+    userLocation: {
         fontSize: 13,
         color: COLORS.textSub,
         marginTop: 2,
     },
     confirmText: {
-        fontSize: 15,
+        fontSize: 16,
         color: COLORS.textSub,
         textAlign: "center",
         marginBottom: 24,
@@ -498,8 +629,8 @@ const styles = StyleSheet.create({
     },
     cancelModalBtn: {
         flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
+        paddingVertical: 16,
+        borderRadius: 14,
         backgroundColor: COLORS.bg,
         alignItems: "center",
     },
@@ -509,10 +640,10 @@ const styles = StyleSheet.create({
         color: COLORS.textSub,
     },
     confirmBtn: {
-        flex: 1,
+        flex: 1.2,
         flexDirection: "row",
-        paddingVertical: 14,
-        borderRadius: 12,
+        paddingVertical: 16,
+        borderRadius: 14,
         backgroundColor: COLORS.primary,
         alignItems: "center",
         justifyContent: "center",
@@ -522,5 +653,19 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "600",
         color: "#fff",
+    },
+    debugBox: {
+        position: "absolute",
+        bottom: 10,
+        left: 10,
+        right: 10,
+        backgroundColor: "rgba(0,0,0,0.7)",
+        padding: 8,
+        borderRadius: 8,
+    },
+    debugText: {
+        color: "#fff",
+        fontSize: 10,
+        fontFamily: "monospace",
     },
 });

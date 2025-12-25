@@ -24,6 +24,13 @@ router.get("/qr", draftController.getQRCode);
 router.post("/qr/regenerate", draftController.regenerateQRCode);
 
 /**
+ * @route   GET /api/draft/history
+ * @desc    Get scan history - who scanned your QR code
+ * @access  Private
+ */
+router.get("/history", draftController.getScanHistory);
+
+/**
  * @route   POST /api/draft/scan
  * @desc    Scan and validate a QR code
  * @access  Private

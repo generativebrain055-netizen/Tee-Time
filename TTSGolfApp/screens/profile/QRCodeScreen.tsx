@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -10,34 +10,18 @@ import {
     Dimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { RefreshCw, Share2, QrCode } from "lucide-react-native";
+import { RefreshCw, Share2 } from "lucide-react-native";
+import QRCode from "react-native-qrcode-svg";
 import { COLORS } from "../../constants/colors";
 import { Header } from "../../components/common";
 import { draftApi } from "../../services/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const QR_SIZE = SCREEN_WIDTH * 0.7;
+const QR_SIZE = Math.min(SCREEN_WIDTH * 0.65, 260);
 
 interface Props {
     navigation: any;
 }
-
-// Simple QR Code display using text-based representation
-// For production, install react-native-qrcode-svg
-const QRCodeDisplay = memo(({ data, size }: { data: string; size: number }) => {
-    // Generate a simple visual representation
-    // In production, use a proper QR library
-    return (
-        <View style={[styles.qrContainer, { width: size, height: size }]}>
-            <View style={styles.qrInner}>
-                <QrCode size={size * 0.6} color={COLORS.textMain} strokeWidth={1.5} />
-                <Text style={styles.qrDataText} numberOfLines={2}>
-                    {data.substring(0, 20)}...
-                </Text>
-            </View>
-        </View>
-    );
-});
 
 export default function QRCodeScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(true);
@@ -123,13 +107,26 @@ export default function QRCodeScreen({ navigation }: Props) {
                 {/* QR Code */}
                 <View style={styles.qrWrapper}>
                     {loading ? (
-                        <View style={[styles.qrPlaceholder, { width: QR_SIZE, height: QR_SIZE }]}>
+                        <View style={[styles.qrPlaceholder, { width: QR_SIZE + 40, height: QR_SIZE + 40 }]}>
                             <ActivityIndicator size="large" color={COLORS.primary} />
+                            <Text style={styles.loadingText}>Generating QR Code...</Text>
                         </View>
                     ) : qrData ? (
-                        <QRCodeDisplay data={qrData} size={QR_SIZE} />
+                        <View style={styles.qrContainer}>
+                            <QRCode
+                                value={qrData}
+                                size={QR_SIZE}
+                                color={COLORS.textMain}
+                                backgroundColor={COLORS.white}
+                                logo={undefined}
+                                logoSize={50}
+                                logoBackgroundColor={COLORS.white}
+                                quietZone={10}
+                                ecl="M"
+                            />
+                        </View>
                     ) : (
-                        <View style={[styles.qrPlaceholder, { width: QR_SIZE, height: QR_SIZE }]}>
+                        <View style={[styles.qrPlaceholder, { width: QR_SIZE + 40, height: QR_SIZE + 40 }]}>
                             <Text style={styles.errorText}>Failed to load QR code</Text>
                             <TouchableOpacity style={styles.retryBtn} onPress={fetchQRCode}>
                                 <Text style={styles.retryText}>Tap to retry</Text>
@@ -191,7 +188,7 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: "center",
         paddingHorizontal: 24,
-        paddingTop: 32,
+        paddingTop: 24,
     },
     title: {
         fontSize: 24,
@@ -203,11 +200,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: COLORS.textSub,
         textAlign: "center",
-        marginBottom: 32,
+        marginBottom: 24,
         lineHeight: 22,
     },
     qrWrapper: {
-        marginBottom: 16,
+        marginBottom: 12,
     },
     qrContainer: {
         backgroundColor: COLORS.white,
@@ -221,16 +218,6 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 5,
     },
-    qrInner: {
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    qrDataText: {
-        marginTop: 12,
-        fontSize: 10,
-        color: COLORS.textSub,
-        textAlign: "center",
-    },
     qrPlaceholder: {
         backgroundColor: COLORS.white,
         borderRadius: 20,
@@ -241,6 +228,11 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 5,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: COLORS.textSub,
     },
     errorText: {
         fontSize: 14,
@@ -261,12 +253,12 @@ const styles = StyleSheet.create({
     versionText: {
         fontSize: 12,
         color: COLORS.textSub,
-        marginBottom: 24,
+        marginBottom: 20,
     },
     actions: {
         flexDirection: "row",
         gap: 16,
-        marginBottom: 32,
+        marginBottom: 24,
     },
     actionBtn: {
         flexDirection: "row",

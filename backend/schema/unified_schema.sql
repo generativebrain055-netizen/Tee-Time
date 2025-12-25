@@ -854,6 +854,23 @@ CREATE INDEX idx_draft_qr_codes_hash ON draft_qr_codes(code_hash) WHERE is_activ
 CREATE INDEX idx_draft_qr_codes_active ON draft_qr_codes(user_id, is_active) WHERE is_active = true;
 
 -- ============================================================================
+-- 31b. QR_SCAN_HISTORY TABLE - Track who scanned whose QR code
+-- ============================================================================
+CREATE TABLE qr_scan_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    qr_code_id UUID NOT NULL REFERENCES draft_qr_codes(id) ON DELETE CASCADE,
+    scanned_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- The user who owns the QR code
+    scanner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- The user who scanned
+    was_added_to_roster BOOLEAN DEFAULT false,
+    scanned_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_scan_per_session UNIQUE (qr_code_id, scanner_user_id, scanned_at)
+);
+
+CREATE INDEX idx_qr_scan_history_scanned_user ON qr_scan_history(scanned_user_id);
+CREATE INDEX idx_qr_scan_history_scanner ON qr_scan_history(scanner_user_id);
+CREATE INDEX idx_qr_scan_history_time ON qr_scan_history(scanned_at DESC);
+
+-- ============================================================================
 -- 32. GAME_SCORES TABLE
 -- ============================================================================
 CREATE TABLE game_scores (

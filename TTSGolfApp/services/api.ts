@@ -1027,4 +1027,20 @@ export const draftApi = {
         body: JSON.stringify({ userId }),
       }
     ),
+
+  // Get scan history - who scanned your QR code
+  getScanHistory: (limit = 20, offset = 0) =>
+    apiCall<{
+      success: boolean;
+      history: Array<{
+        id: string;
+        scannerId: string;
+        scannerName: string;
+        scannerAvatar?: string;
+        scannerHandicap?: number;
+        wasAddedToRoster: boolean;
+        scannedAt: string;
+      }>;
+      pagination: { limit: number; offset: number; hasMore: boolean };
+    }>(`${API_ENDPOINTS.DRAFT_HISTORY}?limit=${limit}&offset=${offset}`),
 };

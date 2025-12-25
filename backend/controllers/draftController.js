@@ -2,6 +2,7 @@ const draftService = require("../services/draftService");
 const rosterRepository = require("../repositories/rosterRepository");
 const userRepository = require("../repositories/userRepository");
 const rosterNotificationService = require("../services/rosterNotificationService");
+const { pool } = require("../config/database");
 const logger = require("../config/logger");
 
 class DraftController {
@@ -10,6 +11,7 @@ class DraftController {
     this.regenerateQRCode = this.regenerateQRCode.bind(this);
     this.scanQRCode = this.scanQRCode.bind(this);
     this.confirmDraft = this.confirmDraft.bind(this);
+    this.getScanHistory = this.getScanHistory.bind(this);
   }
 
   /**
@@ -169,6 +171,15 @@ class DraftController {
       // Get the added user's name for response
       const addedUser = await userRepository.getPublicProfile(userId);
 
+      // Update scan history to mark as added to roster
+      await pool.query(
+        `UPDATE qr_scan_history 
+         SET was_added_to_roster = true 
+         WHERE scanner_user_id = $1 AND scanned_user_id = $2 
+         AND scanned_at > NOW() - INTERVAL '10 minutes'`,
+        [scannerId, userId]
+      );
+
       res.json({
         success: true,
         message: `${addedUser?.first_name || "User"} added to your On-Deck list`,
@@ -181,6 +192,60 @@ class DraftController {
     } catch (error) {
       logger.error("Confirm draft error:", error);
       res.status(500).json({ success: false, message: "Failed to add user to roster" });
+    }
+  }
+
+  /**
+   * GET /api/draft/history
+   * Get scan history - who scanned your QR code
+   */
+  async getScanHistory(req, res) {
+    try {
+      const userId = req.user.id;
+      const limit = parseInt(req.query.limit) || 20;
+      const offset = parseInt(req.query.offset) || 0;
+
+      const result = await pool.query(
+        `SELECT 
+           h.id,
+           h.scanner_user_id,
+           h.was_added_to_roster,
+           h.scanned_at,
+           u.first_name,
+           u.last_name,
+           p.avatar_url,
+           p.handicap
+         FROM qr_scan_history h
+         JOIN users u ON h.scanner_user_id = u.id
+         LEFT JOIN user_profiles p ON u.id = p.user_id
+         WHERE h.scanned_user_id = $1
+         ORDER BY h.scanned_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+
+      const history = result.rows.map(row => ({
+        id: row.id,
+        scannerId: row.scanner_user_id,
+        scannerName: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown',
+        scannerAvatar: row.avatar_url,
+        scannerHandicap: row.handicap,
+        wasAddedToRoster: row.was_added_to_roster,
+        scannedAt: row.scanned_at,
+      }));
+
+      res.json({
+        success: true,
+        history,
+        pagination: {
+          limit,
+          offset,
+          hasMore: history.length === limit,
+        },
+      });
+    } catch (error) {
+      logger.error("Get scan history error:", error);
+      res.status(500).json({ success: false, message: "Failed to get scan history" });
     }
   }
 }

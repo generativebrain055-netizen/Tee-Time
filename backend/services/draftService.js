@@ -154,6 +154,14 @@ class DraftService {
         [record.id]
       );
 
+      // Record scan history
+      await pool.query(
+        `INSERT INTO qr_scan_history (qr_code_id, scanned_user_id, scanner_user_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [record.id, userId, scannerId]
+      );
+
       return { valid: true, userId, qrRecordId: record.id };
     } catch (error) {
       logger.error("QR validation error:", error);

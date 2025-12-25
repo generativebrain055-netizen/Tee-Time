@@ -76,6 +76,7 @@ export interface ApiEndpoints {
   DRAFT_QR_REGENERATE: string;
   DRAFT_SCAN: string;
   DRAFT_CONFIRM: string;
+  DRAFT_HISTORY: string;
   // Health
   HEALTH: string;
 }
@@ -138,6 +139,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   DRAFT_QR_REGENERATE: `${API_URL}/api/draft/qr/regenerate`,
   DRAFT_SCAN: `${API_URL}/api/draft/scan`,
   DRAFT_CONFIRM: `${API_URL}/api/draft/confirm`,
+  DRAFT_HISTORY: `${API_URL}/api/draft/history`,
   // Health
   HEALTH: `${API_URL}/health`,
 };
