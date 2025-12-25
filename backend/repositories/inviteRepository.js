@@ -406,85 +406,177 @@ class InviteRepository {
     return result.rows;
   }
 
-  // Accept FCFS invite with roster position tie-breaker
-  // Returns true if accepted, false if someone with higher roster position already accepted
-  async acceptFCFSWithTieBreaker(inviteId, userId, rosterPosition) {
+  // Accept invite atomically with tie-breaker logic
+  // Handles both FCFS (roster position priority) and Roster (invite order priority)
+  // Returns { success, reason, participantId } - does the full acceptance in one transaction
+  async acceptInviteAtomic(inviteId, userId, userName, inviteType) {
+    // Add 500ms delay to collect simultaneous requests before processing
+    // This allows the system to see all near-simultaneous accepts and apply priority correctly
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      
+      logger.debug(`acceptInviteAtomic: Starting for invite ${inviteId}, user ${userId}`);
 
-      // Get the invite and tee time info
+      // Lock the tee time row to prevent race conditions
+      const teeTimeResult = await client.query(
+        `SELECT t.id, t.max_players, t.creator_id, t.invite_type
+         FROM tee_times t
+         JOIN invites i ON i.tee_time_id = t.id
+         WHERE i.id = $1
+         FOR UPDATE OF t`,
+        [inviteId]
+      );
+      
+      if (!teeTimeResult.rows[0]) {
+        await client.query("ROLLBACK");
+        logger.debug(`acceptInviteAtomic: Tee time not found for invite ${inviteId}`);
+        return { success: false, reason: 'tee_time_not_found' };
+      }
+      
+      const teeTime = teeTimeResult.rows[0];
+      logger.debug(`acceptInviteAtomic: Tee time ${teeTime.id}, max_players: ${teeTime.max_players}, invite_type: ${teeTime.invite_type}`);
+
+      // Get the invite with FOR UPDATE lock
       const inviteResult = await client.query(
-        `SELECT i.*, t.max_players, t.creator_id
-         FROM invites i
-         JOIN tee_times t ON i.tee_time_id = t.id
-         WHERE i.id = $1`,
+        `SELECT * FROM invites WHERE id = $1 FOR UPDATE`,
         [inviteId]
       );
       const invite = inviteResult.rows[0];
+      
       if (!invite) {
         await client.query("ROLLBACK");
+        logger.debug(`acceptInviteAtomic: Invite ${inviteId} not found`);
         return { success: false, reason: 'invite_not_found' };
+      }
+
+      logger.debug(`acceptInviteAtomic: Invite status is '${invite.status}', position: ${invite.position}`);
+
+      if (invite.status !== 'pending') {
+        await client.query("ROLLBACK");
+        logger.debug(`acceptInviteAtomic: Invite ${inviteId} already responded (status: ${invite.status})`);
+        return { success: false, reason: 'already_responded' };
       }
 
       // Get current participant count
       const countResult = await client.query(
         `SELECT COUNT(*) as count FROM tee_time_participants 
          WHERE tee_time_id = $1 AND (status IS NULL OR status != 'cancelled')`,
-        [invite.tee_time_id]
+        [teeTime.id]
       );
       const participantCount = parseInt(countResult.rows[0].count);
+      const spotsLeft = teeTime.max_players - participantCount;
+      logger.debug(`acceptInviteAtomic: Current participants: ${participantCount}, spots left: ${spotsLeft}`);
 
       // Check if there's room
-      if (participantCount >= invite.max_players) {
-        await client.query("ROLLBACK");
+      if (spotsLeft <= 0) {
+        // No room - move to waitlist
+        await client.query(
+          `UPDATE invites SET status = 'waitlist', updated_at = NOW() WHERE id = $1`,
+          [inviteId]
+        );
+        await client.query("COMMIT");
+        logger.debug(`acceptInviteAtomic: Tee time full, moved invite ${inviteId} to waitlist`);
         return { success: false, reason: 'full' };
       }
 
-      // Check for simultaneous accepts - get all accepted invites in the last few seconds
-      // with their roster positions
+      // Check for simultaneous accepts that happened in the last 10 seconds
+      // These are accepts that got through but we need to verify priority
       const recentAcceptsResult = await client.query(
-        `SELECT i.id, i.invitee_user_id, i.position as invite_position,
-                r.position as roster_position
+        `SELECT i.id, i.invitee_user_id, i.position as invite_position
          FROM invites i
-         LEFT JOIN roster r ON r.user_id = $2 AND r.contact_user_id = i.invitee_user_id
          WHERE i.tee_time_id = $1 
            AND i.status = 'accepted'
-           AND i.updated_at > NOW() - INTERVAL '5 seconds'
-         ORDER BY COALESCE(r.position, 999999) ASC`,
-        [invite.tee_time_id, invite.creator_id]
+           AND i.updated_at > NOW() - INTERVAL '10 seconds'
+           AND i.id != $2
+         ORDER BY i.position ASC`,
+        [teeTime.id, inviteId]
       );
+      
+      const recentAccepts = recentAcceptsResult.rows;
+      logger.debug(`acceptInviteAtomic: Found ${recentAccepts.length} recent accepts`);
 
-      // If there are recent accepts and we'd exceed max players, check roster position
-      const potentialCount = participantCount + recentAcceptsResult.rows.length + 1;
-      if (potentialCount > invite.max_players) {
-        // Check if this user has higher roster priority than any recent accept
-        const userRosterResult = await client.query(
-          `SELECT position FROM roster 
-           WHERE user_id = $1 AND contact_user_id = $2`,
-          [invite.creator_id, userId]
-        );
-        const userRosterPos = userRosterResult.rows[0]?.position ?? 999999;
-
-        // Find if any recent accept has lower priority (higher position number)
-        const lowerPriorityAccept = recentAcceptsResult.rows.find(
-          r => (r.roster_position ?? 999999) > userRosterPos
-        );
-
+      // If there are recent accepts and adding this user would exceed capacity
+      // we need to check priority
+      if (recentAccepts.length > 0 && (participantCount + 1) > teeTime.max_players) {
+        // Find if any recent accept has LOWER priority (higher position number) than this invite
+        const lowerPriorityAccept = recentAccepts.find(r => r.invite_position > invite.position);
+        
         if (!lowerPriorityAccept) {
-          // This user doesn't have priority, move to waitlist
-          await client.query("ROLLBACK");
+          // This user has lower priority than all recent accepts - go to waitlist
+          await client.query(
+            `UPDATE invites SET status = 'waitlist', updated_at = NOW() WHERE id = $1`,
+            [inviteId]
+          );
+          await client.query("COMMIT");
+          logger.info(`User ${userId} lost tie-breaker (position ${invite.position}), moved to waitlist`);
           return { success: false, reason: 'tie_breaker_lost' };
         }
+        
+        // This user has higher priority - bump the lower priority user to waitlist
+        logger.info(`User ${userId} (position ${invite.position}) has priority over user at position ${lowerPriorityAccept.invite_position}`);
+        
+        // Move the lower priority accept to waitlist
+        await client.query(
+          `UPDATE invites SET status = 'waitlist', updated_at = NOW() WHERE id = $1`,
+          [lowerPriorityAccept.id]
+        );
+        
+        // Remove them from participants
+        await client.query(
+          `DELETE FROM tee_time_participants WHERE tee_time_id = $1 AND user_id = $2`,
+          [teeTime.id, lowerPriorityAccept.invitee_user_id]
+        );
+        
+        logger.info(`Bumped user ${lowerPriorityAccept.invitee_user_id} to waitlist due to lower priority`);
+      }
 
-        // This user has priority - the lower priority accept will be moved to waitlist
-        // by a separate cleanup process
+      // Room available - accept the invite and add as participant atomically
+      await client.query(
+        `UPDATE invites SET status = 'accepted', updated_at = NOW() WHERE id = $1`,
+        [inviteId]
+      );
+
+      // Add as participant
+      const participantResult = await client.query(
+        `INSERT INTO tee_time_participants (tee_time_id, user_id, name, position)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tee_time_id, user_id) DO UPDATE SET status = NULL, cancelled_at = NULL
+         RETURNING *`,
+        [teeTime.id, userId, userName, participantCount]
+      );
+
+      // Re-check participant count after our insert
+      const finalCountResult = await client.query(
+        `SELECT COUNT(*) as count FROM tee_time_participants 
+         WHERE tee_time_id = $1 AND (status IS NULL OR status != 'cancelled')`,
+        [teeTime.id]
+      );
+      const finalCount = parseInt(finalCountResult.rows[0].count);
+
+      // Check if tee time is now full - move remaining pending to waitlist
+      if (finalCount >= teeTime.max_players) {
+        await client.query(
+          `UPDATE invites SET status = 'waitlist', updated_at = NOW()
+           WHERE tee_time_id = $1 AND status = 'pending'`,
+          [teeTime.id]
+        );
+        logger.info(`Tee time ${teeTime.id} full (${finalCount}/${teeTime.max_players}), remaining invites moved to waitlist`);
       }
 
       await client.query("COMMIT");
-      return { success: true };
+      logger.info(`acceptInviteAtomic: Success! User ${userId} (position ${invite.position}) added as participant`);
+      return { 
+        success: true, 
+        participantId: participantResult.rows[0]?.id,
+        teeTimeId: teeTime.id,
+        isFull: finalCount >= teeTime.max_players
+      };
     } catch (error) {
       await client.query("ROLLBACK");
+      logger.error("Accept invite atomic error:", error);
       throw error;
     } finally {
       client.release();

@@ -48,76 +48,58 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
  * Handle invite acceptance
  */
 const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
-    if (participantCount < teeTime.max_players) {
-        // For FCFS invites: Use tie-breaker logic based on roster position
-        if (teeTime.invite_type === INVITE_TYPES.FCFS) {
-            const tieBreakerResult = await inviteRepository.acceptFCFSWithTieBreaker(
-                invite.id,
-                userId,
-                invite.position // roster position from invite
-            );
+    // Use atomic acceptance to prevent race conditions
+    const user = await userRepository.findById(userId);
+    const userName = `${user.first_name} ${user.last_name}`;
+    
+    logger.info(`Processing acceptance for invite ${invite.id}, user ${userId}, teeTime ${teeTime.id}`);
+    
+    const result = await inviteRepository.acceptInviteAtomic(
+        invite.id,
+        userId,
+        userName,
+        teeTime.invite_type
+    );
 
-            if (!tieBreakerResult.success) {
-                if (tieBreakerResult.reason === 'tie_breaker_lost') {
-                    // Someone with higher roster priority accepted at the same time
-                    await inviteRepository.moveToWaitlist(invite.id);
-                    logger.info(`User ${userId} lost FCFS tie-breaker for tee time ${invite.tee_time_id}, moved to waitlist`);
-                    return {
-                        success: true,
-                        message: "Someone with higher roster priority accepted at the same time. You've been added to the waitlist.",
-                        status: 'waitlist'
-                    };
-                } else if (tieBreakerResult.reason === 'full') {
-                    await inviteRepository.moveToWaitlist(invite.id);
-                    return {
-                        success: true,
-                        message: "Tee time is full. You've been added to the waitlist.",
-                        status: 'waitlist'
-                    };
-                } else {
-                    return {
-                        success: false,
-                        message: "Unable to process your response. Please try again.",
-                        status: 'error'
-                    };
-                }
-            }
+    logger.info(`Atomic acceptance result:`, result);
+
+    if (!result.success) {
+        if (result.reason === 'full') {
+            return {
+                success: true,
+                message: "Tee time is full. You've been added to the waitlist.",
+                status: 'waitlist'
+            };
+        } else if (result.reason === 'tie_breaker_lost') {
+            return {
+                success: true,
+                message: "Someone with higher priority accepted at the same time. You've been added to the waitlist.",
+                status: 'waitlist'
+            };
+        } else if (result.reason === 'already_responded') {
+            return {
+                success: false,
+                message: "You've already responded to this invite.",
+                status: 'error'
+            };
+        } else {
+            logger.error(`Acceptance failed with reason: ${result.reason}`);
+            return {
+                success: false,
+                message: "Unable to process your response. Please try again.",
+                status: 'error'
+            };
         }
-
-        const user = await userRepository.findById(userId);
-        await teeTimeRepository.addParticipant(
-            invite.tee_time_id,
-            userId,
-            null,
-            `${user.first_name} ${user.last_name}`,
-            participantCount
-        );
-
-        await inviteRepository.respondToInvite(invite.id, userId, INVITE_RESPONSES.ACCEPTED);
-        await socialRateService.applyAcceptBonus(userId, invite.tee_time_id, invite.id);
-
-        // For FCFS: Check if tee time is now full
-        if (teeTime.invite_type === INVITE_TYPES.FCFS) {
-            const newCount = participantCount + 1;
-            if (newCount >= teeTime.max_players) {
-                await inviteRepository.moveRemainingToWaitlist(invite.tee_time_id);
-                logger.info(`Tee time ${invite.tee_time_id} full via FCFS, remaining moved to waitlist`);
-            }
-        }
-
-        return {
-            success: true,
-            message: "You're in! See you on the course. (+2 Social Rate)",
-            status: INVITE_RESPONSES.ACCEPTED
-        };
-    } else {
-        await inviteRepository.moveToWaitlist(invite.id);
-        return {
-            success: true,
-            message: "Tee time is full. You've been added to the waitlist.",
-            status: 'waitlist'
-        };
     }
+
+    // Apply social rate bonus
+    await socialRateService.applyAcceptBonus(userId, invite.tee_time_id, invite.id);
+
+    return {
+        success: true,
+        message: "You're in! See you on the course. (+2 Social Rate)",
+        status: INVITE_RESPONSES.ACCEPTED
+    };
 };
 
 /**

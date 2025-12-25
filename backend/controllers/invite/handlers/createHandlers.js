@@ -59,17 +59,19 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
 };
 
 /**
- * Create Roster invites - sequential with response window
+ * Create Roster invites - all at once with response window, priority by position
  */
 const createRosterInvites = async (req, res, teeTime, invitees, responseWindow = 2) => {
     try {
         const userId = req.user.id;
         const responseWindowMs = (responseWindow || 2) * 60 * 60 * 1000;
+        const expiresAt = new Date(Date.now() + responseWindowMs);
 
+        // All invitees get the same expiry time - priority is determined by position
         const inviteesWithExpiry = invitees.map((inv, idx) => ({
             ...inv,
             position: inv.order || idx,
-            expiresAt: idx === 0 ? new Date(Date.now() + responseWindowMs) : null
+            expiresAt: expiresAt // Everyone gets the same deadline
         }));
 
         const createdInvites = await inviteRepository.createBulkInvitesWithExpiry(
@@ -78,13 +80,12 @@ const createRosterInvites = async (req, res, teeTime, invitees, responseWindow =
             inviteesWithExpiry
         );
 
-        // Only send notification to first person in queue
-        const firstInvite = createdInvites.find(i => i.position === 0);
-        if (firstInvite) {
-            if (firstInvite.invitee_user_id) {
+        // Send notifications to ALL invitees (not just first)
+        for (const invite of createdInvites) {
+            if (invite.invitee_user_id) {
                 // In-app notification for registered users - include deadline
                 await notificationService.notifyTeeTimeInvite(
-                    firstInvite.invitee_user_id,
+                    invite.invitee_user_id,
                     {
                         id: teeTime.id,
                         date: teeTime.tee_date,
@@ -96,20 +97,20 @@ const createRosterInvites = async (req, res, teeTime, invitees, responseWindow =
                         firstName: req.user.firstName,
                         lastName: req.user.lastName,
                     },
-                    firstInvite.expires_at // Pass the deadline
+                    invite.expires_at // Pass the deadline
                 );
-            } else if (firstInvite.invitee_phone) {
-                await sendInviteSms(firstInvite, teeTime, false, responseWindow);
+            } else if (invite.invitee_phone) {
+                await sendInviteSms(invite, teeTime, false, responseWindow);
             }
         }
 
-        logger.info(`Roster invites created for tee time ${teeTime.id}: ${createdInvites.length} invites, ${responseWindow}h window`);
+        logger.info(`Roster invites created for tee time ${teeTime.id}: ${createdInvites.length} invites, ${responseWindow}h window, all notified`);
 
         res.status(201).json({
             success: true,
             invites: createdInvites,
             responseWindow,
-            message: `Invites queued. Each player has ${responseWindow} hour(s) to respond.`
+            message: `${createdInvites.length} invites sent. Priority goes to those invited first. Response window: ${responseWindow} hour(s).`
         });
     } catch (error) {
         logger.error("Create roster invites error:", error);
