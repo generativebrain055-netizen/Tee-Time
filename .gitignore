@@ -61,3 +61,7 @@ coverage/
 
 # Misc
 .cache/
+
+.env
+.env.local
+.env.*.local
