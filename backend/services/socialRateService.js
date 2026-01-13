@@ -1,4 +1,4 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 // Point values for different actions
@@ -32,11 +32,18 @@ class SocialRateService {
    * Get user's current social rate score
    */
   async getCurrentScore(userId) {
-    const query = `
-      SELECT social_rate FROM user_profiles WHERE user_id = $1
-    `;
-    const result = await pool.query(query, [userId]);
-    return result.rows[0]?.social_rate ?? null;
+    const { data, error } = await supabaseAdmin
+      .from("user_profiles")
+      .select("social_rate")
+      .eq("user_id", userId)
+      .single();
+
+    if (error) {
+      logger.error(`Error getting social rate for user ${userId}:`, error.message);
+      return null;
+    }
+
+    return data?.social_rate ?? null;
   }
 
   /**
@@ -58,7 +65,6 @@ class SocialRateService {
     await this.updateUserScore(userId, POINT_VALUES.INITIAL_SCORE);
     return POINT_VALUES.INITIAL_SCORE;
   }
-
 
   /**
    * Apply bonus for accepting an invite (+2 points)
@@ -172,7 +178,6 @@ class SocialRateService {
     return this.findLogEntryByTeeTime(userId, teeTimeId, REASONS.NO_SHOW);
   }
 
-
   /**
    * Core score adjustment method
    */
@@ -190,7 +195,7 @@ class SocialRateService {
 
     await this.updateUserScore(userId, newScore);
     
-    logger.info(`Social rate adjusted for user ${userId}: ${currentScore} → ${newScore} (${delta > 0 ? '+' : ''}${delta})`);
+    logger.info(`Social rate adjusted for user ${userId}: ${currentScore} -> ${newScore} (${delta > 0 ? '+' : ''}${delta})`);
     return newScore;
   }
 
@@ -198,111 +203,151 @@ class SocialRateService {
    * Log score change (immutable record)
    */
   async logScoreChange(data) {
-    const query = `
-      INSERT INTO social_rate_logs 
-        (user_id, tee_time_id, invite_id, previous_score, delta, new_score, reason, reason_details, triggered_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `;
-    const result = await pool.query(query, [
-      data.userId,
-      data.teeTimeId || null,
-      data.inviteId || null,
-      data.previousScore,
-      data.delta,
-      data.newScore,
-      data.reason,
-      data.reasonDetails || null,
-      data.triggeredBy || null
-    ]);
-    return result.rows[0];
+    const { data: log, error } = await supabaseAdmin
+      .from("social_rate_logs")
+      .insert({
+        user_id: data.userId,
+        tee_time_id: data.teeTimeId || null,
+        invite_id: data.inviteId || null,
+        previous_score: data.previousScore,
+        delta: data.delta,
+        new_score: data.newScore,
+        reason: data.reason,
+        reason_details: data.reasonDetails || null,
+        triggered_by: data.triggeredBy || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error("Error logging score change:", error.message);
+      throw error;
+    }
+
+    return log;
   }
 
   /**
    * Update user's score in profile
    */
   async updateUserScore(userId, newScore) {
-    const query = `
-      UPDATE user_profiles SET social_rate = $1, updated_at = NOW()
-      WHERE user_id = $2
-    `;
-    await pool.query(query, [newScore, userId]);
+    const { error } = await supabaseAdmin
+      .from("user_profiles")
+      .update({ 
+        social_rate: newScore,
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", userId);
+
+    if (error) {
+      logger.error(`Error updating social rate for user ${userId}:`, error.message);
+      throw error;
+    }
   }
 
   /**
    * Find existing log entry by invite (for idempotency)
    */
   async findLogEntry(userId, inviteId, reason) {
-    const query = `
-      SELECT * FROM social_rate_logs 
-      WHERE user_id = $1 AND invite_id = $2 AND reason = $3
-      LIMIT 1
-    `;
-    const result = await pool.query(query, [userId, inviteId, reason]);
-    return result.rows[0] || null;
+    const { data, error } = await supabaseAdmin
+      .from("social_rate_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("invite_id", inviteId)
+      .eq("reason", reason)
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      logger.error("Error finding log entry:", error.message);
+    }
+
+    return data || null;
   }
 
   /**
    * Find existing log entry by tee time (for idempotency)
    */
   async findLogEntryByTeeTime(userId, teeTimeId, reason) {
-    const query = `
-      SELECT * FROM social_rate_logs 
-      WHERE user_id = $1 AND tee_time_id = $2 AND reason = $3
-      LIMIT 1
-    `;
-    const result = await pool.query(query, [userId, teeTimeId, reason]);
-    return result.rows[0] || null;
+    const { data, error } = await supabaseAdmin
+      .from("social_rate_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("tee_time_id", teeTimeId)
+      .eq("reason", reason)
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      logger.error("Error finding log entry by tee time:", error.message);
+    }
+
+    return data || null;
   }
 
   /**
    * Get user's score history
    */
   async getScoreHistory(userId, limit = 50, offset = 0) {
-    const query = `
-      SELECT 
-        srl.*,
-        tt.course_name,
-        tt.tee_date,
-        tt.tee_time
-      FROM social_rate_logs srl
-      LEFT JOIN tee_times tt ON srl.tee_time_id = tt.id
-      WHERE srl.user_id = $1
-      ORDER BY srl.created_at DESC
-      LIMIT $2 OFFSET $3
-    `;
-    const result = await pool.query(query, [userId, limit, offset]);
-    return result.rows;
+    const { data, error } = await supabaseAdmin
+      .from("social_rate_logs")
+      .select(`
+        *,
+        tee_times:tee_time_id (
+          course_name,
+          tee_date,
+          tee_time
+        )
+      `)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      logger.error("Error getting score history:", error.message);
+      return [];
+    }
+
+    return data || [];
   }
 
   /**
    * Get user's social rate summary
    */
   async getSummary(userId) {
-    const query = `
-      SELECT 
-        COALESCE(up.social_rate, 100) as current_score,
-        COUNT(srl.id) FILTER (WHERE srl.reason = 'invite_accepted') as total_accepts,
-        COUNT(srl.id) FILTER (WHERE srl.reason = 'invite_declined_late') as total_late_declines,
-        COUNT(srl.id) FILTER (WHERE srl.reason = 'cancellation_late') as total_late_cancellations,
-        COUNT(srl.id) FILTER (WHERE srl.reason = 'no_show') as total_no_shows,
-        COALESCE(SUM(srl.delta) FILTER (WHERE srl.delta > 0), 0) as total_earned,
-        COALESCE(ABS(SUM(srl.delta) FILTER (WHERE srl.delta < 0)), 0) as total_lost
-      FROM user_profiles up
-      LEFT JOIN social_rate_logs srl ON up.user_id = srl.user_id
-      WHERE up.user_id = $1
-      GROUP BY up.social_rate
-    `;
-    const result = await pool.query(query, [userId]);
-    return result.rows[0] || {
-      current_score: 100,
-      total_accepts: 0,
-      total_late_declines: 0,
-      total_late_cancellations: 0,
-      total_no_shows: 0,
-      total_earned: 0,
-      total_lost: 0
+    // Get current score
+    const currentScore = await this.getCurrentScore(userId) ?? 100;
+
+    // Get all logs for aggregation
+    const { data: logs, error } = await supabaseAdmin
+      .from("social_rate_logs")
+      .select("reason, delta")
+      .eq("user_id", userId);
+
+    if (error) {
+      logger.error("Error getting summary:", error.message);
+      return {
+        current_score: currentScore,
+        total_accepts: 0,
+        total_late_declines: 0,
+        total_late_cancellations: 0,
+        total_no_shows: 0,
+        total_earned: 0,
+        total_lost: 0
+      };
+    }
+
+    const summary = {
+      current_score: currentScore,
+      total_accepts: logs.filter(l => l.reason === 'invite_accepted').length,
+      total_late_declines: logs.filter(l => l.reason === 'invite_declined_late').length,
+      total_late_cancellations: logs.filter(l => l.reason === 'cancellation_late').length,
+      total_no_shows: logs.filter(l => l.reason === 'no_show').length,
+      total_earned: logs.filter(l => l.delta > 0).reduce((sum, l) => sum + l.delta, 0),
+      total_lost: Math.abs(logs.filter(l => l.delta < 0).reduce((sum, l) => sum + l.delta, 0))
     };
+
+    return summary;
   }
 
   /**

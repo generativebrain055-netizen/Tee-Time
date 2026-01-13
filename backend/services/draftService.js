@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 const QR_SECRET = process.env.QR_SECRET || "teetime-draft-secret-key-change-in-production";
@@ -11,14 +11,21 @@ class DraftService {
    */
   async getOrCreateQRCode(userId) {
     // Check for existing active code
-    const existing = await pool.query(
-      `SELECT * FROM draft_qr_codes WHERE user_id = $1 AND is_active = true`,
-      [userId]
-    );
+    const { data: existing, error } = await supabaseAdmin
+      .from("draft_qr_codes")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .limit(1);
 
-    if (existing.rows.length > 0) {
-      // Return existing code info (we need to regenerate the payload since we don't store the code)
-      return this.generateQRPayload(userId, existing.rows[0].version);
+    if (error) {
+      logger.error(`Error checking existing QR code for user ${userId}:`, error.message);
+      throw error;
+    }
+
+    if (existing && existing.length > 0) {
+      // Return existing code info (regenerate payload since we don't store the code)
+      return this.generateQRPayload(userId, existing[0].version);
     }
 
     // Generate new code
@@ -33,19 +40,34 @@ class DraftService {
     const codeHash = crypto.createHash("sha256").update(code).digest("hex");
 
     // Get next version
-    const versionResult = await pool.query(
-      `SELECT COALESCE(MAX(version), 0) + 1 as next_version 
-       FROM draft_qr_codes WHERE user_id = $1`,
-      [userId]
-    );
-    const version = versionResult.rows[0].next_version;
+    const { data: versionData, error: versionError } = await supabaseAdmin
+      .from("draft_qr_codes")
+      .select("version")
+      .eq("user_id", userId)
+      .order("version", { ascending: false })
+      .limit(1);
+
+    if (versionError) {
+      logger.error(`Error getting QR version for user ${userId}:`, versionError.message);
+      throw versionError;
+    }
+
+    const version = (versionData && versionData.length > 0) ? versionData[0].version + 1 : 1;
 
     // Insert new code
-    await pool.query(
-      `INSERT INTO draft_qr_codes (user_id, code_hash, version, is_active)
-       VALUES ($1, $2, $3, true)`,
-      [userId, codeHash, version]
-    );
+    const { error: insertError } = await supabaseAdmin
+      .from("draft_qr_codes")
+      .insert({
+        user_id: userId,
+        code_hash: codeHash,
+        version: version,
+        is_active: true
+      });
+
+    if (insertError) {
+      logger.error(`Error inserting QR code for user ${userId}:`, insertError.message);
+      throw insertError;
+    }
 
     logger.info(`Generated new QR code for user ${userId}, version ${version}`);
 
@@ -57,12 +79,19 @@ class DraftService {
    */
   async regenerateQRCode(userId) {
     // Revoke all existing codes
-    await pool.query(
-      `UPDATE draft_qr_codes 
-       SET is_active = false, revoked_at = NOW()
-       WHERE user_id = $1 AND is_active = true`,
-      [userId]
-    );
+    const { error } = await supabaseAdmin
+      .from("draft_qr_codes")
+      .update({
+        is_active: false,
+        revoked_at: new Date().toISOString()
+      })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+
+    if (error) {
+      logger.error(`Error revoking QR codes for user ${userId}:`, error.message);
+      throw error;
+    }
 
     logger.info(`Revoked all QR codes for user ${userId}`);
 
@@ -79,7 +108,7 @@ class DraftService {
       .createHmac("sha256", QR_SECRET)
       .update(JSON.stringify(payload))
       .digest("hex")
-      .substring(0, 16); // Shortened signature
+      .substring(0, 16);
 
     return {
       ...payload,
@@ -93,7 +122,6 @@ class DraftService {
    */
   async generateQRPayload(userId, version) {
     // Since we only store the hash, we need to regenerate
-    // This is a security feature - the actual code is never stored
     return this.regenerateQRCode(userId);
   }
 
@@ -130,41 +158,54 @@ class DraftService {
 
       // Verify code exists and is active
       const codeHash = crypto.createHash("sha256").update(code).digest("hex");
-      const qrRecord = await pool.query(
-        `SELECT * FROM draft_qr_codes 
-         WHERE code_hash = $1 AND is_active = true AND user_id = $2`,
-        [codeHash, userId]
-      );
+      const { data: qrRecord, error } = await supabaseAdmin
+        .from("draft_qr_codes")
+        .select("*")
+        .eq("code_hash", codeHash)
+        .eq("is_active", true)
+        .eq("user_id", userId)
+        .limit(1);
 
-      if (qrRecord.rows.length === 0) {
+      if (error || !qrRecord || qrRecord.length === 0) {
         return { valid: false, error: "QR code is invalid or has been revoked" };
       }
 
+      const record = qrRecord[0];
+
       // Check expiration
-      const record = qrRecord.rows[0];
       if (record.expires_at && new Date(record.expires_at) < new Date()) {
         return { valid: false, error: "QR code has expired" };
       }
 
       // Update scan count
-      await pool.query(
-        `UPDATE draft_qr_codes 
-         SET scanned_count = scanned_count + 1, last_scanned_at = NOW()
-         WHERE id = $1`,
-        [record.id]
-      );
+      const { error: updateError } = await supabaseAdmin
+        .from("draft_qr_codes")
+        .update({
+          scanned_count: record.scanned_count + 1,
+          last_scanned_at: new Date().toISOString()
+        })
+        .eq("id", record.id);
+
+      if (updateError) {
+        logger.error("Error updating scan count:", updateError.message);
+      }
 
       // Record scan history
-      await pool.query(
-        `INSERT INTO qr_scan_history (qr_code_id, scanned_user_id, scanner_user_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING`,
-        [record.id, userId, scannerId]
-      );
+      const { error: historyError } = await supabaseAdmin
+        .from("qr_scan_history")
+        .insert({
+          qr_code_id: record.id,
+          scanned_user_id: userId,
+          scanner_user_id: scannerId
+        });
+
+      if (historyError && historyError.code !== '23505') { // Ignore duplicate key errors
+        logger.error("Error recording scan history:", historyError.message);
+      }
 
       return { valid: true, userId, qrRecordId: record.id };
     } catch (error) {
-      logger.error("QR validation error:", error);
+      logger.error("QR validation error:", error.message);
       return { valid: false, error: "Invalid QR code format" };
     }
   }
@@ -173,15 +214,37 @@ class DraftService {
    * Get mutual clubs between two users
    */
   async getMutualClubs(userId1, userId2) {
-    const result = await pool.query(
-      `SELECT c.name 
-       FROM user_club_memberships ucm1
-       JOIN user_club_memberships ucm2 ON ucm1.club_id = ucm2.club_id
-       JOIN clubs c ON ucm1.club_id = c.id
-       WHERE ucm1.user_id = $1 AND ucm2.user_id = $2`,
-      [userId1, userId2]
-    );
-    return result.rows.map((r) => r.name);
+    const { data, error } = await supabaseAdmin
+      .from("user_club_memberships")
+      .select(`
+        clubs!inner (name)
+      `)
+      .eq("user_id", userId1);
+
+    if (error) {
+      logger.error("Error fetching mutual clubs:", error.message);
+      return [];
+    }
+
+    // Get user2's clubs
+    const { data: user2Clubs, error: error2 } = await supabaseAdmin
+      .from("user_club_memberships")
+      .select(`
+        clubs!inner (name)
+      `)
+      .eq("user_id", userId2);
+
+    if (error2) {
+      logger.error("Error fetching user2 clubs:", error2.message);
+      return [];
+    }
+
+    // Find mutual clubs
+    const user1ClubNames = data.map(m => m.clubs.name);
+    const user2ClubNames = user2Clubs.map(m => m.clubs.name);
+    const mutualClubs = user1ClubNames.filter(name => user2ClubNames.includes(name));
+
+    return mutualClubs;
   }
 
   /**

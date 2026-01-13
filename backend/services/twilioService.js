@@ -24,7 +24,7 @@ const initializeTwilioClient = () => {
   }
 
   if (!accountSid.startsWith("AC")) {
-    logger.error("Invalid TWILIO_ACCOUNT_SID. Must start with AC");
+    logger.warn("TWILIO_ACCOUNT_SID appears to be an API Key (SK) instead of Account SID (AC). Using fallback OTP method.");
     return { client: null, verify: null };
   }
 
@@ -79,7 +79,7 @@ const sendOTP = async (phoneNumber) => {
 
       if (process.env.NODE_ENV === "development") {
         const otp = generateOTP();
-        logger.info(`\n🔐 [VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`);
+        logger.info(`[VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
         return { success: true, mode: "console_fallback", otp };
       }
 
@@ -110,7 +110,7 @@ const sendOTP = async (phoneNumber) => {
       logger.error(`Twilio Messages API error for ${phoneNumber}:`, error);
 
       if (process.env.NODE_ENV === "development") {
-        logger.info(`\n🔐 [MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}\n`);
+        logger.info(`[MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
         return { success: true, mode: "console_fallback", otp };
       }
 
@@ -120,7 +120,7 @@ const sendOTP = async (phoneNumber) => {
 
   // Method 3: Development mode - log OTP to console
   const otp = generateOTP();
-  logger.info(`\n🔐 [DEVELOPMENT MODE] OTP for ${phoneNumber}: ${otp}\n`);
+  logger.info(`[DEVELOPMENT MODE] OTP for ${phoneNumber}: ${otp}`);
   return { success: true, mode: "console", otp };
 };
 
@@ -151,7 +151,7 @@ const verifyOTP = async (phoneNumber, otp) => {
  */
 const sendSMS = async (phoneNumber, message) => {
   if (!twilioClient) {
-    logger.info(`\n📱 [SMS - DEV MODE] to ${phoneNumber}:\n${message}\n`);
+    logger.info(`[SMS - DEV MODE] to ${phoneNumber}: ${message}`);
     return { success: true, mode: "console" };
   }
 
@@ -173,7 +173,7 @@ const sendSMS = async (phoneNumber, message) => {
     logger.error(`Twilio SMS error for ${phoneNumber}:`, error);
 
     if (process.env.NODE_ENV === "development") {
-      logger.info(`\n📱 [SMS FAILED - FALLBACK] to ${phoneNumber}:\n${message}\n`);
+      logger.info(`[SMS FAILED - FALLBACK] to ${phoneNumber}: ${message}`);
       return { success: true, mode: "console_fallback" };
     }
 

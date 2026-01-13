@@ -31,10 +31,50 @@ class SessionManager {
     }
   }
 
-  // Check if user is logged in
+  // Check if user is logged in with valid token
   async isLoggedIn(): Promise<boolean> {
-    const token = await AsyncStorage.getItem("accessToken");
-    return !!token;
+    try {
+      const token = await AsyncStorage.getItem("accessToken");
+      if (!token) return false;
+
+      // Decode JWT to check expiration
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(tokenParts[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+
+      // Check if token is expired
+      if (payload.exp && payload.exp < currentTime) {
+        // Token expired, clear session
+        await this.clearSession();
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Token validation error:", error);
+      await this.clearSession();
+      return false;
+    }
+  }
+
+  // Validate token without clearing session
+  async isTokenValid(): Promise<boolean> {
+    try {
+      const token = await AsyncStorage.getItem("accessToken");
+      if (!token) return false;
+
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(tokenParts[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+
+      return !payload.exp || payload.exp >= currentTime;
+    } catch (error) {
+      return false;
+    }
   }
 
   // Clear session

@@ -1,4 +1,4 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
@@ -15,24 +15,32 @@ class NotificationService {
    * @param {string} params.body - Notification body
    * @param {Object} params.data - Additional data (type, senderId, etc.)
    */
-  async createNotification({ userId, type = "in_app", title, body, data = {} }) {
+  async createNotification({
+    userId,
+    type = "in_app",
+    title,
+    body,
+    data = {},
+  }) {
     try {
-      const query = `
-        INSERT INTO notifications (user_id, type, channel, title, body, data, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'sent')
-        RETURNING id
-      `;
-      const result = await pool.query(query, [
-        userId,
-        type,
-        data.type || "general",
-        title,
-        body,
-        JSON.stringify(data),
-      ]);
-      return result.rows[0];
+      const { data: notification, error } = await supabaseAdmin
+        .from("notifications")
+        .insert({
+          user_id: userId,
+          type: type,
+          channel: data.type || "general",
+          title: title,
+          body: body,
+          data: data,
+          status: "sent",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return notification;
     } catch (error) {
-      logger.error("Error creating notification:", error);
+      logger.error("Error creating notification:", error.message);
       // Don't throw - notifications shouldn't break main flow
       return null;
     }
@@ -45,7 +53,8 @@ class NotificationService {
    * @param {string} requestId - The friend request ID for responding
    */
   async notifyFriendRequest(receiverId, sender, requestId) {
-    const senderName = `${sender.firstName || ""} ${sender.lastName || ""}`.trim() || "Someone";
+    const senderName =
+      `${sender.firstName || ""} ${sender.lastName || ""}`.trim() || "Someone";
     return this.createNotification({
       userId: receiverId,
       title: "New Friend Request",
@@ -64,7 +73,9 @@ class NotificationService {
    * Create friend request accepted notification
    */
   async notifyFriendRequestAccepted(senderId, accepter) {
-    const accepterName = `${accepter.firstName || ""} ${accepter.lastName || ""}`.trim() || "Someone";
+    const accepterName =
+      `${accepter.firstName || ""} ${accepter.lastName || ""}`.trim() ||
+      "Someone";
     return this.createNotification({
       userId: senderId,
       title: "Friend Request Accepted",
@@ -82,9 +93,11 @@ class NotificationService {
    * Create tee time invite notification
    */
   async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null) {
-    const inviterName = `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() || "Someone";
+    const inviterName =
+      `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
+      "Someone";
     const dateStr = this.formatDateForNotification(teeTime.date);
-    
+
     let body = `${inviterName} invited you to play on ${dateStr}`;
     if (expiresAt) {
       const deadline = new Date(expiresAt);
@@ -97,7 +110,7 @@ class NotificationService {
       });
       body += `. Respond by ${deadlineStr}`;
     }
-    
+
     return this.createNotification({
       userId,
       title: "Tee Time Invitation",
@@ -119,11 +132,15 @@ class NotificationService {
    * Create tee time invite response notification
    */
   async notifyTeeTimeResponse(ownerId, responder, teeTime, accepted) {
-    const responderName = `${responder.firstName || ""} ${responder.lastName || ""}`.trim() || "Someone";
+    const responderName =
+      `${responder.firstName || ""} ${responder.lastName || ""}`.trim() ||
+      "Someone";
     return this.createNotification({
       userId: ownerId,
       title: accepted ? "Invite Accepted" : "Invite Declined",
-      body: `${responderName} ${accepted ? "accepted" : "declined"} your tee time invitation`,
+      body: `${responderName} ${
+        accepted ? "accepted" : "declined"
+      } your tee time invitation`,
       data: {
         type: "tee_time_response",
         teeTimeId: teeTime.id,
@@ -138,7 +155,8 @@ class NotificationService {
    * Create roster add notification
    */
   async notifyAddedToRoster(userId, adder) {
-    const adderName = `${adder.firstName || ""} ${adder.lastName || ""}`.trim() || "Someone";
+    const adderName =
+      `${adder.firstName || ""} ${adder.lastName || ""}`.trim() || "Someone";
     return this.createNotification({
       userId,
       title: "Added to Roster",
@@ -159,7 +177,7 @@ class NotificationService {
     return this.createNotification({
       userId: organizerId,
       type: "push",
-      title: "Is Everyone Here? ⛳",
+      title: "Is Everyone Here?",
       body: `Your tee time at ${teeTime.courseName} starts in 5 minutes. Tap to confirm attendance.`,
       data: {
         type: "check_in_reminder",
@@ -190,11 +208,14 @@ class NotificationService {
    * Notify organizer that roster is exhausted and prompt to use On-Deck players
    */
   async notifyRosterExhausted(organizerId, teeTime, spotsRemaining) {
-    const courseName = teeTime.course_name || teeTime.courseName || "the course";
+    const courseName =
+      teeTime.course_name || teeTime.courseName || "the course";
     return this.createNotification({
       userId: organizerId,
       title: "Roster Exhausted",
-      body: `Your tee time at ${courseName} has ${spotsRemaining} spot${spotsRemaining > 1 ? 's' : ''} remaining. Select from On-Deck players to fill.`,
+      body: `Your tee time at ${courseName} has ${spotsRemaining} spot${
+        spotsRemaining > 1 ? "s" : ""
+      } remaining. Select from On-Deck players to fill.`,
       data: {
         type: "roster_exhausted",
         teeTimeId: teeTime.id,
@@ -209,8 +230,12 @@ class NotificationService {
    * Notify organizer that a confirmed player has cancelled
    */
   async notifyPlayerCancelled(organizerId, teeTime, cancelledPlayer) {
-    const playerName = `${cancelledPlayer.firstName || ""} ${cancelledPlayer.lastName || ""}`.trim() || "A player";
-    const courseName = teeTime.course_name || teeTime.courseName || "the course";
+    const playerName =
+      `${cancelledPlayer.firstName || ""} ${
+        cancelledPlayer.lastName || ""
+      }`.trim() || "A player";
+    const courseName =
+      teeTime.course_name || teeTime.courseName || "the course";
     return this.createNotification({
       userId: organizerId,
       title: "Player Cancelled",
@@ -229,11 +254,13 @@ class NotificationService {
    * Notify FCFS waitlist that a spot has opened up
    */
   async notifySpotOpened(userId, teeTime, organizer) {
-    const organizerName = `${organizer.firstName || ""} ${organizer.lastName || ""}`.trim() || "Someone";
+    const organizerName =
+      `${organizer.firstName || ""} ${organizer.lastName || ""}`.trim() ||
+      "Someone";
     const dateStr = this.formatDateForNotification(teeTime.tee_date);
     return this.createNotification({
       userId,
-      title: "Spot Opened Up! 🏌️",
+      title: "Spot Opened Up!",
       body: `A spot has opened in ${organizerName}'s Tee Time on ${dateStr} at ${teeTime.course_name}. First to respond is in!`,
       data: {
         type: "spot_opened",
@@ -255,7 +282,9 @@ class NotificationService {
     return this.createNotification({
       userId,
       title: "Response Deadline Approaching",
-      body: `Only ${hoursRemaining} hour${hoursRemaining > 1 ? 's' : ''} left to respond to the tee time at ${teeTime.course_name}!`,
+      body: `Only ${hoursRemaining} hour${
+        hoursRemaining > 1 ? "s" : ""
+      } left to respond to the tee time at ${teeTime.course_name}!`,
       data: {
         type: "fcfs_deadline",
         teeTimeId: teeTime.id,
@@ -269,11 +298,40 @@ class NotificationService {
   /**
    * Notify organizer that tee time is not filled by deadline
    */
+
+  /**
+   * Notify organizer that tee time deadline is approaching with unfilled spots
+   * This is sent BEFORE the deadline expires to give them time to act
+   */
+  async notifyOrganizerFillWarning(organizerId, teeTime, spotsRemaining) {
+    return this.createNotification({
+      userId: organizerId,
+      title: "⏰ Deadline Approaching!",
+      body: `Your tee time at ${
+        teeTime.course_name
+      } still has ${spotsRemaining} open spot${
+        spotsRemaining > 1 ? "s" : ""
+      }. Response deadline expires soon - invite from On-Deck now!`,
+      data: {
+        type: "organizer_fill_warning",
+        teeTimeId: teeTime.id,
+        courseName: teeTime.course_name,
+        spotsRemaining,
+        action: "SELECT_ON_DECK",
+        urgent: true,
+      },
+    });
+  }
+
   async notifyTeeTimeNotFilled(organizerId, teeTime, spotsRemaining) {
     return this.createNotification({
       userId: organizerId,
       title: "Tee Time Not Filled",
-      body: `Your tee time at ${teeTime.course_name} still has ${spotsRemaining} open spot${spotsRemaining > 1 ? 's' : ''}. Would you like to invite On-Deck players?`,
+      body: `Your tee time at ${
+        teeTime.course_name
+      } still has ${spotsRemaining} open spot${
+        spotsRemaining > 1 ? "s" : ""
+      }. Would you like to invite On-Deck players?`,
       data: {
         type: "tee_time_not_filled",
         teeTimeId: teeTime.id,
@@ -289,18 +347,22 @@ class NotificationService {
    * Uses UTC methods to avoid timezone shift with PostgreSQL DATE type
    */
   formatDateForNotification(date) {
-    if (!date) return '';
-    
+    if (!date) return "";
+
     let d;
-    if (typeof date === 'string') {
+    if (typeof date === "string") {
       // Parse string date as local time
-      const [year, month, day] = date.split('-').map(Number);
+      const [year, month, day] = date.split("-").map(Number);
       d = new Date(year, month - 1, day);
     } else {
       // Date object from PostgreSQL - use UTC values to avoid shift
-      d = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+      d = new Date(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate()
+      );
     }
-    
+
     return d.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",

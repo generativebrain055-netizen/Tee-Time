@@ -157,7 +157,13 @@ export interface RosterGroup {
   isDefault: boolean;
   isOwner?: boolean;
   ownerId?: string;
-  sortPreference?: 'position' | 'socialRate' | 'handicap' | 'name' | 'distance' | 'membership';
+  sortPreference?:
+    | "position"
+    | "socialRate"
+    | "handicap"
+    | "name"
+    | "distance"
+    | "membership";
 }
 
 export interface AutoInviteMember {
@@ -236,14 +242,26 @@ export interface WaiverWireEntry {
 
 export const rosterApi = {
   // Get user's roster with optional sorting
-  getRoster: (sortBy?: 'position' | 'socialRate' | 'handicap' | 'name' | 'distance' | 'membership') => {
-    const params = sortBy ? `?sortBy=${sortBy}` : '';
-    return apiCall<{ success: boolean; roster: RosterContact[] }>(`${API_ENDPOINTS.ROSTER}${params}`);
+  getRoster: (
+    sortBy?:
+      | "position"
+      | "socialRate"
+      | "handicap"
+      | "name"
+      | "distance"
+      | "membership"
+  ) => {
+    const params = sortBy ? `?sortBy=${sortBy}` : "";
+    return apiCall<{ success: boolean; roster: RosterContact[] }>(
+      `${API_ENDPOINTS.ROSTER}${params}`
+    );
   },
 
   // Get on-deck players
   getOnDeck: () =>
-    apiCall<{ success: boolean; onDeck: RosterContact[] }>(API_ENDPOINTS.ROSTER_ON_DECK),
+    apiCall<{ success: boolean; onDeck: RosterContact[] }>(
+      API_ENDPOINTS.ROSTER_ON_DECK
+    ),
 
   // Add to roster
   addToRoster: (contact: {
@@ -272,71 +290,121 @@ export const rosterApi = {
 
   // Toggle on-deck status
   toggleOnDeck: (rosterId: string, isOnDeck: boolean) =>
-    apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/${rosterId}/on-deck`, {
-      method: "PUT",
-      body: JSON.stringify({ isOnDeck }),
-    }),
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/on-deck`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ isOnDeck }),
+      }
+    ),
 
   // Move member (drag & drop between roster/on-deck)
-  moveMember: (rosterId: string, data: { targetGroupId?: string; isOnDeck: boolean; newPosition?: number }) =>
-    apiCall<{ success: boolean; entry: any }>(`${API_ENDPOINTS.ROSTER}/${rosterId}/move`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+  moveMember: (
+    rosterId: string,
+    data: { targetGroupId?: string; isOnDeck: boolean; newPosition?: number }
+  ) =>
+    apiCall<{ success: boolean; entry: any }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/move`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // Update member's group
   updateMemberGroup: (rosterId: string, groupId: string | null) =>
-    apiCall<{ success: boolean; entry: any }>(`${API_ENDPOINTS.ROSTER}/${rosterId}/group`, {
-      method: "PUT",
-      body: JSON.stringify({ groupId }),
-    }),
+    apiCall<{ success: boolean; entry: any }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/group`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ groupId }),
+      }
+    ),
 
   // Get detailed member profile
   getMemberProfile: (rosterId: string) =>
-    apiCall<{ success: boolean; profile: MemberProfile }>(`${API_ENDPOINTS.ROSTER}/${rosterId}/profile`),
+    apiCall<{ success: boolean; profile: MemberProfile }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/profile`
+    ),
 
   // Get member's playing history
   getMemberHistory: (rosterId: string) =>
-    apiCall<{ success: boolean; history: any[] }>(`${API_ENDPOINTS.ROSTER}/${rosterId}/history`),
+    apiCall<{ success: boolean; history: any[] }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/history`
+    ),
 
   // Search users
   searchUsers: (query: string) =>
-    apiCall<{ success: boolean; users: any[] }>(`${API_ENDPOINTS.ROSTER_SEARCH}?q=${encodeURIComponent(query)}`),
+    apiCall<{ success: boolean; users: any[] }>(
+      `${API_ENDPOINTS.ROSTER_SEARCH}?q=${encodeURIComponent(query)}`
+    ),
 
   // ============ GROUPS ============
 
   // Get all groups
   getGroups: () =>
-    apiCall<{ success: boolean; groups: RosterGroup[] }>(`${API_ENDPOINTS.ROSTER}/groups`),
+    apiCall<{ success: boolean; groups: RosterGroup[] }>(
+      `${API_ENDPOINTS.ROSTER}/groups`
+    ),
 
   // Get single group details
   getGroup: (groupId: string) =>
-    apiCall<{ success: boolean; group: RosterGroup }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}`),
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}`
+    ),
 
   // Create group
-  createGroup: (data: { name: string; description?: string; color?: string; icon?: string; autoInvite?: boolean; maxMembers?: number; memberIds?: string[] }) =>
-    apiCall<{ success: boolean; group: RosterGroup }>(`${API_ENDPOINTS.ROSTER}/groups`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  createGroup: (data: {
+    name: string;
+    description?: string;
+    color?: string;
+    icon?: string;
+    autoInvite?: boolean;
+    maxMembers?: number;
+    memberIds?: string[];
+  }) =>
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // Update group
   updateGroup: (groupId: string, data: Partial<RosterGroup>) =>
-    apiCall<{ success: boolean; group: RosterGroup }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // Update group sort preference
-  updateGroupSort: (groupId: string, sortBy: 'position' | 'socialRate' | 'handicap' | 'name' | 'distance' | 'membership') =>
-    apiCall<{ success: boolean; sortPreference: string }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}/sort`, {
-      method: "PUT",
-      body: JSON.stringify({ sortBy }),
-    }),
+  updateGroupSort: (
+    groupId: string,
+    sortBy:
+      | "position"
+      | "socialRate"
+      | "handicap"
+      | "name"
+      | "distance"
+      | "membership"
+  ) =>
+    apiCall<{ success: boolean; sortPreference: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/sort`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ sortBy }),
+      }
+    ),
 
   // Get auto-invite members for tee time creation
   getAutoInviteMembers: (groupId: string) =>
-    apiCall<{ success: boolean; members: AutoInviteMember[]; count: number }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}/auto-invite`),
+    apiCall<{ success: boolean; members: AutoInviteMember[]; count: number }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/auto-invite`
+    ),
 
   // Delete group
   deleteGroup: (groupId: string) =>
@@ -346,28 +414,44 @@ export const rosterApi = {
 
   // Get group members
   getGroupMembers: (groupId: string, sortBy?: string) => {
-    const params = sortBy ? `?sortBy=${sortBy}` : '';
-    return apiCall<{ success: boolean; members: RosterContact[] }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}/members${params}`);
+    const params = sortBy ? `?sortBy=${sortBy}` : "";
+    return apiCall<{ success: boolean; members: RosterContact[] }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/members${params}`
+    );
   },
 
   // ============ WAIVER WIRE ============
 
   // Get waiver wire for a date
   getWaiverWire: (date: string) =>
-    apiCall<{ success: boolean; waiverWire: WaiverWireEntry[] }>(`${API_ENDPOINTS.ROSTER}/waiver-wire?date=${date}`),
+    apiCall<{ success: boolean; waiverWire: WaiverWireEntry[] }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire?date=${date}`
+    ),
 
   // Add to waiver wire
-  addToWaiverWire: (data: { availableDate: string; preferredTime?: string; preferredCourse?: string; maxHandicap?: number; notes?: string }) =>
-    apiCall<{ success: boolean; entry: any }>(`${API_ENDPOINTS.ROSTER}/waiver-wire`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  addToWaiverWire: (data: {
+    availableDate: string;
+    preferredTime?: string;
+    preferredCourse?: string;
+    maxHandicap?: number;
+    notes?: string;
+  }) =>
+    apiCall<{ success: boolean; entry: any }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // Remove from waiver wire
   removeFromWaiverWire: (date: string) =>
-    apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/waiver-wire/${date}`, {
-      method: "DELETE",
-    }),
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire/${date}`,
+      {
+        method: "DELETE",
+      }
+    ),
 };
 
 // ============ TEE TIMES API ============
@@ -378,10 +462,10 @@ export interface TeeTimeHistoryEntry {
   courseLocation?: string;
   teeDate: string;
   teeTime: string;
-  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
-  userRole: 'organizer' | 'participant';
+  status: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled";
+  userRole: "organizer" | "participant";
   participantStatus?: string;
-  attendanceStatus?: 'pending' | 'present' | 'no_show' | 'cancelled';
+  attendanceStatus?: "pending" | "present" | "no_show" | "cancelled";
   gameScore?: number;
   holesPlayed?: number;
   organizer: {
@@ -413,7 +497,9 @@ export const teeTimeApi = {
   // Get all tee times
   getTeeTimes: (status?: string) =>
     apiCall<{ success: boolean; teeTimes: TeeTime[] }>(
-      status ? `${API_ENDPOINTS.TEE_TIMES}?status=${status}` : API_ENDPOINTS.TEE_TIMES
+      status
+        ? `${API_ENDPOINTS.TEE_TIMES}?status=${status}`
+        : API_ENDPOINTS.TEE_TIMES
     ),
 
   // Get upcoming tee times
@@ -424,7 +510,9 @@ export const teeTimeApi = {
 
   // Get tee time details
   getTeeTime: (id: string) =>
-    apiCall<{ success: boolean; teeTime: any }>(`${API_ENDPOINTS.TEE_TIMES}/${id}`),
+    apiCall<{ success: boolean; teeTime: any }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${id}`
+    ),
 
   // Cancel tee time
   cancelTeeTime: (id: string) =>
@@ -434,10 +522,15 @@ export const teeTimeApi = {
 
   // Skip invite and advance to next roster member
   skipInvite: (teeTimeId: string, inviteId: string) =>
-    apiCall<{ success: boolean; message: string; skippedInviteId: string; nextInvite: any; invites: any[] }>(
-      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/invites/${inviteId}/skip`,
-      { method: "POST" }
-    ),
+    apiCall<{
+      success: boolean;
+      message: string;
+      skippedInviteId: string;
+      nextInvite: any;
+      invites: any[];
+    }>(`${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/invites/${inviteId}/skip`, {
+      method: "POST",
+    }),
 
   // Get calendar data
   getCalendar: (start: string, end: string) =>
@@ -446,19 +539,27 @@ export const teeTimeApi = {
     ),
 
   // Get complete tee time history
-  getHistory: (params?: { filter?: 'all' | 'upcoming' | 'completed' | 'cancelled' | 'no_show'; limit?: number; offset?: number }) => {
+  getHistory: (params?: {
+    filter?: "all" | "upcoming" | "completed" | "cancelled" | "no_show";
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams();
-    if (params?.filter) query.append('filter', params.filter);
-    if (params?.limit) query.append('limit', params.limit.toString());
-    if (params?.offset) query.append('offset', params.offset.toString());
+    if (params?.filter) query.append("filter", params.filter);
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.offset) query.append("offset", params.offset.toString());
     const queryStr = query.toString();
     return apiCall<{ success: boolean; history: TeeTimeHistoryEntry[] }>(
-      `${API_ENDPOINTS.TEE_TIMES_HISTORY}${queryStr ? `?${queryStr}` : ''}`
+      `${API_ENDPOINTS.TEE_TIMES_HISTORY}${queryStr ? `?${queryStr}` : ""}`
     );
   },
 
   // Send On-Deck invites as FCFS
-  sendOnDeckInvites: (teeTimeId: string, playerIds: string[], deadline?: string) =>
+  sendOnDeckInvites: (
+    teeTimeId: string,
+    playerIds: string[],
+    deadline?: string
+  ) =>
     apiCall<{ success: boolean; message: string; invites: any[] }>(
       `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/on-deck-invites`,
       {
@@ -469,13 +570,15 @@ export const teeTimeApi = {
 
   // Set FCFS deadline for all pending invites
   setFCFSDeadline: (teeTimeId: string, deadline: string) =>
-    apiCall<{ success: boolean; message: string; deadline: string; updatedCount: number }>(
-      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/fcfs-deadline`,
-      {
-        method: "POST",
-        body: JSON.stringify({ deadline }),
-      }
-    ),
+    apiCall<{
+      success: boolean;
+      message: string;
+      deadline: string;
+      updatedCount: number;
+    }>(`${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/fcfs-deadline`, {
+      method: "POST",
+      body: JSON.stringify({ deadline }),
+    }),
 };
 
 // ============ INVITES API ============
@@ -492,45 +595,80 @@ export interface InviteResponse {
 export const inviteApi = {
   // Create invites
   createInvites: (
-    teeTimeId: string, 
-    invitees: Array<{ userId?: string; phone?: string; name?: string; order?: number }>,
+    teeTimeId: string,
+    invitees: Array<{
+      userId?: string;
+      phone?: string;
+      name?: string;
+      order?: number;
+    }>,
     inviteType?: "roster" | "fcfs" | "manual",
-    responseWindow?: number
+    responseWindow?: number,
+    deadline?: string // ISO string for FCFS deadline
   ) =>
-    apiCall<{ success: boolean; invites: any[]; message?: string }>(API_ENDPOINTS.INVITES, {
+    apiCall<{
+      success: boolean;
+      invites: any[];
+      message?: string;
+      deadline?: string;
+    }>(API_ENDPOINTS.INVITES, {
       method: "POST",
-      body: JSON.stringify({ teeTimeId, invitees, inviteType, responseWindow }),
+      body: JSON.stringify({
+        teeTimeId,
+        invitees,
+        inviteType,
+        responseWindow,
+        deadline,
+      }),
     }),
 
   // Create invites from roster
   createFromRoster: (teeTimeId: string, rosterIds?: string[], count?: number) =>
-    apiCall<{ success: boolean; invites: any[]; count: number }>(API_ENDPOINTS.INVITES_FROM_ROSTER, {
-      method: "POST",
-      body: JSON.stringify({ teeTimeId, rosterIds, count }),
-    }),
+    apiCall<{ success: boolean; invites: any[]; count: number }>(
+      API_ENDPOINTS.INVITES_FROM_ROSTER,
+      {
+        method: "POST",
+        body: JSON.stringify({ teeTimeId, rosterIds, count }),
+      }
+    ),
 
   // Get pending invites (received)
   getPendingInvites: () =>
-    apiCall<{ success: boolean; invites: Invite[] }>(API_ENDPOINTS.INVITES_PENDING),
+    apiCall<{ success: boolean; invites: Invite[] }>(
+      API_ENDPOINTS.INVITES_PENDING
+    ),
 
   // Get sent invites
   getSentInvites: () =>
-    apiCall<{ success: boolean; invites: Invite[] }>(API_ENDPOINTS.INVITES_SENT),
+    apiCall<{ success: boolean; invites: Invite[] }>(
+      API_ENDPOINTS.INVITES_SENT
+    ),
 
   // Respond to invite (with optional message)
-  respondToInvite: (inviteId: string, response: "accepted" | "declined" | "maybe", message?: string) =>
-    apiCall<{ success: boolean }>(`${API_ENDPOINTS.INVITES}/${inviteId}/respond`, {
-      method: "PUT",
-      body: JSON.stringify({ response, message }),
-    }),
+  respondToInvite: (
+    inviteId: string,
+    response: "accepted" | "declined" | "maybe",
+    message?: string
+  ) =>
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.INVITES}/${inviteId}/respond`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ response, message }),
+      }
+    ),
 
   // Get response history for an invite
   getInviteResponses: (inviteId: string) =>
-    apiCall<{ success: boolean; responses: InviteResponse[] }>(`${API_ENDPOINTS.INVITES}/${inviteId}/responses`),
+    apiCall<{ success: boolean; responses: InviteResponse[] }>(
+      `${API_ENDPOINTS.INVITES}/${inviteId}/responses`
+    ),
 
   // Get user's response history
   getResponseHistory: () =>
-    apiCall<{ success: boolean; history: any[] }>(`${API_ENDPOINTS.INVITES}/history`),
+    apiCall<{ success: boolean; history: any[] }>(
+      `${API_ENDPOINTS.INVITES}/history`
+    ),
 
   // Cancel invite
   cancelInvite: (inviteId: string) =>
@@ -540,7 +678,9 @@ export const inviteApi = {
 
   // Get waitlist
   getWaitlist: (teeTimeId: string) =>
-    apiCall<{ success: boolean; waitlist: any[] }>(`${API_ENDPOINTS.INVITES}/${teeTimeId}/waitlist`),
+    apiCall<{ success: boolean; waitlist: any[] }>(
+      `${API_ENDPOINTS.INVITES}/${teeTimeId}/waitlist`
+    ),
 };
 
 // ============ PROFILE API ============
@@ -588,24 +728,37 @@ export interface UserProfile {
 export const profileApi = {
   // Get current user with profile
   getCurrentUser: () =>
-    apiCall<{ success: boolean; user: UserProfile }>(API_ENDPOINTS.GET_CURRENT_USER),
+    apiCall<{ success: boolean; user: UserProfile }>(
+      API_ENDPOINTS.GET_CURRENT_USER
+    ),
 
   // Update profile (handles both user and profile data)
   updateProfile: (data: Partial<UserProfile>) =>
-    apiCall<{ success: boolean; user: UserProfile }>(API_ENDPOINTS.UPDATE_PROFILE, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+    apiCall<{ success: boolean; user: UserProfile }>(
+      API_ENDPOINTS.UPDATE_PROFILE,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    ),
 
   // Update notification preferences
-  updateNotificationPreferences: (preferences: { email?: boolean; sms?: boolean; push?: boolean }) =>
+  updateNotificationPreferences: (preferences: {
+    email?: boolean;
+    sms?: boolean;
+    push?: boolean;
+  }) =>
     apiCall<{ success: boolean }>(API_ENDPOINTS.UPDATE_PROFILE, {
       method: "PUT",
       body: JSON.stringify({ notificationPreferences: preferences }),
     }),
 
   // Update privacy settings
-  updatePrivacySettings: (settings: { showHandicap?: boolean; showLocation?: boolean; showPhone?: boolean }) =>
+  updatePrivacySettings: (settings: {
+    showHandicap?: boolean;
+    showLocation?: boolean;
+    showPhone?: boolean;
+  }) =>
     apiCall<{ success: boolean }>(API_ENDPOINTS.UPDATE_PROFILE, {
       method: "PUT",
       body: JSON.stringify({ privacySettings: settings }),
@@ -626,7 +779,7 @@ export interface DiscoveredUser {
   preferredTeeTime?: string;
   walkOrRide?: string;
   socialRate?: number;
-  friendshipStatus: 'none' | 'friend' | 'requested' | 'pending';
+  friendshipStatus: "none" | "friend" | "requested" | "pending";
 }
 
 export interface FriendRequest {
@@ -651,18 +804,25 @@ export const friendApi = {
 
   // Get pending requests (received)
   getPendingRequests: () =>
-    apiCall<{ success: boolean; requests: FriendRequest[] }>(API_ENDPOINTS.FRIENDS_REQUESTS_PENDING),
+    apiCall<{ success: boolean; requests: FriendRequest[] }>(
+      API_ENDPOINTS.FRIENDS_REQUESTS_PENDING
+    ),
 
   // Get sent requests
   getSentRequests: () =>
-    apiCall<{ success: boolean; requests: any[] }>(API_ENDPOINTS.FRIENDS_REQUESTS_SENT),
+    apiCall<{ success: boolean; requests: any[] }>(
+      API_ENDPOINTS.FRIENDS_REQUESTS_SENT
+    ),
 
   // Respond to friend request
-  respondToRequest: (requestId: string, response: 'accepted' | 'declined') =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.FRIENDS}/requests/${requestId}/respond`, {
-      method: "PUT",
-      body: JSON.stringify({ response }),
-    }),
+  respondToRequest: (requestId: string, response: "accepted" | "declined") =>
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.FRIENDS}/requests/${requestId}/respond`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ response }),
+      }
+    ),
 
   // Get friends list
   getFriends: () =>
@@ -675,39 +835,53 @@ export const friendApi = {
     }),
 
   // Discover users by location/course
-  discoverUsers: (params?: { location?: string; course?: string; limit?: number; offset?: number }) => {
+  discoverUsers: (params?: {
+    location?: string;
+    course?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams();
-    if (params?.location) query.append('location', params.location);
-    if (params?.course) query.append('course', params.course);
-    if (params?.limit) query.append('limit', params.limit.toString());
-    if (params?.offset) query.append('offset', params.offset.toString());
+    if (params?.location) query.append("location", params.location);
+    if (params?.course) query.append("course", params.course);
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.offset) query.append("offset", params.offset.toString());
     const queryStr = query.toString();
     return apiCall<{ success: boolean; users: DiscoveredUser[] }>(
-      `${API_ENDPOINTS.FRIENDS_DISCOVER}${queryStr ? `?${queryStr}` : ''}`
+      `${API_ENDPOINTS.FRIENDS_DISCOVER}${queryStr ? `?${queryStr}` : ""}`
     );
   },
 
   // Get user profile
   getUserProfile: (userId: string) =>
-    apiCall<{ success: boolean; profile: DiscoveredUser & { bio?: string; averageScore?: number } }>(
-      `${API_ENDPOINTS.FRIENDS}/profile/${userId}`
-    ),
+    apiCall<{
+      success: boolean;
+      profile: DiscoveredUser & { bio?: string; averageScore?: number };
+    }>(`${API_ENDPOINTS.FRIENDS}/profile/${userId}`),
 
   // Block a user
   blockUser: (userId: string) =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.FRIENDS}/block/${userId}`, {
-      method: "POST",
-    }),
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.FRIENDS}/block/${userId}`,
+      {
+        method: "POST",
+      }
+    ),
 
   // Unblock a user
   unblockUser: (userId: string) =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.FRIENDS}/block/${userId}`, {
-      method: "DELETE",
-    }),
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.FRIENDS}/block/${userId}`,
+      {
+        method: "DELETE",
+      }
+    ),
 
   // Get blocked users
   getBlockedUsers: () =>
-    apiCall<{ success: boolean; blockedUsers: any[] }>(`${API_ENDPOINTS.FRIENDS}/blocked`),
+    apiCall<{ success: boolean; blockedUsers: any[] }>(
+      `${API_ENDPOINTS.FRIENDS}/blocked`
+    ),
 };
 
 // ============ COURSES API ============
@@ -736,8 +910,8 @@ export const courseApi = {
   // Search courses
   searchCourses: (query: string, lat?: number, lng?: number) => {
     const params = new URLSearchParams({ q: query });
-    if (lat) params.append('lat', lat.toString());
-    if (lng) params.append('lng', lng.toString());
+    if (lat) params.append("lat", lat.toString());
+    if (lng) params.append("lng", lng.toString());
     return apiCall<{ success: boolean; courses: GolfCourse[]; source: string }>(
       `${API_ENDPOINTS.COURSES_SEARCH}?${params.toString()}`
     );
@@ -745,8 +919,11 @@ export const courseApi = {
 
   // Get nearby courses
   getNearbyCourses: (lat: number, lng: number, radius?: number) => {
-    const params = new URLSearchParams({ lat: lat.toString(), lng: lng.toString() });
-    if (radius) params.append('radius', radius.toString());
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+    });
+    if (radius) params.append("radius", radius.toString());
     return apiCall<{ success: boolean; courses: GolfCourse[]; source: string }>(
       `${API_ENDPOINTS.COURSES_NEARBY}?${params.toString()}`
     );
@@ -755,7 +932,9 @@ export const courseApi = {
   // Get popular courses
   getPopularCourses: (limit?: number) =>
     apiCall<{ success: boolean; courses: GolfCourse[] }>(
-      limit ? `${API_ENDPOINTS.COURSES_POPULAR}?limit=${limit}` : API_ENDPOINTS.COURSES_POPULAR
+      limit
+        ? `${API_ENDPOINTS.COURSES_POPULAR}?limit=${limit}`
+        : API_ENDPOINTS.COURSES_POPULAR
     ),
 
   // Get course details
@@ -766,20 +945,28 @@ export const courseApi = {
 
   // Add to favorites
   addFavorite: (courseId: string, courseData?: GolfCourse) =>
-    apiCall<{ success: boolean; favorite: any }>(`${API_ENDPOINTS.COURSES}/favorites`, {
-      method: "POST",
-      body: JSON.stringify({ courseId, courseData }),
-    }),
+    apiCall<{ success: boolean; favorite: any }>(
+      `${API_ENDPOINTS.COURSES}/favorites`,
+      {
+        method: "POST",
+        body: JSON.stringify({ courseId, courseData }),
+      }
+    ),
 
   // Remove from favorites
   removeFavorite: (courseId: string) =>
-    apiCall<{ success: boolean }>(`${API_ENDPOINTS.COURSES}/favorites/${courseId}`, {
-      method: "DELETE",
-    }),
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.COURSES}/favorites/${courseId}`,
+      {
+        method: "DELETE",
+      }
+    ),
 
   // Get user's favorites
   getFavorites: () =>
-    apiCall<{ success: boolean; courses: GolfCourse[] }>(API_ENDPOINTS.COURSES_FAVORITES),
+    apiCall<{ success: boolean; courses: GolfCourse[] }>(
+      API_ENDPOINTS.COURSES_FAVORITES
+    ),
 };
 
 // ============ SOCIAL RATE API ============
@@ -817,7 +1004,9 @@ export interface SocialRateLogEntry {
 export const socialRateApi = {
   // Get current user's social rate
   getCurrentScore: () =>
-    apiCall<{ success: boolean; socialRate: SocialRateData }>(API_ENDPOINTS.SOCIAL_RATE),
+    apiCall<{ success: boolean; socialRate: SocialRateData }>(
+      API_ENDPOINTS.SOCIAL_RATE
+    ),
 
   // Get score history
   getHistory: (limit = 50, offset = 0) =>
@@ -827,9 +1016,10 @@ export const socialRateApi = {
 
   // Get another user's score
   getUserScore: (userId: string) =>
-    apiCall<{ success: boolean; socialRate: { userId: string; currentScore: number } }>(
-      `${API_ENDPOINTS.SOCIAL_RATE}/user/${userId}`
-    ),
+    apiCall<{
+      success: boolean;
+      socialRate: { userId: string; currentScore: number };
+    }>(`${API_ENDPOINTS.SOCIAL_RATE}/user/${userId}`),
 };
 
 // ============ ATTENDANCE API ============
@@ -841,7 +1031,7 @@ export interface AttendanceRecord {
   name: string;
   avatar?: string;
   isCreator: boolean;
-  status: 'pending' | 'present' | 'no_show' | 'cancelled';
+  status: "pending" | "present" | "no_show" | "cancelled";
   checkedInAt?: string;
   markedNoShowAt?: string;
   penaltyApplied: boolean;
@@ -874,11 +1064,19 @@ export const attendanceApi = {
     ),
 
   // Update individual attendance
-  updateAttendance: (teeTimeId: string, attendanceId: string, status: 'present' | 'no_show') =>
-    apiCall<{ success: boolean; message: string; attendance: { id: string; status: string; penaltyApplied: boolean } }>(
-      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/check-in/${attendanceId}`,
-      { method: "POST", body: JSON.stringify({ status }) }
-    ),
+  updateAttendance: (
+    teeTimeId: string,
+    attendanceId: string,
+    status: "present" | "no_show"
+  ) =>
+    apiCall<{
+      success: boolean;
+      message: string;
+      attendance: { id: string; status: string; penaltyApplied: boolean };
+    }>(`${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/check-in/${attendanceId}`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
 
   // Cancel own participation
   cancelParticipation: (teeTimeId: string) =>
@@ -892,7 +1090,7 @@ export const attendanceApi = {
 
 export interface AppNotification {
   id: string;
-  type: 'push' | 'email' | 'sms' | 'in_app';
+  type: "push" | "email" | "sms" | "in_app";
   channel?: string;
   title: string;
   body: string;
@@ -932,51 +1130,68 @@ export interface AppNotification {
 
 export const notificationApi = {
   // Get notifications
-  getNotifications: (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) => {
+  getNotifications: (params?: {
+    limit?: number;
+    offset?: number;
+    unreadOnly?: boolean;
+  }) => {
     const query = new URLSearchParams();
-    if (params?.limit) query.append('limit', params.limit.toString());
-    if (params?.offset) query.append('offset', params.offset.toString());
-    if (params?.unreadOnly) query.append('unreadOnly', 'true');
+    if (params?.limit) query.append("limit", params.limit.toString());
+    if (params?.offset) query.append("offset", params.offset.toString());
+    if (params?.unreadOnly) query.append("unreadOnly", "true");
     const queryStr = query.toString();
     return apiCall<{ success: boolean; notifications: AppNotification[] }>(
-      `${API_ENDPOINTS.NOTIFICATIONS}${queryStr ? `?${queryStr}` : ''}`
+      `${API_ENDPOINTS.NOTIFICATIONS}${queryStr ? `?${queryStr}` : ""}`
     );
   },
 
   // Get unread count
   getUnreadCount: () =>
-    apiCall<{ success: boolean; count: number }>(API_ENDPOINTS.NOTIFICATIONS_UNREAD_COUNT),
+    apiCall<{ success: boolean; count: number }>(
+      API_ENDPOINTS.NOTIFICATIONS_UNREAD_COUNT
+    ),
 
   // Mark notification as read
   markAsRead: (notificationId: string) =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/read`, {
-      method: "PUT",
-    }),
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/read`,
+      {
+        method: "PUT",
+      }
+    ),
 
   // Mark notification as responded (for actionable notifications)
   markAsResponded: (notificationId: string) =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/responded`, {
-      method: "PUT",
-    }),
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/responded`,
+      {
+        method: "PUT",
+      }
+    ),
 
   // Mark all as read
   markAllAsRead: () =>
-    apiCall<{ success: boolean; count: number; message: string }>(API_ENDPOINTS.NOTIFICATIONS_READ_ALL, {
-      method: "PUT",
-    }),
+    apiCall<{ success: boolean; count: number; message: string }>(
+      API_ENDPOINTS.NOTIFICATIONS_READ_ALL,
+      {
+        method: "PUT",
+      }
+    ),
 
   // Delete notification
   deleteNotification: (notificationId: string) =>
-    apiCall<{ success: boolean; message: string }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}`, {
-      method: "DELETE",
-    }),
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}`,
+      {
+        method: "DELETE",
+      }
+    ),
 };
-
 
 // ============ DRAFT (QR CODE) API ============
 
 export interface DraftQRCode {
-  data: string;  // Base64 encoded QR payload
+  data: string; // Base64 encoded QR payload
   version: number;
 }
 
@@ -1020,13 +1235,14 @@ export const draftApi = {
 
   // Confirm adding scanned user to On-Deck
   confirmDraft: (userId: string) =>
-    apiCall<{ success: boolean; message: string; entry: { id: string; userId: string; isOnDeck: boolean } }>(
-      API_ENDPOINTS.DRAFT_CONFIRM,
-      {
-        method: "POST",
-        body: JSON.stringify({ userId }),
-      }
-    ),
+    apiCall<{
+      success: boolean;
+      message: string;
+      entry: { id: string; userId: string; isOnDeck: boolean };
+    }>(API_ENDPOINTS.DRAFT_CONFIRM, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
 
   // Get scan history - who scanned your QR code
   getScanHistory: (limit = 20, offset = 0) =>

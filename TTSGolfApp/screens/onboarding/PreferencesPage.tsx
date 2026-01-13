@@ -163,13 +163,24 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
 
   const handleNext = useCallback((): void => {
-    if (!isValid) return;
+    console.log("PreferencesPage - handleNext called");
+    console.log("isValid:", isValid);
+    console.log("preferredTime:", preferredTime);
+    console.log("playStyle:", playStyle);
+    console.log("partnerCount:", partnerCount);
+
+    if (!isValid) {
+      console.log("Validation failed - button should be disabled");
+      return;
+    }
 
     const preferencesData: PreferencesData = {
       playStyle: playStyle as "walk" | "ride" | "either",
       preferredTimes: preferredTime.split(","),
       playerCount: partnerCount,
     };
+
+    console.log("Calling onNext with preferences:", preferencesData);
     onNext({ preferences: preferencesData });
   }, [isValid, playStyle, preferredTime, partnerCount, onNext]);
 

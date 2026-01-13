@@ -1,4 +1,4 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const notificationService = require("./notificationService");
 const logger = require("../config/logger");
 
@@ -14,9 +14,7 @@ class CheckInReminderService {
   async processUpcomingTeeTimes() {
     try {
       // Get server's local time and compare against tee times
-      // We calculate the time window in JavaScript to avoid timezone issues with PostgreSQL
       const now = new Date();
-      const localTimeStr = now.toTimeString().slice(0, 8); // HH:MM:SS format
       
       // Calculate 4 and 6 minutes from now
       const fourMinLater = new Date(now.getTime() + 4 * 60 * 1000);
@@ -29,28 +27,21 @@ class CheckInReminderService {
 
       logger.debug(`Checking for tee times between ${windowStart} and ${windowEnd} on ${todayStr}`);
 
-      const query = `
-        SELECT 
-          t.id,
-          t.creator_id,
-          t.course_name,
-          t.course_location,
-          t.tee_date,
-          t.tee_time,
-          t.status,
-          t.check_in_reminder_sent
-        FROM tee_times t
-        WHERE t.status = 'confirmed'
-          AND t.check_in_reminder_sent = false
-          AND t.tee_date = $1::date
-          AND t.tee_time >= $2::time
-          AND t.tee_time <= $3::time
-      `;
-      
-      const result = await pool.query(query, [todayStr, windowStart, windowEnd]);
-      const teeTimes = result.rows;
+      const { data: teeTimes, error } = await supabaseAdmin
+        .from("tee_times")
+        .select("*")
+        .eq("status", "confirmed")
+        .eq("check_in_reminder_sent", false)
+        .eq("tee_date", todayStr)
+        .gte("tee_time", windowStart)
+        .lte("tee_time", windowEnd);
 
-      if (teeTimes.length === 0) {
+      if (error) {
+        logger.error("Error fetching upcoming tee times:", error.message);
+        throw error;
+      }
+
+      if (!teeTimes || teeTimes.length === 0) {
         logger.debug("No tee times found for check-in reminders");
         return { processed: 0 };
       }
@@ -76,13 +67,13 @@ class CheckInReminderService {
           processed++;
           logger.info(`Check-in reminder sent for tee time ${teeTime.id} to organizer ${teeTime.creator_id}`);
         } catch (error) {
-          logger.error(`Failed to process check-in reminder for tee time ${teeTime.id}:`, error);
+          logger.error(`Failed to process check-in reminder for tee time ${teeTime.id}:`, error.message);
         }
       }
 
       return { processed };
     } catch (error) {
-      logger.error("Error processing upcoming tee times:", error);
+      logger.error("Error processing upcoming tee times:", error.message);
       throw error;
     }
   }
@@ -91,24 +82,34 @@ class CheckInReminderService {
    * Mark tee time as having reminder sent
    */
   async markReminderSent(teeTimeId) {
-    const query = `
-      UPDATE tee_times 
-      SET check_in_reminder_sent = true
-      WHERE id = $1
-    `;
-    await pool.query(query, [teeTimeId]);
+    const { error } = await supabaseAdmin
+      .from("tee_times")
+      .update({ check_in_reminder_sent: true })
+      .eq("id", teeTimeId);
+
+    if (error) {
+      logger.error(`Error marking reminder sent for tee time ${teeTimeId}:`, error.message);
+      throw error;
+    }
   }
 
   /**
    * Transition tee time to in_progress status
    */
   async transitionToInProgress(teeTimeId) {
-    const query = `
-      UPDATE tee_times 
-      SET status = 'in_progress', check_in_started_at = NOW()
-      WHERE id = $1 AND status = 'confirmed'
-    `;
-    await pool.query(query, [teeTimeId]);
+    const { error } = await supabaseAdmin
+      .from("tee_times")
+      .update({ 
+        status: "in_progress",
+        check_in_started_at: new Date().toISOString()
+      })
+      .eq("id", teeTimeId)
+      .eq("status", "confirmed");
+
+    if (error) {
+      logger.error(`Error transitioning tee time ${teeTimeId} to in_progress:`, error.message);
+      throw error;
+    }
   }
 
   /**
@@ -118,25 +119,40 @@ class CheckInReminderService {
   async initializeAttendance(teeTimeId) {
     try {
       // Get all participants
-      const participantsQuery = `
-        SELECT id, user_id FROM tee_time_participants 
-        WHERE tee_time_id = $1 AND (status IS NULL OR status != 'cancelled')
-      `;
-      const participantsResult = await pool.query(participantsQuery, [teeTimeId]);
+      const { data: participants, error: participantsError } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("id, user_id")
+        .eq("tee_time_id", teeTimeId)
+        .or("status.is.null,status.neq.cancelled");
 
-      // Create attendance records for each participant
-      for (const participant of participantsResult.rows) {
-        const insertQuery = `
-          INSERT INTO tee_time_attendance (tee_time_id, participant_id, user_id, status)
-          VALUES ($1, $2, $3, 'pending')
-          ON CONFLICT (tee_time_id, participant_id) DO NOTHING
-        `;
-        await pool.query(insertQuery, [teeTimeId, participant.id, participant.user_id]);
+      if (participantsError) {
+        logger.error(`Error fetching participants for tee time ${teeTimeId}:`, participantsError.message);
+        throw participantsError;
       }
 
-      logger.info(`Initialized attendance for tee time ${teeTimeId} with ${participantsResult.rows.length} participants`);
+      // Create attendance records for each participant
+      const attendanceRecords = participants.map(p => ({
+        tee_time_id: teeTimeId,
+        participant_id: p.id,
+        user_id: p.user_id,
+        status: "pending"
+      }));
+
+      const { error: insertError } = await supabaseAdmin
+        .from("tee_time_attendance")
+        .upsert(attendanceRecords, {
+          onConflict: "tee_time_id,participant_id",
+          ignoreDuplicates: true
+        });
+
+      if (insertError) {
+        logger.error(`Error initializing attendance for tee time ${teeTimeId}:`, insertError.message);
+        throw insertError;
+      }
+
+      logger.info(`Initialized attendance for tee time ${teeTimeId} with ${participants.length} participants`);
     } catch (error) {
-      logger.error(`Failed to initialize attendance for tee time ${teeTimeId}:`, error);
+      logger.error(`Failed to initialize attendance for tee time ${teeTimeId}:`, error.message);
     }
   }
 }

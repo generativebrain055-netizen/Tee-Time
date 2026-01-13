@@ -1,33 +1,60 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
+
+/**
+ * Course Repository - Supabase REST API
+ * Handles all database operations related to golf courses
+ */
 
 class CourseRepository {
     // Search courses by name/location
     async searchCourses(query, limit = 10) {
-        const sql = `
-            SELECT id, name, address, city, state, country, postal_code,
-                   latitude, longitude, phone, website, holes, par,
-                   course_type, price_range, rating, google_place_id
-            FROM golf_courses
-            WHERE name ILIKE $1 OR city ILIKE $1 OR address ILIKE $1
-            ORDER BY rating DESC NULLS LAST, name
-            LIMIT $2
-        `;
-        const result = await pool.query(sql, [`%${query}%`, limit]);
-        return result.rows;
+        try {
+            const searchPattern = `%${query}%`;
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .select("id, name, address, city, state, country, postal_code, latitude, longitude, phone, website, holes, par, course_type, price_range, rating, google_place_id")
+                .or(`name.ilike.${searchPattern},city.ilike.${searchPattern},address.ilike.${searchPattern}`)
+                .order("rating", { ascending: false, nullsFirst: false })
+                .order("name", { ascending: true })
+                .limit(limit);
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            handleError(error, "searchCourses");
+        }
     }
 
     // Get course by ID
     async getCourseById(courseId) {
-        const query = `SELECT * FROM golf_courses WHERE id = $1`;
-        const result = await pool.query(query, [courseId]);
-        return result.rows[0];
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .select("*")
+                .eq("id", courseId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data || null;
+        } catch (error) {
+            handleError(error, "getCourseById");
+        }
     }
 
     // Get course by Google Place ID
     async getCourseByPlaceId(placeId) {
-        const query = `SELECT * FROM golf_courses WHERE google_place_id = $1`;
-        const result = await pool.query(query, [placeId]);
-        return result.rows[0];
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .select("*")
+                .eq("google_place_id", placeId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data || null;
+        } catch (error) {
+            handleError(error, "getCourseByPlaceId");
+        }
     }
 
     // Create or update course from Google Places
@@ -38,96 +65,175 @@ class CourseRepository {
             rating, priceRange
         } = courseData;
 
-        const query = `
-            INSERT INTO golf_courses (
-                name, address, city, state, country, postal_code,
-                latitude, longitude, phone, website, google_place_id,
-                rating, price_range
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            ON CONFLICT (google_place_id) DO UPDATE SET
-                name = EXCLUDED.name,
-                address = EXCLUDED.address,
-                rating = EXCLUDED.rating,
-                updated_at = NOW()
-            RETURNING *
-        `;
-        const result = await pool.query(query, [
-            name, address, city, state, country || 'USA', postalCode,
-            latitude, longitude, phone, website, googlePlaceId,
-            rating, priceRange
-        ]);
-        return result.rows[0];
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .upsert({
+                    name,
+                    address,
+                    city,
+                    state,
+                    country: country || 'USA',
+                    postal_code: postalCode,
+                    latitude,
+                    longitude,
+                    phone,
+                    website,
+                    google_place_id: googlePlaceId,
+                    rating,
+                    price_range: priceRange,
+                }, {
+                    onConflict: 'google_place_id',
+                    ignoreDuplicates: false,
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            handleError(error, "upsertCourse");
+        }
     }
 
     // Get nearby courses
+    // Note: Haversine formula calculation needs to be done via PostgreSQL function
     async getNearbyCourses(latitude, longitude, radiusMiles = 25, limit = 20) {
-        // Haversine formula for distance calculation using subquery
-        const query = `
-            SELECT * FROM (
-                SELECT *, 
-                       (3959 * acos(
-                           cos(radians($1)) * cos(radians(latitude)) * 
-                           cos(radians(longitude) - radians($2)) + 
-                           sin(radians($1)) * sin(radians(latitude))
-                       )) AS distance_miles
-                FROM golf_courses
-                WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-            ) AS courses_with_distance
-            WHERE distance_miles < $3
-            ORDER BY distance_miles
-            LIMIT $4
-        `;
-        const result = await pool.query(query, [latitude, longitude, radiusMiles, limit]);
-        return result.rows;
+        try {
+            // Call PostgreSQL function for Haversine calculation
+            const { data, error } = await supabaseAdmin
+                .rpc('get_nearby_courses', {
+                    p_latitude: latitude,
+                    p_longitude: longitude,
+                    p_radius_miles: radiusMiles,
+                    p_limit: limit
+                });
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            // Fallback: Get all courses and filter client-side (not recommended for production)
+            console.warn("get_nearby_courses function not found. Implement PostgreSQL function for better performance.");
+            console.warn("CREATE FUNCTION get_nearby_courses(p_latitude FLOAT, p_longitude FLOAT, p_radius_miles FLOAT, p_limit INT)");
+            
+            try {
+                const { data, error: fallbackError } = await supabaseAdmin
+                    .from("golf_courses")
+                    .select("*")
+                    .not("latitude", "is", null)
+                    .not("longitude", "is", null)
+                    .limit(100);
+
+                if (fallbackError) throw fallbackError;
+
+                // Calculate distance client-side
+                const coursesWithDistance = (data || []).map(course => {
+                    const R = 3959; // Earth radius in miles
+                    const dLat = (course.latitude - latitude) * Math.PI / 180;
+                    const dLon = (course.longitude - longitude) * Math.PI / 180;
+                    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                             Math.cos(latitude * Math.PI / 180) * Math.cos(course.latitude * Math.PI / 180) *
+                             Math.sin(dLon/2) * Math.sin(dLon/2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    const distance_miles = R * c;
+                    
+                    return { ...course, distance_miles };
+                });
+
+                return coursesWithDistance
+                    .filter(c => c.distance_miles < radiusMiles)
+                    .sort((a, b) => a.distance_miles - b.distance_miles)
+                    .slice(0, limit);
+            } catch (fallbackError) {
+                handleError(fallbackError, "getNearbyCourses fallback");
+            }
+        }
     }
 
     // Get popular courses
     async getPopularCourses(limit = 10) {
-        const query = `
-            SELECT gc.*, COUNT(tt.id) as tee_time_count
-            FROM golf_courses gc
-            LEFT JOIN tee_times tt ON tt.course_name ILIKE gc.name
-            GROUP BY gc.id
-            ORDER BY tee_time_count DESC, gc.rating DESC NULLS LAST
-            LIMIT $1
-        `;
-        const result = await pool.query(query, [limit]);
-        return result.rows;
+        try {
+            // This requires aggregation - best done via PostgreSQL function
+            const { data, error } = await supabaseAdmin
+                .rpc('get_popular_courses', { p_limit: limit });
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            // Fallback: Just return courses by rating
+            console.warn("get_popular_courses function not found. Returning by rating instead.");
+            
+            try {
+                const { data, error: fallbackError } = await supabaseAdmin
+                    .from("golf_courses")
+                    .select("*")
+                    .order("rating", { ascending: false, nullsFirst: false })
+                    .limit(limit);
+
+                if (fallbackError) throw fallbackError;
+                return data || [];
+            } catch (fallbackError) {
+                handleError(fallbackError, "getPopularCourses fallback");
+            }
+        }
     }
 
     // Add to user favorites
     async addFavorite(userId, courseId) {
-        const query = `
-            INSERT INTO user_favorite_courses (user_id, course_id)
-            VALUES ($1, $2)
-            ON CONFLICT DO NOTHING
-            RETURNING *
-        `;
-        const result = await pool.query(query, [userId, courseId]);
-        return result.rows[0];
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("user_favorite_courses")
+                .insert({
+                    user_id: userId,
+                    course_id: courseId,
+                })
+                .select()
+                .single();
+
+            // Ignore duplicate errors
+            if (error && error.code !== '23505') throw error;
+            return data || null;
+        } catch (error) {
+            handleError(error, "addFavorite");
+        }
     }
 
     // Remove from favorites
     async removeFavorite(userId, courseId) {
-        const query = `
-            DELETE FROM user_favorite_courses 
-            WHERE user_id = $1 AND course_id = $2
-            RETURNING *
-        `;
-        const result = await pool.query(query, [userId, courseId]);
-        return result.rows[0];
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("user_favorite_courses")
+                .delete()
+                .eq("user_id", userId)
+                .eq("course_id", courseId)
+                .select()
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error;
+            return data || null;
+        } catch (error) {
+            handleError(error, "removeFavorite");
+        }
     }
 
     // Get user's favorite courses
     async getUserFavorites(userId) {
-        const query = `
-            SELECT gc.* FROM golf_courses gc
-            JOIN user_favorite_courses ufc ON gc.id = ufc.course_id
-            WHERE ufc.user_id = $1
-            ORDER BY gc.name
-        `;
-        const result = await pool.query(query, [userId]);
-        return result.rows;
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("user_favorite_courses")
+                .select(`
+                    golf_courses (*)
+                `)
+                .eq("user_id", userId)
+                .order("golf_courses(name)", { ascending: true });
+
+            if (error) throw error;
+            
+            // Flatten the nested structure
+            return (data || []).map(fav => fav.golf_courses).filter(Boolean);
+        } catch (error) {
+            handleError(error, "getUserFavorites");
+        }
     }
 }
 

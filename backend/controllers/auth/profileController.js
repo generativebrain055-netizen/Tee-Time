@@ -14,6 +14,13 @@ const getCurrentUser = async (req, res, next) => {
   try {
     const user = await userRepository.findById(req.user.id);
 
+    logger.info("[GET_CURRENT_USER] Raw user data from DB:", {
+      userId: user?.id,
+      preferred_tee_time: user?.preferred_tee_time,
+      walk_or_ride: user?.walk_or_ride,
+      playing_partner_preference: user?.playing_partner_preference,
+    });
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -30,6 +37,12 @@ const getCurrentUser = async (req, res, next) => {
     } catch (err) {
       logger.error("Error marking past tee times as completed:", err);
     }
+
+    logger.info("[GET_CURRENT_USER] Returning preferences:", {
+      preferredTeeTime: user.preferred_tee_time,
+      walkOrRide: user.walk_or_ride,
+      playingPartnerPreference: user.playing_partner_preference,
+    });
 
     return res.json({
       success: true,

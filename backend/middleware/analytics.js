@@ -1,4 +1,4 @@
-const { query } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
@@ -23,25 +23,25 @@ const logEvent = async (eventData) => {
       sessionId,
     } = eventData;
 
-    await query(
-      `INSERT INTO analytics_events (
-        user_id, event_name, event_category, event_properties,
-        ip_address, user_agent, device_id, session_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        userId || null,
-        eventName,
-        eventCategory || null,
-        data ? JSON.stringify(data) : "{}",
-        ipAddress || null,
-        userAgent || null,
-        deviceId || null,
-        sessionId || null,
-      ]
-    );
+    const { error } = await supabaseAdmin
+      .from("analytics_events")
+      .insert({
+        user_id: userId || null,
+        event_name: eventName,
+        event_category: eventCategory || null,
+        event_properties: data || {},
+        ip_address: ipAddress || null,
+        user_agent: userAgent || null,
+        device_id: deviceId || null,
+        session_id: sessionId || null,
+      });
+
+    if (error) {
+      logger.error("Failed to log analytics event:", error.message);
+    }
   } catch (error) {
     // Don't throw errors for analytics failures
-    logger.error("Failed to log analytics event:", error);
+    logger.error("Failed to log analytics event:", error.message);
   }
 };
 
@@ -78,7 +78,7 @@ const logAuthEvent = (eventName) => {
             sessionId: req.session?.id,
           });
         } catch (error) {
-          logger.error("Error logging auth event:", error);
+          logger.error("Error logging auth event:", error.message);
         }
       });
 
@@ -123,7 +123,7 @@ const logApiRequest = async (req, res, next) => {
           sessionId: req.session?.id,
         });
       } catch (error) {
-        logger.error("Error logging API request:", error);
+        logger.error("Error logging API request:", error.message);
       }
     });
 
@@ -155,57 +155,59 @@ const logCustomEvent = async (req, eventCategory, eventName, eventData = {}) => 
 const getAnalyticsStats = async (filters = {}) => {
   const { startDate, endDate, eventCategory, eventName, userId } = filters;
 
-  let whereClause = "WHERE 1=1";
-  const params = [];
-  let paramIndex = 1;
+  let query = supabaseAdmin.from("analytics_events").select("*");
 
   if (startDate) {
-    whereClause += ` AND created_at >= $${paramIndex}`;
-    params.push(startDate);
-    paramIndex++;
+    query = query.gte("created_at", startDate);
   }
 
   if (endDate) {
-    whereClause += ` AND created_at <= $${paramIndex}`;
-    params.push(endDate);
-    paramIndex++;
+    query = query.lte("created_at", endDate);
   }
 
   if (eventCategory) {
-    whereClause += ` AND event_category = $${paramIndex}`;
-    params.push(eventCategory);
-    paramIndex++;
+    query = query.eq("event_category", eventCategory);
   }
 
   if (eventName) {
-    whereClause += ` AND event_name = $${paramIndex}`;
-    params.push(eventName);
-    paramIndex++;
+    query = query.eq("event_name", eventName);
   }
 
   if (userId) {
-    whereClause += ` AND user_id = $${paramIndex}`;
-    params.push(userId);
-    paramIndex++;
+    query = query.eq("user_id", userId);
   }
 
-  const result = await query(
-    `SELECT 
-      COUNT(*) as total_events,
-      COUNT(DISTINCT user_id) as unique_users,
-      COUNT(DISTINCT session_id) as unique_sessions,
-      event_category,
-      event_name,
-      COUNT(*) as event_count
-    FROM analytics_events
-    ${whereClause}
-    GROUP BY event_category, event_name
-    ORDER BY event_count DESC
-    LIMIT 100`,
-    params
-  );
+  const { data, error } = await query.limit(100);
 
-  return result.rows;
+  if (error) {
+    logger.error("Error getting analytics stats:", error.message);
+    return [];
+  }
+
+  // Aggregate results
+  const stats = {};
+  (data || []).forEach(event => {
+    const key = `${event.event_category}:${event.event_name}`;
+    if (!stats[key]) {
+      stats[key] = {
+        event_category: event.event_category,
+        event_name: event.event_name,
+        event_count: 0,
+        unique_users: new Set(),
+        unique_sessions: new Set(),
+      };
+    }
+    stats[key].event_count++;
+    if (event.user_id) stats[key].unique_users.add(event.user_id);
+    if (event.session_id) stats[key].unique_sessions.add(event.session_id);
+  });
+
+  return Object.values(stats).map(s => ({
+    ...s,
+    unique_users: s.unique_users.size,
+    unique_sessions: s.unique_sessions.size,
+    total_events: s.event_count,
+  }));
 };
 
 module.exports = {

@@ -6,7 +6,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 // Import configuration
-const { pool, testConnection } = require("./config/database");
+const { testConnection } = require("./config/supabase");
 const logger = require("./config/logger");
 
 // Import middleware
@@ -99,9 +99,8 @@ const gracefulShutdown = async (signal) => {
     schedulerService.stop();
     logger.info('Scheduler stopped');
     
-    // Close database connections
-    await pool.end();
-    logger.info('Database connections closed');
+    // Supabase connections are managed automatically, no need to close
+    logger.info('Supabase connections managed automatically');
     
     process.exit(0);
   } catch (error) {
@@ -124,10 +123,10 @@ const startServer = async () => {
     
     // Start listening
     app.listen(PORT, () => {
-      logger.info(`✅ Server is running on port ${PORT}`);
-      logger.info(`📍 API URL: http://localhost:${PORT}`);
-      logger.info(`🏥 Health check: http://localhost:${PORT}/health`);
-      logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Server is running on port ${PORT}`);
+      logger.info(`API URL: http://localhost:${PORT}`);
+      logger.info(`Health check: http://localhost:${PORT}/health`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
     logger.error("Failed to start server:", error);

@@ -1,327 +1,531 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 class FriendRepository {
-    // ============ FRIEND REQUESTS ============
+  // Send friend request
+  async sendFriendRequest(senderId, receiverId, message = null) {
+    try {
+      // Check if already friends
+      const { data: existingFriendship } = await supabaseAdmin
+        .from("friendships")
+        .select("id")
+        .eq("user_id", senderId)
+        .eq("friend_id", receiverId)
+        .single();
 
-    // Send friend request
-    async sendFriendRequest(senderId, receiverId, message = null) {
-        // First check if there's an existing friendship (shouldn't happen but just in case)
-        const friendshipCheck = await pool.query(
-            "SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2",
-            [senderId, receiverId]
+      if (existingFriendship) {
+        throw new Error("Already friends with this user");
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("friend_requests")
+        .upsert(
+          {
+            sender_id: senderId,
+            receiver_id: receiverId,
+            message,
+            status: "pending",
+          },
+          {
+            onConflict: "sender_id,receiver_id",
+            ignoreDuplicates: false,
+          }
+        )
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleError(error, "sendFriendRequest");
+    }
+  }
+
+  // Get pending requests received
+  async getPendingRequests(userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("friend_requests")
+        .select(
+          `
+                    *,
+                    users!friend_requests_sender_id_fkey (
+                        first_name, 
+                        last_name, 
+                        username,
+                        user_profiles (
+                            handicap, avatar_url, location, home_course
+                        )
+                    )
+                `
+        )
+        .eq("receiver_id", userId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((fr) => {
+        const user = fr.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete user.user_profiles;
+        delete fr.users;
+
+        return { ...fr, ...user, ...profile };
+      });
+    } catch (error) {
+      handleError(error, "getPendingRequests");
+    }
+  }
+
+  // Get sent requests
+  async getSentRequests(userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("friend_requests")
+        .select(
+          `
+                    *,
+                    users!friend_requests_receiver_id_fkey (
+                        first_name, 
+                        last_name, 
+                        username,
+                        user_profiles (
+                            handicap, avatar_url, location
+                        )
+                    )
+                `
+        )
+        .eq("sender_id", userId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((fr) => {
+        const user = fr.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete user.user_profiles;
+        delete fr.users;
+
+        return { ...fr, ...user, ...profile };
+      });
+    } catch (error) {
+      handleError(error, "getSentRequests");
+    }
+  }
+
+  // Respond to friend request - COMPLEX: needs transaction
+  async respondToRequest(requestId, receiverId, status) {
+    try {
+      // Update request status
+      const { data: request, error: updateError } = await supabaseAdmin
+        .from("friend_requests")
+        .update({
+          status,
+          responded_at: new Date().toISOString(),
+        })
+        .eq("id", requestId)
+        .eq("receiver_id", receiverId)
+        .eq("status", "pending")
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      if (!request) throw new Error("Request not found or already responded");
+
+      // If accepted, create bidirectional friendship
+      if (status === "accepted") {
+        const { error: friendshipError } = await supabaseAdmin
+          .from("friendships")
+          .insert([
+            { user_id: request.sender_id, friend_id: request.receiver_id },
+            { user_id: request.receiver_id, friend_id: request.sender_id },
+          ]);
+
+        if (friendshipError && friendshipError.code !== "23505")
+          throw friendshipError;
+      }
+
+      return request;
+    } catch (error) {
+      handleError(error, "respondToRequest");
+    }
+  }
+
+  // Check if friend request exists
+  async getRequestStatus(userId, otherUserId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("friend_requests")
+        .select("*")
+        .or(
+          `and(sender_id.eq.${userId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${userId})`
+        )
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "getRequestStatus");
+    }
+  }
+
+  // Get user's friends
+  async getFriends(userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("friendships")
+        .select(
+          `
+                    id,
+                    created_at,
+                    users!friendships_friend_id_fkey (
+                        id, first_name, last_name, username,
+                        user_profiles (
+                            handicap, avatar_url, location, home_course,
+                            preferred_tee_time, walk_or_ride, rounds_played, social_rate
+                        )
+                    )
+                `
+        )
+        .eq("user_id", userId)
+        .order("users(first_name)", { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map((f) => {
+        const user = f.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete user.user_profiles;
+
+        return {
+          friendship_id: f.id,
+          friends_since: f.created_at,
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          ...profile,
+        };
+      });
+    } catch (error) {
+      handleError(error, "getFriends");
+    }
+  }
+
+  // Check if users are friends
+  async areFriends(userId1, userId2) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("friendships")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId1)
+        .eq("friend_id", userId2);
+
+      if (error) throw error;
+      return data !== null;
+    } catch (error) {
+      handleError(error, "areFriends");
+    }
+  }
+
+  // Remove friend - COMPLEX: needs transaction
+  async removeFriend(userId, friendId) {
+    try {
+      // Delete friendship (both directions)
+      const { error: friendshipError } = await supabaseAdmin
+        .from("friendships")
+        .delete()
+        .or(
+          `and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`
         );
-        if (friendshipCheck.rows.length > 0) {
-            throw new Error('Already friends with this user');
+
+      if (friendshipError) throw friendshipError;
+
+      // Remove from both users' rosters
+      await supabaseAdmin
+        .from("roster")
+        .delete()
+        .eq("user_id", userId)
+        .eq("contact_user_id", friendId);
+
+      await supabaseAdmin
+        .from("roster")
+        .delete()
+        .eq("user_id", friendId)
+        .eq("contact_user_id", userId);
+
+      return true;
+    } catch (error) {
+      handleError(error, "removeFriend");
+    }
+  }
+
+  // Discover users
+  async discoverUsers(userId, options = {}) {
+    const { location, course, limit = 20, offset = 0 } = options;
+
+    try {
+      let query = supabaseAdmin
+        .from("users")
+        .select(
+          `
+                    id, first_name, last_name, username,
+                    user_profiles (
+                        handicap, avatar_url, location, home_course,
+                        preferred_tee_time, walk_or_ride, social_rate
+                    )
+                `
+        )
+        .neq("id", userId)
+        .is("deleted_at", null);
+
+      if (location) {
+        query = query.ilike("user_profiles.location", `%${location}%`);
+      }
+
+      if (course) {
+        query = query.ilike("user_profiles.home_course", `%${course}%`);
+      }
+
+      query = query
+        .order("user_profiles(social_rate)", {
+          ascending: false,
+          nullsFirst: false,
+        })
+        .order("first_name", { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Get friendship status for each user
+      const usersWithStatus = await Promise.all(
+        (data || []).map(async (user) => {
+          const profile = user.user_profiles?.[0] || {};
+          delete user.user_profiles;
+
+          // Check friendship
+          const { data: friendship } = await supabaseAdmin
+            .from("friendships")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("friend_id", user.id)
+            .single();
+
+          // Check sent request
+          const { data: sentRequest } = await supabaseAdmin
+            .from("friend_requests")
+            .select("id, status")
+            .eq("sender_id", userId)
+            .eq("receiver_id", user.id)
+            .eq("status", "pending")
+            .single();
+
+          // Check received request
+          const { data: receivedRequest } = await supabaseAdmin
+            .from("friend_requests")
+            .select("id, status")
+            .eq("sender_id", user.id)
+            .eq("receiver_id", userId)
+            .eq("status", "pending")
+            .single();
+
+          let friendship_status = "none";
+          if (friendship) friendship_status = "friend";
+          else if (sentRequest) friendship_status = "requested";
+          else if (receivedRequest) friendship_status = "pending";
+
+          return { ...user, ...profile, friendship_status };
+        })
+      );
+
+      return usersWithStatus;
+    } catch (error) {
+      handleError(error, "discoverUsers");
+    }
+  }
+
+  // Get user profile for friend view
+  async getUserProfile(userId, viewerId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("users")
+        .select(
+          `
+                    id, first_name, last_name, username,
+                    user_profiles (
+                        handicap, avatar_url, location, home_course,
+                        preferred_tee_time, walk_or_ride, playing_partner_preference,
+                        rounds_played, social_rate, average_score, privacy_settings
+                    )
+                `
+        )
+        .eq("id", userId)
+        .is("deleted_at", null)
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+      if (!data) return null;
+
+      const profile = data.user_profiles?.[0] || {};
+      delete data.user_profiles;
+
+      // Get friendship status
+      const { data: friendship } = await supabaseAdmin
+        .from("friendships")
+        .select("id")
+        .eq("user_id", viewerId)
+        .eq("friend_id", userId)
+        .single();
+
+      const { data: sentRequest } = await supabaseAdmin
+        .from("friend_requests")
+        .select("id")
+        .eq("sender_id", viewerId)
+        .eq("receiver_id", userId)
+        .eq("status", "pending")
+        .single();
+
+      const { data: receivedRequest } = await supabaseAdmin
+        .from("friend_requests")
+        .select("id")
+        .eq("sender_id", userId)
+        .eq("receiver_id", viewerId)
+        .eq("status", "pending")
+        .single();
+
+      let friendship_status = "none";
+      if (friendship) friendship_status = "friend";
+      else if (sentRequest) friendship_status = "requested";
+      else if (receivedRequest) friendship_status = "pending";
+
+      return { ...data, ...profile, friendship_status };
+    } catch (error) {
+      handleError(error, "getUserProfile");
+    }
+  }
+
+  // Block a user
+  async blockUser(userId, blockedUserId) {
+    try {
+      await supabaseAdmin.from("blocked_users").upsert(
+        {
+          user_id: userId,
+          blocked_user_id: blockedUserId,
+        },
+        {
+          onConflict: "user_id,blocked_user_id",
+          ignoreDuplicates: true,
         }
+      );
 
-        // Allow re-sending friend request even if previously declined/accepted
-        const query = `
-            INSERT INTO friend_requests (sender_id, receiver_id, message, status)
-            VALUES ($1, $2, $3, 'pending')
-            ON CONFLICT (sender_id, receiver_id) DO UPDATE SET
-                status = 'pending',
-                message = EXCLUDED.message,
-                updated_at = NOW()
-            RETURNING *
-        `;
-        const result = await pool.query(query, [senderId, receiverId, message]);
-        return result.rows[0];
+      // Remove from both rosters
+      await supabaseAdmin
+        .from("roster")
+        .delete()
+        .eq("user_id", userId)
+        .eq("contact_user_id", blockedUserId);
+
+      await supabaseAdmin
+        .from("roster")
+        .delete()
+        .eq("user_id", blockedUserId)
+        .eq("contact_user_id", userId);
+
+      return { user_id: userId, blocked_user_id: blockedUserId };
+    } catch (error) {
+      handleError(error, "blockUser");
     }
+  }
 
-    // Get pending requests received
-    async getPendingRequests(userId) {
-        const query = `
-            SELECT fr.*, 
-                   u.first_name, u.last_name, u.username,
-                   p.handicap, p.avatar_url, p.location, p.home_course
-            FROM friend_requests fr
-            JOIN users u ON fr.sender_id = u.id
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            WHERE fr.receiver_id = $1 AND fr.status = 'pending'
-            ORDER BY fr.created_at DESC
-        `;
-        const result = await pool.query(query, [userId]);
-        return result.rows;
+  // Unblock a user
+  async unblockUser(userId, blockedUserId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("blocked_users")
+        .delete()
+        .eq("user_id", userId)
+        .eq("blocked_user_id", blockedUserId)
+        .select()
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "unblockUser");
     }
+  }
 
-    // Get sent requests
-    async getSentRequests(userId) {
-        const query = `
-            SELECT fr.*, 
-                   u.first_name, u.last_name, u.username,
-                   p.handicap, p.avatar_url, p.location
-            FROM friend_requests fr
-            JOIN users u ON fr.receiver_id = u.id
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            WHERE fr.sender_id = $1 AND fr.status = 'pending'
-            ORDER BY fr.created_at DESC
-        `;
-        const result = await pool.query(query, [userId]);
-        return result.rows;
+  // Get blocked users
+  async getBlockedUsers(userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("blocked_users")
+        .select(
+          `
+                    *,
+                    users!blocked_users_blocked_user_id_fkey (
+                        first_name, 
+                        last_name, 
+                        username,
+                        user_profiles (avatar_url)
+                    )
+                `
+        )
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((bu) => {
+        const user = bu.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete user.user_profiles;
+        delete bu.users;
+
+        return { ...bu, ...user, ...profile };
+      });
+    } catch (error) {
+      handleError(error, "getBlockedUsers");
     }
+  }
 
-    // Respond to friend request
-    async respondToRequest(requestId, receiverId, status) {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
+  // Check if user is blocked
+  async isBlocked(userId, otherUserId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("blocked_users")
+        .select("id", { count: "exact", head: true })
+        .or(
+          `and(user_id.eq.${userId},blocked_user_id.eq.${otherUserId}),and(user_id.eq.${otherUserId},blocked_user_id.eq.${userId})`
+        );
 
-            // Update request status
-            const updateQuery = `
-                UPDATE friend_requests 
-                SET status = $1, responded_at = NOW(), updated_at = NOW()
-                WHERE id = $2 AND receiver_id = $3 AND status = 'pending'
-                RETURNING *
-            `;
-            const result = await client.query(updateQuery, [status, requestId, receiverId]);
-            const request = result.rows[0];
-
-            if (!request) {
-                throw new Error('Request not found or already responded');
-            }
-
-            // If accepted, create friendship (bidirectional)
-            if (status === 'accepted') {
-                await client.query(
-                    `INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2), ($2, $1)
-                     ON CONFLICT DO NOTHING`,
-                    [request.sender_id, request.receiver_id]
-                );
-            }
-
-            await client.query('COMMIT');
-            return request;
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
+      if (error) throw error;
+      return data !== null;
+    } catch (error) {
+      handleError(error, "isBlocked");
     }
-
-    // Check if friend request exists
-    async getRequestStatus(userId, otherUserId) {
-        const query = `
-            SELECT * FROM friend_requests 
-            WHERE (sender_id = $1 AND receiver_id = $2) 
-               OR (sender_id = $2 AND receiver_id = $1)
-            ORDER BY created_at DESC LIMIT 1
-        `;
-        const result = await pool.query(query, [userId, otherUserId]);
-        return result.rows[0];
-    }
-
-    // ============ FRIENDSHIPS ============
-
-    // Get user's friends
-    async getFriends(userId) {
-        const query = `
-            SELECT f.id as friendship_id, f.created_at as friends_since,
-                   u.id, u.first_name, u.last_name, u.username,
-                   p.handicap, p.avatar_url, p.location, p.home_course,
-                   p.preferred_tee_time, p.walk_or_ride, p.rounds_played, p.social_rate
-            FROM friendships f
-            JOIN users u ON f.friend_id = u.id
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            WHERE f.user_id = $1 AND u.deleted_at IS NULL
-            ORDER BY u.first_name, u.last_name
-        `;
-        const result = await pool.query(query, [userId]);
-        return result.rows;
-    }
-
-    // Check if users are friends
-    async areFriends(userId1, userId2) {
-        const query = `
-            SELECT EXISTS(
-                SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2
-            ) as are_friends
-        `;
-        const result = await pool.query(query, [userId1, userId2]);
-        return result.rows[0].are_friends;
-    }
-
-    // Remove friend (also removes from roster)
-    async removeFriend(userId, friendId) {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            // Delete friendship
-            const friendshipQuery = `
-                DELETE FROM friendships 
-                WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)
-                RETURNING *
-            `;
-            const friendshipResult = await client.query(friendshipQuery, [userId, friendId]);
-
-            // Also remove from both users' rosters
-            await client.query(
-                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
-                [userId, friendId]
-            );
-            await client.query(
-                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
-                [friendId, userId]
-            );
-
-            await client.query('COMMIT');
-            return friendshipResult.rows.length > 0;
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    // ============ DISCOVER USERS ============
-
-    // Get users by location/course (for Availability screen)
-    async discoverUsers(userId, options = {}) {
-        const { location, course, limit = 20, offset = 0 } = options;
-        
-        let whereClause = 'u.id != $1 AND u.deleted_at IS NULL';
-        const params = [userId];
-        let paramIndex = 2;
-
-        if (location) {
-            whereClause += " AND p.location ILIKE $" + paramIndex;
-            params.push("%" + location + "%");
-            paramIndex++;
-        }
-
-        if (course) {
-            whereClause += " AND p.home_course ILIKE $" + paramIndex;
-            params.push("%" + course + "%");
-            paramIndex++;
-        }
-
-        params.push(limit, offset);
-
-        // Note: Only check for PENDING friend requests, not accepted/declined ones
-        // This allows re-adding friends after unfriending
-        const query = `
-            SELECT u.id, u.first_name, u.last_name, u.username,
-                   p.handicap, p.avatar_url, p.location, p.home_course,
-                   p.preferred_tee_time, p.walk_or_ride, p.social_rate,
-                   CASE 
-                       WHEN f.id IS NOT NULL THEN 'friend'
-                       WHEN fr_sent.id IS NOT NULL AND fr_sent.status = 'pending' THEN 'requested'
-                       WHEN fr_recv.id IS NOT NULL AND fr_recv.status = 'pending' THEN 'pending'
-                       ELSE 'none'
-                   END as friendship_status
-            FROM users u
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            LEFT JOIN friendships f ON f.user_id = $1 AND f.friend_id = u.id
-            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $1 AND fr_sent.receiver_id = u.id AND fr_sent.status = 'pending'
-            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $1 AND fr_recv.sender_id = u.id AND fr_recv.status = 'pending'
-            WHERE ` + whereClause + `
-            ORDER BY p.social_rate DESC NULLS LAST, u.first_name
-            LIMIT $` + paramIndex + ` OFFSET $` + (paramIndex + 1);
-
-        const result = await pool.query(query, params);
-        return result.rows;
-    }
-
-    // Get user profile for friend view
-    async getUserProfile(userId, viewerId) {
-        const query = `
-            SELECT u.id, u.first_name, u.last_name, u.username,
-                   p.handicap, p.avatar_url, p.location, p.home_course,
-                   p.preferred_tee_time, p.walk_or_ride, p.playing_partner_preference,
-                   p.rounds_played, p.social_rate, p.average_score,
-                   p.privacy_settings,
-                   CASE 
-                       WHEN f.id IS NOT NULL THEN 'friend'
-                       WHEN fr_sent.id IS NOT NULL AND fr_sent.status = 'pending' THEN 'requested'
-                       WHEN fr_recv.id IS NOT NULL AND fr_recv.status = 'pending' THEN 'pending'
-                       ELSE 'none'
-                   END as friendship_status
-            FROM users u
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            LEFT JOIN friendships f ON f.user_id = $2 AND f.friend_id = u.id
-            LEFT JOIN friend_requests fr_sent ON fr_sent.sender_id = $2 AND fr_sent.receiver_id = u.id AND fr_sent.status = 'pending'
-            LEFT JOIN friend_requests fr_recv ON fr_recv.receiver_id = $2 AND fr_recv.sender_id = u.id AND fr_recv.status = 'pending'
-            WHERE u.id = $1 AND u.deleted_at IS NULL
-        `;
-        const result = await pool.query(query, [userId, viewerId]);
-        return result.rows[0];
-    }
-
-    // ============ BLOCK USERS ============
-
-    // Block a user (also removes from roster)
-    async blockUser(userId, blockedUserId) {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            // Add to blocked list
-            await client.query(
-                `INSERT INTO blocked_users (user_id, blocked_user_id)
-                 VALUES ($1, $2)
-                 ON CONFLICT (user_id, blocked_user_id) DO NOTHING`,
-                [userId, blockedUserId]
-            );
-
-            // Remove from both users' rosters
-            await client.query(
-                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
-                [userId, blockedUserId]
-            );
-            await client.query(
-                `DELETE FROM roster WHERE user_id = $1 AND contact_user_id = $2`,
-                [blockedUserId, userId]
-            );
-
-            await client.query('COMMIT');
-            return { user_id: userId, blocked_user_id: blockedUserId };
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    // Unblock a user
-    async unblockUser(userId, blockedUserId) {
-        const query = `
-            DELETE FROM blocked_users 
-            WHERE user_id = $1 AND blocked_user_id = $2
-            RETURNING *
-        `;
-        const result = await pool.query(query, [userId, blockedUserId]);
-        return result.rows[0];
-    }
-
-    // Get blocked users
-    async getBlockedUsers(userId) {
-        const query = `
-            SELECT bu.*, u.first_name, u.last_name, u.username, p.avatar_url
-            FROM blocked_users bu
-            JOIN users u ON bu.blocked_user_id = u.id
-            LEFT JOIN user_profiles p ON u.id = p.user_id
-            WHERE bu.user_id = $1
-            ORDER BY bu.created_at DESC
-        `;
-        const result = await pool.query(query, [userId]);
-        return result.rows;
-    }
-
-    // Check if user is blocked
-    async isBlocked(userId, otherUserId) {
-        const query = `
-            SELECT EXISTS(
-                SELECT 1 FROM blocked_users 
-                WHERE (user_id = $1 AND blocked_user_id = $2)
-                   OR (user_id = $2 AND blocked_user_id = $1)
-            ) as is_blocked
-        `;
-        const result = await pool.query(query, [userId, otherUserId]);
-        return result.rows[0].is_blocked;
-    }
+  }
 }
 
 module.exports = new FriendRepository();

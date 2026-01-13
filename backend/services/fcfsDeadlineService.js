@@ -9,67 +9,200 @@ const logger = require("../config/logger");
  * and notifies organizers to select from On-Deck
  */
 class FCFSDeadlineService {
+  constructor() {
+    this.timer = null;
+    this.loopCheckInterval = 30 * 60 * 1000; // 30 minutes fallback
+    this.loopTimer = null;
+  }
+
   /**
-   * Process expired invites (both FCFS and Roster)
-   * Called periodically by scheduler
+   * Start the smart scheduler
    */
-  async processExpiredInvites() {
+  start() {
+    logger.info("Starting optimized invite deadline service...");
+    this.scheduleNextCheck();
+
+    // Safety net: check periodically just in case
+    this.loopTimer = setInterval(() => {
+      this.scheduleNextCheck();
+    }, this.loopCheckInterval);
+  }
+
+  stop() {
+    if (this.timer) clearTimeout(this.timer);
+    if (this.loopTimer) clearInterval(this.loopTimer);
+    logger.info("Invite deadline service stopped");
+  }
+
+  /**
+   * Called when a new invite is created to potentially wake up sooner
+   */
+  triggerUpdate() {
+    this.scheduleNextCheck();
+  }
+
+  /**
+   * Find the next event (expiry OR warning) and set a timer for it.
+   * This eliminates constant DB polling.
+   */
+  async scheduleNextCheck() {
     try {
-      logger.debug("Running invite deadline check...");
-      
-      // Get and expire all invites past their deadline
-      const expiredInvites = await inviteRepository.expireOldInvites();
-      
-      logger.debug(`Found ${expiredInvites.length} expired invites to process`);
-      
+      // 1. Process any currently due events immediately (catch-up)
+      await this.processDueEvents();
+
+      // 2. Find next event time (either expiry or 5m warning)
+      const nextEventTimeStr = await inviteRepository.getNextNotificationTime();
+
+      if (!nextEventTimeStr) {
+        logger.debug(
+          "No pending invites or warnings found. Sleeping until new invite created or safety check."
+        );
+        return;
+      }
+
+      const nextEvent = new Date(nextEventTimeStr);
+      const now = new Date();
+      let delay = nextEvent.getTime() - now.getTime();
+
+      // Add small buffer (1s) to ensure DB time passes
+      delay += 1000;
+
+      if (delay < 0) delay = 0;
+
+      logger.info(
+        `Next scheduler wake-up in ${(delay / 1000).toFixed(
+          1
+        )}s at ${nextEvent.toISOString()}`
+      );
+
+      // Reset timer
+      if (this.timer) clearTimeout(this.timer);
+
+      this.timer = setTimeout(() => {
+        this.scheduleNextCheck();
+      }, delay);
+    } catch (error) {
+      logger.error("Error scheduling next invite check:", error);
+      // Retry in 1 minute on error
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.scheduleNextCheck(), 60000);
+    }
+  }
+
+  /**
+   * Process all due events:
+   * 1. Expire invites past deadline
+   * 2. Mark warnings as sent
+   * 3. Send organizer fill warnings (NEW)
+   * Then send notifications for both groups.
+   */
+  async processDueEvents() {
+    try {
+      // NEW: Process organizer fill warnings FIRST (before deadline expires)
+      await this.processOrganizerFillWarnings();
+
+      // Atomic processing in repository
+      // Returns { expired: [], warnings: [] }
+      const results = await inviteRepository.processDueNotifications();
+
+      const expiredInvites = results.expired || [];
+      const warningInvites = results.warnings || [];
+
+      if (expiredInvites.length > 0 || warningInvites.length > 0) {
+        logger.info(
+          `Processed events: ${expiredInvites.length} expired, ${warningInvites.length} warnings`
+        );
+      }
+
+      // --- HANDLE 5-MINUTE WARNINGS ---
+      for (const invite of warningInvites) {
+        if (invite.invitee_user_id) {
+          try {
+            logger.info(
+              `Sending 5-min warning to user ${invite.invitee_user_id} for invite ${invite.id}`
+            );
+            await notificationService.createNotification({
+              userId: invite.invitee_user_id,
+              title: "Act Fast!",
+              body: "Your invite expires in 5 minutes.",
+              data: {
+                type: "invite_warning",
+                teeTimeId: invite.tee_time_id,
+                inviteId: invite.id,
+              },
+            });
+          } catch (err) {
+            logger.error(
+              `Failed to send warning to ${invite.invitee_user_id}:`,
+              err
+            );
+          }
+        }
+      }
+
+      // --- HANDLE EXPIRATIONS ---
       if (expiredInvites.length > 0) {
         logger.info(`Expired ${expiredInvites.length} invites past deadline`);
-        
+
         // Group by tee time to send notifications
-        const teeTimeIds = [...new Set(expiredInvites.map(i => i.tee_time_id))];
-        
+        const teeTimeIds = [
+          ...new Set(expiredInvites.map((i) => i.tee_time_id)),
+        ];
+
         for (const teeTimeId of teeTimeIds) {
           const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
           if (!teeTime) continue;
 
-          const teeTimeInvites = expiredInvites.filter(i => i.tee_time_id === teeTimeId);
-          
+          const teeTimeInvites = expiredInvites.filter(
+            (i) => i.tee_time_id === teeTimeId
+          );
+
           // Notify each user their invite expired
           for (const invite of teeTimeInvites) {
             if (invite.invitee_user_id) {
               try {
-                logger.info(`Notifying user ${invite.invitee_user_id} that their invite expired`);
+                logger.info(
+                  `Notifying user ${invite.invitee_user_id} that their invite expired`
+                );
                 await notificationService.createNotification({
                   userId: invite.invitee_user_id,
-                  title: 'Invite Expired',
-                  body: 'The deadline to respond has passed. The spot may have been filled.',
+                  title: "Invite Expired",
+                  body: "The deadline to respond has passed. The spot may have been filled.",
                   data: {
-                    type: 'invite_expired',
+                    type: "invite_expired",
                     teeTimeId: invite.tee_time_id,
-                    inviteId: invite.id
-                  }
+                    inviteId: invite.id,
+                  },
                 });
               } catch (notifyError) {
-                logger.error(`Failed to notify user ${invite.invitee_user_id} of expired invite:`, notifyError);
+                logger.error(
+                  `Failed to notify user ${invite.invitee_user_id} of expired invite:`,
+                  notifyError
+                );
               }
             }
           }
 
           // For both FCFS and Roster: check if tee time is not filled and notify organizer
           // This gives organizer the option to select from On-Deck
-          await this.checkAndNotifyOrganizerIfNotFilled(teeTimeId, teeTime.invite_type);
+          await this.checkAndNotifyOrganizerIfNotFilled(
+            teeTimeId,
+            teeTime.invite_type
+          );
         }
       }
-      
-      return expiredInvites.length;
     } catch (error) {
       // Don't throw on connection errors - just log and continue
-      if (error.message?.includes('timeout') || error.message?.includes('Connection')) {
-        logger.warn("Invite deadline processing skipped - database connection issue");
-        return 0;
+      if (
+        error.message?.includes("timeout") ||
+        error.message?.includes("Connection")
+      ) {
+        logger.warn(
+          "Invite deadline processing skipped - database connection issue"
+        );
+        return;
       }
-      logger.error("Process expired invites error:", error);
-      return 0;
+      logger.error("Error processing due events:", error);
     }
   }
 
@@ -79,8 +212,10 @@ class FCFSDeadlineService {
    */
   async checkAndNotifyOrganizerIfNotFilled(teeTimeId, inviteType) {
     try {
-      logger.debug(`Checking if tee time ${teeTimeId} (${inviteType}) is filled...`);
-      
+      logger.debug(
+        `Checking if tee time ${teeTimeId} (${inviteType}) is filled...`
+      );
+
       const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
       if (!teeTime) {
         logger.debug(`Tee time ${teeTimeId} not found`);
@@ -90,35 +225,46 @@ class FCFSDeadlineService {
       logger.debug(`Tee time ${teeTimeId} status: ${teeTime.status}`);
 
       // Only process if tee time is still active (not cancelled/completed)
-      if (teeTime.status === 'cancelled' || teeTime.status === 'completed') {
-        logger.debug(`Tee time ${teeTimeId} status is ${teeTime.status}, skipping notification`);
+      if (teeTime.status === "cancelled" || teeTime.status === "completed") {
+        logger.debug(
+          `Tee time ${teeTimeId} status is ${teeTime.status}, skipping notification`
+        );
         return;
       }
 
-      const participantCount = await teeTimeRepository.getParticipantCount(teeTimeId);
+      const participantCount = await teeTimeRepository.getParticipantCount(
+        teeTimeId
+      );
       const spotsRemaining = teeTime.max_players - participantCount;
 
-      logger.debug(`Tee time ${teeTimeId}: ${participantCount}/${teeTime.max_players} participants, ${spotsRemaining} spots remaining`);
+      logger.debug(
+        `Tee time ${teeTimeId}: ${participantCount}/${teeTime.max_players} participants, ${spotsRemaining} spots remaining`
+      );
 
       if (spotsRemaining > 0) {
         // Check if there are any pending invites with active deadlines
-        const pendingInvites = await inviteRepository.getPendingInvitesByTeeTime(teeTimeId);
-        
+        const pendingInvites =
+          await inviteRepository.getPendingInvitesByTeeTime(teeTimeId);
+
         // For roster invites, only count invites that have an active expires_at (currently being waited on)
-        const activeInvites = pendingInvites.filter(inv => {
-          if (inviteType === 'roster') {
+        const activeInvites = pendingInvites.filter((inv) => {
+          if (inviteType === "roster") {
             // For roster, only the invite with expires_at set is "active"
             return inv.expires_at && new Date(inv.expires_at) > new Date();
           }
           // For FCFS, all pending invites are active
           return true;
         });
-        
-        logger.debug(`Tee time ${teeTimeId} has ${pendingInvites.length} pending invites, ${activeInvites.length} active`);
-        
+
+        logger.debug(
+          `Tee time ${teeTimeId} has ${pendingInvites.length} pending invites, ${activeInvites.length} active`
+        );
+
         if (activeInvites.length === 0) {
           // No active invites and spots remaining - notify organizer to use On-Deck
-          logger.info(`Notifying organizer ${teeTime.creator_id} that tee time ${teeTimeId} (${inviteType}) has ${spotsRemaining} unfilled spots - prompting On-Deck selection`);
+          logger.info(
+            `Notifying organizer ${teeTime.creator_id} that tee time ${teeTimeId} (${inviteType}) has ${spotsRemaining} unfilled spots - prompting On-Deck selection`
+          );
           await notificationService.notifyTeeTimeNotFilled(
             teeTime.creator_id,
             teeTime,
@@ -128,6 +274,62 @@ class FCFSDeadlineService {
       }
     } catch (error) {
       logger.error(`Error checking tee time ${teeTimeId} fill status:`, error);
+    }
+  }
+
+  /**
+   * NEW: Process organizer fill warnings BEFORE deadline expires
+   * This notifies organizers when they have unfilled spots and deadline is approaching
+   */
+  async processOrganizerFillWarnings() {
+    try {
+      // Get tee times needing organizer warning (2 min buffer for testing)
+      const teeTimesNeedingWarning =
+        await inviteRepository.getTeeTimesNeedingOrganizerWarning(2);
+
+      if (teeTimesNeedingWarning.length === 0) {
+        return;
+      }
+
+      logger.info(
+        `Processing ${teeTimesNeedingWarning.length} organizer fill warnings`
+      );
+
+      for (const teeTime of teeTimesNeedingWarning) {
+        try {
+          // Check if there are actually unfilled spots
+          const participantCount = await teeTimeRepository.getParticipantCount(
+            teeTime.id
+          );
+          const spotsRemaining = teeTime.max_players - participantCount;
+
+          if (spotsRemaining > 0) {
+            logger.info(
+              `Sending fill warning to organizer ${teeTime.creator_id} for tee time ${teeTime.id} - ${spotsRemaining} spots remaining, deadline approaching`
+            );
+
+            // Send the pre-deadline warning notification
+            await notificationService.notifyOrganizerFillWarning(
+              teeTime.creator_id,
+              teeTime,
+              spotsRemaining
+            );
+
+            // Mark as sent
+            await inviteRepository.markOrganizerFillWarningSent(teeTime.id);
+          } else {
+            // Tee time is actually filled, just mark the warning as sent
+            await inviteRepository.markOrganizerFillWarningSent(teeTime.id);
+          }
+        } catch (err) {
+          logger.error(
+            `Failed to process organizer fill warning for tee time ${teeTime.id}:`,
+            err
+          );
+        }
+      }
+    } catch (error) {
+      logger.error("Error processing organizer fill warnings:", error);
     }
   }
 }

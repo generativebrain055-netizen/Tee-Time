@@ -1,4 +1,4 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
@@ -20,33 +20,53 @@ class RosterNotificationService {
     
     try {
       // Check if already notified for this roster entry
-      const existing = await pool.query(
-        `SELECT id FROM roster_notifications 
-         WHERE roster_id = $1 AND notified_user_id = $2`,
-        [rosterId, contact_user_id]
-      );
+      const { data: existing, error: checkError } = await supabaseAdmin
+        .from("roster_notifications")
+        .select("id")
+        .eq("roster_id", rosterId)
+        .eq("notified_user_id", contact_user_id)
+        .limit(1);
+
+      if (checkError) {
+        logger.error("Error checking existing notification:", checkError.message);
+        throw checkError;
+      }
       
-      if (existing.rows.length > 0) {
+      if (existing && existing.length > 0) {
         return { sent: false, reason: "already_notified" };
       }
       
       // Get group name if applicable
       let groupName = null;
       if (group_id) {
-        const group = await pool.query(
-          'SELECT name FROM roster_groups WHERE id = $1', 
-          [group_id]
-        );
-        groupName = group.rows[0]?.name;
+        const { data: group, error: groupError } = await supabaseAdmin
+          .from("roster_groups")
+          .select("name")
+          .eq("id", group_id)
+          .single();
+
+        if (!groupError && group) {
+          groupName = group.name;
+        }
       }
       
       // Create notification tracking record
-      await pool.query(
-        `INSERT INTO roster_notifications 
-         (roster_id, notified_user_id, roster_owner_id, group_id, group_name, notification_sent, notification_sent_at)
-         VALUES ($1, $2, $3, $4, $5, true, NOW())`,
-        [rosterId, contact_user_id, ownerUser.id, group_id, groupName]
-      );
+      const { error: trackError } = await supabaseAdmin
+        .from("roster_notifications")
+        .insert({
+          roster_id: rosterId,
+          notified_user_id: contact_user_id,
+          roster_owner_id: ownerUser.id,
+          group_id: group_id,
+          group_name: groupName,
+          notification_sent: true,
+          notification_sent_at: new Date().toISOString()
+        });
+
+      if (trackError) {
+        logger.error("Error creating notification tracking:", trackError.message);
+        throw trackError;
+      }
 
       // Build notification message
       const ownerName = `${ownerUser.first_name || ''} ${ownerUser.last_name || ''}`.trim() || 'Someone';
@@ -56,31 +76,34 @@ class RosterNotificationService {
         : `${ownerName} added you to their roster`;
       
       // Create in-app notification
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, channel, title, body, data, status)
-         VALUES ($1, 'in_app', 'roster', $2, $3, $4, 'delivered')`,
-        [
-          contact_user_id,
-          title,
-          body,
-          JSON.stringify({ 
+      const { error: notifError } = await supabaseAdmin
+        .from("notifications")
+        .insert({
+          user_id: contact_user_id,
+          type: "in_app",
+          channel: "roster",
+          title: title,
+          body: body,
+          data: { 
             type: 'roster_add', 
             ownerId: ownerUser.id, 
             ownerName,
             groupName,
             rosterId
-          })
-        ]
-      );
+          },
+          status: "delivered"
+        });
+
+      if (notifError) {
+        logger.error("Error creating in-app notification:", notifError.message);
+        throw notifError;
+      }
       
       logger.info(`Roster add notification sent to user ${contact_user_id} from ${ownerUser.id}`);
       
-      // TODO: Send push notification via FCM/APNs when implemented
-      // await pushNotificationService.send(contact_user_id, { title, body, data });
-      
       return { sent: true, notifiedUserId: contact_user_id };
     } catch (error) {
-      logger.error("Failed to send roster add notification:", error);
+      logger.error("Failed to send roster add notification:", error.message);
       return { sent: false, reason: "error", error: error.message };
     }
   }
@@ -89,28 +112,35 @@ class RosterNotificationService {
    * Get pending roster notifications for a user
    */
   async getPendingNotifications(userId) {
-    const result = await pool.query(
-      `SELECT n.*, 
-              u.first_name as owner_first_name, 
-              u.last_name as owner_last_name,
-              p.avatar_url as owner_avatar
-       FROM roster_notifications n
-       JOIN users u ON n.roster_owner_id = u.id
-       LEFT JOIN user_profiles p ON u.id = p.user_id
-       WHERE n.notified_user_id = $1
-       ORDER BY n.created_at DESC
-       LIMIT 50`,
-      [userId]
-    );
+    const { data, error } = await supabaseAdmin
+      .from("roster_notifications")
+      .select(`
+        *,
+        users!roster_notifications_roster_owner_id_fkey (
+          first_name,
+          last_name
+        ),
+        user_profiles!roster_notifications_roster_owner_id_fkey (
+          avatar_url
+        )
+      `)
+      .eq("notified_user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      logger.error(`Error fetching pending notifications for user ${userId}:`, error.message);
+      return [];
+    }
     
-    return result.rows.map(row => ({
+    return (data || []).map(row => ({
       id: row.id,
       rosterId: row.roster_id,
       groupName: row.group_name,
       owner: {
         id: row.roster_owner_id,
-        name: `${row.owner_first_name || ''} ${row.owner_last_name || ''}`.trim(),
-        avatar: row.owner_avatar
+        name: `${row.users?.first_name || ''} ${row.users?.last_name || ''}`.trim(),
+        avatar: row.user_profiles?.avatar_url
       },
       notificationSent: row.notification_sent,
       createdAt: row.created_at

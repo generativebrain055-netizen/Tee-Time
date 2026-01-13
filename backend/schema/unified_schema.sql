@@ -26,6 +26,7 @@ DROP VIEW IF EXISTS tee_time_attendance_summary CASCADE;
 
 -- Drop all tables in reverse dependency order
 DROP TABLE IF EXISTS game_scores CASCADE;
+DROP TABLE IF EXISTS qr_scan_history CASCADE;
 DROP TABLE IF EXISTS draft_qr_codes CASCADE;
 DROP TABLE IF EXISTS user_club_memberships CASCADE;
 DROP TABLE IF EXISTS clubs CASCADE;
@@ -69,6 +70,7 @@ DROP FUNCTION IF EXISTS cleanup_expired_records() CASCADE;
 DROP FUNCTION IF EXISTS hours_between(TIMESTAMPTZ, TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS is_within_24_hours(TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS get_tee_datetime(DATE, TIME) CASCADE;
+DROP FUNCTION IF EXISTS accept_invite_atomic(UUID, UUID, TEXT) CASCADE;
 
 -- Re-enable triggers
 SET session_replication_role = 'origin';
@@ -381,6 +383,7 @@ CREATE TABLE tee_times (
     check_in_started_at TIMESTAMPTZ,
     check_in_completed_at TIMESTAMPTZ,
     check_in_completed_by UUID REFERENCES users(id),
+    organizer_fill_warning_sent BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     cancelled_at TIMESTAMPTZ,
@@ -396,6 +399,7 @@ CREATE INDEX idx_tee_times_date ON tee_times(tee_date);
 CREATE INDEX idx_tee_times_status ON tee_times(status);
 CREATE INDEX idx_tee_times_upcoming ON tee_times(tee_date, tee_time) WHERE status IN ('pending', 'confirmed');
 CREATE INDEX idx_tee_times_reminder_sent ON tee_times(check_in_reminder_sent) WHERE check_in_reminder_sent = false;
+CREATE INDEX idx_tee_times_organizer_fill_warning ON tee_times(organizer_fill_warning_sent) WHERE organizer_fill_warning_sent = false;
 
 -- ============================================================================
 -- 11. TEE_TIME_PARTICIPANTS TABLE
@@ -442,6 +446,8 @@ CREATE TABLE invites (
     email_sent_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
     deadline_notification_sent BOOLEAN DEFAULT false,
+    notified_5m BOOLEAN DEFAULT false,
+    notified_expired BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT valid_invite_status CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'waitlist', 'cancelled'))
@@ -455,6 +461,7 @@ CREATE INDEX idx_invites_pending ON invites(invitee_user_id, status) WHERE statu
 CREATE INDEX idx_invites_expires ON invites(expires_at) WHERE status = 'pending' AND expires_at IS NOT NULL;
 CREATE INDEX idx_invites_deadline_notification ON invites(expires_at, deadline_notification_sent) 
     WHERE status = 'pending' AND expires_at IS NOT NULL;
+CREATE INDEX idx_invites_notifications ON invites (status, expires_at, notified_5m, notified_expired);
 
 -- ============================================================================
 -- 13. INVITE_RESPONSES TABLE
@@ -987,6 +994,73 @@ BEGIN
     UPDATE rate_limits SET is_blocked = false, blocked_until = NULL WHERE blocked_until < NOW();
     UPDATE invites SET status = 'expired', updated_at = NOW() 
         WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- FUNCTION: accept_invite_atomic
+-- ============================================================================
+CREATE OR REPLACE FUNCTION accept_invite_atomic(
+  p_invite_id UUID,
+  p_user_id UUID,
+  p_response_message TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+  v_invite RECORD;
+  v_tee_time RECORD;
+  v_participant_count INT;
+  v_new_participant_id UUID;
+BEGIN
+  -- Lock the invite row
+  SELECT * INTO v_invite FROM invites 
+  WHERE id = p_invite_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'message', 'Invite not found');
+  END IF;
+
+  IF v_invite.status != 'pending' THEN
+    RETURN jsonb_build_object('success', false, 'message', 'Invite is no longer pending. Status: ' || v_invite.status);
+  END IF;
+
+  -- Lock tee time row
+  SELECT * INTO v_tee_time FROM tee_times 
+  WHERE id = v_invite.tee_time_id FOR UPDATE;
+
+  -- Check capacity
+  SELECT COUNT(*) INTO v_participant_count 
+  FROM tee_time_participants 
+  WHERE tee_time_id = v_invite.tee_time_id 
+  AND status = 'confirmed';
+
+  IF v_participant_count >= v_tee_time.max_players THEN
+    RETURN jsonb_build_object('success', false, 'message', 'Tee time is full');
+  END IF;
+
+  -- Update invite
+  UPDATE invites 
+  SET status = 'accepted', updated_at = NOW() 
+  WHERE id = p_invite_id;
+
+  -- Add response
+  INSERT INTO invite_responses (invite_id, user_id, response, response_message)
+  VALUES (p_invite_id, p_user_id, 'accepted', p_response_message);
+
+  -- Add participant
+  INSERT INTO tee_time_participants (tee_time_id, user_id, position, status, name)
+  VALUES (
+    v_invite.tee_time_id, 
+    p_user_id, 
+    COALESCE(v_invite.position, v_participant_count + 1), 
+    'confirmed',
+    v_invite.invitee_name
+  ) RETURNING id INTO v_new_participant_id;
+
+  RETURN jsonb_build_object('success', true, 'participant_id', v_new_participant_id);
+
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'Error in accept_invite_atomic: %', SQLERRM;
+  RETURN jsonb_build_object('success', false, 'message', SQLERRM);
 END;
 $$ LANGUAGE plpgsql;
 

@@ -1,7 +1,7 @@
-const { query } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 /**
- * Invite Response Repository
+ * Invite Response Repository - Supabase REST API
  * Handles all database operations related to invite responses
  */
 
@@ -21,23 +21,26 @@ const create = async (responseData) => {
         deviceInfo,
     } = responseData;
 
-    const result = await query(
-        `INSERT INTO invite_responses (
-            invite_id, user_id, response, response_message, responded_via, ip_address, device_info
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING *`,
-        [
-            inviteId,
-            userId || null,
-            response,
-            responseMessage || null,
-            respondedVia || 'app',
-            ipAddress || null,
-            deviceInfo ? JSON.stringify(deviceInfo) : null,
-        ]
-    );
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .insert({
+                invite_id: inviteId,
+                user_id: userId || null,
+                response,
+                response_message: responseMessage || null,
+                responded_via: respondedVia || 'app',
+                ip_address: ipAddress || null,
+                device_info: deviceInfo || null,
+            })
+            .select()
+            .single();
 
-    return result.rows[0];
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "create invite response");
+    }
 };
 
 /**
@@ -46,15 +49,26 @@ const create = async (responseData) => {
  * @returns {Promise<Array>}
  */
 const findByInviteId = async (inviteId) => {
-    const result = await query(
-        `SELECT ir.*, u.first_name, u.last_name, u.phone_number
-         FROM invite_responses ir
-         LEFT JOIN users u ON ir.user_id = u.id
-         WHERE ir.invite_id = $1
-         ORDER BY ir.created_at DESC`,
-        [inviteId]
-    );
-    return result.rows;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .select(`
+                *,
+                users (first_name, last_name, phone_number)
+            `)
+            .eq("invite_id", inviteId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        
+        return (data || []).map(response => {
+            const user = response.users || {};
+            delete response.users;
+            return { ...response, ...user };
+        });
+    } catch (error) {
+        handleError(error, "findByInviteId");
+    }
 };
 
 /**
@@ -63,16 +77,36 @@ const findByInviteId = async (inviteId) => {
  * @returns {Promise<Array>}
  */
 const findByUserId = async (userId) => {
-    const result = await query(
-        `SELECT ir.*, i.tee_time_id, tt.course_name, tt.tee_date, tt.tee_time
-         FROM invite_responses ir
-         JOIN invites i ON ir.invite_id = i.id
-         JOIN tee_times tt ON i.tee_time_id = tt.id
-         WHERE ir.user_id = $1
-         ORDER BY ir.created_at DESC`,
-        [userId]
-    );
-    return result.rows;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .select(`
+                *,
+                invites!inner (
+                    tee_time_id,
+                    tee_times (course_name, tee_date, tee_time)
+                )
+            `)
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        
+        return (data || []).map(response => {
+            const invite = response.invites || {};
+            const teeTime = invite.tee_times || {};
+            delete response.invites;
+            return {
+                ...response,
+                tee_time_id: invite.tee_time_id,
+                course_name: teeTime.course_name,
+                tee_date: teeTime.tee_date,
+                tee_time: teeTime.tee_time,
+            };
+        });
+    } catch (error) {
+        handleError(error, "findByUserId");
+    }
 };
 
 /**
@@ -82,14 +116,21 @@ const findByUserId = async (userId) => {
  * @returns {Promise<Object|null>}
  */
 const getLatestResponse = async (inviteId, userId) => {
-    const result = await query(
-        `SELECT * FROM invite_responses 
-         WHERE invite_id = $1 AND user_id = $2
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [inviteId, userId]
-    );
-    return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .select("*")
+            .eq("invite_id", inviteId)
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        handleError(error, "getLatestResponse");
+    }
 };
 
 /**
@@ -98,28 +139,31 @@ const getLatestResponse = async (inviteId, userId) => {
  * @returns {Promise<Object>}
  */
 const countResponsesByType = async (inviteId) => {
-    const result = await query(
-        `SELECT 
-            response,
-            COUNT(*) as count
-         FROM invite_responses
-         WHERE invite_id = $1
-         GROUP BY response`,
-        [inviteId]
-    );
-    
-    const counts = {
-        accepted: 0,
-        declined: 0,
-        maybe: 0,
-        waitlist: 0,
-    };
-    
-    result.rows.forEach(row => {
-        counts[row.response] = parseInt(row.count);
-    });
-    
-    return counts;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .select("response")
+            .eq("invite_id", inviteId);
+
+        if (error) throw error;
+
+        const counts = {
+            accepted: 0,
+            declined: 0,
+            maybe: 0,
+            waitlist: 0,
+        };
+
+        (data || []).forEach(row => {
+            if (counts.hasOwnProperty(row.response)) {
+                counts[row.response]++;
+            }
+        });
+
+        return counts;
+    } catch (error) {
+        handleError(error, "countResponsesByType");
+    }
 };
 
 /**
@@ -128,16 +172,39 @@ const countResponsesByType = async (inviteId) => {
  * @returns {Promise<Array>}
  */
 const getResponseHistoryForTeeTime = async (teeTimeId) => {
-    const result = await query(
-        `SELECT ir.*, i.invitee_name, i.invitee_phone, u.first_name, u.last_name
-         FROM invite_responses ir
-         JOIN invites i ON ir.invite_id = i.id
-         LEFT JOIN users u ON ir.user_id = u.id
-         WHERE i.tee_time_id = $1
-         ORDER BY ir.created_at DESC`,
-        [teeTimeId]
-    );
-    return result.rows;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("invite_responses")
+            .select(`
+                *,
+                invites!inner (
+                    invitee_name,
+                    invitee_phone,
+                    tee_time_id
+                ),
+                users (first_name, last_name)
+            `)
+            .eq("invites.tee_time_id", teeTimeId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        return (data || []).map(response => {
+            const invite = response.invites || {};
+            const user = response.users || {};
+            delete response.invites;
+            delete response.users;
+            return {
+                ...response,
+                invitee_name: invite.invitee_name,
+                invitee_phone: invite.invitee_phone,
+                first_name: user.first_name,
+                last_name: user.last_name,
+            };
+        });
+    } catch (error) {
+        handleError(error, "getResponseHistoryForTeeTime");
+    }
 };
 
 module.exports = {

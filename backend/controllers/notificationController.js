@@ -1,4 +1,4 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 class NotificationController {
@@ -17,23 +17,25 @@ class NotificationController {
       const userId = req.user.id;
       const { limit = 50, offset = 0, unreadOnly = false } = req.query;
 
-      let whereClause = "n.user_id = $1";
+      let query = supabaseAdmin
+        .from("notifications")
+        .select("id, type, channel, title, body, data, status, read_at, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
       if (unreadOnly === "true") {
-        whereClause += " AND n.read_at IS NULL";
+        query = query.is("read_at", null);
       }
 
-      const query = `
-        SELECT n.id, n.type, n.channel, n.title, n.body, n.data,
-               n.status, n.read_at, n.created_at
-        FROM notifications n
-        WHERE ${whereClause}
-        ORDER BY n.created_at DESC
-        LIMIT $2 OFFSET $3
-      `;
+      const { data, error } = await query;
 
-      const result = await pool.query(query, [userId, parseInt(limit), parseInt(offset)]);
+      if (error) {
+        logger.error("Get notifications error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to get notifications" });
+      }
 
-      const notifications = result.rows.map(n => ({
+      const notifications = (data || []).map(n => ({
         id: n.id,
         type: n.type,
         channel: n.channel,
@@ -47,7 +49,7 @@ class NotificationController {
 
       res.json({ success: true, notifications });
     } catch (error) {
-      logger.error("Get notifications error:", error);
+      logger.error("Get notifications error:", error.message);
       res.status(500).json({ success: false, message: "Failed to get notifications" });
     }
   }
@@ -57,15 +59,20 @@ class NotificationController {
     try {
       const userId = req.user.id;
 
-      const result = await pool.query(
-        `SELECT COUNT(*) as count FROM notifications 
-         WHERE user_id = $1 AND read_at IS NULL`,
-        [userId]
-      );
+      const { count, error } = await supabaseAdmin
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .is("read_at", null);
 
-      res.json({ success: true, count: parseInt(result.rows[0].count) });
+      if (error) {
+        logger.error("Get unread count error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to get unread count" });
+      }
+
+      res.json({ success: true, count: count || 0 });
     } catch (error) {
-      logger.error("Get unread count error:", error);
+      logger.error("Get unread count error:", error.message);
       res.status(500).json({ success: false, message: "Failed to get unread count" });
     }
   }
@@ -76,20 +83,29 @@ class NotificationController {
       const userId = req.user.id;
       const notificationId = req.params.id;
 
-      const result = await pool.query(
-        `UPDATE notifications SET read_at = NOW(), status = 'read'
-         WHERE id = $1 AND user_id = $2 AND read_at IS NULL
-         RETURNING id`,
-        [notificationId, userId]
-      );
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .update({
+          read_at: new Date().toISOString(),
+          status: "read"
+        })
+        .eq("id", notificationId)
+        .eq("user_id", userId)
+        .is("read_at", null)
+        .select("id");
 
-      if (result.rows.length === 0) {
+      if (error) {
+        logger.error("Mark as read error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to mark notification as read" });
+      }
+
+      if (!data || data.length === 0) {
         return res.status(404).json({ success: false, message: "Notification not found or already read" });
       }
 
       res.json({ success: true, message: "Notification marked as read" });
     } catch (error) {
-      logger.error("Mark as read error:", error);
+      logger.error("Mark as read error:", error.message);
       res.status(500).json({ success: false, message: "Failed to mark notification as read" });
     }
   }
@@ -100,24 +116,39 @@ class NotificationController {
       const userId = req.user.id;
       const notificationId = req.params.id;
 
-      // Update the notification data to include responded: true
-      const result = await pool.query(
-        `UPDATE notifications 
-         SET data = COALESCE(data, '{}'::jsonb) || '{"responded": true}'::jsonb,
-             read_at = COALESCE(read_at, NOW()),
-             status = 'read'
-         WHERE id = $1 AND user_id = $2
-         RETURNING id, data`,
-        [notificationId, userId]
-      );
+      // Get current notification
+      const { data: notification, error: fetchError } = await supabaseAdmin
+        .from("notifications")
+        .select("data")
+        .eq("id", notificationId)
+        .eq("user_id", userId)
+        .single();
 
-      if (result.rows.length === 0) {
+      if (fetchError || !notification) {
         return res.status(404).json({ success: false, message: "Notification not found" });
+      }
+
+      // Update with responded flag
+      const updatedData = { ...(notification.data || {}), responded: true };
+
+      const { error } = await supabaseAdmin
+        .from("notifications")
+        .update({
+          data: updatedData,
+          read_at: new Date().toISOString(),
+          status: "read"
+        })
+        .eq("id", notificationId)
+        .eq("user_id", userId);
+
+      if (error) {
+        logger.error("Mark as responded error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to mark notification as responded" });
       }
 
       res.json({ success: true, message: "Notification marked as responded" });
     } catch (error) {
-      logger.error("Mark as responded error:", error);
+      logger.error("Mark as responded error:", error.message);
       res.status(500).json({ success: false, message: "Failed to mark notification as responded" });
     }
   }
@@ -127,16 +158,24 @@ class NotificationController {
     try {
       const userId = req.user.id;
 
-      const result = await pool.query(
-        `UPDATE notifications SET read_at = NOW(), status = 'read'
-         WHERE user_id = $1 AND read_at IS NULL
-         RETURNING id`,
-        [userId]
-      );
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .update({
+          read_at: new Date().toISOString(),
+          status: "read"
+        })
+        .eq("user_id", userId)
+        .is("read_at", null)
+        .select("id");
 
-      res.json({ success: true, count: result.rows.length, message: "All notifications marked as read" });
+      if (error) {
+        logger.error("Mark all as read error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to mark notifications as read" });
+      }
+
+      res.json({ success: true, count: data?.length || 0, message: "All notifications marked as read" });
     } catch (error) {
-      logger.error("Mark all as read error:", error);
+      logger.error("Mark all as read error:", error.message);
       res.status(500).json({ success: false, message: "Failed to mark notifications as read" });
     }
   }
@@ -147,18 +186,25 @@ class NotificationController {
       const userId = req.user.id;
       const notificationId = req.params.id;
 
-      const result = await pool.query(
-        `DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING id`,
-        [notificationId, userId]
-      );
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .delete()
+        .eq("id", notificationId)
+        .eq("user_id", userId)
+        .select("id");
 
-      if (result.rows.length === 0) {
+      if (error) {
+        logger.error("Delete notification error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to delete notification" });
+      }
+
+      if (!data || data.length === 0) {
         return res.status(404).json({ success: false, message: "Notification not found" });
       }
 
       res.json({ success: true, message: "Notification deleted" });
     } catch (error) {
-      logger.error("Delete notification error:", error);
+      logger.error("Delete notification error:", error.message);
       res.status(500).json({ success: false, message: "Failed to delete notification" });
     }
   }

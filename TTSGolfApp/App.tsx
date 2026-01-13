@@ -75,14 +75,19 @@ interface Navigation {
   navigate: (screen: ScreenName, params?: NavigationParams) => void;
   replace: (screen: ScreenName, params?: NavigationParams) => void;
   goBack: () => void;
-  reset: (options: { index: number; routes: Array<{ name: ScreenName; params?: NavigationParams }> }) => void;
+  reset: (options: {
+    index: number;
+    routes: Array<{ name: ScreenName; params?: NavigationParams }>;
+  }) => void;
 }
 
 export default function App(): React.ReactElement {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>("Splash");
   const [userData, setUserData] = useState<UserData | null>(null);
   const [screenParams, setScreenParams] = useState<NavigationParams>({});
-  const [screenHistory, setScreenHistory] = useState<{ screen: ScreenName; params: NavigationParams }[]>([{ screen: "Splash", params: {} }]);
+  const [screenHistory, setScreenHistory] = useState<
+    { screen: ScreenName; params: NavigationParams }[]
+  >([{ screen: "Splash", params: {} }]);
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
 
@@ -121,6 +126,16 @@ export default function App(): React.ReactElement {
       }
       const navParams = params || {};
       setScreenParams(navParams);
+      // Update the current history entry instead of just changing screen to prevent ghost history
+      setScreenHistory((prev) => {
+        const newHistory = [...prev];
+        if (newHistory.length > 0) {
+          newHistory[newHistory.length - 1] = { screen, params: navParams };
+        } else {
+          newHistory.push({ screen, params: navParams });
+        }
+        return newHistory;
+      });
       setScreenKey((prev) => prev + 1); // Force remount
       setCurrentScreen(screen);
     },
@@ -135,7 +150,10 @@ export default function App(): React.ReactElement {
         setCurrentScreen(previousEntry.screen);
       }
     },
-    reset: (options: { index: number; routes: Array<{ name: ScreenName; params?: NavigationParams }> }) => {
+    reset: (options: {
+      index: number;
+      routes: Array<{ name: ScreenName; params?: NavigationParams }>;
+    }) => {
       // Reset navigation stack to specified routes
       const targetRoute = options.routes[options.index];
       const navParams = targetRoute.params || {};
@@ -151,13 +169,33 @@ export default function App(): React.ReactElement {
     // Using key prop forces React to remount the component with fresh state
     switch (currentScreen) {
       case "Splash":
-        return <SplashScreen key={`splash-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <SplashScreen
+            key={`splash-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Welcome":
-        return <WelcomeScreen key={`welcome-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <WelcomeScreen
+            key={`welcome-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Login":
-        return <LoginScreen key={`login-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <LoginScreen
+            key={`login-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Onboarding":
-        return <OnboardingScreen key={`onboarding-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <OnboardingScreen
+            key={`onboarding-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "HomePage":
       case "Home":
         return (
@@ -176,7 +214,12 @@ export default function App(): React.ReactElement {
           />
         );
       case "Messages":
-        return <MessagesScreen key={`messages-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <MessagesScreen
+            key={`messages-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "ChatDetail":
         return (
           <ChatDetailScreen
@@ -186,7 +229,12 @@ export default function App(): React.ReactElement {
           />
         );
       case "FullCalendar":
-        return <FullCalendarScreen key={`calendar-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <FullCalendarScreen
+            key={`calendar-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Profile":
         return (
           <ProfileScreen
@@ -218,12 +266,27 @@ export default function App(): React.ReactElement {
           />
         );
       case "CreateTeeTime":
-        return <CreateTeeTimeScreen key={`create-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <CreateTeeTimeScreen
+            key={`create-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Invites":
-        return <InvitesScreen key={`invites-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <InvitesScreen
+            key={`invites-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "Availability":
       case "Community":
-        return <AvailabilityScreen key={`availability-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <AvailabilityScreen
+            key={`availability-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "FriendProfile":
         return (
           <FriendProfileScreen
@@ -287,7 +350,12 @@ export default function App(): React.ReactElement {
           />
         );
       default:
-        return <SplashScreen key={`default-${screenKey}`} navigation={navigation as any} />;
+        return (
+          <SplashScreen
+            key={`default-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
     }
   };
 

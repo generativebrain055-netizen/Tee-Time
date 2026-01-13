@@ -1,8 +1,9 @@
 const draftService = require("../services/draftService");
 const rosterRepository = require("../repositories/rosterRepository");
+const friendRepository = require("../repositories/friendRepository");
 const userRepository = require("../repositories/userRepository");
 const rosterNotificationService = require("../services/rosterNotificationService");
-const { pool } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 class DraftController {
@@ -32,8 +33,10 @@ class DraftController {
         },
       });
     } catch (error) {
-      logger.error("Get QR code error:", error);
-      res.status(500).json({ success: false, message: "Failed to generate QR code" });
+      logger.error("Get QR code error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to generate QR code" });
     }
   }
 
@@ -56,8 +59,10 @@ class DraftController {
         message: "QR code regenerated. Previous codes are now invalid.",
       });
     } catch (error) {
-      logger.error("Regenerate QR code error:", error);
-      res.status(500).json({ success: false, message: "Failed to regenerate QR code" });
+      logger.error("Regenerate QR code error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to regenerate QR code" });
     }
   }
 
@@ -71,7 +76,9 @@ class DraftController {
       const { qrData } = req.body;
 
       if (!qrData) {
-        return res.status(400).json({ success: false, message: "QR data is required" });
+        return res
+          .status(400)
+          .json({ success: false, message: "QR data is required" });
       }
 
       // Validate QR code
@@ -88,7 +95,10 @@ class DraftController {
       const targetUserId = validation.userId;
 
       // Check if already in roster
-      const existing = await rosterRepository.isInRoster(scannerId, targetUserId);
+      const existing = await rosterRepository.isInRoster(
+        scannerId,
+        targetUserId
+      );
       if (existing) {
         return res.status(400).json({
           success: false,
@@ -108,13 +118,19 @@ class DraftController {
       }
 
       // Get mutual clubs
-      const mutualClubs = await draftService.getMutualClubs(scannerId, targetUserId);
+      const mutualClubs = await draftService.getMutualClubs(
+        scannerId,
+        targetUserId
+      );
 
       res.json({
         success: true,
         user: {
           id: targetUserId,
-          name: `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim() || "Unknown",
+          name:
+            `${userProfile.first_name || ""} ${
+              userProfile.last_name || ""
+            }`.trim() || "Unknown",
           avatar: userProfile.avatar_url,
           socialRate: userProfile.social_rate,
           handicap: userProfile.handicap,
@@ -125,8 +141,10 @@ class DraftController {
         confirmationRequired: true,
       });
     } catch (error) {
-      logger.error("Scan QR code error:", error);
-      res.status(500).json({ success: false, message: "Failed to process QR code" });
+      logger.error("Scan QR code error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to process QR code" });
     }
   }
 
@@ -140,7 +158,9 @@ class DraftController {
       const { userId } = req.body;
 
       if (!userId) {
-        return res.status(400).json({ success: false, message: "User ID is required" });
+        return res
+          .status(400)
+          .json({ success: false, message: "User ID is required" });
       }
 
       // Double-check not already in roster
@@ -161,28 +181,110 @@ class DraftController {
       // Set as on-deck
       await rosterRepository.toggleOnDeck(scannerId, entry.id, true);
 
-      // Send notification to drafted user
+      // Fetch scanner details
       const scanner = await userRepository.findById(scannerId);
-      rosterNotificationService.sendRosterAddNotification(
-        { ...entry, contact_user_id: userId },
-        scanner
-      ).catch((err) => logger.error("Failed to send draft notification:", err));
+
+      // Fetch target user details
+      const targetUser = await userRepository.findById(userId);
+
+      // ========================================
+      // STEP 1: Create BIDIRECTIONAL FRIENDSHIP
+      // ========================================
+      const alreadyFriends = await friendRepository.areFriends(
+        scannerId,
+        userId
+      );
+      if (!alreadyFriends) {
+        try {
+          // Insert bidirectional friendships (both directions)
+          const { error: friendshipError } = await supabaseAdmin
+            .from("friendships")
+            .insert([
+              { user_id: scannerId, friend_id: userId },
+              { user_id: userId, friend_id: scannerId },
+            ]);
+
+          if (friendshipError && friendshipError.code !== "23505") {
+            // 23505 = unique_violation, ignore if already exists
+            logger.error(
+              "Failed to create friendship:",
+              friendshipError.message
+            );
+          } else {
+            logger.info(
+              `Created bidirectional friendship between ${scannerId} and ${userId}`
+            );
+          }
+        } catch (err) {
+          logger.error("Failed to create friendship:", err.message);
+        }
+      }
+
+      // ========================================
+      // STEP 2: Add target user to SCANNER'S roster (On-Deck)
+      // ========================================
+      // Already done above - entry is created
+
+      // ========================================
+      // STEP 3: Add scanner to TARGET USER'S roster (mutual)
+      // ========================================
+      const reverseExists = await rosterRepository.isInRoster(
+        userId,
+        scannerId
+      );
+      if (!reverseExists) {
+        try {
+          const reverseEntry = await rosterRepository.addToRoster(userId, {
+            contactUserId: scannerId,
+            contactName: `${scanner.first_name || ""} ${
+              scanner.last_name || ""
+            }`.trim(),
+            contactPhone: scanner.phone_number,
+            contactEmail: scanner.email,
+          });
+          // Also set reverse entry as On-Deck so both see each other
+          if (reverseEntry) {
+            await rosterRepository.toggleOnDeck(userId, reverseEntry.id, true);
+          }
+          logger.info(
+            `Automatically created mutual roster entry for user ${userId} -> ${scannerId}`
+          );
+        } catch (err) {
+          // Log but don't fail the request if auto-add fails
+          logger.error("Failed to create mutual roster entry:", err.message);
+        }
+      }
+
+      // Send notification to drafted user
+      rosterNotificationService
+        .sendRosterAddNotification(
+          { ...entry, contact_user_id: userId },
+          scanner
+        )
+        .catch((err) =>
+          logger.error("Failed to send draft notification:", err.message)
+        );
 
       // Get the added user's name for response
       const addedUser = await userRepository.getPublicProfile(userId);
 
       // Update scan history to mark as added to roster
-      await pool.query(
-        `UPDATE qr_scan_history 
-         SET was_added_to_roster = true 
-         WHERE scanner_user_id = $1 AND scanned_user_id = $2 
-         AND scanned_at > NOW() - INTERVAL '10 minutes'`,
-        [scannerId, userId]
-      );
+      const { error } = await supabaseAdmin
+        .from("qr_scan_history")
+        .update({ was_added_to_roster: true })
+        .eq("scanner_user_id", scannerId)
+        .eq("scanned_user_id", userId)
+        .gte("scanned_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
+
+      if (error) {
+        logger.error("Error updating scan history:", error.message);
+      }
 
       res.json({
         success: true,
-        message: `${addedUser?.first_name || "User"} added to your On-Deck list`,
+        message: `${
+          addedUser?.first_name || "User"
+        } added to your On-Deck list`,
         entry: {
           id: entry.id,
           userId: userId,
@@ -190,8 +292,10 @@ class DraftController {
         },
       });
     } catch (error) {
-      logger.error("Confirm draft error:", error);
-      res.status(500).json({ success: false, message: "Failed to add user to roster" });
+      logger.error("Confirm draft error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to add user to roster" });
     }
   }
 
@@ -205,31 +309,44 @@ class DraftController {
       const limit = parseInt(req.query.limit) || 20;
       const offset = parseInt(req.query.offset) || 0;
 
-      const result = await pool.query(
-        `SELECT 
-           h.id,
-           h.scanner_user_id,
-           h.was_added_to_roster,
-           h.scanned_at,
-           u.first_name,
-           u.last_name,
-           p.avatar_url,
-           p.handicap
-         FROM qr_scan_history h
-         JOIN users u ON h.scanner_user_id = u.id
-         LEFT JOIN user_profiles p ON u.id = p.user_id
-         WHERE h.scanned_user_id = $1
-         ORDER BY h.scanned_at DESC
-         LIMIT $2 OFFSET $3`,
-        [userId, limit, offset]
-      );
+      const { data, error } = await supabaseAdmin
+        .from("qr_scan_history")
+        .select(
+          `
+          id,
+          scanner_user_id,
+          was_added_to_roster,
+          scanned_at,
+          users!qr_scan_history_scanner_user_id_fkey (
+            first_name,
+            last_name
+          ),
+          user_profiles!qr_scan_history_scanner_user_id_fkey (
+            avatar_url,
+            handicap
+          )
+        `
+        )
+        .eq("scanned_user_id", userId)
+        .order("scanned_at", { ascending: false })
+        .range(offset, offset + limit - 1);
 
-      const history = result.rows.map(row => ({
+      if (error) {
+        logger.error("Get scan history error:", error.message);
+        return res
+          .status(500)
+          .json({ success: false, message: "Failed to get scan history" });
+      }
+
+      const history = (data || []).map((row) => ({
         id: row.id,
         scannerId: row.scanner_user_id,
-        scannerName: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown',
-        scannerAvatar: row.avatar_url,
-        scannerHandicap: row.handicap,
+        scannerName:
+          `${row.users?.first_name || ""} ${
+            row.users?.last_name || ""
+          }`.trim() || "Unknown",
+        scannerAvatar: row.user_profiles?.avatar_url,
+        scannerHandicap: row.user_profiles?.handicap,
         wasAddedToRoster: row.was_added_to_roster,
         scannedAt: row.scanned_at,
       }));
@@ -244,8 +361,10 @@ class DraftController {
         },
       });
     } catch (error) {
-      logger.error("Get scan history error:", error);
-      res.status(500).json({ success: false, message: "Failed to get scan history" });
+      logger.error("Get scan history error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to get scan history" });
     }
   }
 }

@@ -1,7 +1,7 @@
-const { query } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 /**
- * Profile Repository
+ * Profile Repository - Supabase REST API
  * Handles all database operations related to user profiles
  */
 
@@ -11,18 +11,18 @@ const { query } = require("../config/database");
  * @returns {Promise<Object|null>}
  */
 const findByUserId = async (userId) => {
-    const result = await query(
-        `SELECT id, user_id, handicap, social_rate, avatar_url, bio, location, home_course,
-                driver, irons, putter, ball,
-                preferred_tee_time, walk_or_ride, playing_partner_preference,
-                timezone, language, notification_preferences, privacy_settings,
-                rounds_played, average_score, created_at, updated_at
-         FROM user_profiles 
-         WHERE user_id = $1 
-         LIMIT 1`,
-        [userId]
-    );
-    return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .select("*")
+            .eq("user_id", userId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        handleError(error, "findByUserId");
+    }
 };
 
 /**
@@ -50,35 +50,35 @@ const create = async (userId, profileData = {}) => {
         language,
     } = profileData;
 
-    const result = await query(
-        `INSERT INTO user_profiles (
-            user_id, handicap, social_rate, avatar_url, bio, location, home_course,
-            driver, irons, putter, ball,
-            preferred_tee_time, walk_or_ride, playing_partner_preference,
-            timezone, language
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        RETURNING *`,
-        [
-            userId,
-            handicap || null,
-            socialRate || 5.0,
-            avatarUrl || null,
-            bio || null,
-            location || null,
-            homeCourse || null,
-            driver || null,
-            irons || null,
-            putter || null,
-            ball || null,
-            preferredTeeTime || null,
-            walkOrRide || 'ride',
-            playingPartnerPreference || null,
-            timezone || 'UTC',
-            language || 'en',
-        ]
-    );
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .insert({
+                user_id: userId,
+                handicap: handicap || null,
+                social_rate: socialRate || 5.0,
+                avatar_url: avatarUrl || null,
+                bio: bio || null,
+                location: location || null,
+                home_course: homeCourse || null,
+                driver: driver || null,
+                irons: irons || null,
+                putter: putter || null,
+                ball: ball || null,
+                preferred_tee_time: preferredTeeTime || null,
+                walk_or_ride: walkOrRide || 'ride',
+                playing_partner_preference: playingPartnerPreference || null,
+                timezone: timezone || 'UTC',
+                language: language || 'en',
+            })
+            .select()
+            .single();
 
-    return result.rows[0];
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "create profile");
+    }
 };
 
 /**
@@ -110,39 +110,38 @@ const update = async (userId, updates) => {
         averageScore: 'average_score',
     };
 
-    const setClauses = [];
-    const values = [];
-    let paramIndex = 1;
+    const updateData = {};
 
     Object.keys(updates).forEach((key) => {
         if (allowedFields[key]) {
             const dbField = allowedFields[key];
-            setClauses.push(`${dbField} = $${paramIndex++}`);
             
             // Handle JSON fields
             if (key === 'notificationPreferences' || key === 'privacySettings') {
-                values.push(JSON.stringify(updates[key]));
+                updateData[dbField] = updates[key]; // Supabase handles JSON automatically
             } else {
-                values.push(updates[key]);
+                updateData[dbField] = updates[key];
             }
         }
     });
 
-    if (setClauses.length === 0) {
+    if (Object.keys(updateData).length === 0) {
         return findByUserId(userId);
     }
 
-    values.push(userId);
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .update(updateData)
+            .eq("user_id", userId)
+            .select()
+            .single();
 
-    const result = await query(
-        `UPDATE user_profiles 
-         SET ${setClauses.join(', ')}, updated_at = NOW()
-         WHERE user_id = $${paramIndex}
-         RETURNING *`,
-        values
-    );
-
-    return result.rows[0];
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "update profile");
+    }
 };
 
 /**
@@ -165,22 +164,35 @@ const upsert = async (userId, profileData) => {
  * @returns {Promise<Object|null>}
  */
 const getUserWithProfile = async (userId) => {
-    const result = await query(
-        `SELECT 
-            u.id, u.phone_number, u.email, u.username, u.first_name, u.last_name,
-            u.is_active, u.is_verified, u.created_at,
-            p.handicap, p.social_rate, p.avatar_url, p.bio, p.location, p.home_course,
-            p.driver, p.irons, p.putter, p.ball,
-            p.preferred_tee_time, p.walk_or_ride, p.playing_partner_preference,
-            p.timezone, p.language, p.notification_preferences, p.privacy_settings,
-            p.rounds_played, p.average_score
-         FROM users u
-         LEFT JOIN user_profiles p ON u.id = p.user_id
-         WHERE u.id = $1 AND u.deleted_at IS NULL
-         LIMIT 1`,
-        [userId]
-    );
-    return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("users")
+            .select(`
+                id, phone_number, email, username, first_name, last_name,
+                is_active, is_verified, created_at,
+                user_profiles (
+                    handicap, social_rate, avatar_url, bio, location, home_course,
+                    driver, irons, putter, ball,
+                    preferred_tee_time, walk_or_ride, playing_partner_preference,
+                    timezone, language, notification_preferences, privacy_settings,
+                    rounds_played, average_score
+                )
+            `)
+            .eq("id", userId)
+            .is("deleted_at", null)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        
+        if (!data) return null;
+        
+        // Flatten profile data
+        const profile = data.user_profiles?.[0] || {};
+        delete data.user_profiles;
+        return { ...data, ...profile };
+    } catch (error) {
+        handleError(error, "getUserWithProfile");
+    }
 };
 
 /**
@@ -190,14 +202,19 @@ const getUserWithProfile = async (userId) => {
  * @returns {Promise<Object>}
  */
 const updateNotificationPreferences = async (userId, preferences) => {
-    const result = await query(
-        `UPDATE user_profiles 
-         SET notification_preferences = $1, updated_at = NOW() 
-         WHERE user_id = $2
-         RETURNING id, notification_preferences`,
-        [JSON.stringify(preferences), userId]
-    );
-    return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .update({ notification_preferences: preferences })
+            .eq("user_id", userId)
+            .select("id, notification_preferences")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "updateNotificationPreferences");
+    }
 };
 
 /**
@@ -207,14 +224,19 @@ const updateNotificationPreferences = async (userId, preferences) => {
  * @returns {Promise<Object>}
  */
 const updatePrivacySettings = async (userId, settings) => {
-    const result = await query(
-        `UPDATE user_profiles 
-         SET privacy_settings = $1, updated_at = NOW() 
-         WHERE user_id = $2
-         RETURNING id, privacy_settings`,
-        [JSON.stringify(settings), userId]
-    );
-    return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .update({ privacy_settings: settings })
+            .eq("user_id", userId)
+            .select("id, privacy_settings")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "updatePrivacySettings");
+    }
 };
 
 /**
@@ -223,14 +245,29 @@ const updatePrivacySettings = async (userId, settings) => {
  * @returns {Promise<Object>}
  */
 const incrementRoundsPlayed = async (userId) => {
-    const result = await query(
-        `UPDATE user_profiles 
-         SET rounds_played = rounds_played + 1, updated_at = NOW() 
-         WHERE user_id = $1
-         RETURNING rounds_played`,
-        [userId]
-    );
-    return result.rows[0];
+    try {
+        // Get current value
+        const { data: current, error: fetchError } = await supabaseAdmin
+            .from("user_profiles")
+            .select("rounds_played")
+            .eq("user_id", userId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        // Increment
+        const { data, error } = await supabaseAdmin
+            .from("user_profiles")
+            .update({ rounds_played: (current.rounds_played || 0) + 1 })
+            .eq("user_id", userId)
+            .select("rounds_played")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "incrementRoundsPlayed");
+    }
 };
 
 module.exports = {

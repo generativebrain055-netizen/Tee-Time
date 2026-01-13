@@ -154,6 +154,10 @@ export default function EditProfileScreen({ navigation, route }: Props) {
         initialProfile.preferences?.playingPartnerPreference || "any"
     );
 
+    // Debug log initial values
+    console.log("[EDIT_PROFILE] Initial profile:", JSON.stringify(initialProfile, null, 2));
+    console.log("[EDIT_PROFILE] Initial preferences:", initialProfile.preferences);
+
     const handleSave = useCallback(async () => {
         if (!firstName.trim()) {
             Alert.alert("Error", "First name is required");
@@ -162,7 +166,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
 
         setSaving(true);
         try {
-            const response = await profileApi.updateProfile({
+            const updateData = {
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
                 email: email.trim(),
@@ -175,7 +179,13 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                     walkOrRide: walkOrRide as "walk" | "ride" | "either",
                     playingPartnerPreference: groupSize,
                 },
-            });
+            };
+
+            console.log("[EDIT_PROFILE] Sending update data:", JSON.stringify(updateData, null, 2));
+
+            const response = await profileApi.updateProfile(updateData);
+
+            console.log("[EDIT_PROFILE] Response:", JSON.stringify(response, null, 2));
 
             if (response.success) {
                 // Update stored user
@@ -193,6 +203,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 ]);
             }
         } catch (error: any) {
+            console.error("[EDIT_PROFILE] Error:", error);
             Alert.alert("Error", error.message || "Failed to save profile");
         } finally {
             setSaving(false);

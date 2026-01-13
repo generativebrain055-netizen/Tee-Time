@@ -1,7 +1,7 @@
-const { query } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 /**
- * Device Repository
+ * Device Repository - Supabase REST API
  * Handles all database operations related to device tracking
  */
 
@@ -11,61 +11,50 @@ const { query } = require("../config/database");
  * @returns {Promise<Object>}
  */
 const upsert = async (deviceData) => {
-  const {
-    userId,
-    deviceFingerprint,
-    deviceName,
-    deviceType,
-    os,
-    osVersion,
-    browser,
-    browserVersion,
-    appVersion,
-    ipAddress,
-    pushToken,
-    pushPlatform,
-  } = deviceData;
+    const {
+        userId,
+        deviceFingerprint,
+        deviceName,
+        deviceType,
+        os,
+        osVersion,
+        browser,
+        browserVersion,
+        appVersion,
+        ipAddress,
+        pushToken,
+        pushPlatform,
+    } = deviceData;
 
-  const result = await query(
-    `INSERT INTO devices (
-      user_id, device_fingerprint, device_name, device_type,
-      os, os_version, browser, browser_version, app_version,
-      last_ip_address, push_token, push_platform, last_seen_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-    ON CONFLICT (device_fingerprint) 
-    DO UPDATE SET
-      user_id = EXCLUDED.user_id,
-      device_name = COALESCE(EXCLUDED.device_name, devices.device_name),
-      device_type = COALESCE(EXCLUDED.device_type, devices.device_type),
-      os = COALESCE(EXCLUDED.os, devices.os),
-      os_version = COALESCE(EXCLUDED.os_version, devices.os_version),
-      browser = COALESCE(EXCLUDED.browser, devices.browser),
-      browser_version = COALESCE(EXCLUDED.browser_version, devices.browser_version),
-      app_version = COALESCE(EXCLUDED.app_version, devices.app_version),
-      last_ip_address = EXCLUDED.last_ip_address,
-      push_token = COALESCE(EXCLUDED.push_token, devices.push_token),
-      push_platform = COALESCE(EXCLUDED.push_platform, devices.push_platform),
-      last_seen_at = NOW(),
-      updated_at = NOW()
-    RETURNING id, user_id, device_fingerprint, device_name, device_type, 
-              is_trusted, is_blocked, last_seen_at`,
-    [
-      userId,
-      deviceFingerprint,
-      deviceName || null,
-      deviceType || null,
-      os || null,
-      osVersion || null,
-      browser || null,
-      browserVersion || null,
-      appVersion || null,
-      ipAddress || null,
-      pushToken || null,
-      pushPlatform || null,
-    ]
-  );
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .upsert({
+                user_id: userId,
+                device_fingerprint: deviceFingerprint,
+                device_name: deviceName || null,
+                device_type: deviceType || null,
+                os: os || null,
+                os_version: osVersion || null,
+                browser: browser || null,
+                browser_version: browserVersion || null,
+                app_version: appVersion || null,
+                last_ip_address: ipAddress || null,
+                push_token: pushToken || null,
+                push_platform: pushPlatform || null,
+                last_seen_at: new Date().toISOString(),
+            }, {
+                onConflict: 'device_fingerprint',
+                ignoreDuplicates: false,
+            })
+            .select("id, user_id, device_fingerprint, device_name, device_type, is_trusted, is_blocked, last_seen_at")
+            .single();
 
-  return result.rows[0];
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "upsert device");
+    }
 };
 
 /**
@@ -74,18 +63,18 @@ const upsert = async (deviceData) => {
  * @returns {Promise<Object|null>}
  */
 const findByFingerprint = async (deviceFingerprint) => {
-  const result = await query(
-    `SELECT id, user_id, device_fingerprint, device_name, device_type,
-            os, os_version, browser, browser_version, app_version,
-            is_trusted, trusted_at, is_blocked, blocked_at, block_reason,
-            push_token, push_platform, last_ip_address, last_seen_at,
-            created_at, updated_at
-     FROM devices
-     WHERE device_fingerprint = $1
-     LIMIT 1`,
-    [deviceFingerprint]
-  );
-  return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("*")
+            .eq("device_fingerprint", deviceFingerprint)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        handleError(error, "findByFingerprint");
+    }
 };
 
 /**
@@ -94,18 +83,18 @@ const findByFingerprint = async (deviceFingerprint) => {
  * @returns {Promise<Object|null>}
  */
 const findById = async (deviceId) => {
-  const result = await query(
-    `SELECT id, user_id, device_fingerprint, device_name, device_type,
-            os, os_version, browser, browser_version, app_version,
-            is_trusted, trusted_at, is_blocked, blocked_at, block_reason,
-            push_token, push_platform, last_ip_address, last_seen_at,
-            created_at, updated_at
-     FROM devices
-     WHERE id = $1
-     LIMIT 1`,
-    [deviceId]
-  );
-  return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("*")
+            .eq("id", deviceId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        handleError(error, "findById");
+    }
 };
 
 /**
@@ -114,17 +103,23 @@ const findById = async (deviceId) => {
  * @returns {Promise<Array>}
  */
 const findByUserId = async (userId) => {
-  const result = await query(
-    `SELECT id, device_fingerprint, device_name, device_type,
-            os, os_version, browser, browser_version, app_version,
-            is_trusted, is_blocked, last_ip_address, last_seen_at,
-            created_at
-     FROM devices
-     WHERE user_id = $1 AND is_blocked = false
-     ORDER BY last_seen_at DESC`,
-    [userId]
-  );
-  return result.rows;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select(`
+                id, device_fingerprint, device_name, device_type,
+                os, os_version, browser, browser_version, app_version,
+                is_trusted, is_blocked, last_ip_address, last_seen_at, created_at
+            `)
+            .eq("user_id", userId)
+            .eq("is_blocked", false)
+            .order("last_seen_at", { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        handleError(error, "findByUserId");
+    }
 };
 
 /**
@@ -133,14 +128,22 @@ const findByUserId = async (userId) => {
  * @returns {Promise<Object>}
  */
 const markAsTrusted = async (deviceId) => {
-  const result = await query(
-    `UPDATE devices 
-     SET is_trusted = true, trusted_at = NOW(), updated_at = NOW() 
-     WHERE id = $1
-     RETURNING id, device_fingerprint, is_trusted, trusted_at`,
-    [deviceId]
-  );
-  return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .update({
+                is_trusted: true,
+                trusted_at: new Date().toISOString(),
+            })
+            .eq("id", deviceId)
+            .select("id, device_fingerprint, is_trusted, trusted_at")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "markAsTrusted");
+    }
 };
 
 /**
@@ -150,15 +153,23 @@ const markAsTrusted = async (deviceId) => {
  * @returns {Promise<Object>}
  */
 const blockDevice = async (deviceId, reason) => {
-  const result = await query(
-    `UPDATE devices 
-     SET is_blocked = true, blocked_at = NOW(), 
-         block_reason = $2, updated_at = NOW() 
-     WHERE id = $1
-     RETURNING id, device_fingerprint, is_blocked, blocked_at, block_reason`,
-    [deviceId, reason]
-  );
-  return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .update({
+                is_blocked: true,
+                blocked_at: new Date().toISOString(),
+                block_reason: reason,
+            })
+            .eq("id", deviceId)
+            .select("id, device_fingerprint, is_blocked, blocked_at, block_reason")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "blockDevice");
+    }
 };
 
 /**
@@ -167,15 +178,23 @@ const blockDevice = async (deviceId, reason) => {
  * @returns {Promise<Object>}
  */
 const unblockDevice = async (deviceId) => {
-  const result = await query(
-    `UPDATE devices 
-     SET is_blocked = false, blocked_at = NULL, 
-         block_reason = NULL, updated_at = NOW() 
-     WHERE id = $1
-     RETURNING id, device_fingerprint, is_blocked`,
-    [deviceId]
-  );
-  return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .update({
+                is_blocked: false,
+                blocked_at: null,
+                block_reason: null,
+            })
+            .eq("id", deviceId)
+            .select("id, device_fingerprint, is_blocked")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "unblockDevice");
+    }
 };
 
 /**
@@ -186,14 +205,22 @@ const unblockDevice = async (deviceId) => {
  * @returns {Promise<Object>}
  */
 const updatePushToken = async (deviceId, pushToken, pushPlatform) => {
-  const result = await query(
-    `UPDATE devices 
-     SET push_token = $2, push_platform = $3, updated_at = NOW() 
-     WHERE id = $1
-     RETURNING id, push_token, push_platform`,
-    [deviceId, pushToken, pushPlatform]
-  );
-  return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .update({
+                push_token: pushToken,
+                push_platform: pushPlatform,
+            })
+            .eq("id", deviceId)
+            .select("id, push_token, push_platform")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "updatePushToken");
+    }
 };
 
 /**
@@ -203,14 +230,19 @@ const updatePushToken = async (deviceId, pushToken, pushPlatform) => {
  * @returns {Promise<void>}
  */
 const updateLastSeen = async (deviceId, ipAddress) => {
-  await query(
-    `UPDATE devices 
-     SET last_seen_at = NOW(), 
-         last_ip_address = $2,
-         updated_at = NOW() 
-     WHERE id = $1`,
-    [deviceId, ipAddress]
-  );
+    try {
+        const { error } = await supabaseAdmin
+            .from("devices")
+            .update({
+                last_seen_at: new Date().toISOString(),
+                last_ip_address: ipAddress,
+            })
+            .eq("id", deviceId);
+
+        if (error) throw error;
+    } catch (error) {
+        handleError(error, "updateLastSeen");
+    }
 };
 
 /**
@@ -219,7 +251,16 @@ const updateLastSeen = async (deviceId, ipAddress) => {
  * @returns {Promise<void>}
  */
 const deleteDevice = async (deviceId) => {
-  await query("DELETE FROM devices WHERE id = $1", [deviceId]);
+    try {
+        const { error } = await supabaseAdmin
+            .from("devices")
+            .delete()
+            .eq("id", deviceId);
+
+        if (error) throw error;
+    } catch (error) {
+        handleError(error, "deleteDevice");
+    }
 };
 
 /**
@@ -227,18 +268,36 @@ const deleteDevice = async (deviceId) => {
  * @returns {Promise<Object>}
  */
 const getStatistics = async () => {
-  const result = await query(`
-    SELECT 
-      COUNT(*) as total_devices,
-      COUNT(DISTINCT user_id) as unique_users,
-      COUNT(*) FILTER (WHERE is_trusted = true) as trusted_devices,
-      COUNT(*) FILTER (WHERE is_blocked = true) as blocked_devices,
-      COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '24 hours') as active_24h,
-      COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '7 days') as active_7d,
-      COUNT(*) FILTER (WHERE last_seen_at > NOW() - INTERVAL '30 days') as active_30d
-    FROM devices
-  `);
-  return result.rows[0];
+    try {
+        const { count: totalDevices } = await supabaseAdmin
+            .from("devices")
+            .select("*", { count: 'exact', head: true });
+
+        const { count: trustedDevices } = await supabaseAdmin
+            .from("devices")
+            .select("*", { count: 'exact', head: true })
+            .eq("is_trusted", true);
+
+        const { count: blockedDevices } = await supabaseAdmin
+            .from("devices")
+            .select("*", { count: 'exact', head: true })
+            .eq("is_blocked", true);
+
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: active24h } = await supabaseAdmin
+            .from("devices")
+            .select("*", { count: 'exact', head: true })
+            .gt("last_seen_at", twentyFourHoursAgo);
+
+        return {
+            total_devices: totalDevices || 0,
+            trusted_devices: trustedDevices || 0,
+            blocked_devices: blockedDevices || 0,
+            active_24h: active24h || 0,
+        };
+    } catch (error) {
+        handleError(error, "getStatistics");
+    }
 };
 
 /**
@@ -246,17 +305,30 @@ const getStatistics = async () => {
  * @returns {Promise<Array>}
  */
 const getDeviceTypeDistribution = async () => {
-  const result = await query(`
-    SELECT 
-      device_type,
-      COUNT(*) as count,
-      COUNT(DISTINCT user_id) as unique_users
-    FROM devices
-    WHERE device_type IS NOT NULL AND is_blocked = false
-    GROUP BY device_type
-    ORDER BY count DESC
-  `);
-  return result.rows;
+    try {
+        // Note: GROUP BY aggregations need to be done via PostgreSQL function
+        // This is a simplified version
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("device_type")
+            .not("device_type", "is", null)
+            .eq("is_blocked", false);
+
+        if (error) throw error;
+
+        // Group manually
+        const distribution = {};
+        data.forEach(d => {
+            distribution[d.device_type] = (distribution[d.device_type] || 0) + 1;
+        });
+
+        return Object.entries(distribution).map(([device_type, count]) => ({
+            device_type,
+            count,
+        }));
+    } catch (error) {
+        handleError(error, "getDeviceTypeDistribution");
+    }
 };
 
 /**
@@ -264,19 +336,30 @@ const getDeviceTypeDistribution = async () => {
  * @returns {Promise<Array>}
  */
 const getOsDistribution = async () => {
-  const result = await query(`
-    SELECT 
-      os,
-      os_version,
-      COUNT(*) as count,
-      COUNT(DISTINCT user_id) as unique_users
-    FROM devices
-    WHERE os IS NOT NULL AND is_blocked = false
-    GROUP BY os, os_version
-    ORDER BY count DESC
-    LIMIT 20
-  `);
-  return result.rows;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("os, os_version")
+            .not("os", "is", null)
+            .eq("is_blocked", false)
+            .limit(20);
+
+        if (error) throw error;
+
+        // Group manually
+        const distribution = {};
+        data.forEach(d => {
+            const key = `${d.os} ${d.os_version || ''}`.trim();
+            distribution[key] = (distribution[key] || 0) + 1;
+        });
+
+        return Object.entries(distribution).map(([key, count]) => {
+            const [os, os_version] = key.split(' ');
+            return { os, os_version: os_version || null, count };
+        });
+    } catch (error) {
+        handleError(error, "getOsDistribution");
+    }
 };
 
 /**
@@ -285,32 +368,47 @@ const getOsDistribution = async () => {
  * @returns {Promise<Array>}
  */
 const findSuspiciousDevices = async (maxDevicesPerUser = 10) => {
-  const result = await query(
-    `SELECT user_id, COUNT(*) as device_count
-     FROM devices
-     WHERE is_blocked = false
-       AND created_at > NOW() - INTERVAL '7 days'
-     GROUP BY user_id
-     HAVING COUNT(*) > $1
-     ORDER BY device_count DESC`,
-    [maxDevicesPerUser]
-  );
-  return result.rows;
+    try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        
+        // Get all recent devices
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("user_id")
+            .eq("is_blocked", false)
+            .gt("created_at", sevenDaysAgo);
+
+        if (error) throw error;
+
+        // Count devices per user
+        const userDeviceCounts = {};
+        data.forEach(d => {
+            userDeviceCounts[d.user_id] = (userDeviceCounts[d.user_id] || 0) + 1;
+        });
+
+        // Filter suspicious users
+        return Object.entries(userDeviceCounts)
+            .filter(([_, count]) => count > maxDevicesPerUser)
+            .map(([user_id, device_count]) => ({ user_id, device_count }))
+            .sort((a, b) => b.device_count - a.device_count);
+    } catch (error) {
+        handleError(error, "findSuspiciousDevices");
+    }
 };
 
 module.exports = {
-  upsert,
-  findByFingerprint,
-  findById,
-  findByUserId,
-  markAsTrusted,
-  blockDevice,
-  unblockDevice,
-  updatePushToken,
-  updateLastSeen,
-  deleteDevice,
-  getStatistics,
-  getDeviceTypeDistribution,
-  getOsDistribution,
-  findSuspiciousDevices,
+    upsert,
+    findByFingerprint,
+    findById,
+    findByUserId,
+    markAsTrusted,
+    blockDevice,
+    unblockDevice,
+    updatePushToken,
+    updateLastSeen,
+    deleteDevice,
+    getStatistics,
+    getDeviceTypeDistribution,
+    getOsDistribution,
+    findSuspiciousDevices,
 };

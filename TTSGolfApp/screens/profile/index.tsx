@@ -71,8 +71,12 @@ export default function ProfileScreen({ navigation }: any) {
                 teeTimeApi.getTeeTimes("completed").catch(() => ({ success: false, teeTimes: [] })),
             ]);
 
+            console.log("📱 [PROFILE] API Response:", JSON.stringify(profileRes, null, 2));
+
             if (profileRes.success && profileRes.user) {
                 const u = profileRes.user;
+                console.log("📱 [PROFILE] User preferences from API:", u.preferences);
+
                 setProfile({
                     id: u.id,
                     firstName: u.firstName || "",
@@ -88,6 +92,8 @@ export default function ProfileScreen({ navigation }: any) {
                     roundsPlayed: u.roundsPlayed,
                     preferences: u.preferences,
                 });
+
+                console.log("📱 [PROFILE] Profile state set with preferences:", u.preferences);
             }
 
             if (teeTimesRes.success) {

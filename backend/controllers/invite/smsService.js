@@ -12,16 +12,26 @@ let twilioClient = null;
 const initTwilioClient = () => {
     if (twilioClient) return twilioClient;
 
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_SID && process.env.TWILIO_SECRET) {
-        twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_SECRET, {
-            accountSid: process.env.TWILIO_ACCOUNT_SID
-        });
-        logger.info("Twilio client initialized with API Key credentials");
-    } else if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-        twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        logger.info("Twilio client initialized with Auth Token");
-    } else {
-        logger.warn("Twilio credentials not configured - SMS features will be disabled");
+    try {
+        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_SID && process.env.TWILIO_SECRET) {
+            twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_SECRET, {
+                accountSid: process.env.TWILIO_ACCOUNT_SID
+            });
+            logger.info("Twilio client initialized with API Key credentials");
+        } else if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+            // Check if ACCOUNT_SID is valid (starts with AC)
+            if (!process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
+                logger.warn("TWILIO_ACCOUNT_SID appears to be an API Key (SK). SMS features will be disabled. Please provide the actual Account SID (starts with AC).");
+                return null;
+            }
+            twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+            logger.info("Twilio client initialized with Auth Token");
+        } else {
+            logger.warn("Twilio credentials not configured - SMS features will be disabled");
+        }
+    } catch (error) {
+        logger.error("Failed to initialize Twilio client:", error.message);
+        twilioClient = null;
     }
 
     return twilioClient;
@@ -54,24 +64,24 @@ const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours) => {
     const dateStr = formatTeeTimeDate(teeTime.tee_date);
 
     if (isFCFS) {
-        return `🏌️ FIRST COME FIRST SERVE!\n\n` +
-            `📍 ${teeTime.course_name}\n` +
-            `📅 ${dateStr} at ${teeTime.tee_time}\n\n` +
-            `⚡ First to accept get the spots!\n` +
+        return `FIRST COME FIRST SERVE!\n\n` +
+            `Location: ${teeTime.course_name}\n` +
+            `Date: ${dateStr} at ${teeTime.tee_time}\n\n` +
+            `First to accept get the spots!\n` +
             `Tap to respond: https://teetime.app/invite/${invite.id}`;
     }
 
     if (responseWindowHours) {
-        return `🏌️ You're invited to play golf!\n\n` +
-            `📍 ${teeTime.course_name}\n` +
-            `📅 ${dateStr} at ${teeTime.tee_time}\n\n` +
-            `⏰ You have ${responseWindowHours} hour(s) to respond\n` +
+        return `You're invited to play golf!\n\n` +
+            `Location: ${teeTime.course_name}\n` +
+            `Date: ${dateStr} at ${teeTime.tee_time}\n\n` +
+            `You have ${responseWindowHours} hour(s) to respond\n` +
             `Tap to respond: https://teetime.app/invite/${invite.id}`;
     }
 
-    return `🏌️ You're invited to play golf!\n\n` +
-        `📍 ${teeTime.course_name}\n` +
-        `📅 ${dateStr} at ${teeTime.tee_time}\n\n` +
+    return `You're invited to play golf!\n\n` +
+        `Location: ${teeTime.course_name}\n` +
+        `Date: ${dateStr} at ${teeTime.tee_time}\n\n` +
         `Download TeeTime Social to respond: https://teetime.app/invite/${invite.id}`;
 };
 

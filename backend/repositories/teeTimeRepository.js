@@ -1,291 +1,662 @@
-const { pool } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 const logger = require("../config/logger");
 const { createTeeDateTime } = require("../utils/dateUtils");
 
 class TeeTimeRepository {
-  // Create a new tee time
   async createTeeTime(creatorId, teeTimeData) {
-    const { courseName, courseLocation, teeDate, teeTime, maxPlayers, inviteType, notes } = teeTimeData;
-    
-    const query = `
-      INSERT INTO tee_times (creator_id, course_name, course_location, tee_date, tee_time, max_players, invite_type, notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `;
-    const result = await pool.query(query, [
-      creatorId, courseName, courseLocation, teeDate, teeTime, maxPlayers || 4, inviteType || 'roster', notes
-    ]);
-    
-    // Add creator as first participant
-    await this.addParticipant(result.rows[0].id, creatorId, null, null, 0, true);
-    
-    return result.rows[0];
+    const {
+      courseName,
+      courseLocation,
+      teeDate,
+      teeTime,
+      maxPlayers,
+      inviteType,
+      notes,
+    } = teeTimeData;
+
+    try {
+      const { data: teeTimeRecord, error } = await supabaseAdmin
+        .from("tee_times")
+        .insert({
+          creator_id: creatorId,
+          course_name: courseName,
+          course_location: courseLocation,
+          tee_date: teeDate,
+          tee_time: teeTime,
+          max_players: maxPlayers || 4,
+          invite_type: inviteType || "roster",
+          notes,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add creator as first participant
+      await this.addParticipant(
+        teeTimeRecord.id,
+        creatorId,
+        null,
+        null,
+        0,
+        true
+      );
+
+      return teeTimeRecord;
+    } catch (error) {
+      handleError(error, "createTeeTime");
+    }
   }
 
-  // Get tee time by ID
   async getTeeTimeById(teeTimeId) {
-    const query = `
-      SELECT t.*, u.first_name, u.last_name, u.username, p.avatar_url
-      FROM tee_times t
-      JOIN users u ON t.creator_id = u.id
-      LEFT JOIN user_profiles p ON u.id = p.user_id
-      WHERE t.id = $1
-    `;
-    const result = await pool.query(query, [teeTimeId]);
-    return result.rows[0];
-  }
-
-  // Get user's tee times
-  async getUserTeeTimes(userId, status = null) {
-    let query = `
-      SELECT DISTINCT t.*, u.first_name as creator_first_name, u.last_name as creator_last_name,
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
-      FROM tee_times t
-      JOIN users u ON t.creator_id = u.id
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
-      WHERE (t.creator_id = $1 OR p.user_id = $1)
-    `;
-    const params = [userId];
-    
-    if (status) {
-      query += " AND t.status = $2";
-      params.push(status);
-    }
-    
-    query += " ORDER BY t.tee_date ASC, t.tee_time ASC";
-    
-    const result = await pool.query(query, params);
-    return result.rows;
-  }
-
-  // Get upcoming tee times
-  async getUpcomingTeeTimes(userId, limit = 10) {
-    const query = `
-      SELECT DISTINCT t.*, u.first_name as creator_first_name, u.last_name as creator_last_name,
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
-      FROM tee_times t
-      JOIN users u ON t.creator_id = u.id
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
-      WHERE (t.creator_id = $1 OR p.user_id = $1)
-        AND t.tee_date >= CURRENT_DATE
-        AND t.status IN ('pending', 'confirmed')
-      ORDER BY t.tee_date ASC, t.tee_time ASC
-      LIMIT $2
-    `;
-    const result = await pool.query(query, [userId, limit]);
-    return result.rows;
-  }
-
-  // Update tee time status
-  async updateStatus(teeTimeId, status) {
-    const query = "UPDATE tee_times SET status = $1 WHERE id = $2 RETURNING *";
-    const result = await pool.query(query, [status, teeTimeId]);
-    return result.rows[0];
-  }
-
-  // Add participant
-  async addParticipant(teeTimeId, userId, phone, name, position, isCreator = false) {
-    const query = `
-      INSERT INTO tee_time_participants (tee_time_id, user_id, phone, name, position, is_creator)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (tee_time_id, user_id) DO NOTHING
-      RETURNING *
-    `;
-    const result = await pool.query(query, [teeTimeId, userId, phone, name, position, isCreator]);
-    return result.rows[0];
-  }
-
-  // Get participants
-  async getParticipants(teeTimeId) {
-    const query = `
-      SELECT p.*, u.first_name, u.last_name, u.username, up.avatar_url, up.handicap
-      FROM tee_time_participants p
-      LEFT JOIN users u ON p.user_id = u.id
-      LEFT JOIN user_profiles up ON u.id = up.user_id
-      WHERE p.tee_time_id = $1
-      ORDER BY p.position ASC
-    `;
-    const result = await pool.query(query, [teeTimeId]);
-    return result.rows;
-  }
-
-  // Remove participant
-  async removeParticipant(teeTimeId, participantId) {
-    const query = "DELETE FROM tee_time_participants WHERE tee_time_id = $1 AND id = $2 RETURNING *";
-    const result = await pool.query(query, [teeTimeId, participantId]);
-    return result.rows[0];
-  }
-
-  // Get participant count
-  async getParticipantCount(teeTimeId) {
-    const query = "SELECT COUNT(*) as count FROM tee_time_participants WHERE tee_time_id = $1";
-    const result = await pool.query(query, [teeTimeId]);
-    return parseInt(result.rows[0].count);
-  }
-
-  // Cancel tee time
-  async cancelTeeTime(teeTimeId, userId) {
-    const query = `
-      UPDATE tee_times SET status = 'cancelled' 
-      WHERE id = $1 AND creator_id = $2 
-      RETURNING *
-    `;
-    const result = await pool.query(query, [teeTimeId, userId]);
-    return result.rows[0];
-  }
-
-  // Get tee times by date range
-  async getTeeTimesByDateRange(userId, startDate, endDate) {
-    const query = `
-      SELECT DISTINCT t.*, 
-             (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND (status IS NULL OR status != 'cancelled')) as participant_count
-      FROM tee_times t
-      LEFT JOIN tee_time_participants p ON t.id = p.tee_time_id AND p.user_id = $1 AND (p.status IS NULL OR p.status != 'cancelled')
-      WHERE (t.creator_id = $1 OR p.user_id = $1)
-        AND t.tee_date BETWEEN $2 AND $3
-      ORDER BY t.tee_date ASC, t.tee_time ASC
-    `;
-    const result = await pool.query(query, [userId, startDate, endDate]);
-    return result.rows;
-  }
-
-  // Remove participant by user ID
-  async removeParticipantByUser(teeTimeId, userId) {
-    const query = `
-      UPDATE tee_time_participants 
-      SET status = 'cancelled', cancelled_at = NOW()
-      WHERE tee_time_id = $1 AND user_id = $2
-      RETURNING *
-    `;
-    const result = await pool.query(query, [teeTimeId, userId]);
-    return result.rows[0];
-  }
-
-  // Get tee times in a specific time range (for cron jobs)
-  async getTeeTimesInRange(startTime, endTime, statuses = ['confirmed']) {
-    const query = `
-      SELECT * FROM tee_times
-      WHERE (tee_date + tee_time) BETWEEN $1 AND $2
-        AND status = ANY($3)
-    `;
-    const result = await pool.query(query, [startTime, endTime, statuses]);
-    return result.rows;
-  }
-
-  // Get in-progress tee times older than cutoff (for auto-complete)
-  async getInProgressTeeTimes(cutoffTime) {
-    const query = `
-      SELECT * FROM tee_times
-      WHERE status = 'in_progress'
-        AND (tee_date + tee_time) < $1
-        AND check_in_completed_at IS NULL
-    `;
-    const result = await pool.query(query, [cutoffTime]);
-    return result.rows;
-  }
-
-  // Get complete tee time history with attendance status
-  async getTeeTimeHistory(userId, options = {}) {
-    const { filter = 'all', limit = 20, offset = 0 } = options;
-    
-    let whereClause = `(t.creator_id = $1 OR ttp.user_id = $1)`;
-    
-    if (filter === 'upcoming') {
-      whereClause += ` AND t.tee_date >= CURRENT_DATE AND t.status NOT IN ('cancelled', 'completed')`;
-    } else if (filter === 'completed') {
-      whereClause += ` AND t.status = 'completed'`;
-    } else if (filter === 'cancelled') {
-      whereClause += ` AND (t.status = 'cancelled' OR ttp.status = 'cancelled')`;
-    } else if (filter === 'no_show') {
-      whereClause += ` AND tta.status = 'no_show'`;
-    }
-    
-    const query = `
-      SELECT DISTINCT ON (t.id)
-        t.id,
-        t.course_name,
-        t.course_location,
-        t.tee_date,
-        t.tee_time,
-        t.status as tee_time_status,
-        t.creator_id,
-        t.max_players,
-        u.first_name as creator_first_name,
-        u.last_name as creator_last_name,
-        up.avatar_url as creator_avatar,
-        ttp.status as participant_status,
-        tta.status as attendance_status,
-        gs.score as game_score,
-        gs.holes_played,
-        CASE 
-          WHEN t.creator_id = $1 THEN 'organizer'
-          ELSE 'participant'
-        END as user_role,
-        (SELECT COUNT(*) FROM tee_time_participants WHERE tee_time_id = t.id AND status = 'confirmed') as participant_count
-      FROM tee_times t
-      LEFT JOIN tee_time_participants ttp ON t.id = ttp.tee_time_id AND ttp.user_id = $1
-      LEFT JOIN tee_time_attendance tta ON ttp.id = tta.participant_id
-      LEFT JOIN game_scores gs ON t.id = gs.tee_time_id AND gs.user_id = $1
-      LEFT JOIN users u ON t.creator_id = u.id
-      LEFT JOIN user_profiles up ON u.id = up.user_id
-      WHERE ${whereClause}
-      ORDER BY t.id, t.tee_date DESC, t.tee_time DESC
-      LIMIT $2 OFFSET $3
-    `;
-    
-    const result = await pool.query(query, [userId, limit, offset]);
-    return result.rows;
-  }
-
-  // Mark past tee times as completed
-  async markPastTeeTimesCompleted() {
-    const query = `
-      UPDATE tee_times 
-      SET status = 'completed', updated_at = NOW()
-      WHERE status IN ('pending', 'confirmed')
-        AND (
-          tee_date < CURRENT_DATE 
-          OR (tee_date = CURRENT_DATE AND tee_time::time < CURRENT_TIME::time)
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .select(
+          `
+          *,
+          users!tee_times_creator_id_fkey (
+            first_name, 
+            last_name, 
+            username,
+            user_profiles (avatar_url)
+          )
+        `
         )
-      RETURNING id, tee_date, tee_time, status
-    `;
-    const result = await pool.query(query);
-    return result.rows;
+        .eq("id", teeTimeId)
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+
+      if (!data) return null;
+
+      const user = data.users || {};
+      const profileData = user.user_profiles;
+      const profile = Array.isArray(profileData)
+        ? profileData[0] || {}
+        : profileData || {};
+
+      delete data.users;
+
+      return {
+        ...data,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        avatar_url: profile.avatar_url,
+      };
+    } catch (error) {
+      handleError(error, "getTeeTimeById");
+    }
   }
 
-  // Check and update tee time status based on invite responses
+  async getUserTeeTimes(userId, status = null) {
+    try {
+      // Get tee times where user is creator
+      let creatorQuery = supabaseAdmin
+        .from("tee_times")
+        .select(
+          `
+          *,
+          users!tee_times_creator_id_fkey (first_name, last_name)
+        `
+        )
+        .eq("creator_id", userId);
+
+      if (status) {
+        creatorQuery = creatorQuery.eq("status", status);
+      }
+
+      const { data: creatorTeeTimes, error: creatorError } = await creatorQuery
+        .order("tee_date", { ascending: true })
+        .order("tee_time", { ascending: true });
+
+      if (creatorError) throw creatorError;
+
+      // Get tee times where user is participant
+      let participantQuery = supabaseAdmin
+        .from("tee_time_participants")
+        .select(
+          `
+          tee_time_id,
+          tee_times!inner (
+            *,
+            users!tee_times_creator_id_fkey (first_name, last_name)
+          )
+        `
+        )
+        .eq("user_id", userId)
+        .or("status.is.null,status.neq.cancelled");
+
+      if (status) {
+        participantQuery = participantQuery.eq("tee_times.status", status);
+      }
+
+      // Note: Can't order by foreign table columns in Supabase, will sort in JS
+      const { data: participantTeeTimes, error: participantError } =
+        await participantQuery;
+
+      if (participantError) throw participantError;
+
+      // Combine and deduplicate
+      const teeTimeMap = new Map();
+
+      (creatorTeeTimes || []).forEach((tt) => {
+        teeTimeMap.set(tt.id, tt);
+      });
+
+      (participantTeeTimes || []).forEach((p) => {
+        if (p.tee_times && !teeTimeMap.has(p.tee_times.id)) {
+          teeTimeMap.set(p.tee_times.id, p.tee_times);
+        }
+      });
+
+      // Get participant counts for all tee times
+      const teeTimesWithCounts = await Promise.all(
+        Array.from(teeTimeMap.values()).map(async (tt) => {
+          const { count } = await supabaseAdmin
+            .from("tee_time_participants")
+            .select("*", { count: "exact", head: true })
+            .eq("tee_time_id", tt.id)
+            .or("status.is.null,status.neq.cancelled");
+
+          const user = tt.users || {};
+          delete tt.users;
+
+          return {
+            ...tt,
+            creator_first_name: user.first_name,
+            creator_last_name: user.last_name,
+            participant_count: count || 0,
+          };
+        })
+      );
+
+      // Sort by date and time
+      return teeTimesWithCounts.sort((a, b) => {
+        const dateCompare = (a.tee_date || "").localeCompare(b.tee_date || "");
+        if (dateCompare !== 0) return dateCompare;
+        return (a.tee_time || "").localeCompare(b.tee_time || "");
+      });
+    } catch (error) {
+      handleError(error, "getUserTeeTimes");
+    }
+  }
+
+  async getUpcomingTeeTimes(userId, limit = 10) {
+    try {
+      // Get tee times where user is creator
+      const { data: creatorTeeTimes, error: creatorError } = await supabaseAdmin
+        .from("tee_times")
+        .select(
+          `
+          *,
+          users!tee_times_creator_id_fkey (first_name, last_name)
+        `
+        )
+        .eq("creator_id", userId)
+        .gte("tee_date", new Date().toISOString().split("T")[0])
+        .in("status", ["pending", "confirmed"])
+        .order("tee_date", { ascending: true })
+        .order("tee_time", { ascending: true });
+
+      if (creatorError) throw creatorError;
+
+      // Get tee times where user is participant (can't filter by foreign table date in Supabase)
+      const { data: participantTeeTimes, error: participantError } =
+        await supabaseAdmin
+          .from("tee_time_participants")
+          .select(
+            `
+          tee_time_id,
+          tee_times!inner (
+            *,
+            users!tee_times_creator_id_fkey (first_name, last_name)
+          )
+        `
+          )
+          .eq("user_id", userId)
+          .or("status.is.null,status.neq.cancelled");
+
+      if (participantError) throw participantError;
+
+      // Combine and deduplicate
+      const teeTimeMap = new Map();
+      const today = new Date().toISOString().split("T")[0];
+
+      (creatorTeeTimes || []).forEach((tt) => {
+        teeTimeMap.set(tt.id, tt);
+      });
+
+      // Filter participant tee times by date and status in JS
+      (participantTeeTimes || []).forEach((p) => {
+        if (
+          p.tee_times &&
+          !teeTimeMap.has(p.tee_times.id) &&
+          p.tee_times.tee_date >= today &&
+          ["pending", "confirmed"].includes(p.tee_times.status)
+        ) {
+          teeTimeMap.set(p.tee_times.id, p.tee_times);
+        }
+      });
+
+      // Get participant counts for all tee times
+      const teeTimesWithCounts = await Promise.all(
+        Array.from(teeTimeMap.values()).map(async (tt) => {
+          const { count } = await supabaseAdmin
+            .from("tee_time_participants")
+            .select("*", { count: "exact", head: true })
+            .eq("tee_time_id", tt.id)
+            .or("status.is.null,status.neq.cancelled");
+
+          const user = tt.users || {};
+          delete tt.users;
+
+          return {
+            ...tt,
+            creator_first_name: user.first_name,
+            creator_last_name: user.last_name,
+            participant_count: count || 0,
+          };
+        })
+      );
+
+      // Sort by date and time, then limit
+      const sorted = teeTimesWithCounts.sort((a, b) => {
+        const dateCompare = a.tee_date.localeCompare(b.tee_date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.tee_time.localeCompare(b.tee_time);
+      });
+
+      return sorted.slice(0, limit);
+    } catch (error) {
+      handleError(error, "getUpcomingTeeTimes");
+    }
+  }
+
+  async updateStatus(teeTimeId, status) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .update({ status })
+        .eq("id", teeTimeId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleError(error, "updateStatus");
+    }
+  }
+
+  async addParticipant(
+    teeTimeId,
+    userId,
+    phone,
+    name,
+    position,
+    isCreator = false
+  ) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .upsert(
+          {
+            tee_time_id: teeTimeId,
+            user_id: userId,
+            phone,
+            name,
+            position,
+            is_creator: isCreator,
+          },
+          {
+            onConflict: "tee_time_id,user_id",
+            ignoreDuplicates: true,
+          }
+        )
+        .select()
+        .single();
+
+      if (error && error.code !== "23505") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "addParticipant");
+    }
+  }
+
+  async getParticipants(teeTimeId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select(
+          `
+          *,
+          users!tee_time_participants_user_id_fkey (
+            first_name, 
+            last_name, 
+            username,
+            user_profiles (avatar_url, handicap)
+          )
+        `
+        )
+        .eq("tee_time_id", teeTimeId)
+        .order("position", { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map((p) => {
+        const user = p.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete p.users;
+
+        return {
+          ...p,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          avatar_url: profile.avatar_url,
+          user_handicap: profile.handicap,
+        };
+      });
+    } catch (error) {
+      handleError(error, "getParticipants");
+    }
+  }
+
+  async removeParticipant(teeTimeId, participantId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .delete()
+        .eq("tee_time_id", teeTimeId)
+        .eq("id", participantId)
+        .select()
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "removeParticipant");
+    }
+  }
+
+  async getParticipantCount(teeTimeId) {
+    try {
+      const { count, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("*", { count: "exact", head: true })
+        .eq("tee_time_id", teeTimeId);
+
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      handleError(error, "getParticipantCount");
+    }
+  }
+
+  async cancelTeeTime(teeTimeId, userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .update({ status: "cancelled" })
+        .eq("id", teeTimeId)
+        .eq("creator_id", userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleError(error, "cancelTeeTime");
+    }
+  }
+
+  async getTeeTimesByDateRange(userId, startDate, endDate) {
+    try {
+      // 1. Get tee times created by user
+      const { data: creatorData, error: creatorError } = await supabaseAdmin
+        .from("tee_times")
+        .select("*")
+        .eq("creator_id", userId)
+        .gte("tee_date", startDate)
+        .lte("tee_date", endDate);
+
+      if (creatorError) throw creatorError;
+
+      // 2. Get tee times where user is a participant
+      // Note: Filtering on joined table columns requires !inner join usually, but we need date filter too
+      // PostgREST filtering on embedded resource valid, e.g. tee_times.tee_date
+      const { data: participantData, error: participantError } =
+        await supabaseAdmin
+          .from("tee_time_participants")
+          .select(
+            `
+          tee_times!inner (*)
+        `
+          )
+          .eq("user_id", userId)
+          .or("status.is.null,status.neq.cancelled")
+          .gte("tee_times.tee_date", startDate)
+          .lte("tee_times.tee_date", endDate);
+
+      if (participantError) throw participantError;
+
+      // Merge and deduplicate
+      const teeTimeMap = new Map();
+
+      (creatorData || []).forEach((tt) => teeTimeMap.set(tt.id, tt));
+
+      (participantData || []).forEach((p) => {
+        if (p.tee_times) {
+          teeTimeMap.set(p.tee_times.id, p.tee_times);
+        }
+      });
+
+      const teeTimes = Array.from(teeTimeMap.values());
+
+      const teeTimesWithCounts = await Promise.all(
+        teeTimes.map(async (tt) => {
+          const { count } = await supabaseAdmin
+            .from("tee_time_participants")
+            .select("*", { count: "exact", head: true })
+            .eq("tee_time_id", tt.id)
+            .or("status.is.null,status.neq.cancelled");
+
+          return { ...tt, participant_count: count || 0 };
+        })
+      );
+
+      return teeTimesWithCounts.sort((a, b) =>
+        (a.tee_date || "").localeCompare(b.tee_date || "")
+      );
+    } catch (error) {
+      handleError(error, "getTeeTimesByDateRange");
+    }
+  }
+
+  async removeParticipantByUser(teeTimeId, userId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .update({
+          status: "cancelled",
+          cancelled_at: new Date().toISOString(),
+        })
+        .eq("tee_time_id", teeTimeId)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleError(error, "removeParticipantByUser");
+    }
+  }
+
+  async getTeeTimesInRange(startTime, endTime, statuses = ["confirmed"]) {
+    try {
+      // Note: Date + time comparison needs PostgreSQL function
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .select("*")
+        .in("status", statuses)
+        .gte("tee_date", startTime)
+        .lte("tee_date", endTime);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      handleError(error, "getTeeTimesInRange");
+    }
+  }
+
+  async getInProgressTeeTimes(cutoffTime) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .select("*")
+        .eq("status", "in_progress")
+        .is("check_in_completed_at", null)
+        .lt("tee_date", cutoffTime);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      handleError(error, "getInProgressTeeTimes");
+    }
+  }
+
+  async getTeeTimeHistory(userId, options = {}) {
+    const { filter = "all", limit = 20, offset = 0 } = options;
+
+    try {
+      let query = supabaseAdmin
+        .from("tee_times")
+        .select(
+          `
+          id, course_name, course_location, tee_date, tee_time, status,
+          creator_id, max_players,
+          users!inner (first_name, last_name),
+          user_profiles (avatar_url),
+          tee_time_participants!left (user_id, status),
+          tee_time_attendance!left (status),
+          game_scores!left (score, holes_played)
+        `
+        )
+        .or(
+          `creator_id.eq.${userId},tee_time_participants.user_id.eq.${userId}`
+        );
+
+      if (filter === "upcoming") {
+        query = query
+          .gte("tee_date", new Date().toISOString().split("T")[0])
+          .not("status", "in", "('cancelled','completed')");
+      } else if (filter === "completed") {
+        query = query.eq("status", "completed");
+      } else if (filter === "cancelled") {
+        query = query.eq("status", "cancelled");
+      }
+
+      query = query
+        .order("tee_date", { ascending: false })
+        .order("tee_time", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return (data || []).map((tt) => {
+        const user = tt.users || {};
+        const profile = tt.user_profiles?.[0] || {};
+        const participant = tt.tee_time_participants?.[0] || {};
+        const attendance = tt.tee_time_attendance?.[0] || {};
+        const gameScore = tt.game_scores?.[0] || {};
+
+        return {
+          id: tt.id,
+          course_name: tt.course_name,
+          course_location: tt.course_location,
+          tee_date: tt.tee_date,
+          tee_time: tt.tee_time,
+          tee_time_status: tt.status,
+          creator_id: tt.creator_id,
+          max_players: tt.max_players,
+          creator_first_name: user.first_name,
+          creator_last_name: user.last_name,
+          creator_avatar: profile.avatar_url,
+          participant_status: participant.status,
+          attendance_status: attendance.status,
+          game_score: gameScore.score,
+          holes_played: gameScore.holes_played,
+          user_role: tt.creator_id === userId ? "organizer" : "participant",
+        };
+      });
+    } catch (error) {
+      handleError(error, "getTeeTimeHistory");
+    }
+  }
+
+  async markPastTeeTimesCompleted() {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .update({ status: "completed" })
+        .in("status", ["pending", "confirmed"])
+        .lt("tee_date", today)
+        .select("id, tee_date, tee_time, status");
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      handleError(error, "markPastTeeTimesCompleted");
+    }
+  }
+
   async checkAndUpdateStatus(teeTimeId) {
-    // Get tee time info
     const teeTime = await this.getTeeTimeById(teeTimeId);
-    if (!teeTime || teeTime.status === 'completed' || teeTime.status === 'cancelled') {
+    if (
+      !teeTime ||
+      teeTime.status === "completed" ||
+      teeTime.status === "cancelled"
+    ) {
       return null;
     }
 
-    // Check if tee time is in the past
     const teeDateTime = createTeeDateTime(teeTime.tee_date, teeTime.tee_time);
     if (teeDateTime < new Date()) {
-      return this.updateStatus(teeTimeId, 'completed');
+      return this.updateStatus(teeTimeId, "completed");
     }
 
-    // Check if all invites have been responded to
-    const inviteQuery = `
-      SELECT 
-        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
-        COUNT(*) FILTER (WHERE status = 'accepted') as accepted_count
-      FROM invites
-      WHERE tee_time_id = $1
-    `;
-    const inviteResult = await pool.query(inviteQuery, [teeTimeId]);
-    const { pending_count, accepted_count } = inviteResult.rows[0];
+    try {
+      const { data: invites, error } = await supabaseAdmin
+        .from("invites")
+        .select("status")
+        .eq("tee_time_id", teeTimeId);
 
-    // If no pending invites and at least one accepted, mark as confirmed
-    if (parseInt(pending_count) === 0 && parseInt(accepted_count) > 0) {
-      return this.updateStatus(teeTimeId, 'confirmed');
+      if (error) throw error;
+
+      const pendingCount = invites.filter((i) => i.status === "pending").length;
+      const acceptedCount = invites.filter(
+        (i) => i.status === "accepted"
+      ).length;
+
+      if (pendingCount === 0 && acceptedCount > 0) {
+        return this.updateStatus(teeTimeId, "confirmed");
+      }
+
+      return null;
+    } catch (error) {
+      handleError(error, "checkAndUpdateStatus");
     }
-
-    return null;
   }
 }
-
 
 module.exports = new TeeTimeRepository();

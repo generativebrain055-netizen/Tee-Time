@@ -48,9 +48,9 @@ const requestOTP = async (req, res, next) => {
       const otpHash = await bcrypt.hash(sendResult.otp, 10);
       const expiresAt = new Date(Date.now() + (parseInt(process.env.OTP_TTL_MS) || 300000));
 
+      // Use phone_number as identifier, not user_id (avoids FK issues)
       await otpRepository.create({
         phoneNumber,
-        userId: existingUser?.id || null,
         otpCodeHash: otpHash,
         purpose,
         expiresAt,
