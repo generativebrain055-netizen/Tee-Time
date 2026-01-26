@@ -13,24 +13,34 @@ const initTwilioClient = () => {
     if (twilioClient) return twilioClient;
 
     try {
-        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_SID && process.env.TWILIO_SECRET) {
-            twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_SECRET, {
-                accountSid: process.env.TWILIO_ACCOUNT_SID
-            });
-            logger.info("Twilio client initialized with API Key credentials");
-        } else if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-            // Check if ACCOUNT_SID is valid (starts with AC)
-            if (!process.env.TWILIO_ACCOUNT_SID.startsWith('AC')) {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const apiKeySid = process.env.TWILIO_API_KEY_SID;
+        const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
+
+        // Try API Key authentication first
+        if (accountSid && apiKeySid && apiKeySecret) {
+            if (!accountSid.startsWith('AC')) {
+                logger.warn("TWILIO_ACCOUNT_SID must start with AC. SMS features will be disabled.");
+                return null;
+            }
+            twilioClient = twilio(apiKeySid, apiKeySecret, { accountSid });
+            logger.info("Twilio SMS client initialized with API Key credentials");
+        } 
+        // Fallback to Auth Token authentication
+        else if (accountSid && authToken) {
+            if (!accountSid.startsWith('AC')) {
                 logger.warn("TWILIO_ACCOUNT_SID appears to be an API Key (SK). SMS features will be disabled. Please provide the actual Account SID (starts with AC).");
                 return null;
             }
-            twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-            logger.info("Twilio client initialized with Auth Token");
-        } else {
+            twilioClient = twilio(accountSid, authToken);
+            logger.info("Twilio SMS client initialized with Auth Token");
+        } 
+        else {
             logger.warn("Twilio credentials not configured - SMS features will be disabled");
         }
     } catch (error) {
-        logger.error("Failed to initialize Twilio client:", error.message);
+        logger.error("Failed to initialize Twilio SMS client:", error.message);
         twilioClient = null;
     }
 

@@ -17,6 +17,7 @@ const tokenController = require("./tokenController");
 const profileController = require("./profileController");
 const registerController = require("./registerController");
 const magicLinkController = require("./magicLinkController");
+const oauthController = require("./oauthController");
 
 module.exports = {
   // OTP operations
@@ -45,4 +46,9 @@ module.exports = {
   verifyMagicLink: magicLinkController.verifyMagicLink,
   requestSmsMagicLink: magicLinkController.requestSmsMagicLink,
   verifySmsMagicLink: magicLinkController.verifySmsMagicLink,
+
+  // OAuth operations
+  googleSignIn: oauthController.googleSignIn,
+  appleSignIn: oauthController.appleSignIn,
+  completeOAuthProfile: oauthController.completeOAuthProfile,
 };

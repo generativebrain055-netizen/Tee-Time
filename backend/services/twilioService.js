@@ -16,10 +16,48 @@ let verifyService = null;
 const initializeTwilioClient = () => {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const apiKeySid = process.env.TWILIO_API_KEY_SID;
+  const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
   const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
+  logger.info("[TWILIO INIT] Checking credentials...", {
+    hasAccountSid: !!accountSid,
+    hasAuthToken: !!authToken,
+    hasApiKeySid: !!apiKeySid,
+    hasApiKeySecret: !!apiKeySecret,
+    accountSidPrefix: accountSid?.substring(0, 2),
+  });
+
+  // Check if using API Key authentication
+  if (apiKeySid && apiKeySecret && accountSid) {
+    if (!accountSid.startsWith("AC")) {
+      logger.warn("TWILIO_ACCOUNT_SID must start with AC. SMS features will be disabled.");
+      return { client: null, verify: null };
+    }
+
+    try {
+      // Use API Key authentication
+      logger.info("[TWILIO INIT] Initializing with API Key authentication...");
+      const client = twilio(apiKeySid, apiKeySecret, { accountSid });
+      const verify = verifyServiceSid ? client.verify.v2.services(verifyServiceSid) : null;
+
+      if (!verify) {
+        logger.info("TWILIO_VERIFY_SERVICE_SID not configured. Using manual OTP method.");
+      } else {
+        logger.info("Twilio initialized with API Key authentication and Verify service.");
+      }
+
+      logger.info("[TWILIO INIT] Successfully initialized with API Key!");
+      return { client, verify };
+    } catch (error) {
+      logger.error("Failed to initialize Twilio with API Key:", error);
+      return { client: null, verify: null };
+    }
+  }
+
+  // Fallback to Auth Token authentication
   if (!accountSid || !authToken) {
-    logger.warn("Twilio credentials not configured. OTP will be logged to console.");
+    logger.warn("Twilio credentials not configured - SMS features will be disabled");
     return { client: null, verify: null };
   }
 
@@ -29,6 +67,7 @@ const initializeTwilioClient = () => {
   }
 
   try {
+    logger.info("[TWILIO INIT] Initializing with Auth Token authentication...");
     const client = twilio(accountSid, authToken);
     const verify = verifyServiceSid ? client.verify.v2.services(verifyServiceSid) : null;
 
@@ -36,6 +75,7 @@ const initializeTwilioClient = () => {
       logger.warn("TWILIO_VERIFY_SERVICE_SID not configured. Using fallback OTP method.");
     }
 
+    logger.info("[TWILIO INIT] Successfully initialized with Auth Token!");
     return { client, verify };
   } catch (error) {
     logger.error("Failed to initialize Twilio client:", error);

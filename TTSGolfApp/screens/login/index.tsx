@@ -20,6 +20,7 @@ import { useLoginFlow } from "./hooks/useLoginFlow";
 import { PhoneInput, OtpInput } from "./components";
 import { LOGIN_COLORS } from "./constants";
 import { formatPhoneDisplay } from "./utils";
+import OAuthButtons from "../../components/OAuthButtons";
 
 interface Props {
     navigation: any;
@@ -101,6 +102,23 @@ export default function LoginScreen({ navigation }: Props) {
                                 onChange={handleOtpChange}
                                 onKeyPress={handleOtpKeyPress}
                                 onResend={handleResendOtp}
+                            />
+                        )}
+
+                        {currentStep === "phone" && (
+                            <OAuthButtons
+                                onSuccess={(data) => {
+                                    if (data.isNewUser) {
+                                        navigation.navigate("Onboarding", {
+                                            oauthData: data.partialData
+                                        });
+                                    } else {
+                                        navigation.replace("Home");
+                                    }
+                                }}
+                                onError={(error) => {
+                                    console.error("OAuth error:", error);
+                                }}
                             />
                         )}
                     </Animated.View>

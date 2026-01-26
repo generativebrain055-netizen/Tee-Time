@@ -3,8 +3,8 @@
  * TypeScript version with proper typing
  */
 
-// Using your computer's IP for physical device testing
-const API_BASE_URL: string = "http://192.168.1.11:3000";
+// Using your AWS deployment
+const API_BASE_URL: string = "http://16.171.170.30:3000";
 
 /**
  * Get the API base URL
@@ -100,6 +100,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   VERIFY_SMS_MAGIC_LINK: `${API_URL}/auth/verify-sms-magic`,
   REGISTER: `${API_URL}/auth/register`,
   UPDATE_PROFILE: `${API_URL}/auth/profile`,
+  GOOGLE_SIGNIN: `${API_URL}/auth/google`,
   // Roster
   ROSTER: `${API_URL}/api/roster`,
   ROSTER_ON_DECK: `${API_URL}/api/roster/on-deck`,

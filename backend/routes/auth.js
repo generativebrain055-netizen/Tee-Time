@@ -297,4 +297,57 @@ router.post(
   authController.registerUser
 );
 
+/**
+ * @route   POST /api/auth/google
+ * @desc    Google Sign In
+ * @access  Public
+ */
+router.post(
+  "/google",
+  captureDeviceInfo,
+  [body("idToken").trim().notEmpty().withMessage("ID token is required")],
+  validateRequest,
+  logAuthEvent("google_signin"),
+  authController.googleSignIn
+);
+
+/**
+ * @route   POST /api/auth/apple
+ * @desc    Apple Sign In
+ * @access  Public
+ */
+router.post(
+  "/apple",
+  captureDeviceInfo,
+  [body("identityToken").trim().notEmpty().withMessage("Identity token is required")],
+  validateRequest,
+  logAuthEvent("apple_signin"),
+  authController.appleSignIn
+);
+
+/**
+ * @route   POST /api/auth/complete-profile
+ * @desc    Complete OAuth profile with additional information
+ * @access  Public
+ */
+router.post(
+  "/complete-profile",
+  captureDeviceInfo,
+  [
+    body("tempToken").trim().notEmpty().withMessage("Temporary token is required"),
+    body("email").optional().trim().isEmail().normalizeEmail().withMessage("Valid email is required"),
+    body("phoneNumber")
+      .trim()
+      .matches(/^\+[1-9]\d{1,14}$/)
+      .withMessage("Invalid phone number format"),
+    body("firstName").optional().trim().isLength({ min: 1, max: 50 }),
+    body("lastName").optional().trim().isLength({ min: 1, max: 50 }),
+    body("username").optional().trim().isLength({ min: 3, max: 50 }),
+    body("handicap").optional().isInt({ min: 0, max: 54 }),
+  ],
+  validateRequest,
+  logAuthEvent("oauth_profile_completed"),
+  authController.completeOAuthProfile
+);
+
 module.exports = router;

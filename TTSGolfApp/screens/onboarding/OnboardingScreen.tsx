@@ -41,6 +41,19 @@ type OnboardingScreenNavigationProp = StackNavigationProp<
 
 interface OnboardingScreenProps {
   navigation: OnboardingScreenNavigationProp;
+  route?: {
+    params?: {
+      oauthData?: {
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+        profilePicture?: string;
+        authProvider?: 'google' | 'apple';
+        googleId?: string;
+        appleId?: string;
+      };
+    };
+  };
 }
 
 interface Styles {
@@ -66,10 +79,16 @@ type StepComponent = React.FC<{
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
+  route,
 }) => {
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const oauthData = route?.params?.oauthData;
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(oauthData ? 1 : 0); // Skip welcome if OAuth
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
-  const [userData, setUserData] = useState<Partial<OnboardingData>>({});
+  const [userData, setUserData] = useState<Partial<OnboardingData>>({
+    email: oauthData?.email,
+    firstName: oauthData?.firstName,
+    lastName: oauthData?.lastName,
+  });
 
   const currentStep = STEP_ORDER[currentStepIndex];
 
@@ -197,13 +216,34 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-      // Register user directly via /auth/register endpoint (passwordless signup)
-      const response = await fetch(API_ENDPOINTS.REGISTER, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      let response;
+
+      // Check if this is OAuth registration
+      if (oauthData) {
+        console.log("Completing OAuth registration");
+        const oauthRequestBody = {
+          ...requestBody,
+          authProvider: oauthData.authProvider,
+          googleId: oauthData.googleId,
+          appleId: oauthData.appleId,
+          profilePicture: oauthData.profilePicture,
+        };
+
+        response = await fetch(`${API_URL}/auth/oauth/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(oauthRequestBody),
+          signal: controller.signal,
+        });
+      } else {
+        // Regular registration
+        response = await fetch(API_ENDPOINTS.REGISTER, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+      }
 
       clearTimeout(timeoutId);
 
@@ -216,6 +256,28 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
 
       console.log("User registered successfully:", data);
+
+      // If OAuth registration, save session and go to Home
+      if (oauthData && data.accessToken) {
+        const sessionManager = (await import('../../utils/sessionManager')).default;
+        await sessionManager.saveSession({
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
+        });
+
+        Alert.alert(
+          "Welcome!",
+          "Your account has been created successfully.",
+          [
+            {
+              text: "Continue",
+              onPress: () => navigation.replace("Home"),
+            },
+          ]
+        );
+        return;
+      }
 
       // Show success message and navigate to Login
       Alert.alert(
