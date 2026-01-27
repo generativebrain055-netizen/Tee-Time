@@ -140,6 +140,10 @@ test-results/
 # Miscellaneous
 # ============================================================================
 .cache/
+GoogleService-Info.plist
+google-play-service-account.json
+google-services.json
+eas.json
 .parcel-cache/
 .next/
 .nuxt/
