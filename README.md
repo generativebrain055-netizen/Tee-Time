@@ -119,6 +119,8 @@ tail -f backend/logs/combined.log
 
 # Error logs only
 tail -f backend/logs/error.log
+=======
+node test-twilio.js +92
 ```
 
 ## Environment Variables
