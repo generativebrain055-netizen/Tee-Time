@@ -1,0 +1,875 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% Color definitions
+\definecolor{primary}{RGB}{93,176,117}
+\definecolor{implemented}{RGB}{46,125,50}
+\definecolor{inprogress}{RGB}{251,140,0}
+\definecolor{planned}{RGB}{158,158,158}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{primary}{\textbf{TeeTime Golf App}}}
+\fancyhead[R]{User Stories Documentation}
+\fancyfoot[C]{\thepage}
+
+% Section formatting
+\titleformat{\section}{\Large\bfseries\color{primary}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{primary!80}}{\thesubsection}{1em}{}
+
+% Hyperlink setup
+\hypersetup{colorlinks=true,linkcolor=primary,urlcolor=primary}
+
+% Custom status command
+\newcommand{\implemented}{\textcolor{implemented}{\textbf{[IMPLEMENTED]}}}
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{primary} TeeTime Golf App\par}
+  \vspace{1cm}
+  {\LARGE User Stories Documentation\par}
+  \vspace{2cm}
+  {\Large Complete Feature Implementation Guide\par}
+  \vspace{1cm}
+  {\large Version 1.0 --- December 2024\par}
+  \vfill
+  {\large\textit{Comprehensive documentation of all implemented user stories with technical details, APIs, and business logic.}\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+This document provides a comprehensive overview of all user stories implemented in the TeeTime Golf App. Each story includes the implementation status, technical details (APIs, database tables), and business logic explanations for client comprehension.
+
+\textbf{All features listed in this document are fully implemented and tested.}
+
+%==============================================================================
+\section{Profile \& User Management}
+%==============================================================================
+
+\subsection{US-01: View and Edit Profile}
+\implemented
+
+\textbf{Story:} I want the ability to view and edit my profile including past game scores, handicap, club memberships, phone number, and location, so that my information stays current.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{GET /api/profile} --- Retrieve current user profile
+      \item \texttt{PUT /api/profile} --- Update profile fields
+    \end{itemize}
+  \item \textbf{Database Tables:} \texttt{users}, \texttt{user\_profiles}, \texttt{game\_scores}, \texttt{user\_club\_memberships}
+  \item \textbf{Editable Fields:} First/last name, phone, email, handicap, bio, location, home course, equipment (driver, irons, putter, ball), preferences (walk/ride, preferred tee time)
+  \item \textbf{Logic:} Profile data split between \texttt{users} (auth info) and \texttt{user\_profiles} (golf-specific data). Updates trigger \texttt{updated\_at} timestamp via database trigger.
+\end{itemize}
+
+\subsection{US-02: Social Rate Score and History}
+\implemented
+
+\textbf{Story:} I want the ability to view my Social Rate score and history, so that I can track my reliability reputation.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{GET /api/social-rate} --- Get current score and stats
+      \item \texttt{GET /api/social-rate/history} --- Get detailed change history
+    \end{itemize}
+  \item \textbf{Database:} \texttt{user\_profiles.social\_rate} (integer 0-100), \texttt{social\_rate\_logs}
+  \item \textbf{Scoring Logic:}
+    \begin{itemize}
+      \item Starting score: 100 points (no upper limit)
+      \item Invite accepted: +2 points
+      \item Decline $>$24 hours before: -1 point
+      \item Cancel $<$24 hours before: -5 points
+      \item No-show: -10 points
+      \item Minimum score: 0
+    \end{itemize}
+  \item \textbf{Audit Trail:} Every change logged with previous score, delta, new score, reason, and tee time reference
+\end{itemize}
+
+\subsection{US-03: Generate Personal QR Code (Get Drafted)}
+\implemented
+
+\textbf{Story:} I want the ability to generate my personal QR code ("Get Drafted"), so that others can easily add me to their On-Deck list.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{GET /api/draft/qr} --- Get or generate QR code
+      \item \texttt{POST /api/draft/qr/regenerate} --- Invalidate old codes and create new
+    \end{itemize}
+  \item \textbf{Database:} \texttt{draft\_qr\_codes} (code\_hash, version, is\_active, scanned\_count)
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item QR payload contains: version, userId, random code, HMAC signature
+      \item Code is hashed (SHA-256) before storage --- actual code never stored
+      \item Regeneration revokes all previous codes
+      \item Tracks scan count and last scanned timestamp
+    \end{itemize}
+  \item \textbf{Frontend:} Uses \texttt{react-native-qrcode-svg} library, 260px size for reliable scanning
+\end{itemize}
+
+\subsection{US-04: Scan QR Code (Scan to Draft)}
+\implemented
+
+\textbf{Story:} I want the ability to scan another user's QR code ("Scan to Draft") and confirmation, so that I can quickly add them to my On-Deck.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{POST /api/draft/scan} --- Validate QR and get user preview
+      \item \texttt{POST /api/draft/confirm} --- Confirm adding to On-Deck
+      \item \texttt{GET /api/draft/history} --- View who scanned your code
+    \end{itemize}
+  \item \textbf{Database:} \texttt{qr\_scan\_history} (tracks scanner, scanned user, timestamp, was\_added)
+  \item \textbf{Validation:}
+    \begin{itemize}
+      \item Verify HMAC signature matches
+      \item Check code is active and not revoked
+      \item Prevent self-scanning
+      \item Check if already in roster
+    \end{itemize}
+  \item \textbf{Frontend:} Uses \texttt{expo-camera} with barcode scanning, 2-second cooldown between scans, animated scan line overlay
+\end{itemize}
+
+\subsection{US-05: Complete Tee Time History}
+\implemented
+
+\textbf{Story:} I want the ability to view my complete tee time history (past and upcoming), so that I can track my golf activity.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times/history?filter=<status>}
+  \item \textbf{Filters:} all, upcoming, completed, cancelled, no\_show
+  \item \textbf{Response Data:} Course name, date/time, status, user role (organizer/participant), attendance status, game score, participant count
+  \item \textbf{Logic:} Combines tee times where user is creator OR participant, sorted by date descending
+\end{itemize}
+
+%==============================================================================
+\section{Roster Management}
+%==============================================================================
+
+\subsection{US-10: Create and Maintain Multiple Rosters}
+\implemented
+
+\textbf{Story:} I want the ability to create and maintain multiple rosters of golf buddies, so that I can organize my regular playing partners into selectable groups.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{GET /api/roster/groups} --- List all groups
+      \item \texttt{POST /api/roster/groups} --- Create new group
+      \item \texttt{PUT /api/roster/groups/:id} --- Update group
+      \item \texttt{DELETE /api/roster/groups/:id} --- Delete group
+    \end{itemize}
+  \item \textbf{Database:} \texttt{roster\_groups}, \texttt{roster\_group\_members}
+  \item \textbf{Group Properties:} name, description, color (hex), icon, auto\_invite flag, max\_members, sort\_preference
+  \item \textbf{Logic:} Many-to-many relationship allows members to belong to multiple groups
+\end{itemize}
+
+\subsection{US-11: Drag-and-Drop Between Roster and On-Deck}
+\implemented
+
+\textbf{Story:} I want the ability to drag-and-drop golfers between "Roster" and "On Deck" sections, so that I can prioritize my preferred playing partners.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{PUT /api/roster/reorder} --- Update positions after drag
+      \item \texttt{PUT /api/roster/:id/move} --- Move between sections
+    \end{itemize}
+  \item \textbf{Database:} \texttt{roster.position} (integer), \texttt{roster.is\_on\_deck} (boolean)
+  \item \textbf{Definitions:}
+    \begin{itemize}
+      \item \textbf{Roster:} Players who will be auto-invited (is\_on\_deck = false)
+      \item \textbf{On-Deck:} Reserve players manually selected when roster fails to fill (is\_on\_deck = true)
+    \end{itemize}
+  \item \textbf{Frontend:} React Native Draggable FlatList with smooth animations
+\end{itemize}
+
+\subsection{US-12: Sort Roster by Multiple Criteria}
+\implemented
+
+\textbf{Story:} I want the ability to sort my roster by Social Rate, Distance to Course, Handicap, or Club Membership, so that I can make strategic invite decisions.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/roster?sortBy=<option>}
+  \item \textbf{Sort Options:}
+    \begin{itemize}
+      \item \texttt{position} --- Manual drag order (default)
+      \item \texttt{socialRate} --- Reliability score (descending)
+      \item \texttt{handicap} --- Skill level (ascending)
+      \item \texttt{name} --- Alphabetical
+      \item \texttt{distance} --- Proximity to course
+      \item \texttt{membership} --- Club membership status
+    \end{itemize}
+  \item \textbf{Logic:} Dynamic SQL ORDER BY based on parameter
+\end{itemize}
+
+\subsection{US-13: View Detailed Roster Member Profiles}
+\implemented
+
+\textbf{Story:} I want the ability to view detailed profiles of roster members including Social Rate, history, handicap, memberships, and waiver wire, so that I have complete information.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/roster/:id/profile}
+  \item \textbf{Profile Data:}
+    \begin{itemize}
+      \item Contact info: name, username, avatar, bio
+      \item Stats: handicap, social rate, rounds played, average score
+      \item History: times played together, invite acceptance rate, last played date
+      \item Preferences: location, home course, walk/ride, preferred tee time
+      \item Equipment: driver, irons, putter, ball
+    \end{itemize}
+  \item \textbf{Database:} Joins \texttt{roster}, \texttt{users}, \texttt{user\_profiles}
+\end{itemize}
+
+\subsection{US-14: Remove or Block Users from Roster}
+\implemented
+
+\textbf{Story:} I want the ability to remove or block users from my roster, so that I can maintain control over my connections.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{DELETE /api/roster/:id} --- Remove from roster
+      \item \texttt{POST /api/friends/block/:userId} --- Block user
+    \end{itemize}
+  \item \textbf{Database:} \texttt{blocked\_users} table
+  \item \textbf{Block Logic:}
+    \begin{itemize}
+      \item Removes from both users' rosters
+      \item Prevents future friend requests
+      \item Hides user from discovery
+      \item Constraint prevents self-blocking
+    \end{itemize}
+\end{itemize}
+
+\subsection{US-15: Notification When Added to Draft/Friends}
+\implemented
+
+\textbf{Story:} I want the ability to receive notifications when someone adds me to their draft/friends, so that I'm aware of the connection.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Service:} \texttt{rosterNotificationService.js}
+  \item \textbf{Database:} \texttt{roster\_notifications}, \texttt{notifications}
+  \item \textbf{Notification Data:} Owner name, avatar, group name (if applicable)
+  \item \textbf{Logic:} Triggered when \texttt{rosterRepository.addToRoster()} is called with a registered user
+\end{itemize}
+
+\subsection{US-16: Add Back / Reciprocal Add Option}
+\implemented
+
+\textbf{Story:} I want the ability to receive a "Add Back" or reciprocal add option in the notification, so that I can easily add them to my draft/friends if I want to.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Notification Action:} "Add Back" button in notification
+  \item \textbf{Logic:} Tapping "Add Back" calls \texttt{POST /api/roster} with the owner's userId
+  \item \textbf{UI:} Action button visible in notification card, disabled after action taken
+\end{itemize}
+
+\subsection{US-17: Name Rosters}
+\implemented
+
+\textbf{Story:} I want the ability to name my rosters (e.g., 'Weekend Crew'), so that I can identify them easily.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/roster/groups} with \texttt{name} field
+  \item \textbf{Database:} \texttt{roster\_groups.name} (VARCHAR 100)
+  \item \textbf{Constraint:} Unique name per user (user\_id, name)
+\end{itemize}
+
+\subsection{US-18: Select Roster When Creating Tee Time}
+\implemented
+
+\textbf{Story:} I want the ability to select which roster to use when creating a tee time invite, so that I can send invites to the appropriate group.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{UI Flow:} Tee time creation wizard includes roster/group selection step
+  \item \textbf{API:} \texttt{GET /api/roster/groups/:id/members} to fetch group members
+  \item \textbf{Logic:} Selected group members become the invite list, respecting group's sort preference
+\end{itemize}
+
+\subsection{US-19: Edit or Delete Saved Rosters}
+\implemented
+
+\textbf{Story:} I want the ability to edit or delete saved rosters, so that I can maintain my roster groups over time.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{PUT /api/roster/groups/:id} --- Update group properties
+      \item \texttt{DELETE /api/roster/groups/:id} --- Delete group
+    \end{itemize}
+  \item \textbf{Delete Logic:} Group deletion sets \texttt{group\_id = NULL} on roster entries (members not deleted)
+\end{itemize}
+
+
+%==============================================================================
+\section{Tee Time Creation}
+%==============================================================================
+
+\subsection{US-20: Create Roster Invite}
+\implemented
+
+\textbf{Story:} I want the ability to create a Roster invite by selecting date, time, course (with autocomplete), and group size (2/3/4), so that I can organize rounds by the roster group selected and a custom order if desired.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API Endpoints:}
+    \begin{itemize}
+      \item \texttt{POST /api/tee-times} --- Create tee time
+      \item \texttt{POST /api/invites} with \texttt{inviteType: 'roster'}
+    \end{itemize}
+  \item \textbf{Course Autocomplete:} \texttt{GET /api/courses/search?q=<query>} --- US golf course database
+  \item \textbf{Group Size:} \texttt{max\_players} field (2, 3, or 4)
+  \item \textbf{Logic:} Creator selects roster members in desired order; position determines invite priority
+\end{itemize}
+
+\subsection{US-21: Custom Response Windows}
+\implemented
+
+\textbf{Story:} I want the ability to set custom response windows (1-24 hours) for each roster position, so that I can control the invitation timeline.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/invites} with \texttt{responseWindow} parameter (hours)
+  \item \textbf{Database:} \texttt{invites.expires\_at} (TIMESTAMPTZ)
+  \item \textbf{Options:} 2 minutes (test), 1 hour, 2 hours, 4 hours, 8 hours, 12 hours, 24 hours
+  \item \textbf{Logic:} All invitees receive same \texttt{expires\_at} timestamp; priority determined by invite position
+\end{itemize}
+
+\subsection{US-22: Real-Time Status Updates with Visual Indicators}
+\implemented
+
+\textbf{Story:} I want the ability to see real-time status updates on roster invites with visual indicators (green check for yes, arrow for waiting, decline icon, timeout icon), so that I can track responses at a glance.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times/:id} returns invite statuses
+  \item \textbf{Status Icons:}
+    \begin{itemize}
+      \item Green checkmark: Accepted
+      \item Clock/arrow: Pending (waiting for response)
+      \item X icon: Declined
+      \item Timer icon: Expired/timed out
+      \item Queue icon: Waitlisted
+    \end{itemize}
+  \item \textbf{Frontend:} Polling or real-time updates to refresh invite statuses
+\end{itemize}
+
+\subsection{US-23: Manually Advance to Next Roster Member}
+\implemented
+
+\textbf{Story:} I want the ability to manually advance to the next roster member if someone declines before the window expires, so that I can fill spots faster.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/invites/:inviteId/skip}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Marks current invite as 'skipped'
+      \item Activates next pending invite in position order
+      \item Returns updated invite list
+    \end{itemize}
+  \item \textbf{UI:} "Skip" button on pending invite cards
+\end{itemize}
+
+\subsection{US-24: On-Deck Selection When Roster Fails}
+\implemented
+
+\textbf{Story:} I want the ability to receive a notification that my Tee Time cannot be filled by my roster and asked if I would like to select players from my On-Deck players to fill the remaining slots.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Service:} \texttt{fcfsDeadlineService.js} (cron job)
+  \item \textbf{Trigger:} When all roster invites expire/decline and spots remain unfilled
+  \item \textbf{Notification:} "Your tee time has unfilled spots. Select from On-Deck?"
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/on-deck-invites}
+  \item \textbf{Logic:} On-Deck players receive FCFS invites; first to accept gets spot
+\end{itemize}
+
+\subsection{US-25: Create FCFS Invite}
+\implemented
+
+\textbf{Story:} I want the ability to create a First Come First Served invite by selecting date, time, course (with autocomplete), and group size (2/3/4), so that I can quickly organize my round.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/invites} with \texttt{inviteType: 'fcfs'}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item All invitees notified simultaneously
+      \item First to accept gets confirmed spot
+      \item When full, remaining invites moved to waitlist
+      \item Atomic acceptance prevents race conditions
+    \end{itemize}
+\end{itemize}
+
+\subsection{US-26: FCFS Broadcast to Entire Roster}
+\implemented
+
+\textbf{Story:} I want the ability to create a First Come First Serve invite that broadcasts to my entire roster, so that I can quickly fill spots for spontaneous rounds.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/invites/from-roster} with \texttt{teeTimeId}
+  \item \textbf{Logic:} Fetches all roster members (excluding On-Deck) and creates FCFS invites for all
+  \item \textbf{UI:} "Invite Entire Roster" button in FCFS creation flow
+\end{itemize}
+
+\subsection{US-27: First Responder Confirmation with Tie-Breaker}
+\implemented
+
+\textbf{Story:} I want the ability to see who responds first and is automatically confirmed, so that spots are filled efficiently. If we need to determine tie-breaker criteria, the person who is higher in my roster should get priority.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Repository:} \texttt{inviteRepository.acceptInviteAtomic()}
+  \item \textbf{Tie-Breaker Logic:}
+    \begin{itemize}
+      \item 500ms delay to collect near-simultaneous accepts
+      \item Database row locking: \texttt{SELECT ... FOR UPDATE}
+      \item For FCFS: Roster position determines priority
+      \item For Roster invites: Invite position (order invited) determines priority
+      \item Lower position number = higher priority
+      \item Winner added as participant; loser moved to waitlist
+    \end{itemize}
+  \item \textbf{Transaction:} Entire operation in single database transaction for atomicity
+\end{itemize}
+
+\subsection{US-28: FCFS Response Deadline}
+\implemented
+
+\textbf{Story:} I want the ability to set a deadline for FCFS responses, so that I can finalize plans by a certain time.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/fcfs-deadline}
+  \item \textbf{Quick Presets:} 2 minutes, 5 minutes, 1 hour, 24 hours
+  \item \textbf{Logic:} Updates \texttt{expires\_at} for all pending invites on the tee time
+  \item \textbf{Expiration:} Cron job marks expired invites and notifies organizer
+\end{itemize}
+
+\subsection{US-29: Notification When Tee Time Not Filled}
+\implemented
+
+\textbf{Story:} I want the ability to have the app notify me if my tee time is not filled by the expiration date, and prompt me to select from my on-deck to fill.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Service:} \texttt{fcfsDeadlineService.js}
+  \item \textbf{Check Logic:}
+    \begin{itemize}
+      \item Runs periodically (cron)
+      \item Finds tee times with expired invites and unfilled spots
+      \item Checks tee time status is 'pending' or 'open'
+    \end{itemize}
+  \item \textbf{Notification:} Push notification to organizer with action to select On-Deck players
+  \item \textbf{On-Deck Flow:} Selected players receive FCFS invites
+\end{itemize}
+
+%==============================================================================
+\section{Invite Notifications \& Responses}
+%==============================================================================
+
+\subsection{US-30: Push Notifications for New Invites}
+\implemented
+
+\textbf{Story:} I want the ability to receive push notifications for new invites, so that I can respond quickly.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Service:} \texttt{notificationService.notifyTeeTimeInvite()}
+  \item \textbf{Database:} \texttt{notifications}, \texttt{devices.push\_token}
+  \item \textbf{Notification Content:} Inviter name, course, date, time
+  \item \textbf{Logic:} Triggered when invite is created; sends to all registered devices
+\end{itemize}
+
+\subsection{US-31: In-App Notifications with Full Details}
+\implemented
+
+\textbf{Story:} I want the ability to receive in-app notifications for new invites with full details (who, when, where, group size), so that I have context to make decisions.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/notifications}
+  \item \textbf{Notification Data:}
+    \begin{itemize}
+      \item \texttt{inviterName}, \texttt{inviterAvatar}
+      \item \texttt{courseName}, \texttt{date}, \texttt{time}
+      \item \texttt{teeTimeId} for navigation
+      \item \texttt{maxPlayers} (group size)
+    \end{itemize}
+  \item \textbf{UI:} Notification bell with unread count badge
+\end{itemize}
+
+\subsection{US-32: Respond Yes/No to Invites}
+\implemented
+
+\textbf{Story:} I want the ability to respond Yes/No to invites within the response window, so that I can confirm or decline participation.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{PUT /api/invites/:id/respond}
+  \item \textbf{Request Body:} \texttt{\{response: 'accepted' | 'declined', message?: string\}}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Validates invite is still pending and not expired
+      \item For 'accepted': Uses atomic acceptance with tie-breaker
+      \item For 'declined': Updates status, notifies organizer
+      \item Records response in \texttt{invite\_responses} table
+    \end{itemize}
+\end{itemize}
+
+\subsection{US-33: Response Window Countdown Timer}
+\implemented
+
+\textbf{Story:} I want the ability to view the response window countdown timer, so that I know how long I have to decide.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Data:} \texttt{invites.expires\_at} returned in invite details
+  \item \textbf{Frontend:} Real-time countdown timer (HH:MM:SS format)
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Updates every second using \texttt{setInterval}
+      \item Shows "Urgent" state (red) when $<$1 hour remaining
+      \item Disables response buttons when expired
+    \end{itemize}
+  \item \textbf{UI:} Prominent timer display on invite cards
+\end{itemize}
+
+\subsection{US-34: Notification When Accepted Player Cancels}
+\implemented
+
+\textbf{Story:} I want the ability to receive a notification if a player that has accepted an invite cancels.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Trigger:} \texttt{POST /api/tee-times/:id/cancel-participation}
+  \item \textbf{Notification:} Sent to organizer with canceling player's name
+  \item \textbf{Content:} "\{PlayerName\} has cancelled their spot for your tee time at \{Course\}"
+\end{itemize}
+
+\subsection{US-35: Automatic Re-Invite on Cancellation}
+\implemented
+
+\textbf{Story:} I want the ability to have the app automatically send a new invite based on the selected invite method (Roster or FCFS) if a player cancels after accepting an invite.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Logic by Invite Type:}
+    \begin{itemize}
+      \item \textbf{Roster:} Continues sending invites in position order to next pending
+      \item \textbf{FCFS:} Notifies waitlisted players and those who haven't responded: "A spot has opened up in \{User's\} Tee Time on \{Date/time\} at \{Course\}. First to Respond is in!"
+    \end{itemize}
+  \item \textbf{API:} \texttt{inviteRepository.reactivateWaitlistInvites()}
+  \item \textbf{Notification:} Push notification to eligible players
+\end{itemize}
+
+\subsection{US-36: Block User from Invites}
+\implemented
+
+\textbf{Story:} I want the ability to block a user if I no longer want to receive invites from that user.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/friends/block/:userId}
+  \item \textbf{Database:} \texttt{blocked\_users} table
+  \item \textbf{Effects:}
+    \begin{itemize}
+      \item Blocked user cannot send invites to blocker
+      \item Removes from both users' rosters
+      \item Hides from discovery/search
+      \item Prevents friend requests
+    \end{itemize}
+\end{itemize}
+
+
+%==============================================================================
+\section{Calendar \& Tee Time Viewing}
+%==============================================================================
+
+\subsection{US-37: Calendar View of Upcoming Tee Times}
+\implemented
+
+\textbf{Story:} I want the ability to view a calendar of all my upcoming tee times, so that I can see my golf schedule at a glance.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times/calendar?start=<date>\&end=<date>}
+  \item \textbf{Response:} Object keyed by date with array of tee times per day
+  \item \textbf{Logic:} Returns tee times where user is creator OR confirmed participant
+  \item \textbf{UI:} Calendar component with dots indicating tee time days; tap to see details
+\end{itemize}
+
+\subsection{US-38: Filter Tee Times by Status}
+\implemented
+
+\textbf{Story:} I want the ability to filter tee times by status (pending, confirmed, completed), so that I can organize my schedule.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times?status=<status>}
+  \item \textbf{Status Options:} pending, confirmed, in\_progress, completed, cancelled
+  \item \textbf{UI:} Filter tabs or dropdown in tee times list
+\end{itemize}
+
+\subsection{US-39: View Invited Tee Times in Calendar}
+\implemented
+
+\textbf{Story:} I want the ability to see tee times I have been invited to in the calendar so that I can respond Yes or No to them.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/invites/pending}
+  \item \textbf{Calendar Integration:} Pending invites shown with different color/indicator
+  \item \textbf{UI:} Tap on invited tee time opens response modal with Yes/No buttons
+  \item \textbf{Logic:} Combines owned tee times + pending invites in calendar view
+\end{itemize}
+
+\subsection{US-40: View Detailed Tee Time Information}
+\implemented
+
+\textbf{Story:} I want the ability to view detailed information for each tee time (participants, course, time, invite type), so that I have complete context.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times/:id}
+  \item \textbf{Response Data:}
+    \begin{itemize}
+      \item Course: name, location, course\_id
+      \item Time: tee\_date, tee\_time, holes (9/18)
+      \item Participants: list with name, avatar, status, isCreator
+      \item Invites: list with status, position, expires\_at
+      \item Settings: invite\_type, max\_players, response\_window
+      \item Status: pending, confirmed, in\_progress, completed, cancelled
+    \end{itemize}
+  \item \textbf{UI:} TeeTimeDetailScreen with hero header, participant cards, invite status grid
+\end{itemize}
+
+%==============================================================================
+\section{Attendance \& Check-In}
+%==============================================================================
+
+\subsection{US-41: Cancel Participation in Confirmed Tee Time}
+\implemented
+
+\textbf{Story:} I want the ability to cancel my participation in a confirmed tee time, so that I can manage schedule conflicts.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/cancel-participation}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Updates participant status to 'cancelled'
+      \item Calculates Social Rate penalty based on timing
+      \item Notifies organizer of cancellation
+      \item Triggers re-invite flow (Roster or FCFS)
+    \end{itemize}
+\end{itemize}
+
+\subsection{US-42: Social Rate Penalty Warning Before Cancellation}
+\implemented
+
+\textbf{Story:} I want the ability to see the Social Rate penalty with a pop-up stating "You will lose \{points\} points if you cancel your Tee Time now. Confirm cancellation? [Yes] [No]" before canceling, so that I understand the accountability consequence.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Logic:} Calculate penalty based on time until tee time:
+    \begin{itemize}
+      \item $>$24 hours: -1 point (minor penalty)
+      \item $<$24 hours: -5 points (late cancellation)
+    \end{itemize}
+  \item \textbf{UI:} Confirmation modal showing exact point loss before action
+  \item \textbf{Response:} Returns \texttt{penaltyApplied: true/false} and points lost
+\end{itemize}
+
+\subsection{US-43: Pre-Tee Time Check-In Notification}
+\implemented
+
+\textbf{Story:} I want the ability as the organizer to receive a push notification 5 minutes before my scheduled tee time asking, "Is Everyone Here?", so that I can quickly confirm attendance.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Database:} \texttt{tee\_times.check\_in\_reminder\_sent} (boolean flag)
+  \item \textbf{Service:} Scheduled job checks for tee times 5 minutes away
+  \item \textbf{Notification:} "Is Everyone Here?" with action buttons
+  \item \textbf{Logic:} Only sent once per tee time; flag prevents duplicates
+\end{itemize}
+
+\subsection{US-44: One-Tap Check-In All Players}
+\implemented
+
+\textbf{Story:} I want the ability as the organizer to select "Yes" to automatically check in all players with no further action required, so that attendance confirmation is quick and effortless.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/check-in/all}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Updates all participants' attendance status to 'present'
+      \item Sets \texttt{checked\_in\_at} timestamp
+      \item Records \texttt{checked\_in\_by} (organizer)
+      \item Marks tee time check-in as completed
+    \end{itemize}
+  \item \textbf{Response:} Count of players checked in
+\end{itemize}
+
+\subsection{US-45: "Who Bailed?" No-Show Selection}
+\implemented
+
+\textbf{Story:} I want the ability as the organizer to select "No" which opens a "Who Bailed?" page showing all confirmed players as checkboxes, so that I can select only the no-show players who will receive the -10 point penalty.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{GET /api/tee-times/:id/attendance} --- Get participant list
+  \item \textbf{UI:} Checkbox list of all confirmed participants
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Organizer selects players who didn't show
+      \item Unchecked players marked as 'present'
+      \item Checked players marked as 'no\_show'
+    \end{itemize}
+\end{itemize}
+
+\subsection{US-46: No-Show Penalty Application}
+\implemented
+
+\textbf{Story:} I want the ability for the organizer to mark my No-Show during check-in, so the system applies a no-show penalty (-10 points) if I do not cancel my Tee Time invite.
+
+\textbf{Implementation:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{API:} \texttt{POST /api/tee-times/:id/check-in/:attendanceId}
+  \item \textbf{Request Body:} \texttt{\{status: 'no\_show'\}}
+  \item \textbf{Logic:}
+    \begin{itemize}
+      \item Updates \texttt{tee\_time\_attendance.status} to 'no\_show'
+      \item Sets \texttt{marked\_no\_show\_at} timestamp
+      \item Applies -10 point Social Rate penalty
+      \item Creates entry in \texttt{social\_rate\_logs} with reason 'no\_show'
+      \item Sets \texttt{penalty\_applied = true}
+    \end{itemize}
+  \item \textbf{Database:} \texttt{tee\_time\_attendance}, \texttt{social\_rate\_logs}
+\end{itemize}
+
+%==============================================================================
+\section{Technical Architecture Summary}
+%==============================================================================
+
+\subsection{Database Schema}
+
+The application uses PostgreSQL with 32 tables organized into logical groups:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Core Tables:} users, user\_profiles, devices, sessions, otp\_requests, magic\_links
+  \item \textbf{Social/Roster:} roster, roster\_groups, roster\_group\_members, friendships, friend\_requests, blocked\_users
+  \item \textbf{Tee Times:} tee\_times, tee\_time\_participants, invites, invite\_responses
+  \item \textbf{Accountability:} social\_rate\_logs, tee\_time\_attendance
+  \item \textbf{Supporting:} notifications, golf\_courses, draft\_qr\_codes, qr\_scan\_history
+\end{itemize}
+
+\subsection{Key Business Logic Components}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Atomic Invite Acceptance:} Database row locking with 500ms delay for tie-breaker resolution
+  \item \textbf{Social Rate System:} Automatic penalty/reward calculation with full audit trail
+  \item \textbf{QR Code Security:} HMAC-signed payloads, hashed storage, revocation support
+  \item \textbf{Invite Expiration:} Cron-based monitoring with automatic status updates and notifications
+  \item \textbf{Attendance Tracking:} Pre-tee time reminders, one-tap check-in, no-show penalty automation
+\end{itemize}
+
+\subsection{API Structure}
+
+All APIs follow RESTful conventions:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Authentication:} JWT tokens with automatic refresh
+  \item \textbf{Base URL:} \texttt{/api/}
+  \item \textbf{Modules:} auth, profile, roster, tee-times, invites, friends, notifications, courses, social-rate, attendance, draft
+\end{itemize}
+
+%==============================================================================
+\section{Appendix: API Endpoint Reference}
+%==============================================================================
+
+\begin{longtable}{|p{4cm}|p{6cm}|p{4cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Description} & \textbf{User Story} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Endpoint} & \textbf{Description} & \textbf{User Story} \\
+\hline
+\endhead
+GET /api/profile & Get user profile & US-01 \\
+PUT /api/profile & Update profile & US-01 \\
+GET /api/social-rate & Get social rate score & US-02 \\
+GET /api/social-rate/history & Get score history & US-02 \\
+GET /api/draft/qr & Get QR code & US-03 \\
+POST /api/draft/scan & Scan QR code & US-04 \\
+POST /api/draft/confirm & Confirm draft & US-04 \\
+GET /api/tee-times/history & Get tee time history & US-05 \\
+\hline
+GET /api/roster & Get roster & US-10 \\
+PUT /api/roster/reorder & Reorder roster & US-11 \\
+PUT /api/roster/:id/move & Move member & US-11 \\
+GET /api/roster/groups & Get groups & US-10, US-17 \\
+POST /api/roster/groups & Create group & US-10, US-17 \\
+GET /api/roster/:id/profile & Get member profile & US-13 \\
+POST /api/friends/block/:id & Block user & US-14, US-36 \\
+\hline
+POST /api/tee-times & Create tee time & US-20, US-25 \\
+POST /api/invites & Create invites & US-20, US-21, US-25 \\
+POST /api/tee-times/:id/skip & Skip invite & US-23 \\
+POST /api/tee-times/:id/on-deck-invites & On-deck invites & US-24, US-29 \\
+POST /api/tee-times/:id/fcfs-deadline & Set deadline & US-28 \\
+\hline
+GET /api/notifications & Get notifications & US-30, US-31 \\
+PUT /api/invites/:id/respond & Respond to invite & US-32 \\
+GET /api/invites/pending & Get pending invites & US-33, US-39 \\
+\hline
+GET /api/tee-times/calendar & Get calendar & US-37 \\
+GET /api/tee-times?status= & Filter tee times & US-38 \\
+GET /api/tee-times/:id & Get tee time details & US-40 \\
+\hline
+POST /api/tee-times/:id/cancel-participation & Cancel participation & US-41, US-42 \\
+POST /api/tee-times/:id/check-in/all & Check in all & US-44 \\
+GET /api/tee-times/:id/attendance & Get attendance & US-45 \\
+POST /api/tee-times/:id/check-in/:id & Update attendance & US-46 \\
+\hline
+\end{longtable}
+
+\end{document}

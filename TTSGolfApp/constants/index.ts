@@ -3,8 +3,10 @@
  * Re-exports all constants for cleaner imports
  */
 
-export { COUNTRY_CODES, getDefaultCountry } from "./countryCodes";
+// Colors (legacy - prefer theme/tokens.ts for new code)
+export { COLORS } from "./colors";
 
+// Onboarding constants
 export {
   ONBOARDING_STEPS,
   STEP_ORDER,

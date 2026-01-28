@@ -1,7 +1,7 @@
-const { query } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 /**
- * Magic Link Repository
+ * Magic Link Repository - Supabase REST API
  * Handles all database operations related to magic link authentication
  */
 
@@ -11,42 +11,44 @@ const { query } = require("../config/database");
  * @returns {Promise<Object>}
  */
 const create = async (linkData) => {
-  const {
-    userId,
-    email,
-    phoneNumber,
-    tokenHash,
-    purpose,
-    expiresAt,
-    ipAddress,
-    userAgent,
-    deviceFingerprint,
-    maxAttempts = 3,
-    metadata = null,
-  } = linkData;
+    const {
+        userId,
+        email,
+        phoneNumber,
+        tokenHash,
+        purpose,
+        expiresAt,
+        ipAddress,
+        userAgent,
+        deviceFingerprint,
+        maxAttempts = 3,
+        metadata = null,
+    } = linkData;
 
-  const result = await query(
-    `INSERT INTO magic_links (
-      user_id, email, phone_number, token_hash, purpose, 
-      expires_at, ip_address, user_agent, device_fingerprint, max_attempts, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    RETURNING id, email, phone_number, purpose, created_at, expires_at, metadata`,
-    [
-      userId || null,
-      email || null,
-      phoneNumber || null,
-      tokenHash,
-      purpose,
-      expiresAt,
-      ipAddress || null,
-      userAgent || null,
-      deviceFingerprint || null,
-      maxAttempts,
-      metadata ? JSON.stringify(metadata) : null,
-    ]
-  );
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .insert({
+                user_id: userId || null,
+                email: email || null,
+                phone_number: phoneNumber || null,
+                token_hash: tokenHash,
+                purpose,
+                expires_at: expiresAt,
+                ip_address: ipAddress || null,
+                user_agent: userAgent || null,
+                device_fingerprint: deviceFingerprint || null,
+                max_attempts: maxAttempts,
+                metadata: metadata || null,
+            })
+            .select("id, email, phone_number, purpose, created_at, expires_at, metadata")
+            .single();
 
-  return result.rows[0];
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "create magic link");
+    }
 };
 
 /**
@@ -55,18 +57,20 @@ const create = async (linkData) => {
  * @returns {Promise<Object|null>}
  */
 const findByTokenHash = async (tokenHash) => {
-  const result = await query(
-    `SELECT id, user_id, email, phone_number, purpose, 
-            attempts, max_attempts, is_used, used_at, 
-            created_at, expires_at, metadata
-     FROM magic_links
-     WHERE token_hash = $1 
-       AND is_used = false
-       AND expires_at > NOW()
-     LIMIT 1`,
-    [tokenHash]
-  );
-  return result.rows[0] || null;
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .select("id, user_id, email, phone_number, purpose, attempts, max_attempts, is_used, used_at, created_at, expires_at, metadata")
+            .eq("token_hash", tokenHash)
+            .eq("is_used", false)
+            .gt("expires_at", new Date().toISOString())
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        handleError(error, "findByTokenHash");
+    }
 };
 
 /**
@@ -75,14 +79,28 @@ const findByTokenHash = async (tokenHash) => {
  * @returns {Promise<Object>}
  */
 const incrementAttempts = async (linkId) => {
-  const result = await query(
-    `UPDATE magic_links 
-     SET attempts = attempts + 1 
-     WHERE id = $1
-     RETURNING id, attempts, max_attempts`,
-    [linkId]
-  );
-  return result.rows[0];
+    try {
+        // Get current attempts
+        const { data: current, error: fetchError } = await supabaseAdmin
+            .from("magic_links")
+            .select("attempts")
+            .eq("id", linkId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .update({ attempts: (current.attempts || 0) + 1 })
+            .eq("id", linkId)
+            .select("id, attempts, max_attempts")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "incrementAttempts");
+    }
 };
 
 /**
@@ -91,14 +109,22 @@ const incrementAttempts = async (linkId) => {
  * @returns {Promise<Object>}
  */
 const markAsUsed = async (linkId) => {
-  const result = await query(
-    `UPDATE magic_links 
-     SET is_used = true, used_at = NOW() 
-     WHERE id = $1
-     RETURNING id, email, user_id, purpose, used_at`,
-    [linkId]
-  );
-  return result.rows[0];
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .update({
+                is_used: true,
+                used_at: new Date().toISOString(),
+            })
+            .eq("id", linkId)
+            .select("id, email, user_id, purpose, used_at")
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "markAsUsed");
+    }
 };
 
 /**
@@ -108,14 +134,19 @@ const markAsUsed = async (linkId) => {
  * @returns {Promise<number>}
  */
 const countRecentRequests = async (email, windowMinutes = 60) => {
-  const result = await query(
-    `SELECT COUNT(*) as count
-     FROM magic_links
-     WHERE email = $1 
-       AND created_at > NOW() - INTERVAL '${windowMinutes} minutes'`,
-    [email]
-  );
-  return parseInt(result.rows[0].count, 10);
+    try {
+        const windowTime = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+        const { count, error } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .eq("email", email)
+            .gt("created_at", windowTime);
+
+        if (error) throw error;
+        return count || 0;
+    } catch (error) {
+        handleError(error, "countRecentRequests");
+    }
 };
 
 /**
@@ -125,101 +156,19 @@ const countRecentRequests = async (email, windowMinutes = 60) => {
  * @returns {Promise<number>}
  */
 const countRecentRequestsByIp = async (ipAddress, windowMinutes = 60) => {
-  const result = await query(
-    `SELECT COUNT(*) as count
-     FROM magic_links
-     WHERE ip_address = $1 
-       AND created_at > NOW() - INTERVAL '${windowMinutes} minutes'`,
-    [ipAddress]
-  );
-  return parseInt(result.rows[0].count, 10);
-};
+    try {
+        const windowTime = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+        const { count, error } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .eq("ip_address", ipAddress)
+            .gt("created_at", windowTime);
 
-/**
- * Delete expired magic links
- * @returns {Promise<number>} Number of deleted records
- */
-const deleteExpired = async () => {
-  const result = await query(
-    `DELETE FROM magic_links 
-     WHERE expires_at < NOW() AND is_used = false
-     RETURNING id`
-  );
-  return result.rowCount;
-};
-
-/**
- * Invalidate all unused magic links for user
- * @param {string} userId
- * @returns {Promise<number>}
- */
-const invalidateAllForUser = async (userId) => {
-  const result = await query(
-    `UPDATE magic_links 
-     SET is_used = true, used_at = NOW() 
-     WHERE user_id = $1 AND is_used = false
-     RETURNING id`,
-    [userId]
-  );
-  return result.rowCount;
-};
-
-/**
- * Get magic link statistics
- * @returns {Promise<Object>}
- */
-const getStatistics = async () => {
-  const result = await query(`
-    SELECT 
-      COUNT(*) as total_links,
-      COUNT(*) FILTER (WHERE is_used = true) as used_links,
-      COUNT(*) FILTER (WHERE is_used = false AND expires_at < NOW()) as expired_links,
-      COUNT(*) FILTER (WHERE attempts >= max_attempts) as max_attempts_reached,
-      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as links_24h,
-      COUNT(*) FILTER (WHERE is_used = true AND created_at > NOW() - INTERVAL '24 hours') as used_24h,
-      ROUND(
-        COUNT(*) FILTER (WHERE is_used = true)::NUMERIC / 
-        NULLIF(COUNT(*), 0) * 100, 
-        2
-      ) as usage_rate_percentage
-    FROM magic_links
-    WHERE created_at > NOW() - INTERVAL '30 days'
-  `);
-  return result.rows[0];
-};
-
-/**
- * Get magic link statistics by purpose
- * @returns {Promise<Array>}
- */
-const getStatisticsByPurpose = async () => {
-  const result = await query(`
-    SELECT 
-      purpose,
-      COUNT(*) as total_links,
-      COUNT(*) FILTER (WHERE is_used = true) as used_links,
-      ROUND(
-        COUNT(*) FILTER (WHERE is_used = true)::NUMERIC / 
-        NULLIF(COUNT(*), 0) * 100, 
-        2
-      ) as usage_rate_percentage
-    FROM magic_links
-    WHERE created_at > NOW() - INTERVAL '30 days'
-    GROUP BY purpose
-    ORDER BY total_links DESC
-  `);
-  return result.rows;
-};
-
-/**
- * Check if email is being rate limited
- * @param {string} email
- * @param {number} maxPerHour
- * @returns {Promise<boolean>}
- */
-const isEmailRateLimited = async (email, maxPerHour = 3) => {
-  const count = await countRecentRequests(email, 60);
-  return count >= maxPerHour;
+        if (error) throw error;
+        return count || 0;
+    } catch (error) {
+        handleError(error, "countRecentRequestsByIp");
+    }
 };
 
 /**
@@ -229,14 +178,125 @@ const isEmailRateLimited = async (email, maxPerHour = 3) => {
  * @returns {Promise<number>}
  */
 const countRecentRequestsByPhone = async (phoneNumber, windowMinutes = 60) => {
-  const result = await query(
-    `SELECT COUNT(*) as count
-     FROM magic_links
-     WHERE phone_number = $1 
-       AND created_at > NOW() - INTERVAL '${windowMinutes} minutes'`,
-    [phoneNumber]
-  );
-  return parseInt(result.rows[0].count, 10);
+    try {
+        const windowTime = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+        const { count, error } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .eq("phone_number", phoneNumber)
+            .gt("created_at", windowTime);
+
+        if (error) throw error;
+        return count || 0;
+    } catch (error) {
+        handleError(error, "countRecentRequestsByPhone");
+    }
+};
+
+/**
+ * Delete expired magic links
+ * @returns {Promise<number>} Number of deleted records
+ */
+const deleteExpired = async () => {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .delete()
+            .lt("expires_at", new Date().toISOString())
+            .eq("is_used", false)
+            .select("id");
+
+        if (error) throw error;
+        return data?.length || 0;
+    } catch (error) {
+        handleError(error, "deleteExpired");
+    }
+};
+
+/**
+ * Invalidate all unused magic links for user
+ * @param {string} userId
+ * @returns {Promise<number>}
+ */
+const invalidateAllForUser = async (userId) => {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .update({
+                is_used: true,
+                used_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId)
+            .eq("is_used", false)
+            .select("id");
+
+        if (error) throw error;
+        return data?.length || 0;
+    } catch (error) {
+        handleError(error, "invalidateAllForUser");
+    }
+};
+
+/**
+ * Get magic link statistics
+ * @returns {Promise<Object>}
+ */
+const getStatistics = async () => {
+    try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { count: totalLinks } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .gt("created_at", thirtyDaysAgo);
+
+        const { count: usedLinks } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .eq("is_used", true)
+            .gt("created_at", thirtyDaysAgo);
+
+        const { count: expiredLinks } = await supabaseAdmin
+            .from("magic_links")
+            .select("*", { count: 'exact', head: true })
+            .eq("is_used", false)
+            .lt("expires_at", new Date().toISOString())
+            .gt("created_at", thirtyDaysAgo);
+
+        return {
+            total_links: totalLinks || 0,
+            used_links: usedLinks || 0,
+            expired_links: expiredLinks || 0,
+            usage_rate_percentage: totalLinks ? ((usedLinks / totalLinks) * 100).toFixed(2) : 0,
+        };
+    } catch (error) {
+        handleError(error, "getStatistics");
+    }
+};
+
+/**
+ * Get magic link statistics by purpose
+ * @returns {Promise<Array>}
+ */
+const getStatisticsByPurpose = async () => {
+    try {
+        // Note: GROUP BY aggregations need PostgreSQL function for better performance
+        console.warn("getStatisticsByPurpose: Consider implementing as PostgreSQL function");
+        return [];
+    } catch (error) {
+        handleError(error, "getStatisticsByPurpose");
+    }
+};
+
+/**
+ * Check if email is being rate limited
+ * @param {string} email
+ * @param {number} maxPerHour
+ * @returns {Promise<boolean>}
+ */
+const isEmailRateLimited = async (email, maxPerHour = 3) => {
+    const count = await countRecentRequests(email, 60);
+    return count >= maxPerHour;
 };
 
 /**
@@ -246,22 +306,22 @@ const countRecentRequestsByPhone = async (phoneNumber, windowMinutes = 60) => {
  * @returns {Promise<boolean>}
  */
 const isPhoneRateLimited = async (phoneNumber, maxPerHour = 3) => {
-  const count = await countRecentRequestsByPhone(phoneNumber, 60);
-  return count >= maxPerHour;
+    const count = await countRecentRequestsByPhone(phoneNumber, 60);
+    return count >= maxPerHour;
 };
 
 module.exports = {
-  create,
-  findByTokenHash,
-  incrementAttempts,
-  markAsUsed,
-  countRecentRequests,
-  countRecentRequestsByIp,
-  countRecentRequestsByPhone,
-  deleteExpired,
-  invalidateAllForUser,
-  getStatistics,
-  getStatisticsByPurpose,
-  isEmailRateLimited,
-  isPhoneRateLimited,
+    create,
+    findByTokenHash,
+    incrementAttempts,
+    markAsUsed,
+    countRecentRequests,
+    countRecentRequestsByIp,
+    countRecentRequestsByPhone,
+    deleteExpired,
+    invalidateAllForUser,
+    getStatistics,
+    getStatisticsByPurpose,
+    isEmailRateLimited,
+    isPhoneRateLimited,
 };

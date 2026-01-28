@@ -10,6 +10,7 @@ import {
   ImageStyle,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
 
 const { width, height } = Dimensions.get("window");
@@ -71,12 +72,58 @@ export default function SplashScreen({
       }),
     ]).start();
 
-    // Auto-navigate to Welcome screen after 1.5 seconds
-    const timer = setTimeout(() => {
-      navigation.replace("Welcome");
-    }, 1500);
+    // Check for existing session and navigate accordingly
+    const checkSession = async () => {
+      try {
+        const [accessToken, userStr] = await Promise.all([
+          AsyncStorage.getItem("accessToken"),
+          AsyncStorage.getItem("user"),
+        ]);
 
-    return () => clearTimeout(timer);
+        // Wait for animation to complete
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        if (accessToken && userStr) {
+          // Validate token by checking if it's expired
+          try {
+            // Decode JWT to check expiration (simple check without verification)
+            const tokenParts = accessToken.split('.');
+            if (tokenParts.length === 3) {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              const currentTime = Math.floor(Date.now() / 1000);
+
+              // Check if token is expired
+              if (payload.exp && payload.exp < currentTime) {
+                // Token expired, clear storage and go to Welcome
+                console.log("Token expired, clearing session");
+                await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                navigation.replace("Welcome");
+                return;
+              }
+            }
+
+            // Token is valid, go to Home
+            const user = JSON.parse(userStr);
+            navigation.replace("Home", { user });
+          } catch (tokenError) {
+            // Invalid token format, clear and go to Welcome
+            console.error("Invalid token format:", tokenError);
+            await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+            navigation.replace("Welcome");
+          }
+        } else {
+          // No session, go to Welcome
+          navigation.replace("Welcome");
+        }
+      } catch (error) {
+        console.error("Session check error:", error);
+        // Clear any corrupted data and go to Welcome
+        await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+        navigation.replace("Welcome");
+      }
+    };
+
+    checkSession();
   }, [navigation, fadeAnim, scaleAnim, rotateAnim]);
 
   const spin = rotateAnim.interpolate({

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "TTSGolfApp",
-    "slug": "TTSGolfApp",
+    "name": "TeeTime Social",
+    "slug": "teetimesocial",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/AppIcon.png",
@@ -14,7 +14,16 @@
     },
     "ios": {
       "supportsTablet": true,
-      "icon": "./assets/AppIcon.png"
+      "icon": "./assets/AppIcon.png",
+      "bundleIdentifier": "com.teetimesocial.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take profile photos.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select profile photos.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to find nearby golf courses.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -22,10 +31,21 @@
         "backgroundColor": "#ffffff"
       },
       "icon": "./assets/AppIcon.png",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.teetimesocial.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-apple-authentication"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9fc8c4f2-1cb5-495d-8f3f-9fe11bcac1eb"
+      }
     }
   }
 }

@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { query } = require("../config/database");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
@@ -53,7 +53,7 @@ const extractDeviceInfo = (req) => {
       osVersion = mobileInfo.osVersion || "";
     }
 
-    logger.info("📱 Mobile device info captured:", {
+    logger.info("[DEVICE] Mobile device info captured:", {
       deviceName,
       deviceType,
       os,
@@ -224,7 +224,7 @@ const saveDevice = async (userId, deviceInfo) => {
   try {
     const fingerprint = generateFingerprint(deviceInfo);
 
-    logger.info("💾 Saving device:", {
+    logger.info("[DEVICE] Saving device:", {
       userId,
       deviceName: deviceInfo.deviceName,
       isNativeApp: deviceInfo.isNativeApp,
@@ -232,66 +232,72 @@ const saveDevice = async (userId, deviceInfo) => {
     });
 
     // Check if device already exists for this user
-    const existing = await query(
-      `SELECT id FROM devices 
-       WHERE user_id = $1 AND device_fingerprint = $2
-       LIMIT 1`,
-      [userId, fingerprint]
-    );
+    const { data: existing, error: checkError } = await supabaseAdmin
+      .from("devices")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("device_fingerprint", fingerprint)
+      .limit(1)
+      .single();
 
-    if (existing.rows.length > 0) {
+    if (checkError && checkError.code !== 'PGRST116') {
+      logger.error("Error checking existing device:", checkError.message);
+    }
+
+    if (existing) {
       // Update existing device
-      const result = await query(
-        `UPDATE devices 
-         SET last_seen_at = NOW(),
-             last_ip_address = $1,
-             user_agent = $2,
-             device_name = COALESCE($3, device_name),
-             app_version = COALESCE($4, app_version),
-             is_native_app = $5
-         WHERE id = $6
-         RETURNING id, device_name, device_type, os, browser, is_native_app`,
-        [
-          deviceInfo.ipAddress,
-          deviceInfo.userAgent,
-          deviceInfo.deviceName,
-          deviceInfo.appVersion,
-          deviceInfo.isNativeApp || false,
-          existing.rows[0].id,
-        ]
-      );
-      logger.info("📱 Device updated:", result.rows[0]?.device_name);
-      return result.rows[0];
+      const { data, error } = await supabaseAdmin
+        .from("devices")
+        .update({
+          last_seen_at: new Date().toISOString(),
+          last_ip_address: deviceInfo.ipAddress,
+          user_agent: deviceInfo.userAgent,
+          device_name: deviceInfo.deviceName || undefined,
+          app_version: deviceInfo.appVersion || undefined,
+          is_native_app: deviceInfo.isNativeApp || false,
+        })
+        .eq("id", existing.id)
+        .select("id, device_name, device_type, os, browser, is_native_app")
+        .single();
+
+      if (error) {
+        logger.error("Error updating device:", error.message);
+        return null;
+      }
+
+      logger.info("[DEVICE] Device updated:", data?.device_name);
+      return data;
     }
 
     // Create new device
-    const result = await query(
-      `INSERT INTO devices (
-        user_id, device_fingerprint, device_name, device_type,
-        os, os_version, browser, browser_version,
-        app_version, user_agent, last_ip_address, is_native_app
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING id, device_name, device_type, os, browser, is_native_app`,
-      [
-        userId,
-        fingerprint,
-        deviceInfo.deviceName || `${deviceInfo.os} ${deviceInfo.deviceType}`,
-        deviceInfo.deviceType,
-        deviceInfo.os,
-        deviceInfo.osVersion,
-        deviceInfo.browser,
-        deviceInfo.browserVersion,
-        deviceInfo.appVersion,
-        deviceInfo.userAgent,
-        deviceInfo.ipAddress,
-        deviceInfo.isNativeApp || false,
-      ]
-    );
+    const { data, error } = await supabaseAdmin
+      .from("devices")
+      .insert({
+        user_id: userId,
+        device_fingerprint: fingerprint,
+        device_name: deviceInfo.deviceName || `${deviceInfo.os} ${deviceInfo.deviceType}`,
+        device_type: deviceInfo.deviceType,
+        os: deviceInfo.os,
+        os_version: deviceInfo.osVersion,
+        browser: deviceInfo.browser,
+        browser_version: deviceInfo.browserVersion,
+        app_version: deviceInfo.appVersion,
+        user_agent: deviceInfo.userAgent,
+        last_ip_address: deviceInfo.ipAddress,
+        is_native_app: deviceInfo.isNativeApp || false,
+      })
+      .select("id, device_name, device_type, os, browser, is_native_app")
+      .single();
 
-    logger.info("📱 New device created:", result.rows[0]?.device_name);
-    return result.rows[0];
+    if (error) {
+      logger.error("Error creating device:", error.message);
+      return null;
+    }
+
+    logger.info("[DEVICE] New device created:", data?.device_name);
+    return data;
   } catch (error) {
-    logger.error("Error saving device:", error);
+    logger.error("Error saving device:", error.message);
     return null;
   }
 };
@@ -302,17 +308,18 @@ const saveDevice = async (userId, deviceInfo) => {
  * @returns {Promise<Array>} List of devices
  */
 const getUserDevices = async (userId) => {
-  const result = await query(
-    `SELECT 
-      id, device_name, device_type, os, os_version,
-      browser, browser_version, last_seen_at, last_ip_address,
-      is_trusted, created_at
-    FROM devices
-    WHERE user_id = $1
-    ORDER BY last_seen_at DESC`,
-    [userId]
-  );
-  return result.rows;
+  const { data, error } = await supabaseAdmin
+    .from("devices")
+    .select("id, device_name, device_type, os, os_version, browser, browser_version, last_seen_at, last_ip_address, is_trusted, created_at")
+    .eq("user_id", userId)
+    .order("last_seen_at", { ascending: false });
+
+  if (error) {
+    logger.error("Error getting user devices:", error.message);
+    return [];
+  }
+
+  return data || [];
 };
 
 /**
@@ -322,14 +329,18 @@ const getUserDevices = async (userId) => {
  * @returns {Promise<boolean>}
  */
 const trustDevice = async (deviceId, userId) => {
-  const result = await query(
-    `UPDATE devices 
-     SET is_trusted = true 
-     WHERE id = $1 AND user_id = $2
-     RETURNING id`,
-    [deviceId, userId]
-  );
-  return result.rowCount > 0;
+  const { error } = await supabaseAdmin
+    .from("devices")
+    .update({ is_trusted: true })
+    .eq("id", deviceId)
+    .eq("user_id", userId);
+
+  if (error) {
+    logger.error("Error trusting device:", error.message);
+    return false;
+  }
+
+  return true;
 };
 
 /**
@@ -339,13 +350,18 @@ const trustDevice = async (deviceId, userId) => {
  * @returns {Promise<boolean>}
  */
 const removeDevice = async (deviceId, userId) => {
-  const result = await query(
-    `DELETE FROM devices 
-     WHERE id = $1 AND user_id = $2
-     RETURNING id`,
-    [deviceId, userId]
-  );
-  return result.rowCount > 0;
+  const { error } = await supabaseAdmin
+    .from("devices")
+    .delete()
+    .eq("id", deviceId)
+    .eq("user_id", userId);
+
+  if (error) {
+    logger.error("Error removing device:", error.message);
+    return false;
+  }
+
+  return true;
 };
 
 /**
@@ -364,7 +380,7 @@ const captureDeviceInfo = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error("Error capturing device info:", error);
+    logger.error("Error capturing device info:", error.message);
     // Don't block request on device capture failure
     next();
   }

@@ -57,6 +57,7 @@ interface Styles {
   errorText: TextStyle;
   otpContainer: ViewStyle;
   otpInput: TextStyle;
+  otpInputPlaceholder: TextStyle;
 }
 
 /**
@@ -135,7 +136,7 @@ export const OTPInput: React.FC<OTPInputProps> = ({
   return (
     <View style={[styles.otpContainer, style]}>
       <RNTextInput
-        style={styles.otpInput}
+        style={[styles.otpInput, !value && styles.otpInputPlaceholder]}
         placeholder={"0".repeat(actualMaxLength)}
         placeholderTextColor={colors.placeholder}
         value={value}
@@ -204,6 +205,9 @@ const styles = StyleSheet.create<Styles>({
     color: colors.textPrimary,
     textAlign: "center",
     letterSpacing: 8,
+  },
+  otpInputPlaceholder: {
+    letterSpacing: 0,
   },
 });
 

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import { getDeviceInfoForApi } from "../utils/deviceInfo";
 
@@ -228,6 +229,17 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
 
         setStatus("OTP verified. Logging you in...");
 
+        // Store tokens
+        if (data.accessToken) {
+          await AsyncStorage.setItem("accessToken", data.accessToken);
+        }
+        if (data.refreshToken) {
+          await AsyncStorage.setItem("refreshToken", data.refreshToken);
+        }
+        if (data.user) {
+          await AsyncStorage.setItem("user", JSON.stringify(data.user));
+        }
+
         // Navigate after brief delay
         setTimeout(() => {
           navigation?.navigate("Home", { user: data.user });
@@ -284,6 +296,17 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
         }
 
         setStatus("Login successful!");
+
+        // Store tokens
+        if (data.accessToken) {
+          await AsyncStorage.setItem("accessToken", data.accessToken);
+        }
+        if (data.refreshToken) {
+          await AsyncStorage.setItem("refreshToken", data.refreshToken);
+        }
+        if (data.user) {
+          await AsyncStorage.setItem("user", JSON.stringify(data.user));
+        }
 
         // Navigate after brief delay
         setTimeout(() => {
@@ -371,6 +394,17 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
         }
 
         setStatus("Account created successfully!");
+
+        // Store tokens
+        if (data.accessToken) {
+          await AsyncStorage.setItem("accessToken", data.accessToken);
+        }
+        if (data.refreshToken) {
+          await AsyncStorage.setItem("refreshToken", data.refreshToken);
+        }
+        if (data.user) {
+          await AsyncStorage.setItem("user", JSON.stringify(data.user));
+        }
 
         // Navigate after brief delay
         setTimeout(() => {

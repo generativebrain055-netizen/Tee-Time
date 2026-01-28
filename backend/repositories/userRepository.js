@@ -1,28 +1,59 @@
-const { query, getClient } = require("../config/database");
+const { supabaseAdmin, handleError } = require("../config/supabase");
 
 /**
- * User Repository
+ * User Repository - Supabase REST API
  * Handles all database operations related to users
+ *
+ * IDENTITY ARCHITECTURE:
+ * - User identity is the `id` (UUID) - NOT phone, NOT email
+ * - Phone number is OPTIONAL profile data
+ * - Email is OPTIONAL profile data
+ * - For OAuth users, identity comes from auth_providers table
  */
 
 /**
- * Find user by phone number
+ * Find user by phone number with profile
+ * NOTE: This is for PROFILE lookup only, not identity verification
  * @param {string} phoneNumber
  * @returns {Promise<Object|null>}
  */
 const findByPhoneNumber = async (phoneNumber) => {
-  const result = await query(
-    `SELECT id, phone_number, email, password_hash, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts, 
-            first_name, last_name, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, created_at, updated_at
-     FROM users 
-     WHERE phone_number = $1 AND deleted_at IS NULL 
-     LIMIT 1`,
-    [phoneNumber]
-  );
-  return result.rows[0] || null;
+  try {
+    if (!phoneNumber) return null;
+
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select(
+        `
+        *,
+        user_profiles (*)
+      `,
+      )
+      .eq("phone_number", phoneNumber)
+      .is("deleted_at", null)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows
+
+    if (!data) return null;
+
+    // Flatten profile data - handle both array and object responses
+    const profileData = data.user_profiles;
+    const profile = Array.isArray(profileData)
+      ? profileData[0] || {}
+      : profileData || {};
+    delete data.user_profiles;
+
+    // Prevent profile ID from overwriting user ID
+    if (profile.id) {
+      profile.profile_id = profile.id;
+      delete profile.id;
+    }
+
+    return { ...data, ...profile };
+  } catch (error) {
+    handleError(error, "findByPhoneNumber");
+  }
 };
 
 /**
@@ -31,63 +62,104 @@ const findByPhoneNumber = async (phoneNumber) => {
  * @returns {Promise<Object|null>}
  */
 const findByEmail = async (email) => {
-  const result = await query(
-    `SELECT id, phone_number, email, password_hash, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts,
-            first_name, last_name, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, created_at, updated_at
-     FROM users 
-     WHERE email = $1 AND deleted_at IS NULL 
-     LIMIT 1`,
-    [email]
-  );
-  return result.rows[0] || null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .is("deleted_at", null)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  } catch (error) {
+    handleError(error, "findByEmail");
+  }
 };
 
 /**
- * Find user by ID
+ * Find user by ID with profile
  * @param {string} userId
  * @returns {Promise<Object|null>}
  */
 const findById = async (userId) => {
-  const result = await query(
-    `SELECT id, phone_number, email, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts,
-            first_name, last_name, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, last_login_device_id,
-            created_at, updated_at
-     FROM users 
-     WHERE id = $1 AND deleted_at IS NULL 
-     LIMIT 1`,
-    [userId]
-  );
-  return result.rows[0] || null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select(
+        `
+        *,
+        user_profiles (*)
+      `,
+      )
+      .eq("id", userId)
+      .is("deleted_at", null)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    if (!data) return null;
+
+    // Flatten profile data - handle both array and object responses
+    const profileData = data.user_profiles;
+    const profile = Array.isArray(profileData)
+      ? profileData[0] || {}
+      : profileData || {};
+    delete data.user_profiles;
+
+    // Prevent profile ID from overwriting user ID
+    if (profile.id) {
+      profile.profile_id = profile.id;
+      delete profile.id;
+    }
+
+    return { ...data, ...profile };
+  } catch (error) {
+    handleError(error, "findById");
+  }
 };
 
 /**
- * Find user by username
+ * Find user by username with profile
  * @param {string} username
  * @returns {Promise<Object|null>}
  */
 const findByUsername = async (username) => {
-  const result = await query(
-    `SELECT id, phone_number, email, username, password_hash, is_active, is_verified, 
-            is_locked, locked_until, failed_login_attempts,
-            first_name, last_name, handicap, social_rate, avatar_url,
-            notification_preferences, timezone, language,
-            last_login_at, last_login_ip, created_at, updated_at
-     FROM users 
-     WHERE username = $1 AND deleted_at IS NULL 
-     LIMIT 1`,
-    [username]
-  );
-  return result.rows[0] || null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select(
+        `
+        *,
+        user_profiles (*)
+      `,
+      )
+      .eq("username", username)
+      .is("deleted_at", null)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    if (!data) return null;
+
+    // Flatten profile data
+    const profile = data.user_profiles?.[0] || {};
+    delete data.user_profiles;
+
+    // Prevent profile ID from overwriting user ID
+    if (profile.id) {
+      profile.profile_id = profile.id;
+      delete profile.id;
+    }
+
+    return { ...data, ...profile };
+  } catch (error) {
+    handleError(error, "findByUsername");
+  }
 };
 
 /**
- * Create a new user
+ * Create a new user with profile
  * @param {Object} userData
  * @returns {Promise<Object>}
  */
@@ -101,30 +173,63 @@ const create = async (userData) => {
     handicap,
     passwordHash,
     isVerified,
+    location,
+    homeCourse,
+    preferredTeeTime,
+    walkOrRide,
+    playingPartnerPreference,
   } = userData;
 
-  const result = await query(
-    `INSERT INTO users (
-      phone_number, email, username, first_name, last_name, handicap, password_hash, is_verified
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, created_at`,
-    [
-      phoneNumber || null,
-      email || null,
-      username || null,
-      firstName || null,
-      lastName || null,
-      handicap ? parseInt(handicap) : null,
-      passwordHash || null,
-      isVerified || false,
-    ]
-  );
+  try {
+    // Create user
+    const { data: user, error: userError } = await supabaseAdmin
+      .from("users")
+      .insert({
+        phone_number: phoneNumber || null,
+        email: email || null,
+        username: username || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        password_hash: passwordHash || null,
+        is_verified: isVerified || false,
+      })
+      .select()
+      .single();
 
-  return result.rows[0];
+    if (userError) throw userError;
+
+    // Create profile
+    const { error: profileError } = await supabaseAdmin
+      .from("user_profiles")
+      .insert({
+        user_id: user.id,
+        handicap: handicap ? parseFloat(handicap) : null,
+        location: location || null,
+        home_course: homeCourse || null,
+        preferred_tee_time: preferredTeeTime || null,
+        walk_or_ride: walkOrRide || null,
+        playing_partner_preference: playingPartnerPreference || null,
+      });
+
+    if (profileError) throw profileError;
+
+    return {
+      ...user,
+      handicap: handicap ? parseFloat(handicap) : null,
+      social_rate: 5.0,
+      location,
+      home_course: homeCourse,
+      preferred_tee_time: preferredTeeTime,
+      walk_or_ride: walkOrRide,
+      playing_partner_preference: playingPartnerPreference,
+    };
+  } catch (error) {
+    handleError(error, "create user");
+  }
 };
 
 /**
- * Update user by ID (general update)
+ * Update user by ID
  * @param {string} userId
  * @param {Object} userData
  * @returns {Promise<Object>}
@@ -140,31 +245,40 @@ const update = async (userId, userData) => {
     email,
   } = userData;
 
-  const result = await query(
-    `UPDATE users SET 
-      first_name = COALESCE($1, first_name),
-      last_name = COALESCE($2, last_name),
-      username = COALESCE($3, username),
-      handicap = COALESCE($4, handicap),
-      password_hash = COALESCE($5, password_hash),
-      is_verified = COALESCE($6, is_verified),
-      email = COALESCE($7, email),
-      updated_at = NOW()
-    WHERE id = $8 AND deleted_at IS NULL
-    RETURNING id, phone_number, email, username, first_name, last_name, handicap, social_rate, is_verified, updated_at`,
-    [
-      firstName || null,
-      lastName || null,
-      username || null,
-      handicap ? parseInt(handicap) : null,
-      passwordHash, // Don't use || null here, we want to allow null to be set
-      isVerified !== undefined ? isVerified : null,
-      email || null,
-      userId,
-    ]
-  );
+  try {
+    // Update users table
+    const userUpdates = {};
+    if (firstName !== undefined) userUpdates.first_name = firstName;
+    if (lastName !== undefined) userUpdates.last_name = lastName;
+    if (username !== undefined) userUpdates.username = username;
+    if (passwordHash !== undefined) userUpdates.password_hash = passwordHash;
+    if (isVerified !== undefined) userUpdates.is_verified = isVerified;
+    if (email !== undefined) userUpdates.email = email;
 
-  return result.rows[0];
+    if (Object.keys(userUpdates).length > 0) {
+      const { error: userError } = await supabaseAdmin
+        .from("users")
+        .update(userUpdates)
+        .eq("id", userId)
+        .is("deleted_at", null);
+
+      if (userError) throw userError;
+    }
+
+    // Update profile if handicap provided
+    if (handicap !== undefined) {
+      const { error: profileError } = await supabaseAdmin
+        .from("user_profiles")
+        .update({ handicap: handicap ? parseFloat(handicap) : null })
+        .eq("user_id", userId);
+
+      if (profileError) throw profileError;
+    }
+
+    return findById(userId);
+  } catch (error) {
+    handleError(error, "update user");
+  }
 };
 
 /**
@@ -174,14 +288,27 @@ const update = async (userId, userData) => {
  * @returns {Promise<Object>}
  */
 const updatePassword = async (userId, passwordHash) => {
-  const result = await query(
-    `UPDATE users 
-     SET password_hash = $1, updated_at = NOW() 
-     WHERE id = $2 AND deleted_at IS NULL
-     RETURNING id, phone_number, email`,
-    [passwordHash, userId]
-  );
-  return result.rows[0];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .update({ password_hash: passwordHash })
+      .eq("id", userId)
+      .is("deleted_at", null)
+      .select("id, phone_number, email")
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    handleError(error, "updatePassword");
+  }
+};
+
+/**
+ * Convert camelCase to snake_case
+ */
+const toSnakeCase = (str) => {
+  return str.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase());
 };
 
 /**
@@ -191,196 +318,314 @@ const updatePassword = async (userId, passwordHash) => {
  * @returns {Promise<Object>}
  */
 const updateProfile = async (userId, updates) => {
-  const allowedFields = [
-    "first_name",
-    "last_name",
-    "email",
+  const userFields = ["first_name", "last_name", "email"];
+  const profileFields = [
+    "handicap",
+    "location",
+    "home_course",
+    "bio",
+    "preferred_tee_time",
+    "walk_or_ride",
+    "playing_partner_preference",
     "avatar_url",
     "timezone",
     "language",
   ];
 
-  const fields = [];
-  const values = [];
-  let paramIndex = 1;
+  console.log("[UPDATE_PROFILE] Input updates:", updates);
 
-  Object.keys(updates).forEach((key) => {
-    const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-    if (allowedFields.includes(snakeKey)) {
-      fields.push(`${snakeKey} = $${paramIndex++}`);
-      values.push(updates[key]);
+  try {
+    // Build user table updates
+    const userUpdates = {};
+    Object.keys(updates).forEach((key) => {
+      const snakeKey = toSnakeCase(key);
+      if (userFields.includes(snakeKey)) {
+        userUpdates[snakeKey] = updates[key];
+      }
+    });
+
+    // Update users table
+    if (Object.keys(userUpdates).length > 0) {
+      console.log("[UPDATE_PROFILE] User table updates:", userUpdates);
+      const { error: userError } = await supabaseAdmin
+        .from("users")
+        .update(userUpdates)
+        .eq("id", userId)
+        .is("deleted_at", null);
+
+      if (userError) throw userError;
     }
-  });
 
-  if (fields.length === 0) {
-    throw new Error("No valid fields to update");
+    // Build profile table updates
+    const profileUpdates = {};
+    Object.keys(updates).forEach((key) => {
+      const snakeKey = toSnakeCase(key);
+      if (profileFields.includes(snakeKey)) {
+        if (snakeKey === "handicap") {
+          profileUpdates[snakeKey] =
+            updates[key] !== null && updates[key] !== ""
+              ? parseFloat(updates[key])
+              : null;
+        } else {
+          profileUpdates[snakeKey] = updates[key];
+        }
+      }
+    });
+
+    // Update user_profiles table
+    if (Object.keys(profileUpdates).length > 0) {
+      console.log("[UPDATE_PROFILE] Profile table updates:", profileUpdates);
+      const { error: profileError } = await supabaseAdmin
+        .from("user_profiles")
+        .update(profileUpdates)
+        .eq("user_id", userId);
+
+      if (profileError) throw profileError;
+    }
+
+    return findById(userId);
+  } catch (error) {
+    handleError(error, "updateProfile");
   }
-
-  fields.push(`updated_at = NOW()`);
-  values.push(userId);
-
-  const result = await query(
-    `UPDATE users 
-     SET ${fields.join(", ")} 
-     WHERE id = $${paramIndex} AND deleted_at IS NULL
-     RETURNING id, phone_number, email, first_name, last_name, 
-               avatar_url, timezone, language, updated_at`,
-    values
-  );
-
-  return result.rows[0];
 };
 
 /**
  * Update last login information
- * @param {string} userId
- * @param {string} ipAddress
- * @param {string} deviceId
- * @returns {Promise<void>}
  */
 const updateLastLogin = async (userId, ipAddress, deviceId = null) => {
-  await query(
-    `UPDATE users 
-     SET last_login_at = NOW(), 
-         last_login_ip = $1,
-         failed_login_attempts = 0
-     WHERE id = $2`,
-    [ipAddress, userId]
-  );
+  try {
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({
+        last_login_at: new Date().toISOString(),
+        last_login_ip: ipAddress,
+        failed_login_attempts: 0,
+      })
+      .eq("id", userId);
+
+    if (error) throw error;
+  } catch (error) {
+    handleError(error, "updateLastLogin");
+  }
 };
 
 /**
  * Increment failed login attempts
- * @param {string} userId
- * @returns {Promise<number>} New count of failed attempts
  */
 const incrementFailedLoginAttempts = async (userId) => {
-  const result = await query(
-    `UPDATE users 
-     SET failed_login_attempts = failed_login_attempts + 1,
-         is_locked = CASE 
-           WHEN failed_login_attempts + 1 >= 5 THEN true 
-           ELSE is_locked 
-         END,
-         locked_until = CASE 
-           WHEN failed_login_attempts + 1 >= 5 THEN NOW() + INTERVAL '30 minutes'
-           ELSE locked_until 
-         END
-     WHERE id = $1
-     RETURNING failed_login_attempts, is_locked, locked_until`,
-    [userId]
-  );
-  return result.rows[0];
+  try {
+    // Get current attempts
+    const { data: user, error: fetchError } = await supabaseAdmin
+      .from("users")
+      .select("failed_login_attempts")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const newAttempts = (user.failed_login_attempts || 0) + 1;
+    const updates = {
+      failed_login_attempts: newAttempts,
+    };
+
+    if (newAttempts >= 5) {
+      updates.is_locked = true;
+      updates.locked_until = new Date(
+        Date.now() + 30 * 60 * 1000,
+      ).toISOString();
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .update(updates)
+      .eq("id", userId)
+      .select("failed_login_attempts, is_locked, locked_until")
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    handleError(error, "incrementFailedLoginAttempts");
+  }
 };
 
 /**
  * Reset failed login attempts
- * @param {string} userId
- * @returns {Promise<void>}
  */
 const resetFailedLoginAttempts = async (userId) => {
-  await query(
-    `UPDATE users 
-     SET failed_login_attempts = 0, 
-         is_locked = false, 
-         locked_until = NULL 
-     WHERE id = $1`,
-    [userId]
-  );
+  try {
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({
+        failed_login_attempts: 0,
+        is_locked: false,
+        locked_until: null,
+      })
+      .eq("id", userId);
+
+    if (error) throw error;
+  } catch (error) {
+    handleError(error, "resetFailedLoginAttempts");
+  }
 };
 
 /**
- * Verify user (mark as verified)
- * @param {string} userId
- * @returns {Promise<Object>}
+ * Verify user
  */
 const verifyUser = async (userId) => {
-  const result = await query(
-    `UPDATE users 
-     SET is_verified = true, updated_at = NOW() 
-     WHERE id = $1 AND deleted_at IS NULL
-     RETURNING id, phone_number, email, is_verified`,
-    [userId]
-  );
-  return result.rows[0];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .update({ is_verified: true })
+      .eq("id", userId)
+      .is("deleted_at", null)
+      .select("id, phone_number, email, is_verified")
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    handleError(error, "verifyUser");
+  }
 };
 
 /**
  * Update notification preferences
- * @param {string} userId
- * @param {Object} preferences
- * @returns {Promise<Object>}
  */
 const updateNotificationPreferences = async (userId, preferences) => {
-  const result = await query(
-    `UPDATE users 
-     SET notification_preferences = $1, updated_at = NOW() 
-     WHERE id = $2 AND deleted_at IS NULL
-     RETURNING id, notification_preferences`,
-    [JSON.stringify(preferences), userId]
-  );
-  return result.rows[0];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("user_profiles")
+      .update({ notification_preferences: preferences })
+      .eq("user_id", userId)
+      .select("id, notification_preferences")
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    handleError(error, "updateNotificationPreferences");
+  }
 };
 
 /**
  * Soft delete user
- * @param {string} userId
- * @returns {Promise<void>}
  */
 const softDelete = async (userId) => {
-  await query(
-    `UPDATE users 
-     SET deleted_at = NOW(), is_active = false 
-     WHERE id = $1`,
-    [userId]
-  );
+  try {
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({
+        deleted_at: new Date().toISOString(),
+        is_active: false,
+      })
+      .eq("id", userId);
+
+    if (error) throw error;
+  } catch (error) {
+    handleError(error, "softDelete");
+  }
 };
 
 /**
  * Check if phone number exists
- * @param {string} phoneNumber
- * @returns {Promise<boolean>}
  */
 const phoneNumberExists = async (phoneNumber) => {
-  const result = await query(
-    "SELECT EXISTS(SELECT 1 FROM users WHERE phone_number = $1 AND deleted_at IS NULL) as exists",
-    [phoneNumber]
-  );
-  return result.rows[0].exists;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("phone_number", phoneNumber)
+      .is("deleted_at", null);
+
+    if (error) throw error;
+    return data !== null;
+  } catch (error) {
+    handleError(error, "phoneNumberExists");
+  }
 };
 
 /**
  * Check if email exists
- * @param {string} email
- * @returns {Promise<boolean>}
  */
 const emailExists = async (email) => {
-  const result = await query(
-    "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL) as exists",
-    [email]
-  );
-  return result.rows[0].exists;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("email", email)
+      .is("deleted_at", null);
+
+    if (error) throw error;
+    return data !== null;
+  } catch (error) {
+    handleError(error, "emailExists");
+  }
 };
 
 /**
  * Get user statistics
- * @returns {Promise<Object>}
  */
 const getStatistics = async () => {
-  const result = await query(`
-    SELECT 
-      COUNT(*) FILTER (WHERE deleted_at IS NULL) as total_users,
-      COUNT(*) FILTER (WHERE is_active = true AND deleted_at IS NULL) as active_users,
-      COUNT(*) FILTER (WHERE is_verified = true AND deleted_at IS NULL) as verified_users,
-      COUNT(*) FILTER (WHERE last_login_at > NOW() - INTERVAL '24 hours') as active_last_24h,
-      COUNT(*) FILTER (WHERE last_login_at > NOW() - INTERVAL '7 days') as active_last_7d,
-      COUNT(*) FILTER (WHERE last_login_at > NOW() - INTERVAL '30 days') as active_last_30d,
-      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as new_users_24h,
-      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as new_users_7d,
-      COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_users_30d
-    FROM users
-  `);
-  return result.rows[0];
+  try {
+    const { count: totalUsers } = await supabaseAdmin
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .is("deleted_at", null);
+
+    const { count: activeUsers } = await supabaseAdmin
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", true)
+      .is("deleted_at", null);
+
+    const { count: verifiedUsers } = await supabaseAdmin
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("is_verified", true)
+      .is("deleted_at", null);
+
+    return {
+      total_users: totalUsers || 0,
+      active_users: activeUsers || 0,
+      verified_users: verifiedUsers || 0,
+    };
+  } catch (error) {
+    handleError(error, "getStatistics");
+  }
+};
+
+/**
+ * Get public profile
+ */
+const getPublicProfile = async (userId) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select(
+        `
+        id, first_name, last_name, username,
+        user_profiles (
+          handicap, social_rate, avatar_url, location, home_course,
+          preferred_tee_time, walk_or_ride, bio, rounds_played, average_score
+        )
+      `,
+      )
+      .eq("id", userId)
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    if (!data) return null;
+
+    const profile = data.user_profiles?.[0] || {};
+    delete data.user_profiles;
+    return { ...data, ...profile };
+  } catch (error) {
+    handleError(error, "getPublicProfile");
+  }
 };
 
 module.exports = {
@@ -401,4 +646,5 @@ module.exports = {
   phoneNumberExists,
   emailExists,
   getStatistics,
+  getPublicProfile,
 };

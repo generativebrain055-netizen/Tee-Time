@@ -118,7 +118,7 @@ const styles = StyleSheet.create<Styles>({
   },
   primaryBtn: {
     backgroundColor: "#5DB075",
-    borderRadius: borderRadius.full,
+    borderRadius: borderRadius.lg,
     paddingVertical: 18,
     alignItems: "center",
     justifyContent: "center",

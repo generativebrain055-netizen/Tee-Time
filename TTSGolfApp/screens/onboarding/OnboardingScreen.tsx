@@ -11,7 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { colors } from "../../theme";
 import { ONBOARDING_STEPS, STEP_ORDER } from "../../constants/onboarding";
-import { API_ENDPOINTS } from "../../config/api";
+import { API_ENDPOINTS, API_URL } from "../../config/api";
 import type { OnboardingData } from "../../types";
 
 // Import all step components
@@ -41,6 +41,19 @@ type OnboardingScreenNavigationProp = StackNavigationProp<
 
 interface OnboardingScreenProps {
   navigation: OnboardingScreenNavigationProp;
+  route?: {
+    params?: {
+      oauthData?: {
+        tempToken?: string;
+        requiredFields?: string[];
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+        picture?: string;
+        authProvider?: "google" | "apple";
+      };
+    };
+  };
 }
 
 interface Styles {
@@ -66,22 +79,79 @@ type StepComponent = React.FC<{
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
+  route,
 }) => {
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const oauthData = route?.params?.oauthData;
+
+  // Debug logging
+  console.log("OnboardingScreen - Mounted");
+  console.log(
+    "OnboardingScreen - Route params:",
+    JSON.stringify(route?.params, null, 2),
+  );
+  console.log(
+    "OnboardingScreen - OAuth data:",
+    JSON.stringify(oauthData, null, 2),
+  );
+
+  // Determine starting step for OAuth users
+  const getInitialStepIndex = () => {
+    if (!oauthData) return 0; // Start at welcome for non-OAuth
+    // Skip welcome, go to phone (step 1)
+    console.log(
+      "OnboardingScreen - OAuth user detected, starting at step 1 (Phone)",
+    );
+    return 1;
+  };
+
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(
+    getInitialStepIndex(),
+  );
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
-  const [userData, setUserData] = useState<Partial<OnboardingData>>({});
+  const [userData, setUserData] = useState<Partial<OnboardingData>>({
+    email: oauthData?.email || undefined,
+    firstName: oauthData?.firstName || undefined,
+    lastName: oauthData?.lastName || undefined,
+  });
 
   const currentStep = STEP_ORDER[currentStepIndex];
 
   const handleNext = (data: Partial<OnboardingData>): void => {
+    console.log("OnboardingScreen - handleNext called with data:", data);
+    console.log("Current step index:", currentStepIndex);
+    console.log("Total steps:", STEP_ORDER.length);
+
     // Merge new data with existing userData
     setUserData((prev) => ({ ...prev, ...data }));
 
+    // Calculate next step index
+    let nextStepIndex = currentStepIndex + 1;
+
+    // For OAuth users, skip the magic link step (they're already authenticated)
+    if (
+      oauthData?.tempToken &&
+      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.MAGIC_LINK
+    ) {
+      console.log("OAuth user - skipping magic link step");
+      nextStepIndex++;
+    }
+
+    // For OAuth users with email, skip the email step
+    if (
+      oauthData?.email &&
+      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.EMAIL
+    ) {
+      console.log("OAuth user with email - skipping email step");
+      nextStepIndex++;
+    }
+
     // Navigate to next step
-    if (currentStepIndex < STEP_ORDER.length - 1) {
-      setCurrentStepIndex(currentStepIndex + 1);
+    if (nextStepIndex < STEP_ORDER.length) {
+      console.log("Moving to step index:", nextStepIndex);
+      setCurrentStepIndex(nextStepIndex);
     } else {
       // Complete onboarding
+      console.log("Last step reached - completing onboarding");
       completeOnboarding({ ...userData, ...data });
     }
   };
@@ -93,58 +163,300 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const completeOnboarding = async (
-    finalData: Partial<OnboardingData>
+    finalData: Partial<OnboardingData>,
   ): Promise<void> => {
-    if (isRegistering) return;
+    console.log("completeOnboarding called with data:", finalData);
 
+    if (isRegistering) {
+      console.log("Already registering, skipping...");
+      return;
+    }
+
+    // Validate required fields
+    const missingFields: string[] = [];
+
+    if (!finalData.phoneNumber) missingFields.push("Phone number");
+    if (!finalData.firstName?.trim()) missingFields.push("First name");
+    if (!finalData.lastName?.trim()) missingFields.push("Last name");
+
+    // Only validate preferences for non-OAuth flow
+    // OAuth users can complete preferences later
+    if (!oauthData?.tempToken) {
+      // Validate preferences for regular signup
+      if (!finalData.preferences) {
+        missingFields.push("Preferences");
+      } else {
+        if (!finalData.preferences.playerCount)
+          missingFields.push("Preferred player count");
+        if (!finalData.preferences.playStyle)
+          missingFields.push("Walk/Ride preference");
+        if (
+          !finalData.preferences.preferredTimes ||
+          finalData.preferences.preferredTimes.length === 0
+        ) {
+          missingFields.push("Preferred time of day");
+        }
+      }
+    }
+
+    if (missingFields.length > 0) {
+      console.log("Validation failed. Missing fields:", missingFields);
+      Alert.alert(
+        "Missing Information",
+        `Please complete the following fields:\n\n${missingFields.join("\n")}`,
+      );
+      return;
+    }
+
+    console.log("Validation passed. Starting registration...");
     setIsRegistering(true);
     try {
       console.log("Registering user directly:", finalData);
 
       // Generate username from first and last name
       const username = `${finalData.firstName?.toLowerCase()}${finalData.lastName?.toLowerCase()}${Math.floor(
-        Math.random() * 1000
+        Math.random() * 1000,
       )}`;
 
-      // Register user directly via /auth/register endpoint (passwordless signup)
-      const response = await fetch(API_ENDPOINTS.REGISTER, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: finalData.phoneNumber,
-          firstName: finalData.firstName,
-          lastName: finalData.lastName,
-          username: username,
-          email: finalData.email || null,
-          handicap: finalData.handicap ? parseInt(finalData.handicap) : null,
-        }),
-      });
+      // Map preferences to backend format
+      const mapPreferredTime = (times: string[] | undefined): string => {
+        if (!times || times.length === 0) return "any";
+        const timeMap: Record<string, string> = {
+          morning: "morning",
+          late_morning: "midday",
+          afternoon: "afternoon",
+          evening: "evening",
+          any: "any",
+        };
+        // Use first time preference or "any"
+        return timeMap[times[0]] || "any";
+      };
 
-      const data = await response.json();
+      const mapGroupSize = (count: string | undefined): string => {
+        if (!count) return "any";
+        const sizeMap: Record<string, string> = {
+          "1": "solo",
+          "2": "twosome",
+          "3": "threesome",
+          "4": "foursome",
+          solo: "solo",
+          twosome: "twosome",
+          threesome: "threesome",
+          foursome: "foursome",
+          any: "any",
+        };
+        return sizeMap[count] || "any";
+      };
+
+      const requestBody = {
+        phoneNumber: finalData.phoneNumber,
+        firstName: finalData.firstName,
+        lastName: finalData.lastName,
+        username: username,
+        email: finalData.email || null,
+        handicap: finalData.handicap
+          ? parseInt(finalData.handicap as string)
+          : null,
+        location: finalData.location?.name || null,
+        homeCourse: finalData.club?.name || null,
+        preferredTeeTime: mapPreferredTime(
+          finalData.preferences?.preferredTimes,
+        ),
+        walkOrRide: finalData.preferences?.playStyle || "either",
+        playingPartnerPreference: mapGroupSize(
+          finalData.preferences?.playerCount,
+        ),
+      };
+
+      console.log("Request body:", JSON.stringify(requestBody, null, 2));
+      console.log("API endpoint:", API_ENDPOINTS.REGISTER);
+      console.log("API_URL from config:", API_URL);
+
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      let response;
+
+      // Check if this is OAuth registration (has tempToken)
+      if (oauthData?.tempToken) {
+        console.log("Completing OAuth registration with tempToken");
+
+        // Ensure we have firstName/lastName - use user input or OAuth data
+        const firstName =
+          finalData.firstName?.trim() || oauthData.firstName || null;
+        const lastName =
+          finalData.lastName?.trim() || oauthData.lastName || null;
+
+        // Validate and clean email
+        let email = finalData.email?.trim() || oauthData.email || null;
+
+        // Basic email validation - if invalid, set to null
+        if (email) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            console.log("Invalid email format, setting to null:", email);
+            email = null;
+          }
+        }
+
+        console.log("Resolved names:", { firstName, lastName, email });
+
+        if (!firstName || !lastName) {
+          Alert.alert(
+            "Missing Information",
+            "First name and last name are required. Please go back and fill them in.",
+          );
+          setIsRegistering(false);
+          return;
+        }
+
+        const oauthRequestBody = {
+          tempToken: oauthData.tempToken,
+          phoneNumber: finalData.phoneNumber,
+          email: email,
+          firstName: firstName,
+          lastName: lastName,
+          username: username,
+          handicap: finalData.handicap
+            ? parseInt(finalData.handicap as string)
+            : null,
+        };
+
+        console.log(
+          "OAuth request body:",
+          JSON.stringify(oauthRequestBody, null, 2),
+        );
+
+        response = await fetch(`${API_URL}/auth/complete-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(oauthRequestBody),
+          signal: controller.signal,
+        });
+      } else {
+        // Regular registration
+        response = await fetch(API_ENDPOINTS.REGISTER, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+      }
+
+      clearTimeout(timeoutId);
+
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
+      let data;
+      try {
+        const responseText = await response.text();
+        console.log("Response body:", responseText);
+        data = JSON.parse(responseText);
+        console.log("Response data:", data);
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError);
+        throw new Error("Invalid response from server. Please try again.");
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to create account");
+        // Extract detailed error information
+        let errorMessage = "Failed to create account";
+        let errorDetails = "";
+
+        if (data.details && typeof data.details === 'object') {
+          // Format validation errors
+          const detailMessages = Object.entries(data.details)
+            .map(([field, message]) => `${field}: ${message}`)
+            .join('\n');
+          errorDetails = detailMessages;
+          errorMessage = data.message || "Validation failed";
+        } else if (data.error) {
+          errorMessage = data.error;
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+
+        console.error("Server error:", { errorMessage, errorDetails, fullData: data });
+
+        // Show user-friendly error
+        const displayMessage = errorDetails
+          ? `${errorMessage}\n\n${errorDetails}`
+          : errorMessage;
+
+        throw new Error(displayMessage);
       }
 
       console.log("User registered successfully:", data);
 
+      // If OAuth registration (status: authenticated), save session and go to Home
+      if (data.status === "authenticated" && data.accessToken) {
+        const { sessionManager } = await import("../../utils/sessionManager");
+        await sessionManager.saveSession({
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
+        });
+
+        console.log("OAuth registration complete - navigating to Home");
+
+        // Navigate immediately to Home, show welcome toast after
+        navigation.replace("Home", { user: data.user });
+
+        // Show non-blocking success message after navigation
+        setTimeout(() => {
+          Alert.alert(
+            "Welcome!",
+            "Your account has been created successfully.",
+          );
+        }, 500);
+        return;
+      }
+
       // Show success message and navigate to Login
       Alert.alert(
-        "Account Created! 🎉",
+        "Account Created!",
         "Your account has been created successfully. Please login to continue.",
         [
           {
             text: "Login",
             onPress: () => navigation.navigate("Login"),
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error registering user:", error);
-      Alert.alert(
-        "Signup Failed",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      console.error("Error type:", typeof error);
+      console.error("Error string:", String(error));
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      } else {
+        console.error(
+          "Non-Error object thrown:",
+          JSON.stringify(error, null, 2),
+        );
+      }
+
+      let errorMessage = "Please try again.";
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          errorMessage =
+            "Request timed out. Please check your connection and try again.";
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error && typeof error === "object") {
+        // Try to extract error message from object
+        const err = error as any;
+        errorMessage =
+          err.error || err.message || "An unexpected error occurred";
+      }
+
+      Alert.alert("Signup Failed", errorMessage);
     } finally {
       setIsRegistering(false);
     }
@@ -223,6 +535,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       {/* Step Content */}
       {renderStep()}
+
+      {/* Loading Overlay */}
+      {isRegistering && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Creating your account...</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -242,5 +564,26 @@ const styles = StyleSheet.create<Styles>({
   },
   stepContainer: {
     flex: 1,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingContainer: {
+    backgroundColor: colors.white,
+    padding: 24,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textMain,
   },
 });

@@ -52,59 +52,16 @@ interface Styles {
 export default function WelcomeScreen({
   navigation,
 }: WelcomeScreenProps): React.ReactElement {
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideUpAnim = useRef(new Animated.Value(50)).current;
-  const logoScaleAnim = useRef(new Animated.Value(0.8)).current;
-  const buttonsSlideAnim = useRef(new Animated.Value(100)).current;
-  const buttonsFadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Staggered entrance animations
-    Animated.sequence([
-      // First: Logo and welcome text
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.ease),
-        }),
-        Animated.spring(logoScaleAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideUpAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
-        }),
-      ]),
-      // Then: Buttons slide up
-      Animated.parallel([
-        Animated.timing(buttonsFadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(buttonsSlideAnim, {
-          toValue: 0,
-          tension: 50,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-  }, [fadeAnim, slideUpAnim, logoScaleAnim, buttonsSlideAnim, buttonsFadeAnim]);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideUpAnim = useRef(new Animated.Value(0)).current;
+  const logoScaleAnim = useRef(new Animated.Value(1)).current;
+  const buttonsSlideAnim = useRef(new Animated.Value(0)).current;
+  const buttonsFadeAnim = useRef(new Animated.Value(1)).current;
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.safeArea}>
-        {/* Logo Section */}
         <Animated.View
           style={[
             styles.logoSection,
@@ -126,7 +83,6 @@ export default function WelcomeScreen({
           <Text style={styles.tagline}>Golf scheduling made simple</Text>
         </Animated.View>
 
-        {/* Buttons Section */}
         <Animated.View
           style={[
             styles.buttonsSection,

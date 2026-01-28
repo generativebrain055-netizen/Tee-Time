@@ -1,221 +1,291 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  StatusBar,
-  ScrollView,
-  ViewStyle,
-  TextStyle,
+  TextInput as RNTextInput,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, borderRadius, fontSize } from "../../theme";
-import { CountryCodeModal } from "../../components";
-import { COUNTRY_CODES } from "../../constants/countryCodes";
-import type { PhoneVerificationPageProps, CountryCode } from "../../types";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { ArrowLeft, X } from "lucide-react-native";
+import type { PhoneVerificationPageProps } from "../../types";
+import CountryPicker, {
+  Country,
+  COUNTRIES,
+} from "../../components/CountryPicker";
 
-interface Styles {
-  container: ViewStyle;
-  header: ViewStyle;
-  stepIndicator: TextStyle;
-  content: ViewStyle;
-  title: TextStyle;
-  subtitle: TextStyle;
-  formArea: ViewStyle;
-  phoneInputWrapper: ViewStyle;
-  phoneInputRow: ViewStyle;
-  countryCodeButton: ViewStyle;
-  flagText: TextStyle;
-  countryCodeText: TextStyle;
-  phoneInputField: TextStyle;
-  footer: ViewStyle;
-  primaryBtn: ViewStyle;
-  primaryBtnDisabled: ViewStyle;
-  primaryBtnText: TextStyle;
-}
+// Colors - consistent with LoginScreen
+const COLORS = {
+  primary: "#5DB075",
+  white: "#FFFFFF",
+  black: "#000000",
+  textMain: "#1A1A1A",
+  textSub: "#6B7280",
+  textPlaceholder: "#9CA3AF",
+  border: "#E5E7EB",
+  error: "#EF4444",
+  errorLight: "#FEF2F2",
+};
 
 export const PhoneVerificationPage: React.FC<PhoneVerificationPageProps> = ({
   onNext,
   onBack,
   initialPhone = "",
 }) => {
-  const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone);
-  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
-    COUNTRY_CODES.find((c) => c.country === "United States") || COUNTRY_CODES[0]
+  const insets = useSafeAreaInsets();
+  const inputRef = useRef<RNTextInput>(null);
+
+  // Parse initial phone to extract country code
+  const getInitialCountry = () => {
+    if (initialPhone) {
+      // Try to match country code from the phone number
+      for (const country of COUNTRIES) {
+        if (initialPhone.startsWith(country.dialCode)) {
+          return country;
+        }
+      }
+    }
+    return COUNTRIES[0]; // Default to US
+  };
+
+  const getInitialPhoneWithoutCode = () => {
+    if (initialPhone) {
+      const country = getInitialCountry();
+      return initialPhone.replace(country.dialCode, "").replace(/\D/g, "");
+    }
+    return "";
+  };
+
+  const [selectedCountry, setSelectedCountry] =
+    useState<Country>(getInitialCountry());
+  const [phoneNumber, setPhoneNumber] = useState<string>(
+    getInitialPhoneWithoutCode(),
   );
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [inputFocused, setInputFocused] = useState<boolean>(false);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const isValid = digitsOnly.length >= 8;
-  const fullPhoneNumber = `${selectedCountry.code}${digitsOnly}`;
+  const isValid = digitsOnly.length >= selectedCountry.minLength;
+  const fullPhoneNumber = `${selectedCountry.dialCode}${digitsOnly}`;
 
   const handleNext = (): void => {
-    if (!isValid) return;
-    // Just pass phone number to next step - magic link sent at end of onboarding
+    if (!isValid) {
+      setHasError(true);
+      return;
+    }
+    Keyboard.dismiss();
     onNext({ phoneNumber: fullPhoneNumber });
   };
 
+  const clearInput = (): void => {
+    setPhoneNumber("");
+    setHasError(false);
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+      <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.stepIndicator}>Step 1 of 7</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Enter your phone number</Text>
-        <Text style={styles.subtitle}>
-          We'll use this to create your account and send you a magic link to
-          complete signup
-        </Text>
-
-        <View style={styles.formArea}>
-          <View style={styles.phoneInputWrapper}>
-            <View style={styles.phoneInputRow}>
-              <TouchableOpacity
-                style={styles.countryCodeButton}
-                onPress={() => setModalVisible(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.flagText}>{selectedCountry.flag}</Text>
-                <Text style={styles.countryCodeText}>
-                  {selectedCountry.code}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={14}
-                  color={colors.textSecondary}
-                />
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.content}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
               </TouchableOpacity>
-              <TextInput
-                style={styles.phoneInputField}
-                placeholder="3051234567"
-                placeholderTextColor={colors.placeholder}
-                value={phoneNumber}
-                onChangeText={(text) => setPhoneNumber(text.replace(/\D/g, ""))}
-                keyboardType="phone-pad"
-                maxLength={12}
-              />
+            </View>
+
+            {/* Main Content */}
+            <View style={styles.mainContent}>
+              <Text style={styles.title}>What's your phone number?</Text>
+              <Text style={styles.subtitle}>
+                We'll use this to create your account and keep it secure.
+              </Text>
+
+              {/* Phone Input */}
+              <View style={styles.inputSection}>
+                <View
+                  style={[
+                    styles.phoneInputContainer,
+                    inputFocused && styles.phoneInputContainerFocused,
+                    hasError && styles.phoneInputContainerError,
+                  ]}
+                >
+                  <CountryPicker
+                    selectedCountry={selectedCountry}
+                    onSelect={(country) => {
+                      setSelectedCountry(country);
+                      setHasError(false);
+                    }}
+                  />
+                  <RNTextInput
+                    ref={inputRef}
+                    style={[
+                      styles.phoneInput,
+                      hasError && styles.phoneInputError,
+                    ]}
+                    placeholder={selectedCountry.placeholder}
+                    placeholderTextColor={COLORS.textPlaceholder}
+                    keyboardType="phone-pad"
+                    value={phoneNumber}
+                    onChangeText={(text) => {
+                      setPhoneNumber(text.replace(/\D/g, ""));
+                      setHasError(false);
+                    }}
+                    maxLength={selectedCountry.maxLength}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                  />
+                  {phoneNumber.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={clearInput}
+                    >
+                      <View style={styles.clearButtonInner}>
+                        <X size={12} color={COLORS.textSub} strokeWidth={2} />
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {hasError && (
+                  <Text style={styles.errorText}>
+                    Please enter a valid phone number
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Bottom Section */}
+            <View style={styles.bottomSection}>
+              <TouchableOpacity
+                style={[
+                  styles.nextButton,
+                  !isValid && styles.nextButtonDisabled,
+                ]}
+                onPress={handleNext}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nextButtonText}>Next</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.primaryBtn, !isValid && styles.primaryBtnDisabled]}
-          onPress={handleNext}
-          disabled={!isValid}
-        >
-          <Text style={styles.primaryBtnText}>Next</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Country Code Modal */}
-      <CountryCodeModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onSelect={setSelectedCountry}
-        selectedCountry={selectedCountry}
-      />
-    </SafeAreaView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
-const styles = StyleSheet.create<Styles>({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: COLORS.white,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-  },
-  stepIndicator: {
-    color: colors.textSecondary,
-    fontSize: fontSize.sm,
-    fontWeight: "500",
+  keyboardView: {
+    flex: 1,
   },
   content: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  title: {
-    fontSize: fontSize.xxl,
-    fontWeight: "bold",
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    fontSize: fontSize.md,
-    color: colors.textSecondary,
-    marginBottom: spacing.xxxl,
-    lineHeight: 22,
-  },
-  formArea: {
-    marginTop: spacing.sm,
-  },
-  phoneInputWrapper: {
-    width: "100%",
-    marginBottom: spacing.lg,
-  },
-  phoneInputRow: {
-    flexDirection: "row",
-    height: 56,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    overflow: "hidden",
-  },
-  countryCodeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.primaryLight,
-    borderRightWidth: 1,
-    borderRightColor: colors.surfaceDark,
-    gap: 4,
-  },
-  flagText: {
-    fontSize: fontSize.lg,
-  },
-  countryCodeText: {
-    fontSize: fontSize.sm,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  phoneInputField: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    fontSize: fontSize.md,
-    color: colors.textPrimary,
+    paddingHorizontal: 24,
   },
-  footer: {
-    padding: spacing.xl,
-    marginTop: "auto",
-  },
-  primaryBtn: {
-    backgroundColor: colors.buttonPrimary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: 18,
-    alignItems: "center",
+  header: {
+    height: 56,
     justifyContent: "center",
   },
-  primaryBtnDisabled: {
-    opacity: 0.5,
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "flex-start",
   },
-  primaryBtnText: {
-    color: colors.white,
-    fontSize: fontSize.md,
-    fontWeight: "bold",
+  mainContent: {
+    flex: 1,
+    paddingTop: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: COLORS.textMain,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: COLORS.textSub,
+    lineHeight: 22,
+    marginBottom: 40,
+  },
+  inputSection: {
+    width: "100%",
+  },
+  phoneInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 56,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 16,
+  },
+  phoneInputContainerFocused: {
+    borderColor: COLORS.textMain,
+    borderWidth: 1.5,
+  },
+  phoneInputContainerError: {
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorLight,
+  },
+  phoneInput: {
+    flex: 1,
+    height: "100%",
+    fontSize: 16,
+    color: COLORS.textMain,
+    fontWeight: "400",
+  },
+  phoneInputError: {
+    color: COLORS.error,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearButtonInner: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 13,
+    color: COLORS.error,
+    marginTop: 8,
+    marginLeft: 4,
+  },
+  bottomSection: {
+    paddingBottom: 32,
+  },
+  nextButton: {
+    height: 56,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  nextButtonDisabled: {
+    opacity: 0.6,
+  },
+  nextButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.white,
   },
 });

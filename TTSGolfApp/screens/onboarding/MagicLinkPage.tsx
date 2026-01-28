@@ -200,7 +200,7 @@ const styles = StyleSheet.create<Styles>({
   primaryBtn: {
     backgroundColor: "#5DB075",
     paddingVertical: 16,
-    borderRadius: 30,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
