@@ -1,95 +1,146 @@
-# TeeTime Golf App
+# TeeTime Social Golf App
 
-Mobile app for simplifying golf tee time coordination through automated invites, rosters, and communications.
+A mobile application for organizing golf tee times with friends, built with React Native (Expo) and Node.js backend.
 
-## 🚀 Quick Start
-
-### Windows Users
-```bash
-start-app.bat
-```
-
-### Mac/Linux Users
-```bash
-# Terminal 1 - Backend
-cd backend && npm install && npm start
-
-# Terminal 2 - Frontend  
-cd TTSGolfApp && npm install && npm start
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-TeeTimeGolfApp/
-├── backend/           # Node.js/Express API
-├── TTSGolfApp/        # React Native mobile app
-├── docs/              # Complete documentation
-│   ├── README.md      # Full documentation
-│   └── requirements.txt
-├── .env               # Environment variables
-└── start-app.bat      # Windows startup script
+TeeTime/
+├── backend/              # Node.js/Express API server
+│   ├── config/          # Database, logger, and service configs
+│   ├── controllers/     # Request handlers
+│   ├── middleware/      # Auth, validation, error handling
+│   ├── repositories/    # Database access layer
+│   ├── routes/          # API route definitions
+│   ├── services/        # Business logic
+│   └── schema/          # Database schema and migrations
+│
+├── TTSGolfApp/          # React Native mobile app (Expo)
+│   ├── components/      # Reusable UI components
+│   ├── screens/         # App screens
+│   ├── hooks/           # Custom React hooks
+│   ├── services/        # API client
+│   ├── stores/          # State management (Zustand)
+│   └── utils/           # Helper functions
+│
+├── docs/                # Documentation
+│   └── setup/          # Setup and configuration guides
+│
+└── tests/              # API tests
 ```
 
-## 📚 Documentation
+## Quick Start
 
-**Complete documentation is in [`docs/README.md`](docs/README.md)**
+### Prerequisites
 
-Includes:
-- Installation guide
-- Twilio OTP setup
-- API endpoints
-- Troubleshooting
-- Deployment guide
+- Node.js 18+ and npm
+- iOS Simulator (Mac) or Android Emulator
+- Supabase account (for database)
+- Twilio account (for SMS/OTP)
 
-## 🔧 Prerequisites
+### Backend Setup
 
-- Node.js 18+
-- PostgreSQL (optional for development)
-- Twilio account (for OTP)
-
-## ⚙️ Configuration
-
-1. Copy `.env.example` to `.env` (if exists) or update `.env`
-2. Add your Twilio credentials:
-   ```env
-   TWILIO_ACCOUNT_SID=AC...
-   TWILIO_AUTH_TOKEN=...
-   TWILIO_VERIFY_SERVICE_SID=VA...
-   ```
-3. Configure database (optional):
-   ```env
-   DB_HOST=localhost
-   DB_NAME=tts_golf_db
-   DB_USER=postgres
-   DB_PASSWORD=your_password
-   ```
-
-## 🧪 Testing
-
-Test Twilio setup:
 ```bash
 cd backend
-node test-twilio.js +923001234567
+cp .env.example .env
+# Edit .env with your credentials
+npm install
+npm start
 ```
 
-## 📱 Tech Stack
+Backend runs on `http://localhost:3000`
 
-- **Frontend**: React Native, Expo
-- **Backend**: Node.js, Express, PostgreSQL
-- **Auth**: Twilio OTP, JWT
-- **SMS**: Twilio Verify API
+### Frontend Setup
 
-## 🆘 Need Help?
+```bash
+cd TTSGolfApp
+cp .env.example .env
+# Edit .env with your local IP address
+npm install
+npx expo start
+```
 
-- **Full Documentation**: [`docs/README.md`](docs/README.md)
-- **Requirements**: [`docs/requirements.txt`](docs/requirements.txt)
-- **Twilio Issues**: Run `node backend/test-twilio.js`
+Press `i` for iOS simulator or `a` for Android emulator.
 
-## 📄 License
+## Documentation
+
+- **[Environment Setup Guide](docs/setup/ENV_SETUP.md)** - Complete setup instructions
+- **[OAuth Troubleshooting](docs/setup/OAUTH_TROUBLESHOOTING.md)** - Fix Google/Apple Sign-In issues
+- **[API Documentation](docs/API_DOCUMENTATION.pdf)** - Backend API reference
+- **[User Stories](docs/USER_STORIES.pdf)** - Feature requirements
+
+## Features
+
+- 📱 Phone number authentication with OTP
+- 🔐 OAuth sign-in (Google, Apple)
+- ⛳ Create and manage tee times
+- 👥 Roster management
+- 📅 Calendar view
+- 💬 In-app messaging
+- 📊 Social rate tracking
+- 🎯 Attendance management
+
+## Tech Stack
+
+**Backend:**
+- Node.js + Express
+- PostgreSQL (via Supabase)
+- JWT authentication
+- Twilio (SMS)
+- SendGrid (Email)
+
+**Frontend:**
+- React Native (Expo)
+- TypeScript
+- Zustand (state management)
+- React Navigation
+
+## Development
+
+### Running Tests
+
+```bash
+cd tests
+./run-tests.ps1
+```
+
+### Database Migrations
+
+```bash
+cd backend
+node scripts/migrate-database.js
+```
+
+### Checking Logs
+
+```bash
+# Backend logs
+tail -f backend/logs/combined.log
+
+# Error logs only
+tail -f backend/logs/error.log
+```
+
+## Environment Variables
+
+Each part of the app has its own `.env` file:
+
+- `backend/.env` - Server, database, API keys
+- `TTSGolfApp/.env` - API URL, OAuth client IDs
+
+See `.env.example` files for required variables.
+
+## Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Test thoroughly
+4. Submit a pull request
+
+## License
 
 Proprietary - All rights reserved
 
----
+## Support
 
-**For complete setup instructions, troubleshooting, and API documentation, see [`docs/README.md`](docs/README.md)**
+For setup issues, see [docs/setup/](docs/setup/) directory.

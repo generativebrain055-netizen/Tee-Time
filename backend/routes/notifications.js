@@ -1,6 +1,8 @@
 const { Router } = require("express");
+const { query } = require("express-validator");
 const notificationController = require("../controllers/notificationController");
 const { authenticate } = require("../middleware/auth");
+const { validateRequest } = require("../middleware/validator");
 
 const router = Router();
 
@@ -9,11 +11,25 @@ router.use(authenticate);
 
 /**
  * @route   GET /api/notifications
- * @desc    Get user's notifications
- * @query   limit, offset, unreadOnly
+ * @desc    Get user's notifications with pagination
+ * @query   limit (1-100, default 50), offset, unreadOnly
  * @access  Private
  */
-router.get("/", notificationController.getNotifications);
+router.get(
+  "/",
+  [
+    query("limit")
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage("limit must be 1-100"),
+    query("offset")
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage("offset must be >= 0"),
+  ],
+  validateRequest,
+  notificationController.getNotifications,
+);
 
 /**
  * @route   GET /api/notifications/unread-count

@@ -6,10 +6,12 @@ import { Animated, Keyboard, TextInput as RNTextInput } from "react-native";
 import { useAuth } from "../../../hooks";
 import { LoginStep } from "../constants";
 import { toE164, isValidPhone, isValidOtp } from "../utils";
+import { Country, COUNTRIES } from "../../../components/CountryPicker";
 
 export const useLoginFlow = (navigation: any) => {
     // State
     const [phoneNumber, setPhoneNumber] = useState("");
+    const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Default to US
     const [otpCode, setOtpCode] = useState("");
     const [currentStep, setCurrentStep] = useState<LoginStep>("phone");
     const [resendTimer, setResendTimer] = useState(0);
@@ -27,9 +29,9 @@ export const useLoginFlow = (navigation: any) => {
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const slideAnim = useRef(new Animated.Value(0)).current;
 
-    // Derived values
-    const e164Phone = toE164(phoneNumber);
-    const isPhoneValid = isValidPhone(phoneNumber);
+    // Derived values - combine country code with phone number
+    const fullPhoneNumber = `${selectedCountry.dialCode}${phoneNumber}`;
+    const isPhoneValid = phoneNumber.length >= selectedCountry.minLength && phoneNumber.length <= selectedCountry.maxLength;
     const isOtpValid = isValidOtp(otpCode);
 
     // Resend timer effect
@@ -68,7 +70,7 @@ export const useLoginFlow = (navigation: any) => {
             return;
         }
 
-        const result = await requestOtp(e164Phone, "login");
+        const result = await requestOtp(fullPhoneNumber, "login");
         if (result.success) {
             if (!isResend) animateStepChange(() => setCurrentStep("otp"));
             setOtpCode("");
@@ -76,12 +78,12 @@ export const useLoginFlow = (navigation: any) => {
         } else {
             setHasError(true);
         }
-    }, [isPhoneValid, loading, e164Phone, requestOtp, animateStepChange]);
+    }, [isPhoneValid, loading, fullPhoneNumber, requestOtp, animateStepChange]);
 
     const handleVerifyOtp = useCallback(async () => {
         if (!isOtpValid || loading) return;
 
-        const result = await verifyOtp(e164Phone, otpCode.trim());
+        const result = await verifyOtp(fullPhoneNumber, otpCode.trim());
         if (result.success) {
             setTimeout(() => {
                 navigation?.navigate("Home", { user: result.user });
@@ -89,7 +91,7 @@ export const useLoginFlow = (navigation: any) => {
         } else {
             setHasError(true);
         }
-    }, [isOtpValid, loading, e164Phone, otpCode, verifyOtp, navigation]);
+    }, [isOtpValid, loading, fullPhoneNumber, otpCode, verifyOtp, navigation]);
 
     const handlePrimaryAction = useCallback(() => {
         Keyboard.dismiss();
@@ -144,6 +146,8 @@ export const useLoginFlow = (navigation: any) => {
         // State
         phoneNumber,
         setPhoneNumber,
+        selectedCountry,
+        setSelectedCountry,
         otpCode,
         currentStep,
         resendTimer,
@@ -153,6 +157,7 @@ export const useLoginFlow = (navigation: any) => {
         loading,
         error,
         isButtonDisabled,
+        fullPhoneNumber,
         // Refs
         phoneInputRef,
         otpInputRefs,

@@ -1,14 +1,14 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 5.1
--- Last Updated: December 2024
+-- Version: 5.2
+-- Last Updated: January 2026
 -- 
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables
 -- 2. Creates all tables fresh
 -- 3. Includes all migrations (social rate, attendance, profile, QR draft, 
---    blocked users, deadline notifications, etc.)
+--    blocked users, deadline notifications, OAuth providers, etc.)
 -- 
 -- Run this in Supabase SQL Editor for a clean setup
 -- ============================================================================
@@ -59,6 +59,7 @@ DROP TABLE IF EXISTS roster CASCADE;
 DROP TABLE IF EXISTS roster_groups CASCADE;
 DROP TABLE IF EXISTS magic_links CASCADE;
 DROP TABLE IF EXISTS otp_requests CASCADE;
+DROP TABLE IF EXISTS auth_providers CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS devices CASCADE;
 DROP TABLE IF EXISTS user_profiles CASCADE;
@@ -125,14 +126,19 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- ============================================================================
 -- 1. USERS TABLE
 -- ============================================================================
+-- IDENTITY NOTE: User identity is the `id` (UUID).
+-- Phone and email are PROFILE DATA, not identity fields.
+-- OAuth users may have NULL phone_number.
+-- ============================================================================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone_number VARCHAR(20) UNIQUE NOT NULL,
+    phone_number VARCHAR(20) UNIQUE,  -- NULLABLE: OAuth users may not have phone
     email VARCHAR(255) UNIQUE,
     username VARCHAR(100) UNIQUE,
     password_hash VARCHAR(255),
     first_name VARCHAR(100),
     last_name VARCHAR(100),
+    supabase_auth_id UUID UNIQUE,  -- Link to Supabase auth.users.id if using native auth
     is_active BOOLEAN DEFAULT true,
     is_verified BOOLEAN DEFAULT false,
     is_locked BOOLEAN DEFAULT false,
@@ -240,6 +246,31 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_access_token_hash ON sessions(access_token_hash);
 CREATE INDEX idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
+
+-- ============================================================================
+-- 4b. AUTH_PROVIDERS TABLE (OAuth)
+-- ============================================================================
+CREATE TABLE auth_providers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(20) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    provider_email VARCHAR(255),
+    provider_data JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_provider CHECK (provider IN ('google', 'apple', 'facebook', 'twitter')),
+    CONSTRAINT unique_provider_user UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX idx_auth_providers_user_id ON auth_providers(user_id);
+CREATE INDEX idx_auth_providers_provider ON auth_providers(provider);
+CREATE INDEX idx_auth_providers_provider_user_id ON auth_providers(provider, provider_user_id);
+
+COMMENT ON TABLE auth_providers IS 'Links users to external OAuth providers (Google, Apple, etc.)';
+COMMENT ON COLUMN auth_providers.provider_user_id IS 'The "sub" or unique ID from the OAuth provider';
+COMMENT ON COLUMN auth_providers.provider_data IS 'Additional provider-specific data (name, picture, etc.)';
 
 -- ============================================================================
 -- 5. OTP_REQUESTS TABLE
@@ -914,6 +945,9 @@ CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
 CREATE TRIGGER update_devices_updated_at BEFORE UPDATE ON devices
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_auth_providers_updated_at BEFORE UPDATE ON auth_providers
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_roster_updated_at BEFORE UPDATE ON roster
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -1072,6 +1106,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE roster ENABLE ROW LEVEL SECURITY;
@@ -1099,20 +1134,23 @@ ALTER TABLE handicap_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clubs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_club_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE draft_qr_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE qr_scan_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- SCHEMA COMPLETE
 -- ============================================================================
 -- 
--- Version: 5.1
--- Total Tables: 32
+-- Version: 5.2
+-- Last Updated: January 2026
+-- Total Tables: 33
 -- 
 -- Core Tables:
 --   1. users - User accounts
 --   2. user_profiles - Extended user info (handicap, social_rate, preferences)
 --   3. devices - User devices for push notifications
 --   4. sessions - Active login sessions
+--   4b. auth_providers - OAuth provider links (Google, Apple, etc.) [NEW]
 --   5. otp_requests - OTP verification codes
 --   6. magic_links - Passwordless login links
 --

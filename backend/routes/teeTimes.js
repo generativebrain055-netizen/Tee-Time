@@ -20,13 +20,21 @@ router.post(
     body("courseName").trim().notEmpty().withMessage("Course name is required"),
     body("courseLocation").optional().trim(),
     body("teeDate").isDate().withMessage("Valid date required (YYYY-MM-DD)"),
-    body("teeTime").matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage("Valid time required (HH:MM)"),
-    body("maxPlayers").optional().isInt({ min: 1, max: 8 }).withMessage("Max players must be 1-8"),
-    body("inviteType").optional().isIn(["roster", "fcfs", "open", "manual"]).withMessage("Invalid invite type"),
-    body("notes").optional().trim()
+    body("teeTime")
+      .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .withMessage("Valid time required (HH:MM)"),
+    body("maxPlayers")
+      .optional()
+      .isInt({ min: 1, max: 8 })
+      .withMessage("Max players must be 1-8"),
+    body("inviteType")
+      .optional()
+      .isIn(["roster", "fcfs", "open", "manual"])
+      .withMessage("Invalid invite type"),
+    body("notes").optional().trim(),
   ],
   validateRequest,
-  teeTimeController.createTeeTime
+  teeTimeController.createTeeTime,
 );
 
 /**
@@ -52,10 +60,10 @@ router.get(
   "/calendar",
   [
     query("start").isDate().withMessage("Start date required"),
-    query("end").isDate().withMessage("End date required")
+    query("end").isDate().withMessage("End date required"),
   ],
   validateRequest,
-  teeTimeController.getCalendar
+  teeTimeController.getCalendar,
 );
 
 /**
@@ -95,11 +103,19 @@ router.post("/:id/invites/:inviteId/skip", teeTimeController.skipInvite);
 router.post(
   "/:id/on-deck-invites",
   [
-    body("playerIds").isArray({ min: 1 }).withMessage("At least one player ID required"),
-    body("deadline").optional().isISO8601().withMessage("Invalid deadline format")
+    body("playerIds")
+      .isArray({ min: 1, max: 50 })
+      .withMessage("playerIds must be an array with 1-50 items"),
+    body("playerIds.*")
+      .isUUID()
+      .withMessage("Each playerIds item must be a valid UUID"),
+    body("deadline")
+      .optional()
+      .isISO8601()
+      .withMessage("Invalid deadline format"),
   ],
   validateRequest,
-  teeTimeController.sendOnDeckInvites
+  teeTimeController.sendOnDeckInvites,
 );
 
 /**
@@ -110,10 +126,12 @@ router.post(
 router.post(
   "/:id/fcfs-deadline",
   [
-    body("deadline").isISO8601().withMessage("Valid deadline required (ISO 8601 format)")
+    body("deadline")
+      .isISO8601()
+      .withMessage("Valid deadline required (ISO 8601 format)"),
   ],
   validateRequest,
-  teeTimeController.setFCFSDeadline
+  teeTimeController.setFCFSDeadline,
 );
 
 module.exports = router;

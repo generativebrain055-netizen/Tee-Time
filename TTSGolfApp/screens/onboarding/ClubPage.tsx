@@ -16,6 +16,7 @@ import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, X, CheckCircle } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ClubPageProps, Club } from "../../types";
+import { API_URL } from "../../config/api";
 
 // Consistent colors with login screen
 const COLORS = {
@@ -49,7 +50,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
   const [loading, setLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Search for golf courses using OpenStreetMap Nominatim API
+  // Search for golf clubs using backend API (fast CSV-based search)
   const searchGolfCourses = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSuggestions([]);
@@ -59,77 +60,79 @@ export const ClubPage: React.FC<ClubPageProps> = ({
     setLoading(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + " golf")}&countrycodes=us&format=json&addressdetails=1&limit=10`,
-        {
-          headers: {
-            "User-Agent": "TeeTimeGolfApp/1.0",
-          },
-        }
+        `${API_URL}/api/courses/clubs/search?q=${encodeURIComponent(query)}&limit=15`,
       );
 
       if (!response.ok) throw new Error("Search failed");
 
       const data = await response.json();
 
-      const results: ClubSuggestion[] = data
-        .filter((item: any) =>
-          item.type === "golf_course" ||
-          item.class === "leisure" ||
-          item.display_name?.toLowerCase().includes("golf")
-        )
-        .slice(0, 8)
-        .map((item: any, index: number) => {
-          const city = item.address?.city || item.address?.town || item.address?.village || "";
-          const state = item.address?.state || "";
-          const location = [city, state].filter(Boolean).join(", ");
+      if (data.success && data.clubs) {
+        const results: ClubSuggestion[] = data.clubs.map((club: any) => ({
+          id: club.id,
+          name: club.name,
+          location: club.location || "USA",
+          type: "Public" as Club["type"],
+        }));
 
-          return {
-            id: `${item.place_id}-${index}`,
-            name: item.name || item.display_name?.split(",")[0] || query,
-            location: location || "United States",
-            type: "Public" as Club["type"],
-          };
-        });
+        // Add manual entry option if query doesn't match exactly
+        if (
+          results.length === 0 ||
+          !results.some((r) => r.name.toLowerCase() === query.toLowerCase())
+        ) {
+          results.push({
+            id: "manual",
+            name: query,
+            location: "Custom entry",
+            type: "Public",
+          });
+        }
 
-      if (results.length === 0 && query.length >= 2) {
-        results.push({
+        setSuggestions(results);
+      } else {
+        setSuggestions([
+          {
+            id: "manual",
+            name: query,
+            location: "Custom entry",
+            type: "Public",
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error("Golf course search error:", error);
+      setSuggestions([
+        {
           id: "manual",
           name: query,
           location: "Custom entry",
           type: "Public",
-        });
-      }
-
-      setSuggestions(results);
-    } catch (error) {
-      console.error("Golf course search error:", error);
-      setSuggestions([{
-        id: "manual",
-        name: query,
-        location: "Custom entry",
-        type: "Public",
-      }]);
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleSearch = useCallback((text: string): void => {
-    setSearchQuery(text);
-    setSelectedClub(null);
+  const handleSearch = useCallback(
+    (text: string): void => {
+      setSearchQuery(text);
+      setSelectedClub(null);
 
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
 
-    if (text.length >= 2) {
-      searchTimeoutRef.current = setTimeout(() => {
-        searchGolfCourses(text);
-      }, 300);
-    } else {
-      setSuggestions([]);
-    }
-  }, [searchGolfCourses]);
+      if (text.length >= 2) {
+        searchTimeoutRef.current = setTimeout(() => {
+          searchGolfCourses(text);
+        }, 300);
+      } else {
+        setSuggestions([]);
+      }
+    },
+    [searchGolfCourses],
+  );
 
   const handleSelectClub = useCallback((club: ClubSuggestion): void => {
     setSelectedClub(club);
@@ -141,11 +144,11 @@ export const ClubPage: React.FC<ClubPageProps> = ({
   const handleNext = useCallback((): void => {
     const clubData: Club | null = selectedClub
       ? {
-        id: selectedClub.id,
-        name: selectedClub.name,
-        location: selectedClub.location,
-        type: selectedClub.type,
-      }
+          id: selectedClub.id,
+          name: selectedClub.name,
+          location: selectedClub.location,
+          type: selectedClub.type,
+        }
       : null;
 
     onNext({ club: clubData });
@@ -276,8 +279,13 @@ export const ClubPage: React.FC<ClubPageProps> = ({
             </TouchableOpacity>
 
             {!selectedClub && (
-              <TouchableOpacity style={styles.notMemberButton} onPress={handleSkip}>
-                <Text style={styles.notMemberText}>I'm not a member anywhere</Text>
+              <TouchableOpacity
+                style={styles.notMemberButton}
+                onPress={handleSkip}
+              >
+                <Text style={styles.notMemberText}>
+                  I'm not a member anywhere
+                </Text>
               </TouchableOpacity>
             )}
           </View>

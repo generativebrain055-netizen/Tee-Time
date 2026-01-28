@@ -44,13 +44,13 @@ interface OnboardingScreenProps {
   route?: {
     params?: {
       oauthData?: {
+        tempToken?: string;
+        requiredFields?: string[];
         email?: string;
         firstName?: string;
         lastName?: string;
-        profilePicture?: string;
-        authProvider?: 'google' | 'apple';
-        googleId?: string;
-        appleId?: string;
+        picture?: string;
+        authProvider?: "google" | "apple";
       };
     };
   };
@@ -82,12 +82,36 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   route,
 }) => {
   const oauthData = route?.params?.oauthData;
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(oauthData ? 1 : 0); // Skip welcome if OAuth
+
+  // Debug logging
+  console.log("OnboardingScreen - Mounted");
+  console.log(
+    "OnboardingScreen - Route params:",
+    JSON.stringify(route?.params, null, 2),
+  );
+  console.log(
+    "OnboardingScreen - OAuth data:",
+    JSON.stringify(oauthData, null, 2),
+  );
+
+  // Determine starting step for OAuth users
+  const getInitialStepIndex = () => {
+    if (!oauthData) return 0; // Start at welcome for non-OAuth
+    // Skip welcome, go to phone (step 1)
+    console.log(
+      "OnboardingScreen - OAuth user detected, starting at step 1 (Phone)",
+    );
+    return 1;
+  };
+
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(
+    getInitialStepIndex(),
+  );
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
   const [userData, setUserData] = useState<Partial<OnboardingData>>({
-    email: oauthData?.email,
-    firstName: oauthData?.firstName,
-    lastName: oauthData?.lastName,
+    email: oauthData?.email || undefined,
+    firstName: oauthData?.firstName || undefined,
+    lastName: oauthData?.lastName || undefined,
   });
 
   const currentStep = STEP_ORDER[currentStepIndex];
@@ -100,10 +124,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     // Merge new data with existing userData
     setUserData((prev) => ({ ...prev, ...data }));
 
+    // Calculate next step index
+    let nextStepIndex = currentStepIndex + 1;
+
+    // For OAuth users, skip the magic link step (they're already authenticated)
+    if (
+      oauthData?.tempToken &&
+      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.MAGIC_LINK
+    ) {
+      console.log("OAuth user - skipping magic link step");
+      nextStepIndex++;
+    }
+
+    // For OAuth users with email, skip the email step
+    if (
+      oauthData?.email &&
+      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.EMAIL
+    ) {
+      console.log("OAuth user with email - skipping email step");
+      nextStepIndex++;
+    }
+
     // Navigate to next step
-    if (currentStepIndex < STEP_ORDER.length - 1) {
-      console.log("Moving to next step");
-      setCurrentStepIndex(currentStepIndex + 1);
+    if (nextStepIndex < STEP_ORDER.length) {
+      console.log("Moving to step index:", nextStepIndex);
+      setCurrentStepIndex(nextStepIndex);
     } else {
       // Complete onboarding
       console.log("Last step reached - completing onboarding");
@@ -118,7 +163,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const completeOnboarding = async (
-    finalData: Partial<OnboardingData>
+    finalData: Partial<OnboardingData>,
   ): Promise<void> => {
     console.log("completeOnboarding called with data:", finalData);
 
@@ -134,14 +179,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     if (!finalData.firstName?.trim()) missingFields.push("First name");
     if (!finalData.lastName?.trim()) missingFields.push("Last name");
 
-    // Validate preferences
-    if (!finalData.preferences) {
-      missingFields.push("Preferences");
-    } else {
-      if (!finalData.preferences.playerCount) missingFields.push("Preferred player count");
-      if (!finalData.preferences.playStyle) missingFields.push("Walk/Ride preference");
-      if (!finalData.preferences.preferredTimes || finalData.preferences.preferredTimes.length === 0) {
-        missingFields.push("Preferred time of day");
+    // Only validate preferences for non-OAuth flow
+    // OAuth users can complete preferences later
+    if (!oauthData?.tempToken) {
+      // Validate preferences for regular signup
+      if (!finalData.preferences) {
+        missingFields.push("Preferences");
+      } else {
+        if (!finalData.preferences.playerCount)
+          missingFields.push("Preferred player count");
+        if (!finalData.preferences.playStyle)
+          missingFields.push("Walk/Ride preference");
+        if (
+          !finalData.preferences.preferredTimes ||
+          finalData.preferences.preferredTimes.length === 0
+        ) {
+          missingFields.push("Preferred time of day");
+        }
       }
     }
 
@@ -149,7 +203,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       console.log("Validation failed. Missing fields:", missingFields);
       Alert.alert(
         "Missing Information",
-        `Please complete the following fields:\n\n${missingFields.join("\n")}`
+        `Please complete the following fields:\n\n${missingFields.join("\n")}`,
       );
       return;
     }
@@ -161,18 +215,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       // Generate username from first and last name
       const username = `${finalData.firstName?.toLowerCase()}${finalData.lastName?.toLowerCase()}${Math.floor(
-        Math.random() * 1000
+        Math.random() * 1000,
       )}`;
 
       // Map preferences to backend format
       const mapPreferredTime = (times: string[] | undefined): string => {
         if (!times || times.length === 0) return "any";
         const timeMap: Record<string, string> = {
-          "morning": "morning",
-          "late_morning": "midday",
-          "afternoon": "afternoon",
-          "evening": "evening",
-          "any": "any",
+          morning: "morning",
+          late_morning: "midday",
+          afternoon: "afternoon",
+          evening: "evening",
+          any: "any",
         };
         // Use first time preference or "any"
         return timeMap[times[0]] || "any";
@@ -185,11 +239,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           "2": "twosome",
           "3": "threesome",
           "4": "foursome",
-          "solo": "solo",
-          "twosome": "twosome",
-          "threesome": "threesome",
-          "foursome": "foursome",
-          "any": "any",
+          solo: "solo",
+          twosome: "twosome",
+          threesome: "threesome",
+          foursome: "foursome",
+          any: "any",
         };
         return sizeMap[count] || "any";
       };
@@ -200,12 +254,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         lastName: finalData.lastName,
         username: username,
         email: finalData.email || null,
-        handicap: finalData.handicap ? parseInt(finalData.handicap as string) : null,
+        handicap: finalData.handicap
+          ? parseInt(finalData.handicap as string)
+          : null,
         location: finalData.location?.name || null,
         homeCourse: finalData.club?.name || null,
-        preferredTeeTime: mapPreferredTime(finalData.preferences?.preferredTimes),
+        preferredTeeTime: mapPreferredTime(
+          finalData.preferences?.preferredTimes,
+        ),
         walkOrRide: finalData.preferences?.playStyle || "either",
-        playingPartnerPreference: mapGroupSize(finalData.preferences?.playerCount),
+        playingPartnerPreference: mapGroupSize(
+          finalData.preferences?.playerCount,
+        ),
       };
 
       console.log("Request body:", JSON.stringify(requestBody, null, 2));
@@ -218,18 +278,57 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       let response;
 
-      // Check if this is OAuth registration
-      if (oauthData) {
-        console.log("Completing OAuth registration");
+      // Check if this is OAuth registration (has tempToken)
+      if (oauthData?.tempToken) {
+        console.log("Completing OAuth registration with tempToken");
+
+        // Ensure we have firstName/lastName - use user input or OAuth data
+        const firstName =
+          finalData.firstName?.trim() || oauthData.firstName || null;
+        const lastName =
+          finalData.lastName?.trim() || oauthData.lastName || null;
+
+        // Validate and clean email
+        let email = finalData.email?.trim() || oauthData.email || null;
+
+        // Basic email validation - if invalid, set to null
+        if (email) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            console.log("Invalid email format, setting to null:", email);
+            email = null;
+          }
+        }
+
+        console.log("Resolved names:", { firstName, lastName, email });
+
+        if (!firstName || !lastName) {
+          Alert.alert(
+            "Missing Information",
+            "First name and last name are required. Please go back and fill them in.",
+          );
+          setIsRegistering(false);
+          return;
+        }
+
         const oauthRequestBody = {
-          ...requestBody,
-          authProvider: oauthData.authProvider,
-          googleId: oauthData.googleId,
-          appleId: oauthData.appleId,
-          profilePicture: oauthData.profilePicture,
+          tempToken: oauthData.tempToken,
+          phoneNumber: finalData.phoneNumber,
+          email: email,
+          firstName: firstName,
+          lastName: lastName,
+          username: username,
+          handicap: finalData.handicap
+            ? parseInt(finalData.handicap as string)
+            : null,
         };
 
-        response = await fetch(`${API_URL}/auth/oauth/complete`, {
+        console.log(
+          "OAuth request body:",
+          JSON.stringify(oauthRequestBody, null, 2),
+        );
+
+        response = await fetch(`${API_URL}/auth/complete-profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(oauthRequestBody),
@@ -248,34 +347,70 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       clearTimeout(timeoutId);
 
       console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
+      console.log("Response ok:", response.ok);
+
+      let data;
+      try {
+        const responseText = await response.text();
+        console.log("Response body:", responseText);
+        data = JSON.parse(responseText);
+        console.log("Response data:", data);
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError);
+        throw new Error("Invalid response from server. Please try again.");
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to create account");
+        // Extract detailed error information
+        let errorMessage = "Failed to create account";
+        let errorDetails = "";
+
+        if (data.details && typeof data.details === 'object') {
+          // Format validation errors
+          const detailMessages = Object.entries(data.details)
+            .map(([field, message]) => `${field}: ${message}`)
+            .join('\n');
+          errorDetails = detailMessages;
+          errorMessage = data.message || "Validation failed";
+        } else if (data.error) {
+          errorMessage = data.error;
+        } else if (data.message) {
+          errorMessage = data.message;
+        }
+
+        console.error("Server error:", { errorMessage, errorDetails, fullData: data });
+
+        // Show user-friendly error
+        const displayMessage = errorDetails
+          ? `${errorMessage}\n\n${errorDetails}`
+          : errorMessage;
+
+        throw new Error(displayMessage);
       }
 
       console.log("User registered successfully:", data);
 
-      // If OAuth registration, save session and go to Home
-      if (oauthData && data.accessToken) {
-        const sessionManager = (await import('../../utils/sessionManager')).default;
+      // If OAuth registration (status: authenticated), save session and go to Home
+      if (data.status === "authenticated" && data.accessToken) {
+        const { sessionManager } = await import("../../utils/sessionManager");
         await sessionManager.saveSession({
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           user: data.user,
         });
 
-        Alert.alert(
-          "Welcome!",
-          "Your account has been created successfully.",
-          [
-            {
-              text: "Continue",
-              onPress: () => navigation.replace("Home"),
-            },
-          ]
-        );
+        console.log("OAuth registration complete - navigating to Home");
+
+        // Navigate immediately to Home, show welcome toast after
+        navigation.replace("Home", { user: data.user });
+
+        // Show non-blocking success message after navigation
+        setTimeout(() => {
+          Alert.alert(
+            "Welcome!",
+            "Your account has been created successfully.",
+          );
+        }, 500);
         return;
       }
 
@@ -288,24 +423,40 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             text: "Login",
             onPress: () => navigation.navigate("Login"),
           },
-        ]
+        ],
       );
     } catch (error) {
       console.error("Error registering user:", error);
+      console.error("Error type:", typeof error);
+      console.error("Error string:", String(error));
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      } else {
+        console.error(
+          "Non-Error object thrown:",
+          JSON.stringify(error, null, 2),
+        );
+      }
 
       let errorMessage = "Please try again.";
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = "Request timed out. Please check your connection and try again.";
+        if (error.name === "AbortError") {
+          errorMessage =
+            "Request timed out. Please check your connection and try again.";
         } else {
           errorMessage = error.message;
         }
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error && typeof error === "object") {
+        // Try to extract error message from object
+        const err = error as any;
+        errorMessage =
+          err.error || err.message || "An unexpected error occurred";
       }
 
-      Alert.alert(
-        "Signup Failed",
-        errorMessage
-      );
+      Alert.alert("Signup Failed", errorMessage);
     } finally {
       setIsRegistering(false);
     }

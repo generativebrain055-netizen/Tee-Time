@@ -2,7 +2,7 @@ const { Router } = require("express");
 const { body } = require("express-validator");
 // Use modular auth controllers (backward compatible)
 const authController = require("../controllers/auth");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, optionalAuth } = require("../middleware/auth");
 const { validateRequest } = require("../middleware/validator");
 const rateLimiter = require("../middleware/rateLimiter");
 const { logAuthEvent } = require("../middleware/analytics");
@@ -23,12 +23,12 @@ router.post(
       .trim()
       .matches(/^\+[1-9]\d{1,14}$/)
       .withMessage(
-        "Invalid phone number format. Must be E.164 format (+1234567890)"
+        "Invalid phone number format. Must be E.164 format (+1234567890)",
       ),
   ],
   validateRequest,
   logAuthEvent("otp_requested"),
-  authController.requestOTP
+  authController.requestOTP,
 );
 
 /**
@@ -53,7 +53,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("otp_verified"),
-  authController.verifyOTP
+  authController.verifyOTP,
 );
 
 /**
@@ -75,7 +75,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("password_set"),
-  authController.setPassword
+  authController.setPassword,
 );
 
 /**
@@ -106,7 +106,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("login"),
-  authController.login
+  authController.login,
 );
 
 /**
@@ -125,7 +125,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("token_refreshed"),
-  authController.refreshToken
+  authController.refreshToken,
 );
 
 /**
@@ -137,7 +137,7 @@ router.post(
   "/logout",
   authenticate,
   logAuthEvent("logout"),
-  authController.logout
+  authController.logout,
 );
 
 /**
@@ -172,7 +172,7 @@ router.put(
     body("preferences").optional().isObject(),
   ],
   validateRequest,
-  authController.updateProfile
+  authController.updateProfile,
 );
 
 /**
@@ -193,7 +193,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("magic_link_requested"),
-  authController.requestMagicLink
+  authController.requestMagicLink,
 );
 
 /**
@@ -212,7 +212,7 @@ router.get(
   "/verify-magic",
   captureDeviceInfo,
   logAuthEvent("magic_link_verified"),
-  authController.verifyMagicLink
+  authController.verifyMagicLink,
 );
 
 /**
@@ -234,7 +234,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("sms_magic_link_requested"),
-  authController.requestSmsMagicLink
+  authController.requestSmsMagicLink,
 );
 
 /**
@@ -248,7 +248,7 @@ router.post(
   [body("token").trim().notEmpty().withMessage("Token is required")],
   validateRequest,
   logAuthEvent("sms_magic_link_verified"),
-  authController.verifySmsMagicLink
+  authController.verifySmsMagicLink,
 );
 
 /**
@@ -263,7 +263,9 @@ router.post(
     body("phoneNumber")
       .trim()
       .matches(/^\+[1-9]\d{1,14}$/)
-      .withMessage("Invalid phone number format. Must be E.164 format (+1234567890)"),
+      .withMessage(
+        "Invalid phone number format. Must be E.164 format (+1234567890)",
+      ),
     body("firstName")
       .trim()
       .notEmpty()
@@ -294,7 +296,7 @@ router.post(
   ],
   validateRequest,
   logAuthEvent("user_registered"),
-  authController.registerUser
+  authController.registerUser,
 );
 
 /**
@@ -308,7 +310,7 @@ router.post(
   [body("idToken").trim().notEmpty().withMessage("ID token is required")],
   validateRequest,
   logAuthEvent("google_signin"),
-  authController.googleSignIn
+  authController.googleSignIn,
 );
 
 /**
@@ -319,35 +321,55 @@ router.post(
 router.post(
   "/apple",
   captureDeviceInfo,
-  [body("identityToken").trim().notEmpty().withMessage("Identity token is required")],
+  [
+    body("identityToken")
+      .trim()
+      .notEmpty()
+      .withMessage("Identity token is required"),
+  ],
   validateRequest,
   logAuthEvent("apple_signin"),
-  authController.appleSignIn
+  authController.appleSignIn,
 );
 
 /**
  * @route   POST /api/auth/complete-profile
- * @desc    Complete OAuth profile with additional information
- * @access  Public
+ * @desc    Complete OAuth profile with additional information (or update profile)
+ * @access  Public (with tempToken) or Private (authenticated)
+ *
+ * NOTE: Phone number is OPTIONAL for OAuth users.
+ * The tempToken flow is DEPRECATED - new apps should use authenticated profile updates.
  */
 router.post(
   "/complete-profile",
   captureDeviceInfo,
+  optionalAuth, // Allow both authenticated and unauthenticated requests
   [
-    body("tempToken").trim().notEmpty().withMessage("Temporary token is required"),
-    body("email").optional().trim().isEmail().normalizeEmail().withMessage("Valid email is required"),
+    // tempToken is optional - supports both legacy and new flow
+    body("tempToken").optional().trim(),
+    body("email")
+      .optional({ nullable: true, checkFalsy: true })
+      .trim()
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Valid email is required"),
+    // Phone is now OPTIONAL for OAuth users
     body("phoneNumber")
+      .optional({ nullable: true, checkFalsy: true })
       .trim()
       .matches(/^\+[1-9]\d{1,14}$/)
       .withMessage("Invalid phone number format"),
     body("firstName").optional().trim().isLength({ min: 1, max: 50 }),
     body("lastName").optional().trim().isLength({ min: 1, max: 50 }),
     body("username").optional().trim().isLength({ min: 3, max: 50 }),
-    body("handicap").optional().isInt({ min: 0, max: 54 }),
+    body("handicap").optional({ nullable: true }).isInt({ min: 0, max: 54 }),
+    // New fields for OAuth onboarding
+    body("location").optional().trim().isLength({ max: 255 }),
+    body("homeCourse").optional().trim().isLength({ max: 255 }),
   ],
   validateRequest,
   logAuthEvent("oauth_profile_completed"),
-  authController.completeOAuthProfile
+  authController.completeOAuthProfile,
 );
 
 module.exports = router;

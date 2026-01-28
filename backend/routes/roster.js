@@ -13,10 +13,24 @@ router.use(authenticate);
 
 /**
  * @route   GET /api/roster
- * @desc    Get user's roster
+ * @desc    Get user's roster with pagination
  * @access  Private
  */
-router.get("/", rosterController.getRoster);
+router.get(
+  "/",
+  [
+    query("limit")
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage("limit must be 1-100"),
+    query("offset")
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage("offset must be >= 0"),
+  ],
+  validateRequest,
+  rosterController.getRoster,
+);
 
 /**
  * @route   POST /api/roster
@@ -27,12 +41,24 @@ router.post(
   "/",
   [
     body("contactUserId").optional().isUUID().withMessage("Invalid user ID"),
-    body("contactPhone").optional().trim().matches(/^\+?[1-9]\d{6,14}$/).withMessage("Invalid phone number"),
-    body("contactName").optional().trim().isLength({ max: 100 }).withMessage("Name too long"),
-    body("contactEmail").optional().trim().isEmail().withMessage("Invalid email")
+    body("contactPhone")
+      .optional()
+      .trim()
+      .matches(/^\+?[1-9]\d{6,14}$/)
+      .withMessage("Invalid phone number"),
+    body("contactName")
+      .optional()
+      .trim()
+      .isLength({ max: 100 })
+      .withMessage("Name too long"),
+    body("contactEmail")
+      .optional()
+      .trim()
+      .isEmail()
+      .withMessage("Invalid email"),
   ],
   validateRequest,
-  rosterController.addToRoster
+  rosterController.addToRoster,
 );
 
 /**
@@ -49,9 +75,14 @@ router.get("/on-deck", rosterController.getOnDeck);
  */
 router.get(
   "/search",
-  [query("q").trim().isLength({ min: 2 }).withMessage("Search query must be at least 2 characters")],
+  [
+    query("q")
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Search query must be at least 2 characters"),
+  ],
   validateRequest,
-  rosterController.searchUsers
+  rosterController.searchUsers,
 );
 
 /**
@@ -61,9 +92,16 @@ router.get(
  */
 router.put(
   "/reorder",
-  [body("orderedIds").isArray().withMessage("orderedIds must be an array")],
+  [
+    body("orderedIds")
+      .isArray({ min: 1, max: 100 })
+      .withMessage("orderedIds must be an array with 1-100 items"),
+    body("orderedIds.*")
+      .isUUID()
+      .withMessage("Each orderedIds item must be a valid UUID"),
+  ],
   validateRequest,
-  rosterController.reorderRoster
+  rosterController.reorderRoster,
 );
 
 // ============ ROSTER GROUPS (before :id routes) ============
@@ -165,7 +203,7 @@ router.put(
   "/:id/on-deck",
   [body("isOnDeck").isBoolean().withMessage("isOnDeck must be a boolean")],
   validateRequest,
-  rosterController.toggleOnDeck
+  rosterController.toggleOnDeck,
 );
 
 /**

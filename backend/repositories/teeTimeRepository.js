@@ -39,7 +39,7 @@ class TeeTimeRepository {
         null,
         null,
         0,
-        true
+        true,
       );
 
       return teeTimeRecord;
@@ -61,7 +61,7 @@ class TeeTimeRepository {
             username,
             user_profiles (avatar_url)
           )
-        `
+        `,
         )
         .eq("id", teeTimeId)
         .single();
@@ -99,7 +99,7 @@ class TeeTimeRepository {
           `
           *,
           users!tee_times_creator_id_fkey (first_name, last_name)
-        `
+        `,
         )
         .eq("creator_id", userId);
 
@@ -123,7 +123,7 @@ class TeeTimeRepository {
             *,
             users!tee_times_creator_id_fkey (first_name, last_name)
           )
-        `
+        `,
         )
         .eq("user_id", userId)
         .or("status.is.null,status.neq.cancelled");
@@ -169,7 +169,7 @@ class TeeTimeRepository {
             creator_last_name: user.last_name,
             participant_count: count || 0,
           };
-        })
+        }),
       );
 
       // Sort by date and time
@@ -192,7 +192,7 @@ class TeeTimeRepository {
           `
           *,
           users!tee_times_creator_id_fkey (first_name, last_name)
-        `
+        `,
         )
         .eq("creator_id", userId)
         .gte("tee_date", new Date().toISOString().split("T")[0])
@@ -213,7 +213,7 @@ class TeeTimeRepository {
             *,
             users!tee_times_creator_id_fkey (first_name, last_name)
           )
-        `
+        `,
           )
           .eq("user_id", userId)
           .or("status.is.null,status.neq.cancelled");
@@ -258,7 +258,7 @@ class TeeTimeRepository {
             creator_last_name: user.last_name,
             participant_count: count || 0,
           };
-        })
+        }),
       );
 
       // Sort by date and time, then limit
@@ -296,7 +296,7 @@ class TeeTimeRepository {
     phone,
     name,
     position,
-    isCreator = false
+    isCreator = false,
   ) {
     try {
       const { data, error } = await supabaseAdmin
@@ -313,7 +313,7 @@ class TeeTimeRepository {
           {
             onConflict: "tee_time_id,user_id",
             ignoreDuplicates: true,
-          }
+          },
         )
         .select()
         .single();
@@ -338,7 +338,7 @@ class TeeTimeRepository {
             username,
             user_profiles (avatar_url, handicap)
           )
-        `
+        `,
         )
         .eq("tee_time_id", teeTimeId)
         .order("position", { ascending: true });
@@ -365,6 +365,67 @@ class TeeTimeRepository {
       });
     } catch (error) {
       handleError(error, "getParticipants");
+    }
+  }
+
+  /**
+   * Batch fetch participants for multiple tee times (N+1 fix)
+   * @param {string[]} teeTimeIds - Array of tee time IDs
+   * @returns {Object} Map of teeTimeId -> participants[]
+   */
+  async getParticipantsBatch(teeTimeIds) {
+    if (!teeTimeIds || teeTimeIds.length === 0) {
+      return {};
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select(
+          `
+          *,
+          users!tee_time_participants_user_id_fkey (
+            first_name, 
+            last_name, 
+            username,
+            user_profiles (avatar_url, handicap)
+          )
+        `,
+        )
+        .in("tee_time_id", teeTimeIds)
+        .order("position", { ascending: true });
+
+      if (error) throw error;
+
+      // Group participants by tee_time_id
+      const participantsByTeeTime = {};
+      teeTimeIds.forEach((id) => {
+        participantsByTeeTime[id] = [];
+      });
+
+      (data || []).forEach((p) => {
+        const user = p.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        const teeTimeId = p.tee_time_id;
+        delete p.users;
+
+        participantsByTeeTime[teeTimeId].push({
+          ...p,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          avatar_url: profile.avatar_url,
+          user_handicap: profile.handicap,
+        });
+      });
+
+      return participantsByTeeTime;
+    } catch (error) {
+      handleError(error, "getParticipantsBatch");
     }
   }
 
@@ -437,7 +498,7 @@ class TeeTimeRepository {
           .select(
             `
           tee_times!inner (*)
-        `
+        `,
           )
           .eq("user_id", userId)
           .or("status.is.null,status.neq.cancelled")
@@ -468,11 +529,11 @@ class TeeTimeRepository {
             .or("status.is.null,status.neq.cancelled");
 
           return { ...tt, participant_count: count || 0 };
-        })
+        }),
       );
 
       return teeTimesWithCounts.sort((a, b) =>
-        (a.tee_date || "").localeCompare(b.tee_date || "")
+        (a.tee_date || "").localeCompare(b.tee_date || ""),
       );
     } catch (error) {
       handleError(error, "getTeeTimesByDateRange");
@@ -547,10 +608,10 @@ class TeeTimeRepository {
           tee_time_participants!left (user_id, status),
           tee_time_attendance!left (status),
           game_scores!left (score, holes_played)
-        `
+        `,
         )
         .or(
-          `creator_id.eq.${userId},tee_time_participants.user_id.eq.${userId}`
+          `creator_id.eq.${userId},tee_time_participants.user_id.eq.${userId}`,
         );
 
       if (filter === "upcoming") {
@@ -645,7 +706,7 @@ class TeeTimeRepository {
 
       const pendingCount = invites.filter((i) => i.status === "pending").length;
       const acceptedCount = invites.filter(
-        (i) => i.status === "accepted"
+        (i) => i.status === "accepted",
       ).length;
 
       if (pendingCount === 0 && acceptedCount > 0) {

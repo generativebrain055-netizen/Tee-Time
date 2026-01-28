@@ -6,6 +6,11 @@
 .env.production
 .env.test
 
+# But keep example files
+!.env.example
+!backend/.env.example
+!TTSGolfApp/.env.example
+
 # Sensitive files
 *.pem
 *.key

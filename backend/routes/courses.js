@@ -3,6 +3,14 @@ const router = express.Router();
 const courseController = require("../controllers/courseController");
 const { authenticate, optionalAuth } = require("../middleware/auth");
 
+// Club search from CSV database (fast, local)
+router.get("/clubs/search", courseController.searchClubs);
+router.get("/clubs/stats", courseController.getClubStats);
+
+// City search for locations
+router.get("/cities/search", courseController.searchCities);
+router.get("/cities/popular", courseController.getPopularCities);
+
 // Public routes (optional auth for personalization)
 router.get("/search", optionalAuth, courseController.searchCourses);
 router.get("/nearby", optionalAuth, courseController.getNearbyCourses);

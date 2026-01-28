@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput as RNTextInput, StyleSheet } fr
 import { X } from "lucide-react-native";
 import { LOGIN_COLORS } from "../constants";
 import { formatPhoneDisplay } from "../utils";
+import CountryPicker, { Country, COUNTRIES } from "../../../components/CountryPicker";
 
 interface Props {
     value: string;
@@ -13,6 +14,8 @@ interface Props {
     onBlur: () => void;
     hasError: boolean;
     onClear: () => void;
+    selectedCountry?: Country;
+    onCountryChange?: (country: Country) => void;
 }
 
 const PhoneInput = memo(({
@@ -24,6 +27,8 @@ const PhoneInput = memo(({
     onBlur,
     hasError,
     onClear,
+    selectedCountry = COUNTRIES[0], // Default to US
+    onCountryChange,
 }: Props) => (
     <View style={styles.container}>
         <View
@@ -33,15 +38,19 @@ const PhoneInput = memo(({
                 hasError && styles.inputContainerError,
             ]}
         >
+            <CountryPicker
+                selectedCountry={selectedCountry}
+                onSelect={onCountryChange || (() => { })}
+            />
             <RNTextInput
                 ref={inputRef}
                 style={[styles.input, hasError && styles.inputError]}
-                placeholder="(555) 123-4567"
+                placeholder={selectedCountry.placeholder}
                 placeholderTextColor={LOGIN_COLORS.textPlaceholder}
                 keyboardType="phone-pad"
-                value={formatPhoneDisplay(value)}
+                value={value}
                 onChangeText={(text) => onChange(text.replace(/\D/g, ""))}
-                maxLength={14}
+                maxLength={selectedCountry.maxLength}
                 onFocus={onFocus}
                 onBlur={onBlur}
             />

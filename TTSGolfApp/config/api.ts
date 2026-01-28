@@ -3,8 +3,8 @@
  * TypeScript version with proper typing
  */
 
-// Using your AWS deployment
-const API_BASE_URL: string = "http://16.171.170.30:3000";
+// Get API URL from environment variable or use default
+const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "http://16.171.170.30:3000";
 
 /**
  * Get the API base URL
@@ -37,6 +37,7 @@ export interface ApiEndpoints {
   VERIFY_SMS_MAGIC_LINK: string;
   REGISTER: string;
   UPDATE_PROFILE: string;
+  GOOGLE_SIGNIN: string;
   // Roster
   ROSTER: string;
   ROSTER_ON_DECK: string;

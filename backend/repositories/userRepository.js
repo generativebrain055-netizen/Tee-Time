@@ -3,22 +3,31 @@ const { supabaseAdmin, handleError } = require("../config/supabase");
 /**
  * User Repository - Supabase REST API
  * Handles all database operations related to users
+ *
+ * IDENTITY ARCHITECTURE:
+ * - User identity is the `id` (UUID) - NOT phone, NOT email
+ * - Phone number is OPTIONAL profile data
+ * - Email is OPTIONAL profile data
+ * - For OAuth users, identity comes from auth_providers table
  */
 
 /**
  * Find user by phone number with profile
+ * NOTE: This is for PROFILE lookup only, not identity verification
  * @param {string} phoneNumber
  * @returns {Promise<Object|null>}
  */
 const findByPhoneNumber = async (phoneNumber) => {
   try {
+    if (!phoneNumber) return null;
+
     const { data, error } = await supabaseAdmin
       .from("users")
       .select(
         `
         *,
         user_profiles (*)
-      `
+      `,
       )
       .eq("phone_number", phoneNumber)
       .is("deleted_at", null)
@@ -81,7 +90,7 @@ const findById = async (userId) => {
         `
         *,
         user_profiles (*)
-      `
+      `,
       )
       .eq("id", userId)
       .is("deleted_at", null)
@@ -123,7 +132,7 @@ const findByUsername = async (username) => {
         `
         *,
         user_profiles (*)
-      `
+      `,
       )
       .eq("username", username)
       .is("deleted_at", null)
@@ -422,7 +431,7 @@ const incrementFailedLoginAttempts = async (userId) => {
     if (newAttempts >= 5) {
       updates.is_locked = true;
       updates.locked_until = new Date(
-        Date.now() + 30 * 60 * 1000
+        Date.now() + 30 * 60 * 1000,
       ).toISOString();
     }
 
@@ -600,7 +609,7 @@ const getPublicProfile = async (userId) => {
           handicap, social_rate, avatar_url, location, home_course,
           preferred_tee_time, walk_or_ride, bio, rounds_played, average_score
         )
-      `
+      `,
       )
       .eq("id", userId)
       .is("deleted_at", null)

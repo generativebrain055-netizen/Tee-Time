@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
+  TextInput as RNTextInput,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -14,6 +14,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, X } from "lucide-react-native";
 import type { PhoneVerificationPageProps } from "../../types";
+import CountryPicker, {
+  Country,
+  COUNTRIES,
+} from "../../components/CountryPicker";
 
 // Colors - consistent with LoginScreen
 const COLORS = {
@@ -34,22 +38,40 @@ export const PhoneVerificationPage: React.FC<PhoneVerificationPageProps> = ({
   initialPhone = "",
 }) => {
   const insets = useSafeAreaInsets();
-  const [phoneNumber, setPhoneNumber] = useState<string>(initialPhone.replace(/^\+1/, ""));
+  const inputRef = useRef<RNTextInput>(null);
+
+  // Parse initial phone to extract country code
+  const getInitialCountry = () => {
+    if (initialPhone) {
+      // Try to match country code from the phone number
+      for (const country of COUNTRIES) {
+        if (initialPhone.startsWith(country.dialCode)) {
+          return country;
+        }
+      }
+    }
+    return COUNTRIES[0]; // Default to US
+  };
+
+  const getInitialPhoneWithoutCode = () => {
+    if (initialPhone) {
+      const country = getInitialCountry();
+      return initialPhone.replace(country.dialCode, "").replace(/\D/g, "");
+    }
+    return "";
+  };
+
+  const [selectedCountry, setSelectedCountry] =
+    useState<Country>(getInitialCountry());
+  const [phoneNumber, setPhoneNumber] = useState<string>(
+    getInitialPhoneWithoutCode(),
+  );
   const [inputFocused, setInputFocused] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
 
   const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const isValid = digitsOnly.length >= 10;
-  const fullPhoneNumber = `+1${digitsOnly}`;
-
-  // Format phone number for display
-  const formatPhoneDisplay = (phone: string): string => {
-    const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length === 0) return "";
-    if (cleaned.length <= 3) return `(${cleaned}`;
-    if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-  };
+  const isValid = digitsOnly.length >= selectedCountry.minLength;
+  const fullPhoneNumber = `${selectedCountry.dialCode}${digitsOnly}`;
 
   const handleNext = (): void => {
     if (!isValid) {
@@ -98,25 +120,36 @@ export const PhoneVerificationPage: React.FC<PhoneVerificationPageProps> = ({
                     hasError && styles.phoneInputContainerError,
                   ]}
                 >
-                  <TextInput
+                  <CountryPicker
+                    selectedCountry={selectedCountry}
+                    onSelect={(country) => {
+                      setSelectedCountry(country);
+                      setHasError(false);
+                    }}
+                  />
+                  <RNTextInput
+                    ref={inputRef}
                     style={[
                       styles.phoneInput,
                       hasError && styles.phoneInputError,
                     ]}
-                    placeholder="(555) 123-4567"
+                    placeholder={selectedCountry.placeholder}
                     placeholderTextColor={COLORS.textPlaceholder}
                     keyboardType="phone-pad"
-                    value={formatPhoneDisplay(phoneNumber)}
+                    value={phoneNumber}
                     onChangeText={(text) => {
                       setPhoneNumber(text.replace(/\D/g, ""));
                       setHasError(false);
                     }}
-                    maxLength={14}
+                    maxLength={selectedCountry.maxLength}
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
                   />
                   {phoneNumber.length > 0 && (
-                    <TouchableOpacity style={styles.clearButton} onPress={clearInput}>
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={clearInput}
+                    >
                       <View style={styles.clearButtonInner}>
                         <X size={12} color={COLORS.textSub} strokeWidth={2} />
                       </View>
@@ -124,7 +157,9 @@ export const PhoneVerificationPage: React.FC<PhoneVerificationPageProps> = ({
                   )}
                 </View>
                 {hasError && (
-                  <Text style={styles.errorText}>Please enter a valid phone number</Text>
+                  <Text style={styles.errorText}>
+                    Please enter a valid phone number
+                  </Text>
                 )}
               </View>
             </View>
@@ -132,7 +167,10 @@ export const PhoneVerificationPage: React.FC<PhoneVerificationPageProps> = ({
             {/* Bottom Section */}
             <View style={styles.bottomSection}>
               <TouchableOpacity
-                style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
+                style={[
+                  styles.nextButton,
+                  !isValid && styles.nextButtonDisabled,
+                ]}
                 onPress={handleNext}
                 activeOpacity={0.8}
               >

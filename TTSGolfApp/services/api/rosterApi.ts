@@ -1,0 +1,241 @@
+/**
+ * Roster API Service
+ * Handles all roster-related API calls
+ * @module services/api/rosterApi
+ */
+
+import { API_ENDPOINTS } from "../../config/api";
+import { apiCall, buildQueryString } from "./core";
+import type {
+  RosterContact,
+  RosterGroup,
+  SortPreference,
+  AutoInviteMember,
+  MemberProfile,
+  WaiverWireEntry,
+  AddToRosterRequest,
+  CreateGroupRequest,
+  MoveMemberRequest,
+  AddToWaiverWireRequest,
+} from "./types";
+
+export const rosterApi = {
+  // ============ ROSTER MEMBERS ============
+
+  /**
+   * Get user's roster with optional sorting
+   */
+  getRoster: (sortBy?: SortPreference) => {
+    const params = sortBy ? `?sortBy=${sortBy}` : "";
+    return apiCall<{ success: boolean; roster: RosterContact[] }>(
+      `${API_ENDPOINTS.ROSTER}${params}`,
+    );
+  },
+
+  /**
+   * Get on-deck players
+   */
+  getOnDeck: () =>
+    apiCall<{ success: boolean; onDeck: RosterContact[] }>(
+      API_ENDPOINTS.ROSTER_ON_DECK,
+    ),
+
+  /**
+   * Add contact to roster
+   */
+  addToRoster: (contact: AddToRosterRequest) =>
+    apiCall<{ success: boolean; entry: RosterContact }>(API_ENDPOINTS.ROSTER, {
+      method: "POST",
+      body: JSON.stringify(contact),
+    }),
+
+  /**
+   * Remove from roster
+   */
+  removeFromRoster: (rosterId: string) =>
+    apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/${rosterId}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * Reorder roster (drag & drop)
+   */
+  reorderRoster: (orderedIds: string[]) =>
+    apiCall<{ success: boolean }>(API_ENDPOINTS.ROSTER_REORDER, {
+      method: "PUT",
+      body: JSON.stringify({ orderedIds }),
+    }),
+
+  /**
+   * Toggle on-deck status
+   */
+  toggleOnDeck: (rosterId: string, isOnDeck: boolean) =>
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/on-deck`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ isOnDeck }),
+      },
+    ),
+
+  /**
+   * Move member (drag & drop between roster/on-deck)
+   */
+  moveMember: (rosterId: string, data: MoveMemberRequest) =>
+    apiCall<{ success: boolean; entry: RosterContact }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/move`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  /**
+   * Update member's group
+   */
+  updateMemberGroup: (rosterId: string, groupId: string | null) =>
+    apiCall<{ success: boolean; entry: RosterContact }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/group`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ groupId }),
+      },
+    ),
+
+  /**
+   * Get detailed member profile
+   */
+  getMemberProfile: (rosterId: string) =>
+    apiCall<{ success: boolean; profile: MemberProfile }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/profile`,
+    ),
+
+  /**
+   * Get member's playing history
+   */
+  getMemberHistory: (rosterId: string) =>
+    apiCall<{ success: boolean; history: unknown[] }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/history`,
+    ),
+
+  /**
+   * Search users
+   */
+  searchUsers: (query: string) =>
+    apiCall<{ success: boolean; users: unknown[] }>(
+      `${API_ENDPOINTS.ROSTER_SEARCH}?q=${encodeURIComponent(query)}`,
+    ),
+
+  // ============ GROUPS ============
+
+  /**
+   * Get all groups
+   */
+  getGroups: () =>
+    apiCall<{ success: boolean; groups: RosterGroup[] }>(
+      `${API_ENDPOINTS.ROSTER}/groups`,
+    ),
+
+  /**
+   * Get single group details
+   */
+  getGroup: (groupId: string) =>
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}`,
+    ),
+
+  /**
+   * Create group
+   */
+  createGroup: (data: CreateGroupRequest) =>
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  /**
+   * Update group
+   */
+  updateGroup: (groupId: string, data: Partial<RosterGroup>) =>
+    apiCall<{ success: boolean; group: RosterGroup }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  /**
+   * Update group sort preference
+   */
+  updateGroupSort: (groupId: string, sortBy: SortPreference) =>
+    apiCall<{ success: boolean; sortPreference: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/sort`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ sortBy }),
+      },
+    ),
+
+  /**
+   * Get auto-invite members for tee time creation
+   */
+  getAutoInviteMembers: (groupId: string) =>
+    apiCall<{ success: boolean; members: AutoInviteMember[]; count: number }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/auto-invite`,
+    ),
+
+  /**
+   * Delete group
+   */
+  deleteGroup: (groupId: string) =>
+    apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/groups/${groupId}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * Get group members
+   */
+  getGroupMembers: (groupId: string, sortBy?: string) => {
+    const params = sortBy ? `?sortBy=${sortBy}` : "";
+    return apiCall<{ success: boolean; members: RosterContact[] }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/members${params}`,
+    );
+  },
+
+  // ============ WAIVER WIRE ============
+
+  /**
+   * Get waiver wire for a date
+   */
+  getWaiverWire: (date: string) =>
+    apiCall<{ success: boolean; waiverWire: WaiverWireEntry[] }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire?date=${date}`,
+    ),
+
+  /**
+   * Add to waiver wire
+   */
+  addToWaiverWire: (data: AddToWaiverWireRequest) =>
+    apiCall<{ success: boolean; entry: WaiverWireEntry }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  /**
+   * Remove from waiver wire
+   */
+  removeFromWaiverWire: (date: string) =>
+    apiCall<{ success: boolean }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire/${date}`,
+      {
+        method: "DELETE",
+      },
+    ),
+};

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, Search, X, MapPin, CheckCircle } from "lucide-react-native";
 import type { LocationPageProps, Location } from "../../types";
+import { API_URL } from "../../config/api";
 
 // Consistent colors with login screen
 const COLORS = {
@@ -51,7 +52,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
   const [loading, setLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Search using OpenStreetMap Nominatim API (free, no API key required)
+  // Search cities using backend API (fast, based on golf club locations)
   const searchLocations = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSuggestions([]);
@@ -61,85 +62,101 @@ export const LocationPage: React.FC<LocationPageProps> = ({
     setLoading(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=us&format=json&addressdetails=1&limit=8`,
-        {
-          headers: {
-            "User-Agent": "TeeTimeGolfApp/1.0",
-          },
-        }
+        `${API_URL}/api/courses/cities/search?q=${encodeURIComponent(query)}&limit=15`,
       );
 
       if (!response.ok) throw new Error("Search failed");
 
       const data = await response.json();
 
-      const results: LocationSuggestion[] = data
-        .filter((item: any) =>
-          item.type === "city" ||
-          item.type === "town" ||
-          item.type === "village" ||
-          item.class === "place"
-        )
-        .map((item: any, index: number) => {
-          const city = item.address?.city || item.address?.town || item.address?.village || item.name;
-          const state = item.address?.state;
-          return {
-            id: `${item.place_id}-${index}`,
-            name: state ? `${city}, ${state}` : city,
-            description: "United States",
-            type: "city" as const,
-            lat: parseFloat(item.lat),
-            lon: parseFloat(item.lon),
-          };
-        });
+      if (data.success && data.cities) {
+        const results: LocationSuggestion[] = data.cities.map((city: any) => ({
+          id: city.id,
+          name: city.name,
+          description: "United States",
+          type: "city" as const,
+        }));
 
-      setSuggestions(results);
+        // Add manual entry option if no exact match
+        if (
+          results.length === 0 ||
+          !results.some((r) =>
+            r.name.toLowerCase().startsWith(query.toLowerCase()),
+          )
+        ) {
+          results.push({
+            id: "manual",
+            name: query,
+            description: "Use this location",
+            type: "city",
+          });
+        }
+
+        setSuggestions(results);
+      } else {
+        setSuggestions([
+          {
+            id: "manual",
+            name: query,
+            description: "Use this location",
+            type: "city",
+          },
+        ]);
+      }
     } catch (error) {
       console.error("Location search error:", error);
-      setSuggestions([{
-        id: "manual",
-        name: query,
-        description: "Use this location",
-        type: "city",
-      }]);
+      setSuggestions([
+        {
+          id: "manual",
+          name: query,
+          description: "Use this location",
+          type: "city",
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleSearch = useCallback((text: string): void => {
-    setSearchQuery(text);
-    setSelectedLocation(null);
+  const handleSearch = useCallback(
+    (text: string): void => {
+      setSearchQuery(text);
+      setSelectedLocation(null);
 
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
 
-    if (text.length >= 2) {
-      searchTimeoutRef.current = setTimeout(() => {
-        searchLocations(text);
-      }, 300);
-    } else {
+      if (text.length >= 2) {
+        searchTimeoutRef.current = setTimeout(() => {
+          searchLocations(text);
+        }, 300);
+      } else {
+        setSuggestions([]);
+      }
+    },
+    [searchLocations],
+  );
+
+  const handleSelectLocation = useCallback(
+    (location: LocationSuggestion): void => {
+      setSelectedLocation(location);
+      setSearchQuery(location.name);
       setSuggestions([]);
-    }
-  }, [searchLocations]);
-
-  const handleSelectLocation = useCallback((location: LocationSuggestion): void => {
-    setSelectedLocation(location);
-    setSearchQuery(location.name);
-    setSuggestions([]);
-    Keyboard.dismiss();
-  }, []);
+      Keyboard.dismiss();
+    },
+    [],
+  );
 
   const handleNext = useCallback((): void => {
     if (!selectedLocation && searchQuery.trim().length < 2) return;
 
     const locationData: Location = selectedLocation
       ? {
-        id: selectedLocation.id,
-        name: selectedLocation.name,
-        description: selectedLocation.description,
-      }
+          id: selectedLocation.id,
+          name: selectedLocation.name,
+          description: selectedLocation.description,
+        }
       : { name: searchQuery.trim() };
 
     onNext({ location: locationData });
@@ -234,7 +251,9 @@ export const LocationPage: React.FC<LocationPageProps> = ({
               <View style={styles.selectedCard}>
                 <MapPin size={24} color={COLORS.primary} />
                 <View style={styles.selectedText}>
-                  <Text style={styles.selectedName}>{selectedLocation.name}</Text>
+                  <Text style={styles.selectedName}>
+                    {selectedLocation.name}
+                  </Text>
                   <Text style={styles.selectedDescription}>
                     {selectedLocation.description}
                   </Text>

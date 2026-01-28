@@ -48,7 +48,11 @@ const verifyGoogleToken = async (idToken) => {
     }
 
     // Validate issuer
-    if (!["accounts.google.com", "https://accounts.google.com"].includes(payload.iss)) {
+    if (
+      !["accounts.google.com", "https://accounts.google.com"].includes(
+        payload.iss,
+      )
+    ) {
       throw new Error("Invalid token issuer");
     }
 
@@ -75,8 +79,11 @@ const verifyGoogleToken = async (idToken) => {
       locale: payload.locale,
     };
   } catch (error) {
-    logger.error("Google token verification failed:", error);
-    throw new Error("Invalid Google token");
+    logger.error("Google token verification failed:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error("Invalid Google token: " + error.message);
   }
 };
 
@@ -109,19 +116,41 @@ const verifyAppleToken = async (identityToken) => {
         throw new Error("Invalid token format");
       }
 
+      // Log the token's audience for debugging
+      logger.info("Apple token decoded", {
+        aud: decoded.payload.aud,
+        iss: decoded.payload.iss,
+        sub: decoded.payload.sub,
+      });
+
+      // Apple uses different audiences for different environments
+      const audiences = [
+        process.env.APPLE_CLIENT_ID,
+        process.env.APPLE_SERVICE_ID,
+        // Add bundle ID variations
+        "com.teetimesocial.app",
+        "com.teetimesocial.app.signin",
+        // Expo Go development (case-sensitive!)
+        "host.exp.Exponent",
+      ].filter(Boolean);
+
       // Verify with Apple's public key
       jwt.verify(
         identityToken,
         getAppleSigningKey,
         {
-          audience: process.env.APPLE_CLIENT_ID || process.env.APPLE_SERVICE_ID,
+          audience: audiences,
           issuer: "https://appleid.apple.com",
           algorithms: ["RS256"],
         },
         (err, payload) => {
           if (err) {
-            logger.error("Apple token verification failed:", err);
-            reject(new Error("Invalid Apple token"));
+            logger.error("Apple token verification failed:", {
+              error: err.message,
+              expectedAudiences: audiences,
+              actualAudience: decoded.payload.aud,
+            });
+            reject(new Error(`Invalid Apple token: ${err.message}`));
             return;
           }
 
@@ -147,10 +176,14 @@ const verifyAppleToken = async (identityToken) => {
             provider: "apple",
             providerUserId: payload.sub,
             email: payload.email,
-            emailVerified: payload.email_verified === "true" || payload.email_verified === true,
-            isPrivateEmail: payload.is_private_email === "true" || payload.is_private_email === true,
+            emailVerified:
+              payload.email_verified === "true" ||
+              payload.email_verified === true,
+            isPrivateEmail:
+              payload.is_private_email === "true" ||
+              payload.is_private_email === true,
           });
-        }
+        },
       );
     } catch (error) {
       logger.error("Apple token verification error:", error);
@@ -170,7 +203,7 @@ const generateTempToken = (data) => {
       ...data,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "15m" } // Short-lived
+    { expiresIn: "15m" }, // Short-lived
   );
 };
 
@@ -190,9 +223,112 @@ const verifyTempToken = (token) => {
   }
 };
 
+// ============ USER IDENTITY FUNCTIONS ============
+// Moved from controller for proper separation of concerns
+
+const userRepository = require("../repositories/userRepository");
+const authProviderRepository = require("../repositories/authProviderRepository");
+
+/**
+ * Find or create user by OAuth provider identity
+ * This is the SINGLE source of truth for OAuth user identity
+ *
+ * CRITICAL RULES:
+ * 1. OAuth provider_user_id (sub claim) is the ONLY identity source
+ * 2. Phone/Email are PROFILE DATA only - never used for identity matching
+ *
+ * @param {Object} params - OAuth verification data
+ * @returns {Object} - { user, isNewUser }
+ */
+const findOrCreateOAuthUser = async ({
+  provider,
+  providerUserId,
+  email,
+  emailVerified,
+  firstName,
+  lastName,
+  picture,
+  isPrivateEmail = false,
+}) => {
+  // Check if provider link exists (THIS IS THE IDENTITY CHECK)
+  const providerLink = await authProviderRepository.findByProvider(
+    provider,
+    providerUserId,
+  );
+
+  if (providerLink) {
+    await authProviderRepository.updateLastUsed(providerLink.id);
+    const user = await userRepository.findById(providerLink.user_id);
+
+    logger.info("OAuth user found via provider link", {
+      userId: user.id,
+      provider,
+      providerUserId: providerUserId.substring(0, 8) + "...",
+    });
+
+    return { user, isNewUser: false };
+  }
+
+  // No provider link - create NEW OAuth user
+  logger.info("Creating new OAuth user", {
+    provider,
+    providerUserId: providerUserId.substring(0, 8) + "...",
+    hasEmail: !!email,
+    emailVerified,
+  });
+
+  const newUser = await userRepository.create({
+    phoneNumber: null,
+    email: email && emailVerified && !isPrivateEmail ? email : null,
+    firstName: firstName || null,
+    lastName: lastName || null,
+    username: null,
+    handicap: null,
+    isVerified: true,
+  });
+
+  await authProviderRepository.create({
+    userId: newUser.id,
+    provider,
+    providerUserId,
+    providerEmail: email || null,
+    providerData: {
+      name: `${firstName || ""} ${lastName || ""}`.trim(),
+      picture: picture || null,
+      email_verified: emailVerified,
+      is_private_email: isPrivateEmail,
+    },
+  });
+
+  logger.info("New OAuth user created", { userId: newUser.id, provider });
+  return { user: newUser, isNewUser: true };
+};
+
+/**
+ * Check what profile fields are missing for OAuth users
+ * @param {Object} user - User record
+ * @returns {Object} - Profile completeness status
+ */
+const getProfileCompleteness = (user) => {
+  const missingFields = [];
+
+  if (!user.first_name) missingFields.push("firstName");
+  if (!user.last_name) missingFields.push("lastName");
+  if (!user.location) missingFields.push("location");
+  if (!user.home_course) missingFields.push("homeCourse");
+
+  return {
+    isComplete: missingFields.length === 0,
+    missingFields,
+    needsOnboarding: missingFields.length > 0,
+  };
+};
+
 module.exports = {
   verifyGoogleToken,
   verifyAppleToken,
   generateTempToken,
   verifyTempToken,
+  findOrCreateOAuthUser,
+  getProfileCompleteness,
 };

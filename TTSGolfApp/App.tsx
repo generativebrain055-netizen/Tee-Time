@@ -1,3 +1,4 @@
+import "./global.css";
 import React, { useState, useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,12 +27,14 @@ import CheckInScreen from "./screens/CheckInScreen";
 import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
 import SelectOnDeckScreen from "./screens/SelectOnDeckScreen";
 import { OnboardingScreen } from "./screens/onboarding";
+import { OAuthOnboardingScreen } from "./screens/onboarding/OAuthOnboardingScreen";
 
 type ScreenName =
   | "Splash"
   | "Welcome"
   | "Login"
   | "Onboarding"
+  | "OAuthOnboarding"
   | "HomePage"
   | "Home"
   | "Roster"
@@ -194,6 +197,14 @@ export default function App(): React.ReactElement {
           <OnboardingScreen
             key={`onboarding-${screenKey}`}
             navigation={navigation as any}
+          />
+        );
+      case "OAuthOnboarding":
+        return (
+          <OAuthOnboardingScreen
+            key={`oauth-onboarding-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "HomePage":

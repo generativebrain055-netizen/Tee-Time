@@ -3,6 +3,10 @@
  * Re-exports all components for cleaner imports
  */
 
+// Auth components
+export { OAuthButtons } from "./auth";
+export type { OAuthButtonsProps, OAuthSuccessData } from "../types/oauth";
+
 // Button components
 export { PrimaryButton, SecondaryButton, TextButton } from "./Button";
 

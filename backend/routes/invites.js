@@ -18,13 +18,21 @@ router.post(
   "/",
   [
     body("teeTimeId").isUUID().withMessage("Valid tee time ID required"),
-    body("invitees").isArray({ min: 1 }).withMessage("At least one invitee required"),
-    body("invitees.*.userId").optional().isUUID().withMessage("Invalid user ID"),
-    body("invitees.*.phone").optional().matches(/^\+?[1-9]\d{6,14}$/).withMessage("Invalid phone"),
-    body("invitees.*.name").optional().trim()
+    body("invitees")
+      .isArray({ min: 1, max: 20 })
+      .withMessage("invitees must be an array with 1-20 items"),
+    body("invitees.*.userId")
+      .optional()
+      .isUUID()
+      .withMessage("Invalid user ID"),
+    body("invitees.*.phone")
+      .optional()
+      .matches(/^\+?[1-9]\d{6,14}$/)
+      .withMessage("Invalid phone"),
+    body("invitees.*.name").optional().trim(),
   ],
   validateRequest,
-  inviteController.createInvites
+  inviteController.createInvites,
 );
 
 /**
@@ -36,11 +44,21 @@ router.post(
   "/from-roster",
   [
     body("teeTimeId").isUUID().withMessage("Valid tee time ID required"),
-    body("rosterIds").optional().isArray().withMessage("rosterIds must be an array"),
-    body("count").optional().isInt({ min: 1, max: 20 }).withMessage("Count must be 1-20")
+    body("rosterIds")
+      .optional()
+      .isArray({ max: 50 })
+      .withMessage("rosterIds must be an array with max 50 items"),
+    body("rosterIds.*")
+      .optional()
+      .isUUID()
+      .withMessage("Each rosterIds item must be a valid UUID"),
+    body("count")
+      .optional()
+      .isInt({ min: 1, max: 20 })
+      .withMessage("Count must be 1-20"),
   ],
   validateRequest,
-  inviteController.createFromRoster
+  inviteController.createFromRoster,
 );
 
 /**
@@ -65,11 +83,17 @@ router.get("/sent", inviteController.getSentInvites);
 router.put(
   "/:id/respond",
   [
-    body("response").isIn(["accepted", "declined", "maybe"]).withMessage("Response must be accepted, declined, or maybe"),
-    body("message").optional().trim().isLength({ max: 500 }).withMessage("Message too long")
+    body("response")
+      .isIn(["accepted", "declined", "maybe"])
+      .withMessage("Response must be accepted, declined, or maybe"),
+    body("message")
+      .optional()
+      .trim()
+      .isLength({ max: 500 })
+      .withMessage("Message too long"),
   ],
   validateRequest,
-  inviteController.respondToInvite
+  inviteController.respondToInvite,
 );
 
 /**
