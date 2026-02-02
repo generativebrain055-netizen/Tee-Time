@@ -23,7 +23,7 @@ class ClubsService {
     if (this.loaded) return;
 
     try {
-      const csvPath = path.resolve(__dirname, "../../clubs.csv");
+      const csvPath = path.resolve(__dirname, "../data/clubs.csv");
 
       if (!fs.existsSync(csvPath)) {
         logger.warn("Clubs CSV file not found at:", csvPath);

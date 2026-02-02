@@ -108,6 +108,415 @@ const googleSignIn = async (req, res, next) => {
 };
 
 /**
+ * Google OAuth Callback (Custom Redirect Handler)
+ * GET /auth/google/callback?code=...&state=...
+ * 
+ * This endpoint receives the OAuth callback from Google, exchanges the code
+ * for tokens, creates a session, and shows a success page that redirects back to the app.
+ * 
+ * This approach is more reliable than Expo's auth proxy for development.
+ */
+const googleOAuthCallback = async (req, res, next) => {
+  try {
+    const { code, state, error } = req.query;
+
+    // Handle OAuth errors
+    if (error) {
+      logger.error("Google OAuth callback error:", { error });
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Authentication Failed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: sans-serif; text-align: center; padding: 40px;">
+          <h1>Authentication Failed</h1>
+          <p>Error: ${error}</p>
+          <p>Please return to the app and try again.</p>
+          <a href="teetimesocial://" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #5DB075; color: white; text-decoration: none; border-radius: 8px;">Return to App</a>
+        </body>
+        </html>
+      `);
+    }
+
+    if (!code) {
+      return res.status(400).send("Missing authorization code");
+    }
+
+    // Determine redirect URI based on environment
+    const redirectUri = `${req.protocol}://${req.get("host")}/auth/google/callback`;
+
+    logger.info("Google OAuth callback received", {
+      hasCode: !!code,
+      redirectUri,
+    });
+
+    // Exchange code for tokens
+    const verifiedData = await oauthService.exchangeGoogleCode(
+      code,
+      null, // No code verifier for server-side flow
+      redirectUri,
+    );
+
+    const {
+      providerUserId,
+      email,
+      emailVerified,
+      givenName,
+      familyName,
+      picture,
+    } = verifiedData;
+
+    // Find or create user
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
+      provider: "google",
+      providerUserId,
+      email,
+      emailVerified,
+      firstName: givenName,
+      lastName: familyName,
+      picture,
+    });
+
+    // Create session
+    const { accessToken, refreshToken } = await sessionService.createSession({
+      userId: user.id,
+      req,
+      rememberMe: false,
+    });
+
+    logger.info("Google OAuth callback successful", {
+      userId: user.id,
+      isNewUser,
+    });
+
+    // Store tokens in a temporary session that the app can retrieve
+    // Using a short-lived token to pass data securely
+    const tempToken = oauthService.generateTempToken({
+      accessToken,
+      refreshToken,
+      user: formatUser(user),
+      isNewUser,
+      needsOnboarding: oauthService.getProfileCompleteness(user).needsOnboarding,
+    });
+
+    // Redirect to success page with deep link that includes the temp token
+    const deepLink = `teetimesocial://oauth-callback?token=${tempToken}`;
+    
+    // Send success page with auto-redirect
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Authentication Successful</title>
+          <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  min-height: 100vh;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 20px;
+              }
+              .container {
+                  background: white;
+                  border-radius: 20px;
+                  padding: 40px;
+                  max-width: 400px;
+                  width: 100%;
+                  text-align: center;
+                  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+              }
+              .success-icon {
+                  width: 80px;
+                  height: 80px;
+                  background: #5DB075;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  margin: 0 auto 24px;
+                  animation: scaleIn 0.5s ease-out;
+              }
+              .checkmark {
+                  width: 40px;
+                  height: 40px;
+                  stroke: white;
+                  stroke-width: 3;
+                  fill: none;
+              }
+              h1 {
+                  color: #1C1C1E;
+                  font-size: 24px;
+                  font-weight: 600;
+                  margin-bottom: 12px;
+              }
+              p {
+                  color: #6B7280;
+                  font-size: 16px;
+                  line-height: 1.5;
+                  margin-bottom: 32px;
+              }
+              .app-link {
+                  display: inline-block;
+                  background: #5DB075;
+                  color: white;
+                  text-decoration: none;
+                  padding: 14px 32px;
+                  border-radius: 12px;
+                  font-weight: 600;
+                  font-size: 16px;
+                  transition: all 0.3s ease;
+              }
+              @keyframes scaleIn {
+                  from { transform: scale(0); opacity: 0; }
+                  to { transform: scale(1); opacity: 1; }
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="success-icon">
+                  <svg class="checkmark" viewBox="0 0 52 52">
+                      <path d="M14 27l8 8 16-16"/>
+                  </svg>
+              </div>
+              <h1>Authentication Successful!</h1>
+              <p>Redirecting you back to TeeTime...</p>
+              <a href="${deepLink}" class="app-link" id="returnButton">
+                  Return to App
+              </a>
+          </div>
+          <script>
+              // Auto-redirect immediately
+              window.location.href = '${deepLink}';
+              
+              // Fallback button
+              document.getElementById('returnButton').addEventListener('click', (e) => {
+                  e.preventDefault();
+                  window.location.href = '${deepLink}';
+              });
+          </script>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    logger.error("Google OAuth callback error:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Error</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: sans-serif; text-align: center; padding: 40px;">
+        <h1>Authentication Error</h1>
+        <p>${error.message}</p>
+        <p>Please return to the app and try again.</p>
+        <a href="teetimesocial://" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #5DB075; color: white; text-decoration: none; border-radius: 8px;">Return to App</a>
+      </body>
+      </html>
+    `);
+  }
+};
+
+/**
+ * Google Sign In with Authorization Code (PKCE Flow)
+ * POST /auth/google/code
+ * Body: { code, codeVerifier, redirectUri }
+ *
+ * Used when client obtains authorization code (Expo Go with auth proxy)
+ */
+const googleSignInWithCode = async (req, res, next) => {
+  try {
+    const { code, codeVerifier, redirectUri } = req.body;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        error: "Authorization code is required",
+      });
+    }
+
+    if (!redirectUri) {
+      return res.status(400).json({
+        success: false,
+        error: "Redirect URI is required",
+      });
+    }
+
+    logger.info("Google OAuth code exchange attempt", {
+      hasCode: !!code,
+      hasCodeVerifier: !!codeVerifier,
+      redirectUri,
+    });
+
+    // Exchange code for ID token and verify
+    const verifiedData = await oauthService.exchangeGoogleCode(
+      code,
+      codeVerifier,
+      redirectUri,
+    );
+    const {
+      providerUserId,
+      email,
+      emailVerified,
+      givenName,
+      familyName,
+      picture,
+    } = verifiedData;
+
+    // Find or create user (business logic in service)
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
+      provider: "google",
+      providerUserId,
+      email,
+      emailVerified,
+      firstName: givenName,
+      lastName: familyName,
+      picture,
+    });
+
+    // Create session
+    const { accessToken, refreshToken } = await sessionService.createSession({
+      userId: user.id,
+      req,
+      rememberMe: false,
+    });
+
+    logger.info("Google sign in (code exchange) successful", {
+      userId: user.id,
+      isNewUser,
+    });
+
+    // Check profile completeness (business logic in service)
+    const profileStatus = oauthService.getProfileCompleteness(user);
+
+    return res.json({
+      status: "authenticated",
+      success: true,
+      accessToken,
+      refreshToken,
+      user: formatUser(user),
+      isNewUser,
+      needsOnboarding: profileStatus.needsOnboarding,
+      missingFields: profileStatus.missingFields,
+      profileIncomplete: !profileStatus.isComplete,
+      ...(profileStatus.needsOnboarding && {
+        message: "Please complete your profile to continue",
+      }),
+    });
+  } catch (error) {
+    logger.error("Google sign in (code exchange) error:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Google authentication failed",
+    });
+  }
+};
+
+/**
+ * Google Sign In with Access Token (Implicit Grant Flow)
+ * POST /auth/google/token
+ * Body: { accessToken }
+ *
+ * Used when client obtains access token directly (implicit flow) instead of ID token.
+ * This is useful for Expo Go development where auth code exchange is problematic.
+ */
+const googleSignInWithAccessToken = async (req, res, next) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: "Access token is required",
+      });
+    }
+
+    // Verify Google access token and get user info
+    const verifiedData =
+      await oauthService.verifyGoogleAccessToken(accessToken);
+    const {
+      providerUserId,
+      email,
+      emailVerified,
+      givenName,
+      familyName,
+      picture,
+    } = verifiedData;
+
+    logger.info("Google OAuth (access token) attempt", {
+      providerUserId: providerUserId.substring(0, 8) + "...",
+      email,
+      emailVerified,
+    });
+
+    // Find or create user (business logic in service)
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
+      provider: "google",
+      providerUserId,
+      email,
+      emailVerified,
+      firstName: givenName,
+      lastName: familyName,
+      picture,
+    });
+
+    // Create session
+    const { accessToken: sessionAccessToken, refreshToken } =
+      await sessionService.createSession({
+        userId: user.id,
+        req,
+        rememberMe: false,
+      });
+
+    logger.info("Google sign in (access token) successful", {
+      userId: user.id,
+      isNewUser,
+    });
+
+    // Check profile completeness (business logic in service)
+    const profileStatus = oauthService.getProfileCompleteness(user);
+
+    return res.json({
+      status: "authenticated",
+      success: true,
+      accessToken: sessionAccessToken,
+      refreshToken,
+      user: formatUser(user),
+      isNewUser,
+      needsOnboarding: profileStatus.needsOnboarding,
+      missingFields: profileStatus.missingFields,
+      profileIncomplete: !profileStatus.isComplete,
+      ...(profileStatus.needsOnboarding && {
+        message: "Please complete your profile to continue",
+      }),
+    });
+  } catch (error) {
+    logger.error("Google sign in (access token) error:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Google authentication failed",
+    });
+  }
+};
+
+/**
  * Apple Sign In
  * POST /auth/apple
  * Body: { identityToken, user?: { name: { firstName, lastName }, email } }
@@ -190,6 +599,50 @@ const appleSignIn = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       error: error.message || "Apple authentication failed",
+    });
+  }
+};
+
+/**
+ * Verify Temporary Token
+ * POST /auth/verify-temp-token
+ * Body: { token }
+ * 
+ * Verifies the temporary token from OAuth callback and returns session data
+ */
+const verifyTempTokenEndpoint = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: "Token is required",
+      });
+    }
+
+    // Verify the temp token
+    const decoded = oauthService.verifyTempToken(token);
+
+    logger.info("Temp token verified", {
+      type: decoded.type,
+      hasAccessToken: !!decoded.accessToken,
+    });
+
+    return res.json({
+      success: true,
+      accessToken: decoded.accessToken,
+      refreshToken: decoded.refreshToken,
+      user: decoded.user,
+      isNewUser: decoded.isNewUser,
+      needsOnboarding: decoded.needsOnboarding,
+      missingFields: decoded.missingFields,
+    });
+  } catch (error) {
+    logger.error("Temp token verification error:", error);
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Invalid or expired token",
     });
   }
 };
@@ -375,6 +828,10 @@ const handleLegacyTempTokenFlow = async (req, res) => {
 
 module.exports = {
   googleSignIn,
+  googleOAuthCallback,
+  googleSignInWithCode,
+  googleSignInWithAccessToken,
   appleSignIn,
   completeOAuthProfile,
+  verifyTempTokenEndpoint,
 };

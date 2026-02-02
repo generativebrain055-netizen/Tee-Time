@@ -2,6 +2,7 @@
   "expo": {
     "name": "TeeTime Social",
     "slug": "teetimesocial",
+    "scheme": "teetimesocial",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/AppIcon.png",
@@ -40,7 +41,13 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.900592600620-74ihitjmsit828b2fctfngaisruq2r21"
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -1,15 +1,19 @@
-const { OAuth2Client } = require("google-auth-library");
 const jwt = require("jsonwebtoken");
 const jwksClient = require("jwks-rsa");
 const logger = require("../config/logger");
+const admin = require("firebase-admin");
 
 /**
  * OAuth Service
- * Handles OAuth token verification for Google and Apple
+ * Handles OAuth token verification for Google (via Firebase) and Apple
  */
 
-// Initialize Google OAuth client
-const googleClient = new OAuth2Client();
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.FIREBASE_PROJECT_ID || "teetime-db29d",
+  });
+}
 
 // Apple JWKS client for token verification
 const appleJwksClient = jwksClient({
@@ -19,71 +23,197 @@ const appleJwksClient = jwksClient({
 });
 
 /**
- * Verify Google ID Token
- * @param {string} idToken - Google ID token
+ * Verify Google ID Token (Firebase)
+ * @param {string} idToken - Firebase ID token from Google Sign-In
  * @returns {Object} Verified payload with user info
  */
 const verifyGoogleToken = async (idToken) => {
   try {
-    const audiences = [
+    // Verify Firebase ID token using Firebase Admin SDK
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+    // Validate required fields
+    if (!decodedToken.uid) {
+      throw new Error("Invalid token: missing uid");
+    }
+
+    logger.info("Firebase token verified successfully", {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      email_verified: decodedToken.email_verified,
+    });
+
+    return {
+      provider: "google",
+      providerUserId: decodedToken.uid,
+      email: decodedToken.email,
+      emailVerified: decodedToken.email_verified || false,
+      name: decodedToken.name,
+      givenName: decodedToken.given_name,
+      familyName: decodedToken.family_name,
+      picture: decodedToken.picture,
+      locale: decodedToken.locale,
+    };
+  } catch (error) {
+    logger.error("Firebase token verification failed:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error("Invalid Google token: " + error.message);
+  }
+};
+
+/**
+ * Verify Google Access Token using Google's tokeninfo endpoint
+ * This is used for implicit grant flow where we get an access token instead of ID token
+ * @param {string} accessToken - Google access token
+ * @returns {Object} Verified payload with user info
+ */
+const verifyGoogleAccessToken = async (accessToken) => {
+  try {
+    // Verify the access token with Google's tokeninfo endpoint
+    const tokenInfoResponse = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`,
+    );
+
+    if (!tokenInfoResponse.ok) {
+      const errorData = await tokenInfoResponse.json().catch(() => ({}));
+      logger.error("Google tokeninfo request failed:", {
+        status: tokenInfoResponse.status,
+        error: errorData,
+      });
+      throw new Error("Invalid Google access token");
+    }
+
+    const tokenInfo = await tokenInfoResponse.json();
+
+    // Validate the audience matches our client ID
+    const validClientIds = [
       process.env.GOOGLE_CLIENT_ID_IOS,
       process.env.GOOGLE_CLIENT_ID_ANDROID,
       process.env.GOOGLE_CLIENT_ID_WEB,
     ].filter(Boolean);
 
-    if (audiences.length === 0) {
-      throw new Error("No Google Client IDs configured");
+    // For access tokens, check the azp (authorized party) or aud
+    const tokenAudience = tokenInfo.azp || tokenInfo.aud;
+    if (!validClientIds.includes(tokenAudience)) {
+      logger.warn("Access token audience mismatch", {
+        tokenAudience,
+        validClientIds,
+      });
+      throw new Error("Token was not issued for this application");
     }
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: audiences,
-    });
-
-    const payload = ticket.getPayload();
-
-    // Validate required fields
-    if (!payload.sub) {
-      throw new Error("Invalid token: missing sub");
+    // Validate token hasn't expired
+    if (tokenInfo.expires_in <= 0) {
+      throw new Error("Access token has expired");
     }
 
-    // Validate issuer
-    if (
-      !["accounts.google.com", "https://accounts.google.com"].includes(
-        payload.iss,
-      )
-    ) {
-      throw new Error("Invalid token issuer");
+    // Now fetch user info using the access token
+    const userInfoResponse = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    if (!userInfoResponse.ok) {
+      const errorData = await userInfoResponse.json().catch(() => ({}));
+      logger.error("Google userinfo request failed:", {
+        status: userInfoResponse.status,
+        error: errorData,
+      });
+      throw new Error("Failed to fetch user info from Google");
     }
 
-    // Validate expiration
-    if (payload.exp * 1000 < Date.now()) {
-      throw new Error("Token expired");
-    }
+    const userInfo = await userInfoResponse.json();
 
-    logger.info("Google token verified successfully", {
-      sub: payload.sub,
-      email: payload.email,
-      email_verified: payload.email_verified,
+    logger.info("Google access token verified successfully", {
+      sub: userInfo.id,
+      email: userInfo.email,
+      verified_email: userInfo.verified_email,
     });
 
     return {
       provider: "google",
-      providerUserId: payload.sub,
-      email: payload.email,
-      emailVerified: payload.email_verified || false,
-      name: payload.name,
-      givenName: payload.given_name,
-      familyName: payload.family_name,
-      picture: payload.picture,
-      locale: payload.locale,
+      providerUserId: userInfo.id,
+      email: userInfo.email,
+      emailVerified: userInfo.verified_email || false,
+      name: userInfo.name,
+      givenName: userInfo.given_name,
+      familyName: userInfo.family_name,
+      picture: userInfo.picture,
+      locale: userInfo.locale,
     };
   } catch (error) {
-    logger.error("Google token verification failed:", {
+    logger.error("Google access token verification failed:", {
       error: error.message,
       stack: error.stack,
     });
-    throw new Error("Invalid Google token: " + error.message);
+    throw new Error("Failed to verify Google access token: " + error.message);
+  }
+};
+
+/**
+ * Exchange Google authorization code for ID token
+ * Used with PKCE flow (Expo Go with auth proxy)
+ * @param {string} code - Authorization code from Google
+ * @param {string} codeVerifier - PKCE code verifier
+ * @param {string} redirectUri - The redirect URI used in the auth request
+ * @returns {Object} Verified payload with user info
+ */
+const exchangeGoogleCode = async (code, codeVerifier, redirectUri) => {
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID_WEB;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId) {
+      throw new Error("Google Web Client ID not configured");
+    }
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        ...(clientSecret && { client_secret: clientSecret }),
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+        ...(codeVerifier && { code_verifier: codeVerifier }),
+      }).toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.json().catch(() => ({}));
+      logger.error("Google token exchange failed:", {
+        status: tokenResponse.status,
+        error: errorData,
+      });
+      throw new Error(
+        errorData.error_description || "Failed to exchange authorization code",
+      );
+    }
+
+    const tokens = await tokenResponse.json();
+
+    // Verify the ID token
+    if (!tokens.id_token) {
+      throw new Error("No ID token in response");
+    }
+
+    return await verifyGoogleToken(tokens.id_token);
+  } catch (error) {
+    logger.error("Google code exchange failed:", {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error("Failed to exchange Google code: " + error.message);
   }
 };
 
@@ -326,6 +456,8 @@ const getProfileCompleteness = (user) => {
 
 module.exports = {
   verifyGoogleToken,
+  verifyGoogleAccessToken,
+  exchangeGoogleCode,
   verifyAppleToken,
   generateTempToken,
   verifyTempToken,

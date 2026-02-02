@@ -300,6 +300,14 @@ router.post(
 );
 
 /**
+ * @route   GET /api/auth/google/callback
+ * @desc    Google OAuth Callback (Custom Redirect Handler)
+ * @access  Public
+ * @note    Receives OAuth callback, exchanges code, and redirects to app with token
+ */
+router.get("/google/callback", authController.googleOAuthCallback);
+
+/**
  * @route   POST /api/auth/google
  * @desc    Google Sign In
  * @access  Public
@@ -311,6 +319,45 @@ router.post(
   validateRequest,
   logAuthEvent("google_signin"),
   authController.googleSignIn,
+);
+
+/**
+ * @route   POST /api/auth/google/code
+ * @desc    Google Sign In with Authorization Code (PKCE Flow)
+ * @access  Public
+ * @note    Used for Expo Go with auth proxy - exchanges code for tokens
+ */
+router.post(
+  "/google/code",
+  captureDeviceInfo,
+  [
+    body("code").trim().notEmpty().withMessage("Authorization code is required"),
+    body("redirectUri").trim().notEmpty().withMessage("Redirect URI is required"),
+    body("codeVerifier").optional().trim(),
+  ],
+  validateRequest,
+  logAuthEvent("google_signin_code"),
+  authController.googleSignInWithCode,
+);
+
+/**
+ * @route   POST /api/auth/google/token
+ * @desc    Google Sign In with Access Token (Implicit Grant Flow)
+ * @access  Public
+ * @note    Used for Expo Go development where auth code exchange has redirect issues
+ */
+router.post(
+  "/google/token",
+  captureDeviceInfo,
+  [
+    body("accessToken")
+      .trim()
+      .notEmpty()
+      .withMessage("Access token is required"),
+  ],
+  validateRequest,
+  logAuthEvent("google_signin_token"),
+  authController.googleSignInWithAccessToken,
 );
 
 /**
@@ -330,6 +377,18 @@ router.post(
   validateRequest,
   logAuthEvent("apple_signin"),
   authController.appleSignIn,
+);
+
+/**
+ * @route   POST /api/auth/verify-temp-token
+ * @desc    Verify temporary OAuth token from callback
+ * @access  Public
+ */
+router.post(
+  "/verify-temp-token",
+  [body("token").trim().notEmpty().withMessage("Token is required")],
+  validateRequest,
+  authController.verifyTempTokenEndpoint,
 );
 
 /**

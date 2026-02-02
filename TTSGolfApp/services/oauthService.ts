@@ -84,12 +84,28 @@ const apiClient = {
 // ============================================================================
 
 /**
- * Sign in with Google OAuth
+ * Sign in with Google OAuth (ID Token flow)
  */
 export async function signInWithGoogle(
   idToken: string,
 ): Promise<OAuthResponse> {
   return apiClient.post<OAuthResponse>("/auth/google", { idToken });
+}
+
+/**
+ * Sign in with Google OAuth using authorization code (PKCE flow)
+ * This is used when exchanging an auth code for tokens
+ */
+export async function signInWithGoogleCode(
+  code: string,
+  codeVerifier?: string,
+  redirectUri?: string,
+): Promise<OAuthResponse> {
+  return apiClient.post<OAuthResponse>("/auth/google/code", {
+    code,
+    codeVerifier,
+    redirectUri: redirectUri || "https://auth.expo.io/@dawood90999/teetimesocial",
+  });
 }
 
 /**
@@ -148,6 +164,7 @@ export function formatOAuthError(error: unknown): string {
 
 export const oauthService = {
   signInWithGoogle,
+  signInWithGoogleCode,
   signInWithApple,
   completeOAuthProfile,
   isUserCancellation,

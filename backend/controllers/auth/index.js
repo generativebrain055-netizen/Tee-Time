@@ -1,7 +1,7 @@
 /**
  * Auth Controllers Index
  * Re-exports all auth controller functions for backward compatibility
- * 
+ *
  * Structure:
  * - otpController: requestOTP, verifyOTP
  * - loginController: login, logout, logoutAll
@@ -49,6 +49,10 @@ module.exports = {
 
   // OAuth operations
   googleSignIn: oauthController.googleSignIn,
+  googleOAuthCallback: oauthController.googleOAuthCallback,
+  googleSignInWithCode: oauthController.googleSignInWithCode,
+  googleSignInWithAccessToken: oauthController.googleSignInWithAccessToken,
   appleSignIn: oauthController.appleSignIn,
   completeOAuthProfile: oauthController.completeOAuthProfile,
+  verifyTempTokenEndpoint: oauthController.verifyTempTokenEndpoint,
 };

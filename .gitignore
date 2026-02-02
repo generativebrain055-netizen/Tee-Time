@@ -1,4 +1,10 @@
-# Environment variables
+# ============================================================================
+# TeeTime Social - Git Ignore Configuration
+# ============================================================================
+
+# ============================================================================
+# Environment Variables & Secrets
+# ============================================================================
 .env
 .env.local
 .env.*.local
@@ -6,75 +12,149 @@
 .env.production
 .env.test
 
-# But keep example files
+# Keep example files for reference
 !.env.example
 !backend/.env.example
 !TTSGolfApp/.env.example
 
-# Sensitive files
+# ============================================================================
+# Sensitive Files & Credentials
+# ============================================================================
 *.pem
 *.key
 *.p8
 *.p12
 *.mobileprovision
-AuthKey_*.p8
+*.keystore
+*.jks
 
+# Configuration files (keep templates)
+config/firebase/google-services.json
+config/firebase/GoogleService-Info.plist
+config/keys/*.p8
+
+# Build copies of config files
+TTSGolfApp/google-services.json
+TTSGolfApp/GoogleService-Info.plist
+
+# Backend keys
+backend/config/keys/*.p8
+
+# ============================================================================
 # Dependencies
+# ============================================================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
+yarn.lock
 
-# OS files
+# ============================================================================
+# Operating System Files
+# ============================================================================
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
+desktop.ini
 
-# IDE
+# ============================================================================
+# IDE & Editor Files
+# ============================================================================
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.code-workspace
 
+# ============================================================================
 # Logs
+# ============================================================================
 logs/
 *.log
+backend/logs/*.log
+!backend/logs/.gitkeep
 
-# Build outputs
+# ============================================================================
+# Build Outputs
+# ============================================================================
 dist/
 build/
 *.tgz
+out/
 
-# Database
+# ============================================================================
+# Database Files
+# ============================================================================
 *.sqlite
 *.db
+*.db-journal
 
-# Temporary files
+# ============================================================================
+# Temporary Files
+# ============================================================================
 tmp/
 temp/
 *.tmp
+*.bak
+*.backup
 
-# Backend specific
+# ============================================================================
+# Backend Specific
+# ============================================================================
 backend/node_modules/
 backend/logs/
-backend/config/AuthKey_*.p8
+backend/config/keys/
+backend/dist/
 
-# Frontend specific
+# ============================================================================
+# Mobile App Specific (React Native / Expo)
+# ============================================================================
 TTSGolfApp/node_modules/
 TTSGolfApp/.expo/
 TTSGolfApp/.expo-shared/
 TTSGolfApp/dist/
 TTSGolfApp/web-build/
+TTSGolfApp/android/app/build/
+TTSGolfApp/android/build/
+TTSGolfApp/android/.gradle/
+TTSGolfApp/ios/Pods/
+TTSGolfApp/ios/build/
+TTSGolfApp/*.apk
+TTSGolfApp/*.ipa
 
-# React Native
-*.jks
-*.orig.*
+# Keep release keystore (should be managed separately)
+!TTSGolfApp/android/app/teetimesocial-release.keystore
 
-# Testing
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
 coverage/
 .nyc_output/
+test-results/
+*.test.js.snap
 
-# Misc
+# ============================================================================
+# Miscellaneous
+# ============================================================================
 .cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vercel/
+
+# ============================================================================
+# Documentation (temporary/generated)
+# ============================================================================
+# Keep all markdown files in docs/ but ignore generated ones
+docs/generated/
+
+# ============================================================================
+# APK/IPA Files (except specific releases)
+# ============================================================================
+*.apk
+*.ipa
+!releases/*.apk
+!releases/*.ipa

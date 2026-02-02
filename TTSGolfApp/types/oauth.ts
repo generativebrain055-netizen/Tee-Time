@@ -158,6 +158,7 @@ export interface GoogleOAuthConfig {
   iosClientId: string;
   webClientId: string;
   scopes: string[];
+  redirectUri?: string; // Optional explicit redirect URI for OAuth 2.0 compliance
 }
 
 // ============================================================================

@@ -1,8 +1,6 @@
 /**
  * OAuthButtons Component
- * Production-grade OAuth authentication buttons for Apple and Google Sign-In
- *
- * @module components/auth/OAuthButtons
+ * Firebase Authentication with Google Sign-In
  */
 
 import React, { useCallback, useMemo } from "react";
@@ -15,8 +13,9 @@ import {
   Alert,
 } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
+import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import { auth } from "../../config/firebase";
 
 import {
   colorTokens,
@@ -35,83 +34,55 @@ import {
 import type {
   OAuthButtonsProps,
   OAuthSuccessData,
-  GoogleOAuthConfig,
 } from "../../types/oauth";
 import GoogleLogo from "../GoogleLogo";
-
-// Complete auth session for OAuth redirect handling
-WebBrowser.maybeCompleteAuthSession();
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS;
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB;
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+// Configure Google Sign-In with Firebase
+GoogleSignin.configure({
+  webClientId: GOOGLE_WEB_CLIENT_ID,
+  offlineAccess: false,
+});
+
+console.log("[Firebase] Configured with Web Client ID:", GOOGLE_WEB_CLIENT_ID);
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-/**
- * Check if Google OAuth is properly configured
- */
 function isGoogleConfigured(): boolean {
-  return !!(
-    GOOGLE_IOS_CLIENT_ID &&
-    GOOGLE_WEB_CLIENT_ID &&
-    !GOOGLE_IOS_CLIENT_ID.includes("XXXXX")
-  );
-}
-
-/**
- * Get Google OAuth configuration if available
- */
-function getGoogleConfig(): GoogleOAuthConfig | null {
-  if (!isGoogleConfigured()) return null;
-
-  return {
-    iosClientId: GOOGLE_IOS_CLIENT_ID!,
-    webClientId: GOOGLE_WEB_CLIENT_ID!,
-    scopes: ["profile", "email"],
-  };
+  return !!(GOOGLE_WEB_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID.includes("XXXXX"));
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-/**
- * OAuth authentication buttons component
- * Provides Apple Sign-In (iOS only) and Google Sign-In options
- */
 export function OAuthButtons({
   onSuccess,
   onError,
   disabled = false,
 }: OAuthButtonsProps): React.ReactElement {
-  const googleConfig = useMemo(() => getGoogleConfig(), []);
-
-  // Initialize Google Sign-In hook
-  const [_request, response, promptAsync] = Google.useIdTokenAuthRequest(
-    googleConfig || { iosClientId: "", webClientId: "" },
-  );
-
-  // Handle Google OAuth response
-  React.useEffect(() => {
-    if (response?.type === "success") {
-      const { id_token } = response.params;
-      handleGoogleResponse(id_token);
-    }
-  }, [response]);
+  const googleConfigured = useMemo(() => isGoogleConfigured(), []);
 
   /**
-   * Process Google OAuth token and complete authentication
+   * Process Firebase user and send to backend
    */
-  const handleGoogleResponse = useCallback(
-    async (idToken: string) => {
+  const handleFirebaseUser = useCallback(
+    async (firebaseUser: any) => {
       try {
+        console.log("[Firebase] Getting ID token...");
+        const idToken = await firebaseUser.getIdToken();
+
+        console.log("[Firebase] Sending ID token to backend for verification...");
         const data = await oauthService.signInWithGoogle(idToken);
+
+        console.log("[Firebase] Backend response:", JSON.stringify(data, null, 2));
 
         // Save session
         await sessionManager.saveSession({
@@ -128,6 +99,7 @@ export function OAuthButtons({
 
         // Check if onboarding is needed
         if (data.needsOnboarding && data.missingFields?.length > 0) {
+          console.log("[Firebase] Onboarding needed. Missing fields:", data.missingFields);
           successData.needsOnboarding = true;
           successData.oauthData = {
             accessToken: data.accessToken,
@@ -136,11 +108,14 @@ export function OAuthButtons({
             needsOnboarding: data.needsOnboarding,
             missingFields: data.missingFields,
           };
+        } else {
+          console.log("[Firebase] No onboarding needed. User is complete.");
         }
 
+        console.log("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
         onSuccess(successData);
       } catch (error) {
-        console.error("[OAuth] Google Sign-In Error:", error);
+        console.error("[Firebase] Backend verification error:", error);
         onError(formatOAuthError(error));
       }
     },
@@ -148,10 +123,10 @@ export function OAuthButtons({
   );
 
   /**
-   * Initiate Google Sign-In flow
+   * Initiate Google Sign-In using Firebase
    */
   const handleGoogleSignIn = useCallback(async () => {
-    if (!googleConfig) {
+    if (!googleConfigured) {
       Alert.alert(
         "Google Sign-In Not Available",
         "Google Sign-In is not configured. Please use phone number login or Apple Sign-In.",
@@ -161,12 +136,60 @@ export function OAuthButtons({
     }
 
     try {
-      await promptAsync();
-    } catch (error) {
-      console.error("[OAuth] Google Sign-In Error:", error);
+      console.log("[Firebase] Starting Google Sign-In...");
+
+      // Check Play Services (Android only)
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+
+      console.log("[Firebase] Google Sign-In response:", JSON.stringify(userInfo, null, 2));
+
+      // Get the ID token from the response
+      const idToken = userInfo.data?.idToken;
+
+      if (!idToken) {
+        console.error("[Firebase] No ID token in response. Full response:", userInfo);
+        throw new Error("No ID token received from Google");
+      }
+
+      console.log("[Firebase] Got Google ID token, signing in to Firebase...");
+
+      // Create Firebase credential
+      const googleCredential = GoogleAuthProvider.credential(idToken);
+
+      // Sign in to Firebase
+      const userCredential = await signInWithCredential(auth, googleCredential);
+
+      console.log("[Firebase] Firebase sign-in successful");
+      console.log("[Firebase] User:", userCredential.user.email);
+
+      // Send to backend
+      await handleFirebaseUser(userCredential.user);
+
+    } catch (error: any) {
+      console.error("[Firebase] Google Sign-In Error:", error);
+
+      // Handle specific error codes
+      if (error.code === "SIGN_IN_CANCELLED" || error.code === 'auth/cancelled-popup-request') {
+        console.log("[Firebase] User cancelled sign-in");
+        return;
+      }
+
+      if (error.code === "IN_PROGRESS") {
+        console.log("[Firebase] Sign-in already in progress");
+        return;
+      }
+
+      if (error.code === "PLAY_SERVICES_NOT_AVAILABLE") {
+        onError("Google Play Services not available. Please update Google Play Services.");
+        return;
+      }
+
       onError(formatOAuthError(error));
     }
-  }, [googleConfig, promptAsync, onError]);
+  }, [googleConfigured, handleFirebaseUser, onError]);
 
   /**
    * Initiate Apple Sign-In flow
@@ -184,11 +207,11 @@ export function OAuthButtons({
         identityToken: credential.identityToken!,
         user: credential.fullName
           ? {
-              name: {
-                firstName: credential.fullName.givenName,
-                lastName: credential.fullName.familyName,
-              },
-            }
+            name: {
+              firstName: credential.fullName.givenName,
+              lastName: credential.fullName.familyName,
+            },
+          }
           : null,
       });
 
@@ -220,10 +243,9 @@ export function OAuthButtons({
       onSuccess(successData);
     } catch (error) {
       if (isUserCancellation(error)) {
-        // User cancelled - don't show error
         return;
       }
-      console.error("[OAuth] Apple Sign-In Error:", error);
+      console.error("[Firebase] Apple Sign-In Error:", error);
       onError(formatOAuthError(error));
     }
   }, [onSuccess, onError]);
@@ -255,7 +277,7 @@ export function OAuthButtons({
         )}
 
         {/* Google Sign-In */}
-        {googleConfig && (
+        {googleConfigured && (
           <TouchableOpacity
             style={[styles.googleButton, disabled && styles.buttonDisabled]}
             onPress={handleGoogleSignIn}
@@ -322,9 +344,5 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
-
-// ============================================================================
-// Exports
-// ============================================================================
 
 export default OAuthButtons;
