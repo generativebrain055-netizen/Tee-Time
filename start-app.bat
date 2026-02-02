@@ -38,7 +38,7 @@ if not exist "TTSGolfApp\node_modules\" (
 echo ========================================
 echo   Starting Backend Server...
 echo ========================================
-echo Backend will run on: http://localhost:3000
+echo Backend will run on: https://api.teetimesocial.app
 echo.
 start "TeeTime Backend" cmd /k "cd backend && npm start"
 
@@ -57,7 +57,7 @@ echo ========================================
 echo   Both servers are starting!
 echo ========================================
 echo.
-echo Backend:  http://localhost:3000
+echo Backend:  https://api.teetimesocial.app
 echo Frontend: Check Expo DevTools window
 echo.
 echo Press any key to close this window...

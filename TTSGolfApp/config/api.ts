@@ -4,7 +4,7 @@
  */
 
 // Get API URL from environment variable or use default
-const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "http://16.171.170.30:3000";
+const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "https://api.teetimesocial.app";
 
 /**
  * Get the API base URL
