@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Successful</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #5DB075;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        .success-icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: white;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        h1 {
+            color: #1C1C1E;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        p {
+            color: #6B7280;
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 32px;
+        }
+
+        .app-link {
+            display: inline-block;
+            background: #5DB075;
+            color: white;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(93, 176, 117, 0.3);
+        }
+
+        .app-link:hover {
+            background: #4a9960;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(93, 176, 117, 0.4);
+        }
+
+        .manual-instruction {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #E5E7EB;
+            color: #9CA3AF;
+            font-size: 14px;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes checkmark {
+            0% {
+                stroke-dashoffset: 100;
+            }
+
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .checkmark {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: checkmark 0.5s ease-out 0.3s forwards;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="success-icon">
+            <svg viewBox="0 0 52 52">
+                <path class="checkmark" d="M14 27l8 8 16-16" />
+            </svg>
+        </div>
+
+        <h1>Authentication Successful!</h1>
+        <p>You've been successfully authenticated with Google. Return to the TeeTime app to continue.</p>
+
+        <a href="teetimesocial://oauth-callback" class="app-link" id="returnButton">
+            Return to App
+        </a>
+
+        <div class="manual-instruction">
+            If the app doesn't open automatically, please return to the TeeTime app manually.
+        </div>
+    </div>
+
+    <script>
+        // Auto-redirect to app after 2 seconds
+        setTimeout(() => {
+            window.location.href = 'teetimesocial://oauth-callback';
+        }, 2000);
+
+        // Handle button click
+        document.getElementById('returnButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = 'teetimesocial://oauth-callback';
+
+            // Fallback: show instruction if app doesn't open
+            setTimeout(() => {
+                alert('Please return to the TeeTime app to continue.');
+            }, 3000);
+        });
+    </script>
+</body>
+
+</html>
