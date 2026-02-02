@@ -158,3 +158,4 @@ docs/generated/
 *.ipa
 !releases/*.apk
 !releases/*.ipa
+"backend/scripts/tests/" 
