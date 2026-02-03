@@ -3,7 +3,7 @@
     "name": "TeeTime Social",
     "slug": "teetimesocial",
     "scheme": "teetimesocial",
-    "version": "1.0.0",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/AppIcon.png",
     "userInterfaceStyle": "light",
