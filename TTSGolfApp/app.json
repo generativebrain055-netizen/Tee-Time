@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "icon": "./assets/AppIcon.png",
       "bundleIdentifier": "com.teetimesocial.app",
-      "buildNumber": "5",
+      "buildNumber": "7",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take profile photos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select profile photos.",
