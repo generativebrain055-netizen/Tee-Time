@@ -120,20 +120,70 @@ class ExternalServiceError extends AppError {
 }
 
 /**
+ * Common security scan paths that should be logged at lower level
+ */
+const SECURITY_SCAN_PATTERNS = [
+  /^\/\.env/i,
+  /^\/\.git/i,
+  /^\/\.github/i,
+  /^\/\.gitlab/i,
+  /^\/\.ssh/i,
+  /^\/\.htaccess/i,
+  /^\/\.well-known/i,
+  /^\/\.vscode/i,
+  /^\/\.idea/i,
+  /^\/\.npmrc/i,
+  /^\/\.travis/i,
+  /^\/\.gitignore/i,
+  /^\/\.gitlab-ci/i,
+  /^\/\.hg/i,
+  /^\/\.svn/i,
+  /^\/\.next/i,
+  /^\/\.nuxt/i,
+  /^\/\.vite/i,
+  /^\/\.local/i,
+  /^\/\.production/i,
+  /^\/\.remote/i,
+  /^\/\.phpinfo/i,
+  /^\/\.pypirc/i,
+];
+
+/**
+ * Check if a path matches security scan patterns
+ */
+const isSecurityScanPath = (path) => {
+  return SECURITY_SCAN_PATTERNS.some(pattern => pattern.test(path));
+};
+
+/**
  * Error Handler Middleware
  */
 const errorHandler = (err, req, res, next) => {
-  // Log error
-  logger.error("Error occurred", {
-    error: err.message,
-    stack: err.stack,
-    statusCode: err.statusCode,
-    code: err.code,
-    path: req.path,
-    method: req.method,
-    ip: req.ip,
-    userId: req.user?.id,
-  });
+  const isSecurityScan = isSecurityScanPath(req.path);
+  const isNotFound = err.statusCode === 404;
+  
+  // For 404s on security scan paths, log at info level instead of error
+  // These are common bot/scanner requests and not actual errors
+  if (isNotFound && isSecurityScan) {
+    logger.info("Security scan attempt blocked", {
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+  } else {
+    // Log actual errors
+    logger.error("Error occurred", {
+      error: err.message,
+      stack: err.stack,
+      statusCode: err.statusCode,
+      code: err.code,
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      userId: req.user?.id,
+    });
+  }
 
   // Determine status code
   const statusCode = err.statusCode || 500;

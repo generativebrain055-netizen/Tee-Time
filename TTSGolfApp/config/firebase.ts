@@ -4,6 +4,7 @@
  */
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { logger } from '../utils/logger';
 import { getAuth, initializeAuth, getReactNativePersistence, Auth } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -46,14 +47,14 @@ try {
       if (authError.code === 'auth/already-initialized') {
         auth = getAuth(app);
       } else {
-        console.error('Firebase Auth initialization error:', authError);
+        logger.error('Firebase Auth initialization error:', authError);
         // Fallback to getAuth if initializeAuth fails
         auth = getAuth(app);
       }
     }
   } else {
-    console.warn('Firebase configuration is incomplete. Firebase features will be disabled.');
-    console.warn('Missing environment variables:', {
+    logger.warn('Firebase configuration is incomplete. Firebase features will be disabled.');
+    logger.warn('Missing environment variables:', {
       apiKey: !firebaseConfig.apiKey,
       authDomain: !firebaseConfig.authDomain,
       projectId: !firebaseConfig.projectId,
@@ -63,7 +64,7 @@ try {
     });
   }
 } catch (error) {
-  console.error('Firebase initialization error:', error);
+  logger.error('Firebase initialization error:', error);
   // App will continue without Firebase, but OAuth features won't work
 }
 

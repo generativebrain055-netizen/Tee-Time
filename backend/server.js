@@ -15,6 +15,7 @@ const logger = require("./config/logger");
 // Import middleware
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const { logApiRequest } = require("./middleware/analytics");
+const securityScannerBlocker = require("./middleware/securityScanner");
 
 // Import services
 const schedulerService = require("./services/schedulerService");
@@ -70,6 +71,9 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 if (process.env.ENABLE_ANALYTICS !== "false") {
   app.use(logApiRequest);
 }
+
+// Security scanner blocker (blocks common scanner paths early)
+app.use(securityScannerBlocker);
 
 // Health check route (before other routes)
 app.get("/health", (req, res) => {
@@ -194,6 +198,8 @@ process.on("unhandledRejection", (reason, promise) => {
   process.exit(1);
 });
 
-startServer();
+if (process.env.NODE_ENV !== "test") {
+  startServer();
+}
 
 module.exports = app;

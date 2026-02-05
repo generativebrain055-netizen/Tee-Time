@@ -172,11 +172,12 @@ EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSy...
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
-EXPO_PUBLIC_FIREBASE_APP_ID=1:123456789:android:abc123
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+EXPO_PUBLIC_FIREBASE_APP_ID=1:xxx:ios:xxx
 
-# Google OAuth Web Client ID
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=xxxxx-xxxxx.apps.googleusercontent.com
+# Google OAuth (required for Google Sign-In)
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=xxxxx.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=xxxxx.apps.googleusercontent.com  # iOS OAuth Client ID from Google Cloud Console
 ```
 
 ### 7.2 Where to Find Each Value
@@ -203,6 +204,10 @@ All values are in Firebase Console → Project Settings → General:
 
 **EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:**
 - Same as GOOGLE_CLIENT_ID_WEB from backend
+
+**EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID:**
+- Google Cloud Console → Credentials → OAuth 2.0 Client IDs → iOS client
+- Required for Google Sign-In on iOS; prevents "failed to determine clientID" error
 
 ---
 

@@ -36,20 +36,25 @@ import type {
   OAuthSuccessData,
 } from "../../types/oauth";
 import GoogleLogo from "../GoogleLogo";
+import { logger } from "../../utils/logger";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
 // Configure Google Sign-In with Firebase
+// iOS: pass iosClientId so RNGoogleSignin works even if GoogleService-Info.plist is missing CLIENT_ID
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
+  ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
   offlineAccess: false,
 });
 
-console.log("[Firebase] Configured with Web Client ID:", GOOGLE_WEB_CLIENT_ID);
+logger.debug("[Firebase] Configured with Web Client ID:", GOOGLE_WEB_CLIENT_ID);
+if (GOOGLE_IOS_CLIENT_ID) logger.debug("[Firebase] iOS Client ID set for Google Sign-In");
 
 // ============================================================================
 // Helper Functions
@@ -76,13 +81,13 @@ export function OAuthButtons({
   const handleFirebaseUser = useCallback(
     async (firebaseUser: any) => {
       try {
-        console.log("[Firebase] Getting ID token...");
+        logger.debug("[Firebase] Getting ID token...");
         const idToken = await firebaseUser.getIdToken();
 
-        console.log("[Firebase] Sending ID token to backend for verification...");
+        logger.debug("[Firebase] Sending ID token to backend for verification...");
         const data = await oauthService.signInWithGoogle(idToken);
 
-        console.log("[Firebase] Backend response:", JSON.stringify(data, null, 2));
+        logger.debug("[Firebase] Backend response:", JSON.stringify(data, null, 2));
 
         // Save session
         await sessionManager.saveSession({
@@ -99,7 +104,7 @@ export function OAuthButtons({
 
         // Check if onboarding is needed
         if (data.needsOnboarding && data.missingFields?.length > 0) {
-          console.log("[Firebase] Onboarding needed. Missing fields:", data.missingFields);
+          logger.debug("[Firebase] Onboarding needed. Missing fields:", data.missingFields);
           successData.needsOnboarding = true;
           successData.oauthData = {
             accessToken: data.accessToken,
@@ -109,13 +114,13 @@ export function OAuthButtons({
             missingFields: data.missingFields,
           };
         } else {
-          console.log("[Firebase] No onboarding needed. User is complete.");
+          logger.debug("[Firebase] No onboarding needed. User is complete.");
         }
 
-        console.log("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
+        logger.debug("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
         onSuccess(successData);
       } catch (error) {
-        console.error("[Firebase] Backend verification error:", error);
+        logger.error("[Firebase] Backend verification error:", error);
         onError(formatOAuthError(error));
       }
     },
@@ -136,7 +141,7 @@ export function OAuthButtons({
     }
 
     try {
-      console.log("[Firebase] Starting Google Sign-In...");
+      logger.debug("[Firebase] Starting Google Sign-In...");
 
       // Check Play Services (Android only)
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -144,17 +149,17 @@ export function OAuthButtons({
       // Sign in with Google
       const userInfo = await GoogleSignin.signIn();
 
-      console.log("[Firebase] Google Sign-In response:", JSON.stringify(userInfo, null, 2));
+      logger.debug("[Firebase] Google Sign-In response:", JSON.stringify(userInfo, null, 2));
 
       // Get the ID token from the response
       const idToken = userInfo.data?.idToken;
 
       if (!idToken) {
-        console.error("[Firebase] No ID token in response. Full response:", userInfo);
+        logger.error("[Firebase] No ID token in response. Full response:", userInfo);
         throw new Error("No ID token received from Google");
       }
 
-      console.log("[Firebase] Got Google ID token, signing in to Firebase...");
+      logger.debug("[Firebase] Got Google ID token, signing in to Firebase...");
 
       // Check if Firebase auth is available
       if (!auth) {
@@ -167,23 +172,23 @@ export function OAuthButtons({
       // Sign in to Firebase
       const userCredential = await signInWithCredential(auth, googleCredential);
 
-      console.log("[Firebase] Firebase sign-in successful");
-      console.log("[Firebase] User:", userCredential.user.email);
+      logger.debug("[Firebase] Firebase sign-in successful");
+      logger.debug("[Firebase] User:", userCredential.user.email);
 
       // Send to backend
       await handleFirebaseUser(userCredential.user);
 
     } catch (error: any) {
-      console.error("[Firebase] Google Sign-In Error:", error);
+      logger.error("[Firebase] Google Sign-In Error:", error);
 
       // Handle specific error codes
       if (error.code === "SIGN_IN_CANCELLED" || error.code === 'auth/cancelled-popup-request') {
-        console.log("[Firebase] User cancelled sign-in");
+        logger.debug("[Firebase] User cancelled sign-in");
         return;
       }
 
       if (error.code === "IN_PROGRESS") {
-        console.log("[Firebase] Sign-in already in progress");
+        logger.debug("[Firebase] Sign-in already in progress");
         return;
       }
 
@@ -250,7 +255,7 @@ export function OAuthButtons({
       if (isUserCancellation(error)) {
         return;
       }
-      console.error("[Firebase] Apple Sign-In Error:", error);
+      logger.error("[Firebase] Apple Sign-In Error:", error);
       onError(formatOAuthError(error));
     }
   }, [onSuccess, onError]);

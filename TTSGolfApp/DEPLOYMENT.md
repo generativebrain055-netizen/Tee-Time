@@ -33,6 +33,9 @@ You'll need to set these variables:
 - `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id`
 - `EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id`
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your_google_web_client_id`
+- `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your_ios_client_id.apps.googleusercontent.com` (required for Google Sign-In on iOS)
+
+**Note:** Never commit `GoogleService-Info.plist` or `google-services.json`. Use EAS secrets for build-time config. See `SECRETS_AND_BUILD.md`.
 
 Or set them all at once:
 ```bash

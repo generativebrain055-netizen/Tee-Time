@@ -11,3 +11,6 @@ export { getDeviceInfo } from "./deviceInfo";
 
 // Base64 Utilities
 export { base64Decode, base64DecodeJSON } from "./base64";
+
+// Logging
+export { logger } from "./logger";
