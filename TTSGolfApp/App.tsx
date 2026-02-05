@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sessionManager } from "./utils/sessionManager";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/login";
@@ -370,5 +371,9 @@ export default function App(): React.ReactElement {
     }
   };
 
-  return <SafeAreaProvider>{renderScreen()}</SafeAreaProvider>;
+  return (
+    <ErrorBoundary>
+      <SafeAreaProvider>{renderScreen()}</SafeAreaProvider>
+    </ErrorBoundary>
+  );
 }

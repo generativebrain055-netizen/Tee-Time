@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TeeTime Social",
-    "slug": "teetimesocial",
+    "slug": "TTSGolfApp",
     "scheme": "teetimesocial",
     "version": "1.0.7",
     "orientation": "portrait",
@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "icon": "./assets/AppIcon.png",
       "bundleIdentifier": "com.teetimesocial.app",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take profile photos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select profile photos.",

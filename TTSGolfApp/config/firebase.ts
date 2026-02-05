@@ -3,8 +3,8 @@
  * Initializes Firebase for authentication and other services
  */
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, initializeAuth, getReactNativePersistence, Auth } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
@@ -16,13 +16,56 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// Check if Firebase config is valid
+const isFirebaseConfigValid = (): boolean => {
+  return !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId
+  );
+};
 
-// Initialize Auth with AsyncStorage persistence
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+
+// Initialize Firebase with error handling
+try {
+  if (isFirebaseConfigValid()) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    
+    // Initialize Auth with AsyncStorage persistence
+    try {
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    } catch (authError: any) {
+      // Auth might already be initialized, try to get it
+      if (authError.code === 'auth/already-initialized') {
+        auth = getAuth(app);
+      } else {
+        console.error('Firebase Auth initialization error:', authError);
+        // Fallback to getAuth if initializeAuth fails
+        auth = getAuth(app);
+      }
+    }
+  } else {
+    console.warn('Firebase configuration is incomplete. Firebase features will be disabled.');
+    console.warn('Missing environment variables:', {
+      apiKey: !firebaseConfig.apiKey,
+      authDomain: !firebaseConfig.authDomain,
+      projectId: !firebaseConfig.projectId,
+      storageBucket: !firebaseConfig.storageBucket,
+      messagingSenderId: !firebaseConfig.messagingSenderId,
+      appId: !firebaseConfig.appId,
+    });
+  }
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  // App will continue without Firebase, but OAuth features won't work
+}
 
 export { app, auth };
 export default app;

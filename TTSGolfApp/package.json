@@ -10,7 +10,13 @@
     "build:ios": "eas build --platform ios --profile internal-testing",
     "build:ios:local": "eas build --platform ios --profile internal-testing --local",
     "submit:ios": "eas submit --platform ios --latest",
-    "build:configure": "eas build:configure"
+    "build:configure": "eas build:configure",
+    "deploy": "npx eas-cli build --platform ios --profile internal-testing && npx eas-cli submit --platform ios --latest",
+    "deploy:build": "npx eas-cli build --platform ios --profile internal-testing",
+    "deploy:submit": "npx eas-cli submit --platform ios --latest",
+    "eas:login": "npx eas-cli login",
+    "eas:whoami": "npx eas-cli whoami",
+    "eas:secrets": "npx eas-cli secret:list"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -41,9 +47,11 @@
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-qrcode-svg": "^6.3.21",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-worklets-core": "^1.6.2",
     "tailwindcss": "^3.3.2",
     "zustand": "^5.0.9"
   },

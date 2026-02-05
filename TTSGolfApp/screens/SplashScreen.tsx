@@ -12,6 +12,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
+import { base64DecodeJSON } from "../utils/base64";
 
 const { width, height } = Dimensions.get("window");
 
@@ -89,7 +90,7 @@ export default function SplashScreen({
             // Decode JWT to check expiration (simple check without verification)
             const tokenParts = accessToken.split('.');
             if (tokenParts.length === 3) {
-              const payload = JSON.parse(atob(tokenParts[1]));
+              const payload = base64DecodeJSON(tokenParts[1]);
               const currentTime = Math.floor(Date.now() / 1000);
 
               // Check if token is expired
@@ -103,7 +104,16 @@ export default function SplashScreen({
             }
 
             // Token is valid, go to Home
-            const user = JSON.parse(userStr);
+            let user;
+            try {
+              user = JSON.parse(userStr);
+            } catch (parseError) {
+              console.error("Failed to parse user data:", parseError);
+              // Clear corrupted user data
+              await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+              navigation.replace("Welcome");
+              return;
+            }
             navigation.replace("Home", { user });
           } catch (tokenError) {
             // Invalid token format, clear and go to Welcome

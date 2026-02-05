@@ -156,6 +156,11 @@ export function OAuthButtons({
 
       console.log("[Firebase] Got Google ID token, signing in to Firebase...");
 
+      // Check if Firebase auth is available
+      if (!auth) {
+        throw new Error("Firebase authentication is not initialized. Please check your Firebase configuration.");
+      }
+
       // Create Firebase credential
       const googleCredential = GoogleAuthProvider.credential(idToken);
 

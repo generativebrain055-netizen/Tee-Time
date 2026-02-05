@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { base64DecodeJSON } from "./base64";
 
 type SessionExpiredCallback = () => void;
 
@@ -41,7 +42,7 @@ class SessionManager {
       const tokenParts = token.split(".");
       if (tokenParts.length !== 3) return false;
 
-      const payload = JSON.parse(atob(tokenParts[1]));
+      const payload = base64DecodeJSON(tokenParts[1]);
       const currentTime = Math.floor(Date.now() / 1000);
 
       // Check if token is expired
@@ -68,7 +69,7 @@ class SessionManager {
       const tokenParts = token.split(".");
       if (tokenParts.length !== 3) return false;
 
-      const payload = JSON.parse(atob(tokenParts[1]));
+      const payload = base64DecodeJSON(tokenParts[1]);
       const currentTime = Math.floor(Date.now() / 1000);
 
       return !payload.exp || payload.exp >= currentTime;

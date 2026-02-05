@@ -1,0 +1,25 @@
+═══════════════════════════════════════════════════════════════
+  DEPLOYMENT COMMAND - Copy and paste this in your terminal
+═══════════════════════════════════════════════════════════════
+
+cd /Volumes/Macintosh_HD/Users/user284740/Downloads/TeeTimeSocial/Tee-Time/TTSGolfApp && ./START_DEPLOYMENT.sh
+
+═══════════════════════════════════════════════════════════════
+  OR run these commands one by one:
+═══════════════════════════════════════════════════════════════
+
+cd /Volumes/Macintosh_HD/Users/user284740/Downloads/TeeTimeSocial/Tee-Time/TTSGolfApp
+
+# 1. Login to EAS (interactive - opens browser)
+npx --yes eas-cli login
+
+# 2. Set API URL
+npx --yes eas-cli env:create --scope project --name EXPO_PUBLIC_API_URL --value "https://api.teetimesocial.app" --type string --force
+
+# 3. Build iOS app (takes 15-30 minutes)
+npx --yes eas-cli build --platform ios --profile internal-testing
+
+# 4. Submit to TestFlight
+npx --yes eas-cli submit --platform ios --latest
+
+═══════════════════════════════════════════════════════════════

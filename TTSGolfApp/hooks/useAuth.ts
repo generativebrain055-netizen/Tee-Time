@@ -142,7 +142,14 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
           }),
         });
 
-        const data = await response.json();
+        // Handle non-JSON responses
+        let data;
+        try {
+          const responseText = await response.text();
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          throw new Error("Invalid response from server. Please try again.");
+        }
 
         if (!response.ok) {
           const errorMsg = data.message || "Unable to send OTP.";
@@ -216,7 +223,14 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
           body: JSON.stringify(requestBody),
         });
 
-        const data = await response.json();
+        // Handle non-JSON responses
+        let data;
+        try {
+          const responseText = await response.text();
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          throw new Error("Invalid response from server. Please try again.");
+        }
         console.log("📥 [FRONTEND] Response received:", {
           status: response.status,
           ok: response.ok,
@@ -289,7 +303,14 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
           }),
         });
 
-        const data = await response.json();
+        // Handle non-JSON responses
+        let data;
+        try {
+          const responseText = await response.text();
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          throw new Error("Invalid response from server. Please try again.");
+        }
 
         if (!response.ok) {
           throw new Error(data.message || "Login failed.");
@@ -371,7 +392,14 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
           }),
         });
 
-        const data = await response.json();
+        // Handle non-JSON responses
+        let data;
+        try {
+          const responseText = await response.text();
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          throw new Error("Invalid response from server. Please try again.");
+        }
 
         if (!response.ok || !data.success) {
           let errorMessage = "Verification failed";

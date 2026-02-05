@@ -32,7 +32,16 @@ export const refreshAccessToken = async (): Promise<string | null> => {
       body: JSON.stringify({ refreshToken }),
     });
 
-    const data = await response.json();
+    // Handle non-JSON responses
+    let data;
+    try {
+      const responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      console.error("Failed to parse refresh token response:", parseError);
+      await sessionManager.handleSessionExpired();
+      return null;
+    }
 
     if (response.ok && data.success) {
       await AsyncStorage.setItem("accessToken", data.accessToken);
@@ -73,11 +82,12 @@ export const apiCall = async <T>(
   options: RequestInit = {},
   retryOnUnauthorized = true,
 ): Promise<T> => {
-  const headers = await getAuthHeaders();
-  const response = await fetch(url, {
-    ...options,
-    headers: { ...headers, ...options.headers },
-  });
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...headers, ...options.headers },
+    });
 
   // Handle 401 Unauthorized - try to refresh token
   if (response.status === 401 && retryOnUnauthorized) {
@@ -92,7 +102,20 @@ export const apiCall = async <T>(
           Authorization: `Bearer ${newToken}`,
         },
       });
-      const retryData = await retryResponse.json();
+      
+      // Handle non-JSON responses
+      let retryData;
+      try {
+        const responseText = await retryResponse.text();
+        retryData = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        throw new ApiError(
+          "Invalid response from server",
+          retryResponse.status,
+          "INVALID_RESPONSE",
+        );
+      }
+      
       if (!retryResponse.ok) {
         throw new ApiError(
           retryData.message || "API request failed",
@@ -106,7 +129,18 @@ export const apiCall = async <T>(
     throw new ApiError("Session expired", 401, "SESSION_EXPIRED");
   }
 
-  const data = await response.json();
+  // Handle non-JSON responses
+  let data;
+  try {
+    const responseText = await response.text();
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch (parseError) {
+    throw new ApiError(
+      "Invalid response from server",
+      response.status,
+      "INVALID_RESPONSE",
+    );
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -117,6 +151,26 @@ export const apiCall = async <T>(
   }
 
   return data;
+  } catch (error) {
+    // Re-throw ApiError as-is
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new ApiError(
+        "Network error. Please check your connection.",
+        0,
+        "NETWORK_ERROR",
+      );
+    }
+    // Handle other errors
+    throw new ApiError(
+      error instanceof Error ? error.message : "An unexpected error occurred",
+      0,
+      "UNKNOWN_ERROR",
+    );
+  }
 };
 
 /**

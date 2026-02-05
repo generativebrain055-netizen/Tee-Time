@@ -54,7 +54,18 @@ const apiClient = {
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
+      // Handle non-JSON responses
+      let data;
+      try {
+        const responseText = await response.text();
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        throw new OAuthError(
+          "Invalid response from server",
+          undefined,
+          response.status,
+        );
+      }
 
       if (!response.ok) {
         throw new OAuthError(
