@@ -56,7 +56,7 @@ const googleSignIn = async (req, res, next) => {
     });
 
     // Find or create user (business logic in service)
-    const result = await oauthService.findOrCreateOAuthUser({
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
       provider: "google",
       providerUserId,
       email,
@@ -65,37 +65,6 @@ const googleSignIn = async (req, res, next) => {
       lastName: familyName || clientUserData?.name?.lastName,
       picture,
     });
-
-    // Check if sign-up is needed
-    if (result.needsSignUp) {
-      // Generate temp token for sign-up flow
-      const tempToken = oauthService.generateTempToken({
-        provider: result.oauthData.provider,
-        providerUserId: result.oauthData.providerUserId,
-        email: result.oauthData.email,
-        firstName: result.oauthData.firstName,
-        lastName: result.oauthData.lastName,
-        picture: result.oauthData.picture,
-        emailVerified: result.oauthData.emailVerified,
-        isPrivateEmail: result.oauthData.isPrivateEmail,
-      });
-
-      logger.info("Google OAuth requires sign-up", {
-        provider: result.oauthData.provider,
-        providerUserId: providerUserId.substring(0, 8) + "...",
-        hasEmail: !!result.oauthData.email,
-      });
-
-      return res.json({
-        status: "signup_required",
-        success: true,
-        needsSignUp: true,
-        tempToken,
-        oauthData: result.oauthData,
-      });
-    }
-
-    const { user, isNewUser } = result;
 
     // Create session
     const { accessToken, refreshToken } = await sessionService.createSession({
@@ -406,7 +375,7 @@ const googleSignInWithCode = async (req, res, next) => {
     } = verifiedData;
 
     // Find or create user (business logic in service)
-    const result = await oauthService.findOrCreateOAuthUser({
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
       provider: "google",
       providerUserId,
       email,
@@ -415,37 +384,6 @@ const googleSignInWithCode = async (req, res, next) => {
       lastName: familyName,
       picture,
     });
-
-    // Check if sign-up is needed
-    if (result.needsSignUp) {
-      // Generate temp token for sign-up flow
-      const tempToken = oauthService.generateTempToken({
-        provider: result.oauthData.provider,
-        providerUserId: result.oauthData.providerUserId,
-        email: result.oauthData.email,
-        firstName: result.oauthData.firstName,
-        lastName: result.oauthData.lastName,
-        picture: result.oauthData.picture,
-        emailVerified: result.oauthData.emailVerified,
-        isPrivateEmail: result.oauthData.isPrivateEmail,
-      });
-
-      logger.info("Google OAuth (code exchange) requires sign-up", {
-        provider: result.oauthData.provider,
-        providerUserId: providerUserId.substring(0, 8) + "...",
-        hasEmail: !!result.oauthData.email,
-      });
-
-      return res.json({
-        status: "signup_required",
-        success: true,
-        needsSignUp: true,
-        tempToken,
-        oauthData: result.oauthData,
-      });
-    }
-
-    const { user, isNewUser } = result;
 
     // Create session
     const { accessToken, refreshToken } = await sessionService.createSession({
@@ -614,7 +552,7 @@ const appleSignIn = async (req, res, next) => {
     });
 
     // Find or create user (business logic in service)
-    const result = await oauthService.findOrCreateOAuthUser({
+    const { user, isNewUser } = await oauthService.findOrCreateOAuthUser({
       provider: "apple",
       providerUserId,
       email,
@@ -623,37 +561,6 @@ const appleSignIn = async (req, res, next) => {
       lastName,
       isPrivateEmail,
     });
-
-    // Check if sign-up is needed
-    if (result.needsSignUp) {
-      // Generate temp token for sign-up flow
-      const tempToken = oauthService.generateTempToken({
-        provider: result.oauthData.provider,
-        providerUserId: result.oauthData.providerUserId,
-        email: result.oauthData.email,
-        firstName: result.oauthData.firstName,
-        lastName: result.oauthData.lastName,
-        picture: result.oauthData.picture,
-        emailVerified: result.oauthData.emailVerified,
-        isPrivateEmail: result.oauthData.isPrivateEmail,
-      });
-
-      logger.info("Apple OAuth requires sign-up", {
-        provider: result.oauthData.provider,
-        providerUserId: providerUserId.substring(0, 8) + "...",
-        hasEmail: !!result.oauthData.email,
-      });
-
-      return res.json({
-        status: "signup_required",
-        success: true,
-        needsSignUp: true,
-        tempToken,
-        oauthData: result.oauthData,
-      });
-    }
-
-    const { user, isNewUser } = result;
 
     // Create session
     const { accessToken, refreshToken } = await sessionService.createSession({
@@ -692,140 +599,6 @@ const appleSignIn = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       error: error.message || "Apple authentication failed",
-    });
-  }
-};
-
-/**
- * Complete SSO Sign-Up
- * POST /auth/oauth/sso-signup
- * Body: { tempToken, firstName, lastName, phoneNumber, email? }
- *
- * Completes the SSO sign-up flow by creating a user with phone number
- * and linking the OAuth provider. Validates phone/email uniqueness.
- */
-const completeSsoSignup = async (req, res, next) => {
-  try {
-    const { tempToken, firstName, lastName, phoneNumber, email } = req.body;
-
-    if (!tempToken) {
-      return res.status(400).json({
-        success: false,
-        error: "Temporary token is required",
-      });
-    }
-
-    if (!firstName || !lastName) {
-      return res.status(400).json({
-        success: false,
-        error: "First name and last name are required",
-      });
-    }
-
-    if (!phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        error: "Phone number is required",
-      });
-    }
-
-    // Verify temp token
-    const temp = oauthService.verifyTempToken(tempToken);
-
-    if (temp.type !== "temp_oauth") {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid token type",
-      });
-    }
-
-    // Normalize phone number
-    const { normalizePhoneToE164 } = require("../../utils/validation");
-    const normalizedPhone = normalizePhoneToE164(phoneNumber);
-
-    // Check phone number uniqueness
-    const phoneExists = await userRepository.phoneNumberExists(normalizedPhone);
-    if (phoneExists) {
-      return res.status(409).json({
-        success: false,
-        field: "phoneNumber",
-        error: "This phone number is already in use",
-      });
-    }
-
-    // Check email uniqueness if provided
-    if (email) {
-      const existingByEmail = await userRepository.findByEmail(email);
-      if (existingByEmail) {
-        return res.status(409).json({
-          success: false,
-          field: "email",
-          error: "This email is already in use",
-        });
-      }
-    }
-
-    // Use email from temp token if not provided
-    const finalEmail = email || temp.email || null;
-
-    // Create user
-    const user = await userRepository.create({
-      phoneNumber: normalizedPhone,
-      email: finalEmail,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      username: null,
-      handicap: null,
-      isVerified: true,
-    });
-
-    // Link OAuth provider
-    await authProviderRepository.create({
-      userId: user.id,
-      provider: temp.provider,
-      providerUserId: temp.providerUserId,
-      providerEmail: finalEmail,
-      providerData: {
-        name: `${firstName.trim()} ${lastName.trim()}`,
-        picture: temp.picture || null,
-        email_verified: temp.emailVerified || false,
-        is_private_email: temp.isPrivateEmail || false,
-      },
-    });
-
-    logger.info("SSO sign-up completed", {
-      userId: user.id,
-      provider: temp.provider,
-      providerUserId: temp.providerUserId.substring(0, 8) + "...",
-    });
-
-    // Create session
-    const { accessToken, refreshToken } = await sessionService.createSession({
-      userId: user.id,
-      req,
-      rememberMe: false,
-    });
-
-    // Check profile completeness
-    const profileStatus = oauthService.getProfileCompleteness(user);
-
-    return res.json({
-      success: true,
-      accessToken,
-      refreshToken,
-      user: formatUser(user),
-      isNewUser: true,
-      needsOnboarding: profileStatus.needsOnboarding,
-      missingFields: profileStatus.missingFields,
-    });
-  } catch (error) {
-    logger.error("SSO sign-up error:", {
-      error: error.message,
-      stack: error.stack,
-    });
-    return res.status(400).json({
-      success: false,
-      error: error.message || "SSO sign-up failed",
     });
   }
 };
@@ -1099,5 +872,4 @@ module.exports = {
   appleSignIn,
   completeOAuthProfile,
   verifyTempTokenEndpoint,
-  completeSsoSignup,
 };

@@ -17,29 +17,16 @@ export type OAuthProvider = "google" | "apple";
  * Standard OAuth response from backend
  */
 export interface OAuthResponse {
-  status: "authenticated" | "signup_required";
+  status: "authenticated";
   success: boolean;
-  accessToken?: string;
-  refreshToken?: string;
-  user?: OAuthUser;
-  isNewUser?: boolean;
-  needsOnboarding?: boolean;
-  missingFields?: OAuthMissingField[];
+  accessToken: string;
+  refreshToken: string;
+  user: OAuthUser;
+  isNewUser: boolean;
+  needsOnboarding: boolean;
+  missingFields: OAuthMissingField[];
   profileIncomplete?: boolean;
   message?: string;
-  // Sign-up required fields
-  needsSignUp?: boolean;
-  tempToken?: string;
-  oauthData?: {
-    provider: OAuthProvider;
-    providerUserId: string;
-    email?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
-    picture?: string | null;
-    emailVerified?: boolean;
-    isPrivateEmail?: boolean;
-  };
 }
 
 /**
@@ -78,19 +65,8 @@ export type OAuthMissingField =
 export interface OAuthSuccessData {
   isNewUser: boolean;
   needsOnboarding?: boolean;
-  needsSignUp?: boolean;
-  tempToken?: string;
   user?: OAuthUser;
-  oauthData?: OAuthOnboardingData | {
-    provider: OAuthProvider;
-    providerUserId: string;
-    email?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
-    picture?: string | null;
-    emailVerified?: boolean;
-    isPrivateEmail?: boolean;
-  };
+  oauthData?: OAuthOnboardingData;
   /** @deprecated Use oauthData instead */
   partialData?: LegacyOAuthPartialData;
 }

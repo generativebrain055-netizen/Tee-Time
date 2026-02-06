@@ -1,6 +1,5 @@
 export { OnboardingScreen } from "./OnboardingScreen";
 export { OAuthOnboardingScreen } from "./OAuthOnboardingScreen";
-export { SsoSignupInfoScreen } from "./SsoSignupInfoScreen";
 export { SignUpOptionsPage } from "./SignUpOptionsPage";
 export { PhoneVerificationPage } from "./PhoneVerificationPage";
 export { MagicLinkPage } from "./MagicLinkPage";

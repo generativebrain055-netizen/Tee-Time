@@ -122,19 +122,6 @@ export function OAuthButtons({
           user: data.user,
         });
 
-        // Check if sign-up is needed
-        if (data.needsSignUp && data.tempToken) {
-          logger.debug("[Firebase] Sign-up required. Navigating to SSO sign-up screen.");
-          const successData: OAuthSuccessData = {
-            isNewUser: true,
-            needsSignUp: true,
-            tempToken: data.tempToken,
-            oauthData: data.oauthData,
-          };
-          onSuccess(successData);
-          return;
-        }
-
         // Prepare success callback data
         const successData: OAuthSuccessData = {
           isNewUser: data.isNewUser,
@@ -265,39 +252,26 @@ export function OAuthButtons({
           : null,
       });
 
-      // Check if sign-up is needed
-      if (data.needsSignUp && data.tempToken) {
-        logger.debug("[Apple] Sign-up required. Navigating to SSO sign-up screen.");
-        const successData: OAuthSuccessData = {
-          isNewUser: true,
-          needsSignUp: true,
-          tempToken: data.tempToken,
-          oauthData: data.oauthData,
-        };
-        onSuccess(successData);
-        return;
-      }
-
       // Save session
       await sessionManager.saveSession({
-        accessToken: data.accessToken!,
-        refreshToken: data.refreshToken!,
-        user: data.user!,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        user: data.user,
       });
 
       // Prepare success callback data
       const successData: OAuthSuccessData = {
-        isNewUser: data.isNewUser!,
-        user: data.user!,
+        isNewUser: data.isNewUser,
+        user: data.user,
       };
 
       // Check if onboarding is needed
       if (data.needsOnboarding && data.missingFields?.length > 0) {
         successData.needsOnboarding = true;
         successData.oauthData = {
-          accessToken: data.accessToken!,
-          refreshToken: data.refreshToken!,
-          user: data.user!,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user: data.user,
           needsOnboarding: data.needsOnboarding,
           missingFields: data.missingFields,
         };

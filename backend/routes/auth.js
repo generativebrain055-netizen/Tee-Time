@@ -431,26 +431,6 @@ router.post(
 );
 
 /**
- * @route   POST /api/auth/oauth/sso-signup
- * @desc    Complete SSO sign-up with phone number and name
- * @access  Public
- */
-router.post(
-  "/oauth/sso-signup",
-  captureDeviceInfo,
-  [
-    body("tempToken").trim().notEmpty().withMessage("Temporary token is required"),
-    body("firstName").trim().notEmpty().withMessage("First name is required"),
-    body("lastName").trim().notEmpty().withMessage("Last name is required"),
-    body("phoneNumber").trim().notEmpty().withMessage("Phone number is required"),
-    body("email").optional().trim().isEmail().withMessage("Invalid email format"),
-  ],
-  validateRequest,
-  logAuthEvent("sso_signup"),
-  authController.completeSsoSignup,
-);
-
-/**
  * @route   POST /api/auth/verify-temp-token
  * @desc    Verify temporary OAuth token from callback
  * @access  Public

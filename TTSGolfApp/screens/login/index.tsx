@@ -112,25 +112,8 @@ export default function LoginScreen({ navigation }: Props) {
                   <View style={styles.dividerLine} />
                 </View>
                 <OAuthButtons
-                  onSuccess={(data) => {
-                    // Check if sign-up is needed
-                    if (data.needsSignUp && data.tempToken) {
-                      navigation.navigate("SsoSignupInfo", {
-                        tempToken: data.tempToken,
-                        oauthData: data.oauthData,
-                      });
-                      return;
-                    }
-
-                    // Check if onboarding is needed
-                    if (data.needsOnboarding && data.oauthData) {
-                      navigation.navigate("OAuthOnboarding", {
-                        oauthData: data.oauthData,
-                      });
-                      return;
-                    }
-
-                    // Normal sign-in - go to Home
+                  onSuccess={() => {
+                    // Sign in with Google/Apple: always go to main screen (do not go to sign-up form)
                     navigation.replace("Home");
                   }}
                   onError={(error) => {
