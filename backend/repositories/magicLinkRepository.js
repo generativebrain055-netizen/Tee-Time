@@ -310,6 +310,33 @@ const isPhoneRateLimited = async (phoneNumber, maxPerHour = 3) => {
     return count >= maxPerHour;
 };
 
+/**
+ * Find recently verified magic link for phone (used for register validation)
+ * @param {string} phoneNumber
+ * @param {number} windowMinutes - how recently used_at must be (default 60)
+ * @returns {Promise<Object|null>}
+ */
+const findRecentlyVerifiedByPhone = async (phoneNumber, windowMinutes = 60) => {
+    try {
+        const windowTime = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+        const { data, error } = await supabaseAdmin
+            .from("magic_links")
+            .select("id, phone_number, used_at")
+            .eq("phone_number", phoneNumber)
+            .eq("purpose", "signup")
+            .eq("is_used", true)
+            .gte("used_at", windowTime)
+            .order("used_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        handleError(error, "findRecentlyVerifiedByPhone");
+    }
+};
+
 module.exports = {
     create,
     findByTokenHash,
@@ -318,6 +345,7 @@ module.exports = {
     countRecentRequests,
     countRecentRequestsByIp,
     countRecentRequestsByPhone,
+    findRecentlyVerifiedByPhone,
     deleteExpired,
     invalidateAllForUser,
     getStatistics,

@@ -238,6 +238,28 @@ router.post(
 );
 
 /**
+ * @route   POST /api/auth/sms-magic-link-login
+ * @desc    Request magic link via SMS for sign-in (existing users only)
+ * @access  Public
+ */
+router.post(
+  "/sms-magic-link-login",
+  captureDeviceInfo,
+  rateLimiter.magicLink,
+  [
+    body("phoneNumber")
+      .trim()
+      .notEmpty()
+      .withMessage("Phone number is required")
+      .matches(/^\+?[1-9]\d{6,14}$/)
+      .withMessage("Invalid phone number format"),
+  ],
+  validateRequest,
+  logAuthEvent("sms_magic_link_login_requested"),
+  authController.requestSmsMagicLinkForLogin,
+);
+
+/**
  * @route   POST /api/auth/verify-sms-magic
  * @desc    Verify SMS magic link token and complete signup
  * @access  Public
@@ -249,6 +271,30 @@ router.post(
   validateRequest,
   logAuthEvent("sms_magic_link_verified"),
   authController.verifySmsMagicLink,
+);
+
+/**
+ * @route   POST /api/auth/upload-avatar
+ * @desc    Upload profile photo, returns public URL for use in register/update
+ * @access  Public
+ */
+router.post(
+  "/upload-avatar",
+  captureDeviceInfo,
+  [
+    body("imageBase64").optional().isString(),
+    body("profilePhotoBase64").optional().isString(),
+  ],
+  (req, res, next) => {
+    if (!req.body.imageBase64 && !req.body.profilePhotoBase64) {
+      return res.status(400).json({
+        success: false,
+        message: "Image data is required (imageBase64 or profilePhotoBase64).",
+      });
+    }
+    next();
+  },
+  authController.uploadAvatar,
 );
 
 /**
@@ -293,6 +339,11 @@ router.post(
       .optional({ nullable: true })
       .isInt({ min: 0, max: 54 })
       .withMessage("Handicap must be between 0 and 54"),
+    body("zipCode")
+      .optional({ nullable: true })
+      .trim()
+      .isLength({ max: 20 })
+      .withMessage("Zip code must be at most 20 characters"),
   ],
   validateRequest,
   logAuthEvent("user_registered"),

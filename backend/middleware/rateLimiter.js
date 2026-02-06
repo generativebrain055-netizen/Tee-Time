@@ -66,13 +66,13 @@ const login = createLimiter({
 
 /**
  * Magic Link Rate Limiter
- * 3 requests per hour per email
+ * 10 requests per hour per email/phone
  */
 const magicLink = createLimiter({
   windowMs: 60 * 60 * 1000,
-  max: 3,
+  max: 10,
   message: "Too many magic link requests. Please try again later",
-  keyGenerator: (req) => `magic:${req.body.email || req.ip}`,
+  keyGenerator: (req) => `magic:${req.body.email || req.body.phoneNumber || req.ip}`,
 });
 
 /**

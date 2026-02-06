@@ -1,29 +1,28 @@
 /**
  * Login flow state and logic hook
+ * Uses magic link (not OTP) for phone sign-in - link sent via SMS, user taps to verify
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Animated, Keyboard, TextInput as RNTextInput } from "react-native";
-import { useAuth } from "../../../hooks";
+import * as Linking from "expo-linking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { requestSmsMagicLinkForLogin, verifySmsMagicLink } from "../../../utils/smsMagicLink";
 import { LoginStep } from "../constants";
-import { toE164, isValidPhone, isValidOtp } from "../utils";
 import { Country, COUNTRIES } from "../../../components/CountryPicker";
 
 export const useLoginFlow = (navigation: any) => {
     // State
     const [phoneNumber, setPhoneNumber] = useState("");
     const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]); // Default to US
-    const [otpCode, setOtpCode] = useState("");
     const [currentStep, setCurrentStep] = useState<LoginStep>("phone");
     const [resendTimer, setResendTimer] = useState(0);
     const [inputFocused, setInputFocused] = useState(false);
     const [hasError, setHasError] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
     // Refs
     const phoneInputRef = useRef<RNTextInput>(null);
-    const otpInputRefs = useRef<(RNTextInput | null)[]>([]);
-
-    // Auth hook
-    const { requestOtp, verifyOtp, loading, error, clearMessages } = useAuth();
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -32,7 +31,6 @@ export const useLoginFlow = (navigation: any) => {
     // Derived values - combine country code with phone number
     const fullPhoneNumber = `${selectedCountry.dialCode}${phoneNumber}`;
     const isPhoneValid = phoneNumber.length >= selectedCountry.minLength && phoneNumber.length <= selectedCountry.maxLength;
-    const isOtpValid = isValidOtp(otpCode);
 
     // Resend timer effect
     useEffect(() => {
@@ -45,8 +43,51 @@ export const useLoginFlow = (navigation: any) => {
 
     // Clear error when typing
     useEffect(() => {
-        if (phoneNumber || otpCode) setHasError(false);
-    }, [phoneNumber, otpCode]);
+        if (phoneNumber) setHasError(false);
+    }, [phoneNumber]);
+
+    // Deep link listener - when user taps magic link, verify and navigate to Home
+    const handleMagicLinkUrl = useCallback(
+        async (url: string) => {
+            if (!url.includes("auth/magic-link") || !url.includes("token=")) return;
+            try {
+                const parsed = Linking.parse(url);
+                const tokenRaw = parsed.queryParams?.token;
+                const token = typeof tokenRaw === "string" ? tokenRaw : Array.isArray(tokenRaw) ? tokenRaw[0] : null;
+                if (!token || typeof token !== "string") return;
+
+                setLoading(true);
+                const result = await verifySmsMagicLink(token);
+                setLoading(false);
+
+                if (result.success && result.accessToken && result.refreshToken && result.user) {
+                    await AsyncStorage.setItem("accessToken", result.accessToken);
+                    await AsyncStorage.setItem("refreshToken", result.refreshToken);
+                    await AsyncStorage.setItem("user", JSON.stringify(result.user));
+                    navigation?.navigate("Home", { user: result.user });
+                } else if (!result.success) {
+                    setHasError(true);
+                    setError(result.error || "Verification failed.");
+                }
+            } catch (err) {
+                setLoading(false);
+                setHasError(true);
+                setError(err instanceof Error ? err.message : "Verification failed.");
+            }
+        },
+        [navigation]
+    );
+
+    useEffect(() => {
+        const sub = Linking.addEventListener("url", ({ url }) => handleMagicLinkUrl(url));
+        return () => sub.remove();
+    }, [handleMagicLinkUrl]);
+
+    useEffect(() => {
+        Linking.getInitialURL().then((url) => {
+            if (url) handleMagicLinkUrl(url);
+        });
+    }, [handleMagicLinkUrl]);
 
     // Animate step transitions
     const animateStepChange = useCallback((callback: () => void) => {
@@ -64,53 +105,44 @@ export const useLoginFlow = (navigation: any) => {
     }, [fadeAnim, slideAnim]);
 
     // Handlers
-    const handleRequestOtp = useCallback(async (isResend = false) => {
+    const handleRequestMagicLink = useCallback(async (isResend = false) => {
         if (!isPhoneValid || loading) {
             setHasError(true);
             return;
         }
-
-        const result = await requestOtp(fullPhoneNumber, "login");
+        setLoading(true);
+        setError("");
+        const result = await requestSmsMagicLinkForLogin(fullPhoneNumber);
+        setLoading(false);
         if (result.success) {
-            if (!isResend) animateStepChange(() => setCurrentStep("otp"));
-            setOtpCode("");
-            setResendTimer(result.resendAfterSeconds || 30);
+            if (!isResend) animateStepChange(() => setCurrentStep("magicLinkSent"));
+            setResendTimer(60); // 60s before resend
         } else {
             setHasError(true);
+            setError(result.error || "Failed to send sign-in link.");
         }
-    }, [isPhoneValid, loading, fullPhoneNumber, requestOtp, animateStepChange]);
-
-    const handleVerifyOtp = useCallback(async () => {
-        if (!isOtpValid || loading) return;
-
-        const result = await verifyOtp(fullPhoneNumber, otpCode.trim());
-        if (result.success) {
-            setTimeout(() => {
-                navigation?.navigate("Home", { user: result.user });
-            }, 500);
-        } else {
-            setHasError(true);
-        }
-    }, [isOtpValid, loading, fullPhoneNumber, otpCode, verifyOtp, navigation]);
+    }, [isPhoneValid, loading, fullPhoneNumber, animateStepChange]);
 
     const handlePrimaryAction = useCallback(() => {
         Keyboard.dismiss();
-        if (currentStep === "phone") handleRequestOtp();
-        else if (currentStep === "otp") handleVerifyOtp();
-    }, [currentStep, handleRequestOtp, handleVerifyOtp]);
+        if (currentStep === "phone") handleRequestMagicLink();
+    }, [currentStep, handleRequestMagicLink]);
 
-    const handleResendOtp = useCallback(() => {
+    const handleResendMagicLink = useCallback(() => {
         if (resendTimer > 0 || loading) return;
-        handleRequestOtp(true);
-    }, [resendTimer, loading, handleRequestOtp]);
+        handleRequestMagicLink(true);
+    }, [resendTimer, loading, handleRequestMagicLink]);
+
+    const clearMessages = useCallback(() => {
+        setError("");
+        setHasError(false);
+    }, []);
 
     const handleBack = useCallback(() => {
-        if (currentStep === "otp") {
+        if (currentStep === "magicLinkSent") {
             animateStepChange(() => {
                 setCurrentStep("phone");
                 clearMessages();
-                setOtpCode("");
-                setHasError(false);
             });
         } else {
             navigation.goBack();
@@ -123,24 +155,7 @@ export const useLoginFlow = (navigation: any) => {
         phoneInputRef.current?.focus();
     }, []);
 
-    const handleOtpChange = useCallback((text: string, index: number) => {
-        const newOtp = otpCode.split("");
-        newOtp[index] = text;
-        const newOtpString = newOtp.join("").slice(0, 6);
-        setOtpCode(newOtpString);
-
-        if (text && index < 5) {
-            otpInputRefs.current[index + 1]?.focus();
-        }
-    }, [otpCode]);
-
-    const handleOtpKeyPress = useCallback((key: string, index: number) => {
-        if (key === "Backspace" && !otpCode[index] && index > 0) {
-            otpInputRefs.current[index - 1]?.focus();
-        }
-    }, [otpCode]);
-
-    const isButtonDisabled = loading || (currentStep === "phone" ? !isPhoneValid : !isOtpValid);
+    const isButtonDisabled = loading || (currentStep === "phone" ? !isPhoneValid : true);
 
     return {
         // State
@@ -148,7 +163,6 @@ export const useLoginFlow = (navigation: any) => {
         setPhoneNumber,
         selectedCountry,
         setSelectedCountry,
-        otpCode,
         currentStep,
         resendTimer,
         inputFocused,
@@ -160,16 +174,13 @@ export const useLoginFlow = (navigation: any) => {
         fullPhoneNumber,
         // Refs
         phoneInputRef,
-        otpInputRefs,
         // Animations
         fadeAnim,
         slideAnim,
         // Handlers
         handlePrimaryAction,
-        handleResendOtp,
+        handleResendMagicLink,
         handleBack,
         clearPhoneInput,
-        handleOtpChange,
-        handleOtpKeyPress,
     };
 };

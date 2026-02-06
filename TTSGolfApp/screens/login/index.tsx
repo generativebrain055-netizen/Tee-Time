@@ -17,9 +17,9 @@ import { StatusBar } from "expo-status-bar";
 import { ArrowLeft } from "lucide-react-native";
 
 import { useLoginFlow } from "./hooks/useLoginFlow";
-import { PhoneInput, OtpInput } from "./components";
+import { PhoneInput } from "./components";
 import { LOGIN_COLORS } from "./constants";
-import { formatPhoneDisplay } from "./utils";
+import { maskPhoneDisplay } from "../../utils/smsMagicLink";
 import { OAuthButtons } from "../../components";
 
 interface Props {
@@ -34,7 +34,6 @@ export default function LoginScreen({ navigation }: Props) {
     setPhoneNumber,
     selectedCountry,
     setSelectedCountry,
-    otpCode,
     currentStep,
     resendTimer,
     inputFocused,
@@ -45,15 +44,12 @@ export default function LoginScreen({ navigation }: Props) {
     isButtonDisabled,
     fullPhoneNumber,
     phoneInputRef,
-    otpInputRefs,
     fadeAnim,
     slideAnim,
     handlePrimaryAction,
-    handleResendOtp,
+    handleResendMagicLink,
     handleBack,
     clearPhoneInput,
-    handleOtpChange,
-    handleOtpKeyPress,
   } = useLoginFlow(navigation);
 
   return (
@@ -80,7 +76,7 @@ export default function LoginScreen({ navigation }: Props) {
             <Text style={styles.subtitle}>
               {currentStep === "phone"
                 ? "Already created an account? Sign in here."
-                : `Enter the code sent to ${fullPhoneNumber}`}
+                : `Check your phone - tap the sign-in link we sent to ${maskPhoneDisplay(fullPhoneNumber)}`}
             </Text>
 
             {currentStep === "phone" ? (
@@ -95,19 +91,36 @@ export default function LoginScreen({ navigation }: Props) {
                 onBlur={() => setInputFocused(false)}
                 hasError={hasError}
                 onClear={clearPhoneInput}
+                errorMessage={error}
               />
             ) : (
-              <OtpInput
-                value={otpCode}
-                inputRefs={otpInputRefs}
-                hasError={hasError}
-                error={error}
-                resendTimer={resendTimer}
-                loading={loading}
-                onChange={handleOtpChange}
-                onKeyPress={handleOtpKeyPress}
-                onResend={handleResendOtp}
-              />
+              <View style={{ alignItems: "center", marginTop: 16 }}>
+                <Text style={[styles.subtitle, { marginBottom: 24 }]}>
+                  Tap the link in your SMS to sign in.
+                </Text>
+                {error ? (
+                  <Text style={[styles.subtitle, { color: LOGIN_COLORS.error, marginBottom: 16 }]}>
+                    {error}
+                  </Text>
+                ) : null}
+                <TouchableOpacity
+                  onPress={handleResendMagicLink}
+                  disabled={resendTimer > 0 || loading}
+                  style={{ paddingVertical: 8 }}
+                >
+                  <Text
+                    style={[
+                      styles.subtitle,
+                      {
+                        color: resendTimer > 0 ? LOGIN_COLORS.textSub : LOGIN_COLORS.primary,
+                        fontWeight: "600",
+                      },
+                    ]}
+                  >
+                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend link"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {currentStep === "phone" && (
@@ -169,7 +182,7 @@ export default function LoginScreen({ navigation }: Props) {
             activeOpacity={0.8}
           >
             <Text style={styles.nextButtonText}>
-              {currentStep === "otp" ? "Verify" : "Next"}
+              {currentStep === "magicLinkSent" ? "Waiting..." : "Next"}
             </Text>
           </TouchableOpacity>
 

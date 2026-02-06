@@ -1,10 +1,12 @@
 const userRepository = require("../../repositories/userRepository");
 const magicLinkRepository = require("../../repositories/magicLinkRepository");
 const cryptoUtils = require("../../utils/crypto");
+const { normalizePhoneToE164 } = require("../../utils/validation");
 const sessionService = require("../../services/sessionService");
 const emailService = require("../../services/emailService");
 const twilioService = require("../../services/twilioService");
 const logger = require("../../config/logger");
+const { magicLinksLogger } = require("../../config/logger");
 
 /**
  * Magic Link Controller
@@ -21,7 +23,7 @@ const requestMagicLink = async (req, res, next) => {
     const userAgent = req.headers["user-agent"];
 
     // Check rate limiting
-    const isRateLimited = await magicLinkRepository.isEmailRateLimited(email, 3);
+    const isRateLimited = await magicLinkRepository.isEmailRateLimited(email, 10);
 
     if (isRateLimited) {
       return res.status(429).json({
@@ -103,7 +105,7 @@ const magicLinkRedirect = async (req, res, next) => {
       `);
     }
 
-    const deepLink = `teetimegolf://auth/magic-link?token=${token}`;
+    const deepLink = `teetimesocial://auth/magic-link?token=${token}`;
     const webFallback = `${process.env.API_URL}/auth/verify-magic?token=${token}`;
 
     res.send(`
@@ -228,7 +230,15 @@ const requestSmsMagicLink = async (req, res, next) => {
       });
     }
 
-    const isRateLimited = await magicLinkRepository.isPhoneRateLimited(phoneNumber, 3);
+    const e164 = normalizePhoneToE164(phoneNumber);
+    if (!e164) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format. Please use E.164 (e.g. +15551234567).",
+      });
+    }
+
+    const isRateLimited = await magicLinkRepository.isPhoneRateLimited(e164, 10);
 
     if (isRateLimited) {
       return res.status(429).json({
@@ -237,7 +247,7 @@ const requestSmsMagicLink = async (req, res, next) => {
       });
     }
 
-    let user = await userRepository.findByPhoneNumber(phoneNumber);
+    let user = await userRepository.findByPhoneNumber(e164);
 
     if (user) {
       return res.status(400).json({
@@ -254,7 +264,7 @@ const requestSmsMagicLink = async (req, res, next) => {
     await magicLinkRepository.create({
       userId: null,
       email: userData?.email || null,
-      phoneNumber,
+      phoneNumber: e164,
       tokenHash,
       purpose: "signup",
       expiresAt,
@@ -264,29 +274,54 @@ const requestSmsMagicLink = async (req, res, next) => {
       metadata: userData || null,
     });
 
-    const webLink = `${process.env.API_URL || "http://localhost:3000"}/auth/verify-signup?token=${token}`;
+    // Deep link - opens app when user taps link on phone
+    const deepLink = `teetimesocial://auth/magic-link?token=${token}`;
+    const webFallback = `${process.env.API_URL || "https://api.teetimesocial.app"}/auth/magic-link-redirect?token=${token}`;
+
+    // SMS: primary deep link; web fallback for tap on desktop/browser
+    const smsBody = `TeeTime Golf: Verify your phone - ${deepLink}\nExpires in ${expiryMinutes} min. No app? ${webFallback}`;
 
     try {
-      await twilioService.sendSMS(
-        phoneNumber,
-        `Welcome to TeeTime Golf! 🏌️ Complete your signup: ${webLink}\n\nThis link expires in ${expiryMinutes} minutes.`
-      );
+      await twilioService.sendSMS(e164, smsBody);
+
+      // Log to magic-links.log for testing (simulator can't receive SMS)
+      magicLinksLogger.info(`SMS magic link sent to ${e164}`, {
+        phoneNumber: e164,
+        deepLink,
+        webFallback,
+        expiresInMinutes: expiryMinutes,
+      });
 
       return res.json({
         success: true,
-        message: "Magic link sent to your phone via SMS.",
+        message: "Verification link sent to your phone.",
         expiresInMinutes: expiryMinutes,
         mode: "sms",
       });
     } catch (smsError) {
-      logger.info(`\n🔗 [SMS MAGIC LINK] for ${phoneNumber}: ${webLink}\n`);
+      logger.error("SMS send failed:", smsError);
 
-      return res.json({
-        success: true,
-        message: "Magic link generated. Check server console.",
-        expiresInMinutes: expiryMinutes,
-        mode: "console",
-        ...(process.env.NODE_ENV === "development" && { devToken: token }),
+      if (process.env.NODE_ENV === "development") {
+        // Log to magic-links.log (SMS failed, link for dev/testing)
+        magicLinksLogger.info(`[DEV] SMS failed - magic link for ${e164}`, {
+          phoneNumber: e164,
+          deepLink,
+          webFallback,
+          expiresInMinutes: expiryMinutes,
+        });
+        logger.info(`[DEV] SMS magic link for ${e164}: ${deepLink}`);
+        return res.json({
+          success: true,
+          message: "Verification link generated. Check server console in development.",
+          expiresInMinutes: expiryMinutes,
+          mode: "console",
+          devToken: token,
+        });
+      }
+
+      return res.status(503).json({
+        success: false,
+        message: "We couldn't send the verification link. Please check your phone number and try again.",
       });
     }
   } catch (error) {
@@ -296,7 +331,118 @@ const requestSmsMagicLink = async (req, res, next) => {
 };
 
 /**
- * Verify SMS magic link and complete signup
+ * Request magic link via SMS for sign-in (existing users only)
+ */
+const requestSmsMagicLinkForLogin = async (req, res, next) => {
+  try {
+    const { phoneNumber } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers["user-agent"];
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    const e164 = normalizePhoneToE164(phoneNumber);
+    if (!e164) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format. Please use E.164 (e.g. +15551234567).",
+      });
+    }
+
+    const isRateLimited = await magicLinkRepository.isPhoneRateLimited(e164, 10);
+    if (isRateLimited) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many magic link requests. Please try again later.",
+      });
+    }
+
+    const user = await userRepository.findByPhoneNumber(e164);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "No account found with this phone number. Please sign up first.",
+      });
+    }
+
+    const token = cryptoUtils.generateToken(32);
+    const tokenHash = cryptoUtils.hashToken(token);
+    const expiryMinutes = parseInt(process.env.MAGIC_LINK_EXPIRY_MINUTES) || 15;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    await magicLinkRepository.create({
+      userId: user.id,
+      email: null,
+      phoneNumber: e164,
+      tokenHash,
+      purpose: "login",
+      expiresAt,
+      ipAddress,
+      userAgent,
+      maxAttempts: 3,
+      metadata: null,
+    });
+
+    const deepLink = `teetimesocial://auth/magic-link?token=${token}`;
+    const webFallback = `${process.env.API_URL || "https://api.teetimesocial.app"}/auth/magic-link-redirect?token=${token}`;
+    const smsBody = `TeeTime Social: Sign in - ${deepLink}\nExpires in ${expiryMinutes} min. No app? ${webFallback}`;
+
+    try {
+      await twilioService.sendSMS(e164, smsBody);
+
+      magicLinksLogger.info(`SMS magic link (login) sent to ${e164}`, {
+        phoneNumber: e164,
+        deepLink,
+        webFallback,
+        expiresInMinutes: expiryMinutes,
+      });
+
+      return res.json({
+        success: true,
+        message: "Sign-in link sent to your phone.",
+        expiresInMinutes: expiryMinutes,
+        mode: "sms",
+      });
+    } catch (smsError) {
+      logger.error("SMS send failed (login):", smsError);
+
+      if (process.env.NODE_ENV === "development") {
+        magicLinksLogger.info(`[DEV] SMS failed - magic link (login) for ${e164}`, {
+          phoneNumber: e164,
+          deepLink,
+          webFallback,
+          expiresInMinutes: expiryMinutes,
+        });
+        logger.info(`[DEV] SMS magic link (login) for ${e164}: ${deepLink}`);
+        return res.json({
+          success: true,
+          message: "Sign-in link generated. Check logs/magic-links.log or server console.",
+          expiresInMinutes: expiryMinutes,
+          mode: "console",
+          devToken: token,
+        });
+      }
+
+      return res.status(503).json({
+        success: false,
+        message: "We couldn't send the sign-in link. Please try again later.",
+      });
+    }
+  } catch (error) {
+    logger.error("Error in requestSmsMagicLinkForLogin:", error);
+    next(error);
+  }
+};
+
+/**
+ * Verify SMS magic link token
+ * - purpose=signup: returns phoneNumber (user completes onboarding, then register)
+ * - purpose=login: creates session and returns accessToken, refreshToken, user
  */
 const verifySmsMagicLink = async (req, res, next) => {
   try {
@@ -315,55 +461,60 @@ const verifySmsMagicLink = async (req, res, next) => {
     if (!magicLink) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired magic link.",
+        message: "Invalid or expired verification link.",
       });
     }
 
     if (magicLink.attempts >= magicLink.max_attempts) {
       return res.status(400).json({
         success: false,
-        message: "Magic link has exceeded maximum attempts.",
+        message: "Verification link has exceeded maximum attempts.",
       });
     }
 
-    await magicLinkRepository.incrementAttempts(magicLink.id);
     await magicLinkRepository.markAsUsed(magicLink.id);
 
-    const storedUserData = magicLink.metadata || {};
+    logger.info(`Phone verified via SMS magic link: ${magicLink.phone_number} (purpose: ${magicLink.purpose})`);
 
-    const user = await userRepository.create({
-      phoneNumber: magicLink.phone_number,
-      email: storedUserData.email || magicLink.email,
-      firstName: storedUserData.firstName || null,
-      lastName: storedUserData.lastName || null,
-      username: storedUserData.username || null,
-      handicap: storedUserData.handicap || null,
-      passwordHash: null,
-      isVerified: true,
-    });
+    // purpose=login: create session and return tokens
+    if (magicLink.purpose === "login" && magicLink.user_id) {
+      const user = await userRepository.findById(magicLink.user_id);
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: "User not found.",
+        });
+      }
 
-    const { accessToken, refreshToken } = await sessionService.createSession({
-      userId: user.id,
-      req,
-      rememberMe: true,
-    });
+      const { accessToken, refreshToken } = await sessionService.createSession({
+        userId: user.id,
+        req,
+        rememberMe: true,
+      });
 
-    logger.info(`New user created via SMS magic link: ${user.id}`);
+      return res.json({
+        success: true,
+        message: "Signed in successfully.",
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          phoneNumber: user.phone_number,
+          email: user.email,
+          username: user.username,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          handicap: user.handicap,
+          socialRate: user.social_rate,
+        },
+      });
+    }
 
+    // purpose=signup: return phoneNumber only
     return res.json({
       success: true,
-      message: "Account created successfully.",
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        phoneNumber: user.phone_number,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        handicap: user.handicap,
-        socialRate: user.social_rate,
-      },
+      message: "Phone number verified successfully.",
+      phoneNumber: magicLink.phone_number,
     });
   } catch (error) {
     logger.error("Error in verifySmsMagicLink:", error);
@@ -376,5 +527,6 @@ module.exports = {
   magicLinkRedirect,
   verifyMagicLink,
   requestSmsMagicLink,
+  requestSmsMagicLinkForLogin,
   verifySmsMagicLink,
 };

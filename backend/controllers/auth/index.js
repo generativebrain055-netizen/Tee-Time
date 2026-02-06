@@ -39,12 +39,14 @@ module.exports = {
   // Registration operations
   setPassword: registerController.setPassword,
   registerUser: registerController.registerUser,
+  uploadAvatar: registerController.uploadAvatar,
 
   // Magic link operations
   requestMagicLink: magicLinkController.requestMagicLink,
   magicLinkRedirect: magicLinkController.magicLinkRedirect,
   verifyMagicLink: magicLinkController.verifyMagicLink,
   requestSmsMagicLink: magicLinkController.requestSmsMagicLink,
+  requestSmsMagicLinkForLogin: magicLinkController.requestSmsMagicLinkForLogin,
   verifySmsMagicLink: magicLinkController.verifySmsMagicLink,
 
   // OAuth operations

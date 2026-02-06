@@ -17,4 +17,4 @@ export const LOGIN_COLORS = {
     surface: "#F9FAFB",
 };
 
-export type LoginStep = "phone" | "otp";
+export type LoginStep = "phone" | "magicLinkSent";

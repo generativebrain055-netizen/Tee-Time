@@ -34,6 +34,7 @@ export interface ApiEndpoints {
   REQUEST_MAGIC_LINK: string;
   VERIFY_MAGIC_LINK: string;
   REQUEST_SMS_MAGIC_LINK: string;
+  REQUEST_SMS_MAGIC_LINK_LOGIN: string;
   VERIFY_SMS_MAGIC_LINK: string;
   REGISTER: string;
   UPDATE_PROFILE: string;
@@ -98,6 +99,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   REQUEST_MAGIC_LINK: `${API_URL}/auth/magic-link`,
   VERIFY_MAGIC_LINK: `${API_URL}/auth/verify-magic`,
   REQUEST_SMS_MAGIC_LINK: `${API_URL}/auth/sms-magic-link`,
+  REQUEST_SMS_MAGIC_LINK_LOGIN: `${API_URL}/auth/sms-magic-link-login`,
   VERIFY_SMS_MAGIC_LINK: `${API_URL}/auth/verify-sms-magic`,
   REGISTER: `${API_URL}/auth/register`,
   UPDATE_PROFILE: `${API_URL}/auth/profile`,

@@ -175,6 +175,7 @@ CREATE TABLE user_profiles (
     preferred_tee_time VARCHAR(50),
     walk_or_ride VARCHAR(20) DEFAULT 'ride',
     playing_partner_preference VARCHAR(100),
+    zip_code VARCHAR(20),
     timezone VARCHAR(50) DEFAULT 'UTC',
     language VARCHAR(10) DEFAULT 'en',
     notification_preferences JSONB DEFAULT '{"email": true, "sms": true, "push": true}'::jsonb,

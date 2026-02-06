@@ -101,4 +101,29 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+/**
+ * Magic link logger - writes to logs/magic-links.log for testing (simulator, dev).
+ * Contains phone number and full link URLs. Keep this file out of version control (*.log).
+ */
+const magicLinkLogFormat = winston.format.combine(
+  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  winston.format.printf(({ timestamp, message, ...meta }) => {
+    const metaStr = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+    return `${timestamp} ${message}${metaStr}`;
+  })
+);
+
+const magicLinksLogger = winston.createLogger({
+  level: "info",
+  format: magicLinkLogFormat,
+  transports: [
+    new winston.transports.File({
+      filename: path.join(__dirname, "../logs/magic-links.log"),
+      maxsize: 5242880,
+      maxFiles: 3,
+    }),
+  ],
+});
+
 module.exports = logger;
+module.exports.magicLinksLogger = magicLinksLogger;

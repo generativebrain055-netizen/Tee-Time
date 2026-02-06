@@ -1,6 +1,9 @@
 const bcrypt = require("bcryptjs");
 const userRepository = require("../../repositories/userRepository");
+const magicLinkRepository = require("../../repositories/magicLinkRepository");
 const sessionService = require("../../services/sessionService");
+const avatarUploadService = require("../../services/avatarUploadService");
+const { normalizePhoneToE164 } = require("../../utils/validation");
 const logger = require("../../config/logger");
 
 /**
@@ -79,22 +82,46 @@ const setPassword = async (req, res, next) => {
  */
 const registerUser = async (req, res, next) => {
   try {
-    const { 
-      phoneNumber, 
-      firstName, 
-      lastName, 
-      username, 
-      email, 
+    const {
+      phoneNumber,
+      firstName,
+      lastName,
+      username,
+      email,
       handicap,
       location,
       homeCourse,
       preferredTeeTime,
       walkOrRide,
       playingPartnerPreference,
+      zipCode,
+      avatarUrl,
+      profilePhotoBase64,
     } = req.body;
 
+    let resolvedAvatarUrl = avatarUrl || null;
+    if (profilePhotoBase64) {
+      try {
+        resolvedAvatarUrl = await avatarUploadService.uploadAvatar(profilePhotoBase64);
+      } catch (uploadErr) {
+        logger.error("Avatar upload failed:", uploadErr);
+        return res.status(400).json({
+          success: false,
+          message: uploadErr.message || "Failed to upload profile photo.",
+        });
+      }
+    }
+
+    const e164 = phoneNumber ? normalizePhoneToE164(phoneNumber) : null;
+    if (!e164) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid phone number is required.",
+      });
+    }
+
     logger.info("📝 [BACKEND] Direct user registration:", {
-      phoneNumber,
+      phoneNumber: e164,
       firstName,
       lastName,
       username,
@@ -107,8 +134,17 @@ const registerUser = async (req, res, next) => {
       playingPartnerPreference,
     });
 
+    // Validate phone was recently verified via SMS magic link
+    const verifiedLink = await magicLinkRepository.findRecentlyVerifiedByPhone(e164, 60);
+    if (!verifiedLink) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must be verified first. Please complete the verification link sent to your phone.",
+      });
+    }
+
     // Check if user already exists
-    const existingUser = await userRepository.findByPhoneNumber(phoneNumber);
+    const existingUser = await userRepository.findByPhoneNumber(e164);
 
     if (existingUser) {
       return res.status(400).json({
@@ -130,7 +166,7 @@ const registerUser = async (req, res, next) => {
 
     // Create new user (passwordless) with all profile data
     const user = await userRepository.create({
-      phoneNumber,
+      phoneNumber: e164,
       firstName,
       lastName,
       username: username || `${firstName.toLowerCase()}${lastName.toLowerCase()}${Math.floor(Math.random() * 1000)}`,
@@ -143,11 +179,13 @@ const registerUser = async (req, res, next) => {
       preferredTeeTime: preferredTeeTime || null,
       walkOrRide: walkOrRide || null,
       playingPartnerPreference: playingPartnerPreference || null,
+      zipCode: zipCode || null,
+      avatarUrl: resolvedAvatarUrl,
     });
 
     logger.info("✅ [BACKEND] User registered successfully:", {
       userId: user.id,
-      phoneNumber,
+      phoneNumber: e164,
       username: user.username,
     });
 
@@ -162,6 +200,8 @@ const registerUser = async (req, res, next) => {
         lastName: user.last_name,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
+        zipCode: user.zip_code || null,
         location: user.location,
         homeCourse: user.home_course,
         preferredTeeTime: user.preferred_tee_time,
@@ -175,7 +215,35 @@ const registerUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Upload profile photo (standalone - returns URL for use in register/update)
+ */
+const uploadAvatar = async (req, res, next) => {
+  try {
+    const { imageBase64, profilePhotoBase64 } = req.body;
+    const base64 = imageBase64 || profilePhotoBase64;
+
+    if (!base64) {
+      return res.status(400).json({
+        success: false,
+        message: "Image data is required (imageBase64 or profilePhotoBase64).",
+      });
+    }
+
+    const avatarUrl = await avatarUploadService.uploadAvatar(base64);
+
+    return res.json({
+      success: true,
+      avatarUrl,
+    });
+  } catch (error) {
+    logger.error("Error in uploadAvatar:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   setPassword,
   registerUser,
+  uploadAvatar,
 };

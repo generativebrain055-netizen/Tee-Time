@@ -669,6 +669,9 @@ const completeOAuthProfile = async (req, res, next) => {
       email,
       location,
       homeCourse,
+      zipCode,
+      avatarUrl,
+      profilePhotoBase64,
     } = req.body;
 
     // LEGACY SUPPORT: If tempToken is provided, use old flow
@@ -696,6 +699,22 @@ const completeOAuthProfile = async (req, res, next) => {
     if (handicap !== undefined) updates.handicap = handicap;
     if (location) updates.location = location;
     if (homeCourse) updates.homeCourse = homeCourse;
+    if (zipCode !== undefined) updates.zipCode = zipCode;
+    if (avatarUrl) updates.avatarUrl = avatarUrl;
+
+    // Upload profile photo if base64 provided
+    if (profilePhotoBase64) {
+      try {
+        const avatarUploadService = require("../../services/avatarUploadService");
+        updates.avatarUrl = await avatarUploadService.uploadAvatar(profilePhotoBase64, userId);
+      } catch (uploadErr) {
+        logger.error("Avatar upload failed:", uploadErr);
+        return res.status(400).json({
+          success: false,
+          error: uploadErr.message || "Failed to upload profile photo.",
+        });
+      }
+    }
 
     // Update profile
     const updatedUser = await userRepository.updateProfile(userId, updates);
@@ -741,7 +760,24 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     lastName,
     username,
     handicap,
+    zipCode,
+    avatarUrl,
+    profilePhotoBase64,
   } = req.body;
+
+  let resolvedAvatarUrl = avatarUrl || null;
+  if (profilePhotoBase64) {
+    try {
+      const avatarUploadService = require("../../services/avatarUploadService");
+      resolvedAvatarUrl = await avatarUploadService.uploadAvatar(profilePhotoBase64);
+    } catch (uploadErr) {
+      logger.error("Avatar upload failed:", uploadErr);
+      return res.status(400).json({
+        success: false,
+        error: uploadErr.message || "Failed to upload profile photo.",
+      });
+    }
+  }
 
   logger.warn("DEPRECATED: Using legacy tempToken flow", {
     hasPhone: !!phoneNumber,
@@ -791,6 +827,8 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     username: username || null,
     handicap: handicap || null,
     isVerified: true,
+    zipCode: zipCode || null,
+    avatarUrl: resolvedAvatarUrl,
   });
 
   // Link OAuth provider

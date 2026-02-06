@@ -20,6 +20,7 @@ const securityScannerBlocker = require("./middleware/securityScanner");
 // Import services
 const schedulerService = require("./services/schedulerService");
 const clubsService = require("./services/clubsService");
+const avatarUploadService = require("./services/avatarUploadService");
 
 // Import routes
 const authRoutes = require("./routes/auth");
@@ -130,6 +131,11 @@ const startServer = async () => {
   try {
     // Test database connection
     await testConnection();
+
+    // Ensure avatars bucket exists for profile photo uploads
+    avatarUploadService.ensureBucketExists().catch((e) => {
+      logger.warn("Avatar bucket check skipped:", e.message);
+    });
 
     // Load golf clubs from CSV
     await clubsService.loadClubs();

@@ -178,6 +178,8 @@ const create = async (userData) => {
     preferredTeeTime,
     walkOrRide,
     playingPartnerPreference,
+    zipCode,
+    avatarUrl,
   } = userData;
 
   try {
@@ -209,6 +211,8 @@ const create = async (userData) => {
         preferred_tee_time: preferredTeeTime || null,
         walk_or_ride: walkOrRide || null,
         playing_partner_preference: playingPartnerPreference || null,
+        zip_code: zipCode || null,
+        avatar_url: avatarUrl || null,
       });
 
     if (profileError) throw profileError;
@@ -222,6 +226,8 @@ const create = async (userData) => {
       preferred_tee_time: preferredTeeTime,
       walk_or_ride: walkOrRide,
       playing_partner_preference: playingPartnerPreference,
+      zip_code: zipCode || null,
+      avatar_url: avatarUrl || null,
     };
   } catch (error) {
     handleError(error, "create user");
@@ -328,6 +334,7 @@ const updateProfile = async (userId, updates) => {
     "walk_or_ride",
     "playing_partner_preference",
     "avatar_url",
+    "zip_code",
     "timezone",
     "language",
   ];

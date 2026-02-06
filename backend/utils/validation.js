@@ -20,6 +20,22 @@ const isValidPhoneNumber = (phoneNumber) => {
 };
 
 /**
+ * Normalize phone number to E.164 for Twilio
+ * @param {string} phoneNumber - Phone in any format (e.g. +15551234567, 5551234567)
+ * @returns {string|null} E.164 format or null if invalid
+ */
+const normalizePhoneToE164 = (phoneNumber) => {
+  if (!phoneNumber || typeof phoneNumber !== "string") return null;
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  // Assume US/CA (+1) if 10 digits, else require leading country code
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (digits.length >= 11 && digits.length <= 15) return `+${digits}`;
+  return null;
+};
+
+/**
  * Validate email format
  * @param {string} email
  * @returns {boolean}
@@ -325,6 +341,7 @@ const validateRequestBody = (body, schema) => {
 
 module.exports = {
   isValidPhoneNumber,
+  normalizePhoneToE164,
   isValidEmail,
   validatePassword,
   isValidOTP,

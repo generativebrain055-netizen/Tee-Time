@@ -16,6 +16,8 @@ interface Props {
     onClear: () => void;
     selectedCountry?: Country;
     onCountryChange?: (country: Country) => void;
+    /** When set, shows this message instead of generic "Please enter a valid phone number" */
+    errorMessage?: string;
 }
 
 const PhoneInput = memo(({
@@ -29,6 +31,7 @@ const PhoneInput = memo(({
     onClear,
     selectedCountry = COUNTRIES[0], // Default to US
     onCountryChange,
+    errorMessage,
 }: Props) => (
     <View style={styles.container}>
         <View
@@ -63,7 +66,9 @@ const PhoneInput = memo(({
             )}
         </View>
         {hasError && (
-            <Text style={styles.errorText}>Please enter a valid phone number</Text>
+            <Text style={styles.errorText}>
+                {errorMessage || "Please enter a valid phone number"}
+            </Text>
         )}
     </View>
 ));

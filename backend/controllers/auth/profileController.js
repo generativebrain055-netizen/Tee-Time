@@ -83,21 +83,24 @@ const getCurrentUser = async (req, res, next) => {
 const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { 
-      firstName, 
-      lastName, 
-      email, 
-      handicap, 
-      location, 
-      homeCourse, 
-      bio, 
-      preferences 
+    const {
+      firstName,
+      lastName,
+      email,
+      handicap,
+      location,
+      homeCourse,
+      bio,
+      zipCode,
+      avatarUrl,
+      profilePhotoBase64,
+      preferences,
     } = req.body;
 
     logger.info("📝 [PROFILE] Update request:", {
       userId,
       preferences,
-      body: req.body,
+      body: { ...req.body, profilePhotoBase64: req.body.profilePhotoBase64 ? "[base64]" : undefined },
     });
 
     // Build update object
@@ -109,6 +112,22 @@ const updateProfile = async (req, res, next) => {
     if (location !== undefined) updates.location = location;
     if (homeCourse !== undefined) updates.homeCourse = homeCourse;
     if (bio !== undefined) updates.bio = bio;
+    if (zipCode !== undefined) updates.zipCode = zipCode;
+    if (avatarUrl) updates.avatarUrl = avatarUrl;
+
+    // Upload profile photo if base64 provided
+    if (profilePhotoBase64) {
+      try {
+        const avatarUploadService = require("../../services/avatarUploadService");
+        updates.avatarUrl = await avatarUploadService.uploadAvatar(profilePhotoBase64, userId);
+      } catch (uploadErr) {
+        logger.error("Avatar upload failed:", uploadErr);
+        return res.status(400).json({
+          success: false,
+          message: uploadErr.message || "Failed to upload profile photo.",
+        });
+      }
+    }
     
     // Handle preferences
     if (preferences) {
@@ -152,6 +171,8 @@ const updateProfile = async (req, res, next) => {
         username: user.username,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
+        zipCode: user.zip_code || null,
         location: user.location,
         homeCourse: user.home_course,
         bio: user.bio,
