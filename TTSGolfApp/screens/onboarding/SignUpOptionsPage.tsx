@@ -17,14 +17,18 @@ import CountryPicker, { Country, COUNTRIES } from "../../components/CountryPicke
 import { OAuthButtons } from "../../components/auth/OAuthButtons";
 import type { OAuthSuccessData } from "../../types/oauth";
 
+// Figma sign-up screen colors
 const COLORS = {
   primary: "#5EBC68",
   white: "#FFFFFF",
   black: "#000000",
   textMain: "#1A1A1A",
-  textSub: "#6B7280",
-  textPlaceholder: "#9CA3AF",
+  textSub: "#6D6D6D",
+  textPlaceholder: "#CCCCCC",
   border: "#E5E7EB",
+  dividerLine: "#EBEDF0",
+  dividerText: "#696969",
+  backArrow: "#4B5563",
   error: "#EF4444",
   errorLight: "#FEF2F2",
 };
@@ -79,23 +83,16 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity style={styles.backButton} onPress={onBack}>
-                <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
+                <ArrowLeft size={24} color={COLORS.backArrow} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
             {/* Main Content */}
             <View style={styles.mainContent}>
-              <Text style={styles.title}>Create account</Text>
+              <Text style={styles.title}>Enter your phone number</Text>
               <Text style={styles.subtitle}>
-                Sign up with Google, Apple, or your phone number to get started.
+              We'll text you a link to verify your phone
               </Text>
-
-              {/* OAuth Buttons - Google first (green), Apple second (gray) */}
-              <OAuthButtons
-                layout="signup"
-                onSuccess={onOAuthSuccess}
-                onError={(err) => console.error("OAuth error:", err)}
-              />
 
               {/* Phone Input */}
               <View style={styles.inputSection}>
@@ -148,21 +145,36 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
                   </Text>
                 )}
               </View>
-            </View>
 
-            {/* Bottom Section */}
-            <View style={styles.bottomSection}>
+              {/* Continue with phone - Figma: green #5EBC68, white text */}
               <TouchableOpacity
                 style={[
                   styles.nextButton,
+                  styles.nextButtonInContent,
                   !isValid && styles.nextButtonDisabled,
                 ]}
                 onPress={handlePhoneNext}
                 activeOpacity={0.8}
                 disabled={!isValid}
               >
-                <Text style={styles.nextButtonText}>Continue with phone</Text>
+                <Text style={styles.nextButtonText}>Next</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Figma: "or" divider between phone CTA and OAuth */}
+            <View style={styles.dividerWrap}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Bottom Section: Apple then Google (Figma: #F7F7F7, #E5E7EB) */}
+            <View style={styles.bottomSection}>
+              <OAuthButtons
+                variant="signup"
+                onSuccess={onOAuthSuccess}
+                onError={(err) => console.error("OAuth error:", err)}
+              />
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -194,7 +206,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   mainContent: {
-    flex: 1,
     paddingTop: 16,
   },
   title: {
@@ -218,7 +229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: 56,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 16,
@@ -258,15 +269,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginLeft: 4,
   },
+  dividerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.dividerLine,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: COLORS.dividerText,
+    fontWeight: "500",
+  },
   bottomSection: {
     paddingBottom: 32,
+    gap: 16,
   },
   nextButton: {
-    height: 56,
+    height: 54,
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+  },
+  nextButtonInContent: {
+    marginTop: 16,
   },
   nextButtonDisabled: {
     opacity: 0.6,

@@ -15,7 +15,6 @@ import { API_ENDPOINTS, API_URL } from "../../config/api";
 import type { OnboardingData } from "../../types";
 
 // Import all step components
-import { WelcomePage } from "./WelcomePage";
 import { SignUpOptionsPage } from "./SignUpOptionsPage";
 import { PhoneVerificationPage } from "./PhoneVerificationPage";
 import { MagicLinkPage } from "./MagicLinkPage";
@@ -100,8 +99,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Determine starting step for OAuth users
   const getInitialStepIndex = () => {
-    if (!oauthData) return 0; // Start at welcome for non-OAuth
-    // Skip welcome, go to phone (step 1)
+    if (!oauthData) return 0; // Start at signup options for non-OAuth
+    // OAuth: skip signup options, go to phone (step 1)
     console.log(
       "OnboardingScreen - OAuth user detected, starting at step 1 (Phone)",
     );
@@ -171,7 +170,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const handleBack = (): void => {
-    if (currentStepIndex > 0) {
+    if (currentStepIndex === 0) {
+      // Sign up w/SSO: back goes to Gateway (Welcome) screen
+      navigation.replace("Welcome");
+    } else {
       setCurrentStepIndex(currentStepIndex - 1);
     }
   };
@@ -482,8 +484,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const getStepComponent = (step: string): StepComponent => {
     switch (step) {
-      case ONBOARDING_STEPS.WELCOME:
-        return WelcomePage as unknown as StepComponent;
       case ONBOARDING_STEPS.SIGNUP_OPTIONS:
         return SignUpOptionsPage as unknown as StepComponent;
       case ONBOARDING_STEPS.PHONE:
@@ -505,7 +505,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       case ONBOARDING_STEPS.PREFERENCES:
         return PreferencesPage as unknown as StepComponent;
       default:
-        return WelcomePage as unknown as StepComponent;
+        return SignUpOptionsPage as unknown as StepComponent;
     }
   };
 
@@ -525,18 +525,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const renderStep = (): React.ReactElement => {
     const StepComponent = getStepComponent(currentStep);
-
-    // Special handling for WelcomePage props
-    if (currentStep === ONBOARDING_STEPS.WELCOME) {
-      return (
-        <View style={styles.stepContainer}>
-          <WelcomePage
-            onGetStarted={() => handleNext({})}
-            onLogin={() => navigation.navigate("Login")}
-          />
-        </View>
-      );
-    }
 
     // Special handling for SignUpOptionsPage - needs onOAuthSuccess
     if (currentStep === ONBOARDING_STEPS.SIGNUP_OPTIONS) {

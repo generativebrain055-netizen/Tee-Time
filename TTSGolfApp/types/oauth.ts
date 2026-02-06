@@ -17,16 +17,29 @@ export type OAuthProvider = "google" | "apple";
  * Standard OAuth response from backend
  */
 export interface OAuthResponse {
-  status: "authenticated";
+  status: "authenticated" | "signup_required";
   success: boolean;
-  accessToken: string;
-  refreshToken: string;
-  user: OAuthUser;
-  isNewUser: boolean;
-  needsOnboarding: boolean;
-  missingFields: OAuthMissingField[];
+  accessToken?: string;
+  refreshToken?: string;
+  user?: OAuthUser;
+  isNewUser?: boolean;
+  needsOnboarding?: boolean;
+  missingFields?: OAuthMissingField[];
   profileIncomplete?: boolean;
   message?: string;
+  // Sign-up required fields
+  needsSignUp?: boolean;
+  tempToken?: string;
+  oauthData?: {
+    provider: OAuthProvider;
+    providerUserId: string;
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    picture?: string | null;
+    emailVerified?: boolean;
+    isPrivateEmail?: boolean;
+  };
 }
 
 /**
@@ -65,8 +78,19 @@ export type OAuthMissingField =
 export interface OAuthSuccessData {
   isNewUser: boolean;
   needsOnboarding?: boolean;
+  needsSignUp?: boolean;
+  tempToken?: string;
   user?: OAuthUser;
-  oauthData?: OAuthOnboardingData;
+  oauthData?: OAuthOnboardingData | {
+    provider: OAuthProvider;
+    providerUserId: string;
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    picture?: string | null;
+    emailVerified?: boolean;
+    isPrivateEmail?: boolean;
+  };
   /** @deprecated Use oauthData instead */
   partialData?: LegacyOAuthPartialData;
 }
@@ -106,7 +130,9 @@ export interface OAuthButtonsProps {
   onSuccess: (data: OAuthSuccessData) => void;
   onError: (error: string) => void;
   disabled?: boolean;
-  /** Sign-up layout: Google first (green), Apple second (gray), divider below */
+  /** "signup" shows "Continue with Apple/Google"; "signin" shows "Sign in with Apple/Google" */
+  variant?: "signin" | "signup";
+  /** @deprecated Use variant for label; layout no longer changes order (Apple then Google) */
   layout?: "default" | "signup";
 }
 

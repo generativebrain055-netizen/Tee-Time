@@ -1,6 +1,6 @@
 export { OnboardingScreen } from "./OnboardingScreen";
 export { OAuthOnboardingScreen } from "./OAuthOnboardingScreen";
-export { WelcomePage } from "./WelcomePage";
+export { SsoSignupInfoScreen } from "./SsoSignupInfoScreen";
 export { SignUpOptionsPage } from "./SignUpOptionsPage";
 export { PhoneVerificationPage } from "./PhoneVerificationPage";
 export { MagicLinkPage } from "./MagicLinkPage";
@@ -15,7 +15,6 @@ export { PreferencesPage } from "./PreferencesPage";
 // Re-export types
 export type {
   OnboardingPageProps,
-  WelcomePageProps,
   SignUpOptionsPageProps,
   PhoneVerificationPageProps,
   NamePageProps,

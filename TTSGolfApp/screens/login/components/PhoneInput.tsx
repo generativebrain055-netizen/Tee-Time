@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         height: 56,
         backgroundColor: LOGIN_COLORS.white,
-        borderRadius: 12,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: LOGIN_COLORS.border,
         paddingHorizontal: 16,

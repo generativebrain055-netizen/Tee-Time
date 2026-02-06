@@ -11,6 +11,7 @@ import WelcomeScreen from "./screens/WelcomeScreen";
 const LoginScreen = lazy(() => import("./screens/login"));
 const OnboardingModule = lazy(() => import("./screens/onboarding").then((m) => ({ default: m.OnboardingScreen })));
 const OAuthOnboardingModule = lazy(() => import("./screens/onboarding/OAuthOnboardingScreen").then((m) => ({ default: m.OAuthOnboardingScreen })));
+const SsoSignupInfoModule = lazy(() => import("./screens/onboarding/SsoSignupInfoScreen").then((m) => ({ default: m.SsoSignupInfoScreen })));
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
 import MessagesScreen from "./screens/Messages";
@@ -38,6 +39,7 @@ type ScreenName =
   | "Login"
   | "Onboarding"
   | "OAuthOnboarding"
+  | "SsoSignupInfo"
   | "HomePage"
   | "Home"
   | "Roster"
@@ -229,6 +231,22 @@ export default function App(): React.ReactElement {
           >
             <OAuthOnboardingModule
               key={`oauth-onboarding-${screenKey}`}
+              navigation={navigation as any}
+              route={{ params: screenParams } as any}
+            />
+          </Suspense>
+        );
+      case "SsoSignupInfo":
+        return (
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <SsoSignupInfoModule
+              key={`sso-signup-${screenKey}`}
               navigation={navigation as any}
               route={{ params: screenParams } as any}
             />

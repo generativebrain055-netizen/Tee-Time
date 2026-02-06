@@ -60,7 +60,7 @@ export default function LoginScreen({ navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ArrowLeft size={24} color={LOGIN_COLORS.black} strokeWidth={1.5} />
+            <ArrowLeft size={24} color={LOGIN_COLORS.backArrow} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
@@ -80,19 +80,64 @@ export default function LoginScreen({ navigation }: Props) {
             </Text>
 
             {currentStep === "phone" ? (
-              <PhoneInput
-                value={phoneNumber}
-                onChange={setPhoneNumber}
-                selectedCountry={selectedCountry}
-                onCountryChange={setSelectedCountry}
-                inputRef={phoneInputRef}
-                focused={inputFocused}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                hasError={hasError}
-                onClear={clearPhoneInput}
-                errorMessage={error}
-              />
+              <View style={styles.phoneStepColumn}>
+                <PhoneInput
+                  value={phoneNumber}
+                  onChange={setPhoneNumber}
+                  selectedCountry={selectedCountry}
+                  onCountryChange={setSelectedCountry}
+                  inputRef={phoneInputRef}
+                  focused={inputFocused}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  hasError={hasError}
+                  onClear={clearPhoneInput}
+                  errorMessage={error}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.nextButton,
+                    styles.nextButtonInContent,
+                    isButtonDisabled && styles.nextButtonDisabled,
+                  ]}
+                  onPress={handlePrimaryAction}
+                  disabled={isButtonDisabled}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.nextButtonText}>Next</Text>
+                </TouchableOpacity>
+                <View style={[styles.dividerWrap, styles.dividerWrapInColumn]}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <OAuthButtons
+                  onSuccess={(data) => {
+                    // Check if sign-up is needed
+                    if (data.needsSignUp && data.tempToken) {
+                      navigation.navigate("SsoSignupInfo", {
+                        tempToken: data.tempToken,
+                        oauthData: data.oauthData,
+                      });
+                      return;
+                    }
+
+                    // Check if onboarding is needed
+                    if (data.needsOnboarding && data.oauthData) {
+                      navigation.navigate("OAuthOnboarding", {
+                        oauthData: data.oauthData,
+                      });
+                      return;
+                    }
+
+                    // Normal sign-in - go to Home
+                    navigation.replace("Home");
+                  }}
+                  onError={(error) => {
+                    console.error("OAuth error:", error);
+                  }}
+                />
+              </View>
             ) : (
               <View style={{ alignItems: "center", marginTop: 16 }}>
                 <Text style={[styles.subtitle, { marginBottom: 24 }]}>
@@ -122,46 +167,6 @@ export default function LoginScreen({ navigation }: Props) {
                 </TouchableOpacity>
               </View>
             )}
-
-            {currentStep === "phone" && (
-              <OAuthButtons
-                onSuccess={(data) => {
-                  console.log(
-                    "Login Screen - OAuth onSuccess received:",
-                    JSON.stringify(data, null, 2),
-                  );
-                  if (data.needsOnboarding && data.oauthData) {
-                    // User authenticated but needs to complete profile
-                    console.log(
-                      "Login Screen - Navigating to OAuthOnboarding with data:",
-                      data.oauthData,
-                    );
-                    navigation.navigate("OAuthOnboarding", {
-                      oauthData: data.oauthData,
-                    });
-                  } else if (data.isNewUser) {
-                    // Legacy flow - new user needs full onboarding
-                    console.log(
-                      "Login Screen - Navigating to Onboarding with oauthData:",
-                      data.partialData,
-                    );
-                    navigation.navigate("Onboarding", {
-                      oauthData: data.partialData,
-                    });
-                    console.log("Login Screen - Navigation called");
-                  } else {
-                    // Existing user with complete profile
-                    console.log(
-                      "Login Screen - Existing user, navigating to Home",
-                    );
-                    navigation.replace("Home");
-                  }
-                }}
-                onError={(error) => {
-                  console.error("OAuth error:", error);
-                }}
-              />
-            )}
           </Animated.View>
         </View>
 
@@ -172,30 +177,17 @@ export default function LoginScreen({ navigation }: Props) {
             { paddingBottom: Math.max(insets.bottom, 16) + 16 },
           ]}
         >
-          <TouchableOpacity
-            style={[
-              styles.nextButton,
-              isButtonDisabled && styles.nextButtonDisabled,
-            ]}
-            onPress={handlePrimaryAction}
-            disabled={isButtonDisabled}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.nextButtonText}>
-              {currentStep === "magicLinkSent" ? "Waiting..." : "Next"}
-            </Text>
-          </TouchableOpacity>
-
-          {currentStep === "phone" && (
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Onboarding")}
-              >
-                <Text style={styles.signupLink}>Sign up</Text>
-              </TouchableOpacity>
-            </View>
+          {currentStep === "magicLinkSent" && (
+            <TouchableOpacity
+              style={[styles.nextButton, styles.nextButtonDisabled]}
+              disabled
+              activeOpacity={0.8}
+            >
+              <Text style={styles.nextButtonText}>Waiting...</Text>
+            </TouchableOpacity>
           )}
+
+
         </View>
       </View>
     </TouchableWithoutFeedback>
@@ -225,6 +217,12 @@ const styles = StyleSheet.create({
   animatedContent: {
     paddingTop: 16,
   },
+  phoneStepColumn: {
+    gap: 16,
+  },
+  nextButtonInContent: {
+    marginTop: 0,
+  },
   title: {
     fontSize: 28,
     fontWeight: "700",
@@ -235,23 +233,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: LOGIN_COLORS.textSub,
     lineHeight: 22,
-    marginBottom: 40,
+    marginBottom: 32,
   },
   bottomSection: {
     paddingHorizontal: 24,
     paddingTop: 16,
+    gap: 16,
     backgroundColor: LOGIN_COLORS.white,
   },
   nextButton: {
-    height: 56,
+    height: 54,
     backgroundColor: LOGIN_COLORS.primary,
-    borderRadius: 12,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   nextButtonDisabled: {
     backgroundColor: LOGIN_COLORS.primary,
     opacity: 0.6,
+  },
+  dividerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerWrapInColumn: {
+    marginVertical: 0,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: LOGIN_COLORS.dividerLine,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: LOGIN_COLORS.dividerText,
+    fontWeight: "500",
   },
   nextButtonText: {
     fontSize: 16,

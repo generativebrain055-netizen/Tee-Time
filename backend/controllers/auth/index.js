@@ -57,4 +57,5 @@ module.exports = {
   appleSignIn: oauthController.appleSignIn,
   completeOAuthProfile: oauthController.completeOAuthProfile,
   verifyTempTokenEndpoint: oauthController.verifyTempTokenEndpoint,
+  completeSsoSignup: oauthController.completeSsoSignup,
 };

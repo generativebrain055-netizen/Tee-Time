@@ -399,39 +399,62 @@ const findOrCreateOAuthUser = async ({
     return { user, isNewUser: false };
   }
 
-  // No provider link - create NEW OAuth user
-  logger.info("Creating new OAuth user", {
+  // No provider link - check if email exists in users table
+  // If email exists, link OAuth provider to that user
+  // If email doesn't exist, return flag indicating sign-up is needed
+  
+  const hasValidEmail = email && emailVerified && !isPrivateEmail;
+  
+  if (hasValidEmail) {
+    // Check if user with this email already exists
+    const existingUser = await userRepository.findByEmail(email);
+    
+    if (existingUser) {
+      // Link OAuth provider to existing user
+      await authProviderRepository.create({
+        userId: existingUser.id,
+        provider,
+        providerUserId,
+        providerEmail: email,
+        providerData: {
+          name: `${firstName || ""} ${lastName || ""}`.trim(),
+          picture: picture || null,
+          email_verified: emailVerified,
+          is_private_email: isPrivateEmail,
+        },
+      });
+      
+      logger.info("OAuth provider linked to existing user", {
+        userId: existingUser.id,
+        provider,
+        providerUserId: providerUserId.substring(0, 8) + "...",
+      });
+      
+      return { user: existingUser, isNewUser: false };
+    }
+  }
+  
+  // Email doesn't exist or is not valid - return flag indicating sign-up is needed
+  logger.info("OAuth user needs sign-up", {
     provider,
     providerUserId: providerUserId.substring(0, 8) + "...",
     hasEmail: !!email,
     emailVerified,
   });
-
-  const newUser = await userRepository.create({
-    phoneNumber: null,
-    email: email && emailVerified && !isPrivateEmail ? email : null,
-    firstName: firstName || null,
-    lastName: lastName || null,
-    username: null,
-    handicap: null,
-    isVerified: true,
-  });
-
-  await authProviderRepository.create({
-    userId: newUser.id,
-    provider,
-    providerUserId,
-    providerEmail: email || null,
-    providerData: {
-      name: `${firstName || ""} ${lastName || ""}`.trim(),
+  
+  return {
+    needsSignUp: true,
+    oauthData: {
+      provider,
+      providerUserId,
+      email: hasValidEmail ? email : null,
+      firstName: firstName || null,
+      lastName: lastName || null,
       picture: picture || null,
-      email_verified: emailVerified,
-      is_private_email: isPrivateEmail,
+      emailVerified,
+      isPrivateEmail,
     },
-  });
-
-  logger.info("New OAuth user created", { userId: newUser.id, provider });
-  return { user: newUser, isNewUser: true };
+  };
 };
 
 /**

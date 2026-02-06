@@ -17,14 +17,6 @@ import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { auth } from "../../config/firebase";
 
-import {
-  colorTokens,
-  spacingTokens,
-  borderTokens,
-  componentTokens,
-  typographyTokens,
-  shadowTokens,
-} from "../../theme/tokens";
 import { sessionManager } from "../../utils/sessionManager";
 import {
   oauthService,
@@ -35,8 +27,20 @@ import type {
   OAuthButtonsProps,
   OAuthSuccessData,
 } from "../../types/oauth";
+import Svg, { Path } from "react-native-svg";
 import GoogleLogo from "../GoogleLogo";
 import { logger } from "../../utils/logger";
+
+function AppleLogo({ size = 20 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 36 36" fill="none">
+      <Path
+        d="M35.6647 30.8068C35.3774 31.4706 35.0374 32.0816 34.6434 32.6434C34.1064 33.4092 33.6667 33.9393 33.3279 34.2337C32.8026 34.7169 32.2398 34.9644 31.6371 34.9784C31.2045 34.9784 30.6827 34.8553 30.0753 34.6055C29.466 34.3568 28.906 34.2337 28.394 34.2337C27.857 34.2337 27.281 34.3568 26.665 34.6055C26.048 34.8553 25.551 34.9855 25.171 34.9984C24.5931 35.023 24.017 34.7685 23.442 34.2337C23.075 33.9135 22.616 33.3647 22.0661 32.5871C21.4761 31.7567 20.991 30.7939 20.611 29.6961C20.204 28.5104 20 27.3622 20 26.2507C20 24.9773 20.2751 23.8791 20.826 22.9588C21.259 22.2196 21.8351 21.6365 22.5561 21.2084C23.277 20.7804 24.056 20.5622 24.895 20.5483C25.354 20.5483 25.956 20.6903 26.704 20.9694C27.45 21.2495 27.9289 21.3915 28.1389 21.3915C28.2959 21.3915 28.828 21.2254 29.73 20.8943C30.583 20.5873 31.3029 20.4602 31.8927 20.5103C33.4908 20.6393 34.6915 21.2694 35.49 22.4047C34.0607 23.2709 33.3537 24.4842 33.3677 26.0406C33.3806 27.2529 33.8203 28.2618 34.6845 29.0628C35.0761 29.4346 35.5134 29.7219 36 29.926C35.8945 30.2321 35.7831 30.5253 35.6647 30.8068ZM31.9994 16.3801C31.9994 17.3303 31.6524 18.2175 30.9606 19.0387C30.1258 20.015 29.116 20.5791 28.021 20.4901C28.007 20.3761 27.9989 20.2561 27.9989 20.13C27.9989 19.2178 28.396 18.2416 29.101 17.4434C29.453 17.0392 29.9006 16.7032 30.4435 16.4351C30.9852 16.171 31.4976 16.025 31.9795 16C31.9936 16.127 31.9994 16.2541 31.9994 16.3801V16.3801Z"
+        fill="black"
+      />
+    </Svg>
+  );
+}
 
 // ============================================================================
 // Constants
@@ -44,6 +48,13 @@ import { logger } from "../../utils/logger";
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+
+// Figma: fill #F7F7F7, stroke #E5E7EB
+const FIGMA_BG = "#F7F7F7";
+const FIGMA_BORDER = "#E5E7EB";
+const FIGMA_BUTTON_HEIGHT = 53;
+const FIGMA_RADIUS = 8;
+const ICON_SIZE = 24;
 
 // ============================================================================
 // Helper Functions
@@ -75,17 +86,20 @@ function ensureGoogleSignInConfigured(): void {
 // Component
 // ============================================================================
 
-const GOOGLE_GREEN = "#5EBC68";
-const APPLE_GRAY = "#F7F7F7";
+const LABELS = {
+  signin: { apple: "Continue with Apple", google: "Continue with Google" },
+  signup: { apple: "Continue with Apple", google: "Continue with Google" },
+} as const;
 
 export function OAuthButtons({
   onSuccess,
   onError,
   disabled = false,
+  variant = "signin",
   layout = "default",
 }: OAuthButtonsProps): React.ReactElement {
   const googleConfigured = useMemo(() => isGoogleConfigured(), []);
-  const isSignupLayout = layout === "signup";
+  const labels = LABELS[variant];
 
   /**
    * Process Firebase user and send to backend
@@ -107,6 +121,19 @@ export function OAuthButtons({
           refreshToken: data.refreshToken,
           user: data.user,
         });
+
+        // Check if sign-up is needed
+        if (data.needsSignUp && data.tempToken) {
+          logger.debug("[Firebase] Sign-up required. Navigating to SSO sign-up screen.");
+          const successData: OAuthSuccessData = {
+            isNewUser: true,
+            needsSignUp: true,
+            tempToken: data.tempToken,
+            oauthData: data.oauthData,
+          };
+          onSuccess(successData);
+          return;
+        }
 
         // Prepare success callback data
         const successData: OAuthSuccessData = {
@@ -238,26 +265,39 @@ export function OAuthButtons({
           : null,
       });
 
+      // Check if sign-up is needed
+      if (data.needsSignUp && data.tempToken) {
+        logger.debug("[Apple] Sign-up required. Navigating to SSO sign-up screen.");
+        const successData: OAuthSuccessData = {
+          isNewUser: true,
+          needsSignUp: true,
+          tempToken: data.tempToken,
+          oauthData: data.oauthData,
+        };
+        onSuccess(successData);
+        return;
+      }
+
       // Save session
       await sessionManager.saveSession({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        user: data.user,
+        accessToken: data.accessToken!,
+        refreshToken: data.refreshToken!,
+        user: data.user!,
       });
 
       // Prepare success callback data
       const successData: OAuthSuccessData = {
-        isNewUser: data.isNewUser,
-        user: data.user,
+        isNewUser: data.isNewUser!,
+        user: data.user!,
       };
 
       // Check if onboarding is needed
       if (data.needsOnboarding && data.missingFields?.length > 0) {
         successData.needsOnboarding = true;
         successData.oauthData = {
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-          user: data.user,
+          accessToken: data.accessToken!,
+          refreshToken: data.refreshToken!,
+          user: data.user!,
           needsOnboarding: data.needsOnboarding,
           missingFields: data.missingFields,
         };
@@ -273,81 +313,42 @@ export function OAuthButtons({
     }
   }, [onSuccess, onError]);
 
+  const renderAppleButton = () =>
+    Platform.OS === "ios" && (
+      <TouchableOpacity
+        style={[styles.figmaButton, disabled && styles.buttonDisabled]}
+        onPress={() => void (!disabled && handleAppleSignIn())}
+        activeOpacity={0.8}
+        disabled={disabled}
+      >
+        <View style={styles.iconLeft}>
+          <AppleLogo size={ICON_SIZE} />
+        </View>
+        <Text style={styles.figmaButtonText}>{labels.apple}</Text>
+      </TouchableOpacity>
+    );
+
   const renderGoogleButton = () =>
     googleConfigured && (
       <TouchableOpacity
-        style={[
-          isSignupLayout ? styles.googleButtonSignup : styles.googleButton,
-          disabled && styles.buttonDisabled,
-        ]}
+        style={[styles.figmaButton, styles.figmaGoogleButton, disabled && styles.buttonDisabled]}
         onPress={handleGoogleSignIn}
         activeOpacity={0.8}
         disabled={disabled}
       >
-        <GoogleLogo size={componentTokens.icon.size.sm} />
-        <Text
-          style={[
-            isSignupLayout ? styles.googleButtonTextSignup : styles.googleButtonText,
-          ]}
-        >
-          Continue with Google
-        </Text>
+        <View style={styles.iconLeft}>
+          <GoogleLogo size={ICON_SIZE} />
+        </View>
+        <Text style={styles.figmaButtonText}>{labels.google}</Text>
       </TouchableOpacity>
     );
 
-  const renderAppleButton = () =>
-    Platform.OS === "ios" && (
-      isSignupLayout ? (
-        <TouchableOpacity
-          style={[styles.appleButtonSignup, disabled && styles.buttonDisabled]}
-          onPress={() => void (!disabled && handleAppleSignIn())}
-          activeOpacity={0.8}
-          disabled={disabled}
-        >
-          <Text style={styles.appleButtonTextSignup}>Continue with Apple</Text>
-        </TouchableOpacity>
-      ) : (
-        <AppleAuthentication.AppleAuthenticationButton
-          buttonType={
-            AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-          }
-          buttonStyle={
-            AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-          }
-          cornerRadius={borderTokens.radius.md}
-          style={[styles.appleButton, disabled && styles.buttonDisabled]}
-          onPress={() => void (!disabled && handleAppleSignIn())}
-        />
-      )
-    );
-
-  const divider = (
-    <View style={[styles.divider, isSignupLayout && styles.dividerTop]}>
-      <View style={styles.dividerLine} />
-      <Text style={styles.dividerText}>or continue with</Text>
-      <View style={styles.dividerLine} />
-    </View>
-  );
-
   return (
     <View style={styles.container}>
-      {!isSignupLayout && divider}
-
       <View style={styles.buttonsContainer}>
-        {isSignupLayout ? (
-          <>
-            {renderGoogleButton()}
-            {renderAppleButton()}
-          </>
-        ) : (
-          <>
-            {renderAppleButton()}
-            {renderGoogleButton()}
-          </>
-        )}
+        {renderAppleButton()}
+        {renderGoogleButton()}
       </View>
-
-      {isSignupLayout && divider}
     </View>
   );
 }
@@ -358,79 +359,36 @@ export function OAuthButtons({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: spacingTokens.xxl,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacingTokens.xxl,
-  },
-  dividerLine: {
-    flex: 1,
-    height: borderTokens.width.thin,
-    backgroundColor: colorTokens.neutral.outline,
-  },
-  dividerText: {
-    marginHorizontal: spacingTokens.lg,
-    fontSize: typographyTokens.fontSize.sm,
-    color: colorTokens.text.secondary,
+    marginTop: 0,
   },
   buttonsContainer: {
-    gap: spacingTokens.md,
+    gap: 16,
   },
-  appleButton: {
-    height: componentTokens.button.height.lg,
-  },
-  googleButton: {
-    height: componentTokens.button.height.lg,
-    backgroundColor: colorTokens.neutral.white,
-    borderRadius: borderTokens.radius.md,
-    borderWidth: borderTokens.width.thin,
-    borderColor: colorTokens.neutral.outline,
-    justifyContent: "center",
-    alignItems: "center",
+  figmaButton: {
+    height: FIGMA_BUTTON_HEIGHT,
+    backgroundColor: FIGMA_BG,
+    borderRadius: FIGMA_RADIUS,
+    borderWidth: 1,
+    borderColor: FIGMA_BORDER,
     flexDirection: "row",
-    gap: spacingTokens.md,
-    paddingHorizontal: spacingTokens.lg,
-    ...shadowTokens.sm,
-  },
-  googleButtonText: {
-    fontSize: typographyTokens.fontSize.md,
-    fontWeight: typographyTokens.fontWeight.semibold,
-    color: colorTokens.text.primary,
-  },
-  googleButtonSignup: {
-    height: componentTokens.button.height.lg,
-    backgroundColor: GOOGLE_GREEN,
-    borderRadius: borderTokens.radius.md,
-    justifyContent: "center",
     alignItems: "center",
-    flexDirection: "row",
-    gap: spacingTokens.md,
-    paddingHorizontal: spacingTokens.lg,
+    paddingHorizontal: 16,
   },
-  googleButtonTextSignup: {
-    fontSize: typographyTokens.fontSize.md,
-    fontWeight: typographyTokens.fontWeight.semibold,
-    color: "#FFFFFF",
-  },
-  appleButtonSignup: {
-    height: componentTokens.button.height.lg,
-    backgroundColor: APPLE_GRAY,
-    borderRadius: borderTokens.radius.md,
-    borderWidth: borderTokens.width.thin,
-    borderColor: colorTokens.neutral.outline,
+  iconLeft: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
-  appleButtonTextSignup: {
-    fontSize: typographyTokens.fontSize.md,
-    fontWeight: typographyTokens.fontWeight.semibold,
-    color: colorTokens.text.primary,
+  figmaGoogleButton: {
+    // Same as figmaButton; Google has icon + text
   },
-  dividerTop: {
-    marginTop: spacingTokens.xxl,
-    marginBottom: spacingTokens.lg,
+  figmaButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000000",
+    textAlign: "center",
   },
   buttonDisabled: {
     opacity: 0.5,

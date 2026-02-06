@@ -145,7 +145,8 @@ export const useLoginFlow = (navigation: any) => {
                 clearMessages();
             });
         } else {
-            navigation.goBack();
+            // Login w/SSO: back goes to Gateway (Welcome) screen
+            navigation.replace("Welcome");
         }
     }, [currentStep, animateStepChange, clearMessages, navigation]);
 

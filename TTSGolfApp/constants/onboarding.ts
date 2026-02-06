@@ -33,7 +33,6 @@ export type OnboardingStep =
  * Magic link step comes right after phone for verification
  */
 export const STEP_ORDER: OnboardingStep[] = [
-  ONBOARDING_STEPS.WELCOME,
   ONBOARDING_STEPS.SIGNUP_OPTIONS,
   ONBOARDING_STEPS.PHONE,
   ONBOARDING_STEPS.MAGIC_LINK,
