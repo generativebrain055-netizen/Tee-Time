@@ -45,17 +45,6 @@ import { logger } from "../../utils/logger";
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-// Configure Google Sign-In with Firebase
-// iOS: pass iosClientId so RNGoogleSignin works even if GoogleService-Info.plist is missing CLIENT_ID
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
-  offlineAccess: false,
-});
-
-logger.debug("[Firebase] Configured with Web Client ID:", GOOGLE_WEB_CLIENT_ID);
-if (GOOGLE_IOS_CLIENT_ID) logger.debug("[Firebase] iOS Client ID set for Google Sign-In");
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -64,16 +53,39 @@ function isGoogleConfigured(): boolean {
   return !!(GOOGLE_WEB_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID.includes("XXXXX"));
 }
 
+/** Lazy init Google Sign-In - only call configure when we have valid config (prevents iOS crash on startup) */
+let googleSignInConfigured = false;
+function ensureGoogleSignInConfigured(): void {
+  if (googleSignInConfigured) return;
+  if (!isGoogleConfigured()) return;
+  try {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID!,
+      ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
+      offlineAccess: false,
+    });
+    googleSignInConfigured = true;
+    logger.debug("[Firebase] Configured Google Sign-In with Web Client ID");
+  } catch (e) {
+    logger.error("[Firebase] Google Sign-In configure failed:", e);
+  }
+}
+
 // ============================================================================
 // Component
 // ============================================================================
+
+const GOOGLE_GREEN = "#5EBC68";
+const APPLE_GRAY = "#F7F7F7";
 
 export function OAuthButtons({
   onSuccess,
   onError,
   disabled = false,
+  layout = "default",
 }: OAuthButtonsProps): React.ReactElement {
   const googleConfigured = useMemo(() => isGoogleConfigured(), []);
+  const isSignupLayout = layout === "signup";
 
   /**
    * Process Firebase user and send to backend
@@ -141,6 +153,7 @@ export function OAuthButtons({
     }
 
     try {
+      ensureGoogleSignInConfigured();
       logger.debug("[Firebase] Starting Google Sign-In...");
 
       // Check Play Services (Android only)
@@ -260,45 +273,81 @@ export function OAuthButtons({
     }
   }, [onSuccess, onError]);
 
+  const renderGoogleButton = () =>
+    googleConfigured && (
+      <TouchableOpacity
+        style={[
+          isSignupLayout ? styles.googleButtonSignup : styles.googleButton,
+          disabled && styles.buttonDisabled,
+        ]}
+        onPress={handleGoogleSignIn}
+        activeOpacity={0.8}
+        disabled={disabled}
+      >
+        <GoogleLogo size={componentTokens.icon.size.sm} />
+        <Text
+          style={[
+            isSignupLayout ? styles.googleButtonTextSignup : styles.googleButtonText,
+          ]}
+        >
+          Continue with Google
+        </Text>
+      </TouchableOpacity>
+    );
+
+  const renderAppleButton = () =>
+    Platform.OS === "ios" && (
+      isSignupLayout ? (
+        <TouchableOpacity
+          style={[styles.appleButtonSignup, disabled && styles.buttonDisabled]}
+          onPress={() => void (!disabled && handleAppleSignIn())}
+          activeOpacity={0.8}
+          disabled={disabled}
+        >
+          <Text style={styles.appleButtonTextSignup}>Continue with Apple</Text>
+        </TouchableOpacity>
+      ) : (
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={
+            AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+          }
+          buttonStyle={
+            AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+          }
+          cornerRadius={borderTokens.radius.md}
+          style={[styles.appleButton, disabled && styles.buttonDisabled]}
+          onPress={() => void (!disabled && handleAppleSignIn())}
+        />
+      )
+    );
+
+  const divider = (
+    <View style={[styles.divider, isSignupLayout && styles.dividerTop]}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerText}>or continue with</Text>
+      <View style={styles.dividerLine} />
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      {/* Divider */}
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or continue with</Text>
-        <View style={styles.dividerLine} />
-      </View>
+      {!isSignupLayout && divider}
 
-      {/* OAuth Buttons */}
       <View style={styles.buttonsContainer}>
-        {/* Apple Sign-In (iOS only) */}
-        {Platform.OS === "ios" && (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={
-              AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-            }
-            buttonStyle={
-              AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-            }
-            cornerRadius={borderTokens.radius.md}
-            style={[styles.appleButton, disabled && styles.buttonDisabled]}
-            onPress={() => void (!disabled && handleAppleSignIn())}
-          />
-        )}
-
-        {/* Google Sign-In */}
-        {googleConfigured && (
-          <TouchableOpacity
-            style={[styles.googleButton, disabled && styles.buttonDisabled]}
-            onPress={handleGoogleSignIn}
-            activeOpacity={0.8}
-            disabled={disabled}
-          >
-            <GoogleLogo size={componentTokens.icon.size.sm} />
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
+        {isSignupLayout ? (
+          <>
+            {renderGoogleButton()}
+            {renderAppleButton()}
+          </>
+        ) : (
+          <>
+            {renderAppleButton()}
+            {renderGoogleButton()}
+          </>
         )}
       </View>
+
+      {isSignupLayout && divider}
     </View>
   );
 }
@@ -349,6 +398,39 @@ const styles = StyleSheet.create({
     fontSize: typographyTokens.fontSize.md,
     fontWeight: typographyTokens.fontWeight.semibold,
     color: colorTokens.text.primary,
+  },
+  googleButtonSignup: {
+    height: componentTokens.button.height.lg,
+    backgroundColor: GOOGLE_GREEN,
+    borderRadius: borderTokens.radius.md,
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacingTokens.md,
+    paddingHorizontal: spacingTokens.lg,
+  },
+  googleButtonTextSignup: {
+    fontSize: typographyTokens.fontSize.md,
+    fontWeight: typographyTokens.fontWeight.semibold,
+    color: "#FFFFFF",
+  },
+  appleButtonSignup: {
+    height: componentTokens.button.height.lg,
+    backgroundColor: APPLE_GRAY,
+    borderRadius: borderTokens.radius.md,
+    borderWidth: borderTokens.width.thin,
+    borderColor: colorTokens.neutral.outline,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  appleButtonTextSignup: {
+    fontSize: typographyTokens.fontSize.md,
+    fontWeight: typographyTokens.fontWeight.semibold,
+    color: colorTokens.text.primary,
+  },
+  dividerTop: {
+    marginTop: spacingTokens.xxl,
+    marginBottom: spacingTokens.lg,
   },
   buttonDisabled: {
     opacity: 0.5,

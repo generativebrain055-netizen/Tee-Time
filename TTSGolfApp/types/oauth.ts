@@ -106,6 +106,8 @@ export interface OAuthButtonsProps {
   onSuccess: (data: OAuthSuccessData) => void;
   onError: (error: string) => void;
   disabled?: boolean;
+  /** Sign-up layout: Google first (green), Apple second (gray), divider below */
+  layout?: "default" | "signup";
 }
 
 // ============================================================================

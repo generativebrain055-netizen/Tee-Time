@@ -16,10 +16,12 @@ import type { OnboardingData } from "../../types";
 
 // Import all step components
 import { WelcomePage } from "./WelcomePage";
+import { SignUpOptionsPage } from "./SignUpOptionsPage";
 import { PhoneVerificationPage } from "./PhoneVerificationPage";
 import { MagicLinkPage } from "./MagicLinkPage";
 import { NamePage } from "./NamePage";
 import { EmailPage } from "./EmailPage";
+import { PhotoZipPage } from "./PhotoZipPage";
 import { LocationPage } from "./LocationPage";
 import { ClubPage } from "./ClubPage";
 import { HandicapPage } from "./HandicapPage";
@@ -71,6 +73,8 @@ type StepComponent = React.FC<{
   initialPhone?: string;
   initialData?: OnboardingData;
   initialEmail?: string;
+  initialProfilePhotoUri?: string;
+  initialZipCode?: string;
   initialLocation?: string;
   initialClub?: string;
   initialHandicap?: string;
@@ -126,6 +130,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
     // Calculate next step index
     let nextStepIndex = currentStepIndex + 1;
+
+    // From SignUpOptionsPage: user chose phone, skip standalone PHONE step
+    if (
+      currentStep === ONBOARDING_STEPS.SIGNUP_OPTIONS &&
+      data.phoneNumber &&
+      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.PHONE
+    ) {
+      console.log("SignUpOptionsPage - skipping PHONE step, going to MAGIC_LINK");
+      nextStepIndex++;
+    }
 
     // For OAuth users, skip the magic link step (they're already authenticated)
     if (
@@ -254,6 +268,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         lastName: finalData.lastName,
         username: username,
         email: finalData.email || null,
+        zipCode: finalData.zipCode || null,
+        profilePhotoBase64: finalData.profilePhotoBase64 || null,
         handicap: finalData.handicap
           ? parseInt(finalData.handicap as string)
           : null,
@@ -318,6 +334,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           firstName: firstName,
           lastName: lastName,
           username: username,
+          zipCode: finalData.zipCode || null,
+          profilePhotoBase64: finalData.profilePhotoBase64 || null,
           handicap: finalData.handicap
             ? parseInt(finalData.handicap as string)
             : null,
@@ -466,6 +484,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     switch (step) {
       case ONBOARDING_STEPS.WELCOME:
         return WelcomePage as unknown as StepComponent;
+      case ONBOARDING_STEPS.SIGNUP_OPTIONS:
+        return SignUpOptionsPage as unknown as StepComponent;
       case ONBOARDING_STEPS.PHONE:
         return PhoneVerificationPage as unknown as StepComponent;
       case ONBOARDING_STEPS.MAGIC_LINK:
@@ -474,6 +494,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         return NamePage as unknown as StepComponent;
       case ONBOARDING_STEPS.EMAIL:
         return EmailPage as unknown as StepComponent;
+      case ONBOARDING_STEPS.PHOTO_ZIP:
+        return PhotoZipPage as unknown as StepComponent;
       case ONBOARDING_STEPS.LOCATION:
         return LocationPage as unknown as StepComponent;
       case ONBOARDING_STEPS.CLUB:
@@ -484,6 +506,20 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         return PreferencesPage as unknown as StepComponent;
       default:
         return WelcomePage as unknown as StepComponent;
+    }
+  };
+
+  const handleOAuthSuccess = (data: any) => {
+    if (data.needsOnboarding && data.oauthData) {
+      navigation.navigate("OAuthOnboarding", {
+        oauthData: data.oauthData,
+      });
+    } else if (data.isNewUser && data.partialData) {
+      navigation.navigate("Onboarding", {
+        oauthData: data.partialData,
+      });
+    } else {
+      navigation.replace("Home");
     }
   };
 
@@ -502,6 +538,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       );
     }
 
+    // Special handling for SignUpOptionsPage - needs onOAuthSuccess
+    if (currentStep === ONBOARDING_STEPS.SIGNUP_OPTIONS) {
+      return (
+        <View style={styles.stepContainer}>
+          <SignUpOptionsPage
+            onNext={handleNext}
+            onBack={handleBack}
+            onOAuthSuccess={handleOAuthSuccess}
+          />
+        </View>
+      );
+    }
+
     return (
       <View style={styles.stepContainer}>
         <StepComponent
@@ -510,6 +559,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           initialPhone={userData.phoneNumber}
           initialData={userData as OnboardingData}
           initialEmail={userData.email}
+          initialProfilePhotoUri={userData.profilePhotoUri}
+          initialZipCode={userData.zipCode}
           initialLocation={userData.location?.name}
           initialClub={userData.club?.name}
           initialHandicap={userData.handicap?.toString() || ""}

@@ -133,7 +133,17 @@ export default function SplashScreen({
       }
     };
 
-    checkSession();
+    // Critical: .catch() prevents unhandled promise rejection which crashes the app in production
+    checkSession().catch((err) => {
+      console.error("Splash checkSession unhandled error:", err);
+      try {
+        AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]).catch(() => {});
+        navigation.replace("Welcome");
+      } catch (e) {
+        // Last resort: navigation might throw
+        navigation.replace("Welcome");
+      }
+    });
   }, [navigation, fadeAnim, scaleAnim, rotateAnim]);
 
   const spin = rotateAnim.interpolate({

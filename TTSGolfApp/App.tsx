@@ -1,12 +1,16 @@
 import "./global.css";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
+import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
-import LoginScreen from "./screens/login";
+// Lazy-load Login and Onboarding (defers Firebase/OAuth init until user taps "Sign in" or "Create account")
+const LoginScreen = lazy(() => import("./screens/login"));
+const OnboardingModule = lazy(() => import("./screens/onboarding").then((m) => ({ default: m.OnboardingScreen })));
+const OAuthOnboardingModule = lazy(() => import("./screens/onboarding/OAuthOnboardingScreen").then((m) => ({ default: m.OAuthOnboardingScreen })));
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
 import MessagesScreen from "./screens/Messages";
@@ -27,8 +31,6 @@ import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
 import CheckInScreen from "./screens/CheckInScreen";
 import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
 import SelectOnDeckScreen from "./screens/SelectOnDeckScreen";
-import { OnboardingScreen } from "./screens/onboarding";
-import { OAuthOnboardingScreen } from "./screens/onboarding/OAuthOnboardingScreen";
 
 type ScreenName =
   | "Splash"
@@ -188,25 +190,49 @@ export default function App(): React.ReactElement {
         );
       case "Login":
         return (
-          <LoginScreen
-            key={`login-${screenKey}`}
-            navigation={navigation as any}
-          />
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <LoginScreen
+              key={`login-${screenKey}`}
+              navigation={navigation as any}
+            />
+          </Suspense>
         );
       case "Onboarding":
         return (
-          <OnboardingScreen
-            key={`onboarding-${screenKey}`}
-            navigation={navigation as any}
-          />
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <OnboardingModule
+              key={`onboarding-${screenKey}`}
+              navigation={navigation as any}
+            />
+          </Suspense>
         );
       case "OAuthOnboarding":
         return (
-          <OAuthOnboardingScreen
-            key={`oauth-onboarding-${screenKey}`}
-            navigation={navigation as any}
-            route={{ params: screenParams } as any}
-          />
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <OAuthOnboardingModule
+              key={`oauth-onboarding-${screenKey}`}
+              navigation={navigation as any}
+              route={{ params: screenParams } as any}
+            />
+          </Suspense>
         );
       case "HomePage":
       case "Home":

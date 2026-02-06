@@ -1,10 +1,12 @@
 export { OnboardingScreen } from "./OnboardingScreen";
 export { OAuthOnboardingScreen } from "./OAuthOnboardingScreen";
 export { WelcomePage } from "./WelcomePage";
+export { SignUpOptionsPage } from "./SignUpOptionsPage";
 export { PhoneVerificationPage } from "./PhoneVerificationPage";
 export { MagicLinkPage } from "./MagicLinkPage";
 export { NamePage } from "./NamePage";
 export { EmailPage } from "./EmailPage";
+export { PhotoZipPage } from "./PhotoZipPage";
 export { LocationPage } from "./LocationPage";
 export { ClubPage } from "./ClubPage";
 export { HandicapPage } from "./HandicapPage";
@@ -14,9 +16,11 @@ export { PreferencesPage } from "./PreferencesPage";
 export type {
   OnboardingPageProps,
   WelcomePageProps,
+  SignUpOptionsPageProps,
   PhoneVerificationPageProps,
   NamePageProps,
   EmailPageProps,
+  PhotoZipPageProps,
   LocationPageProps,
   ClubPageProps,
   HandicapPageProps,
