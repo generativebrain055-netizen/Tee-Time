@@ -81,6 +81,25 @@ const googleSignIn = async (req, res, next) => {
     // Check profile completeness (business logic in service)
     const profileStatus = oauthService.getProfileCompleteness(user);
 
+    // For new users, require phone verification via SMS magic link
+    if (isNewUser) {
+      return res.json({
+        status: "pending_phone_verification",
+        success: true,
+        needsPhoneVerification: true,
+        providerData: {
+          email,
+          email_verified: emailVerified,
+          first_name: givenName,
+          last_name: familyName,
+          firstName: givenName,
+          lastName: familyName,
+          picture,
+        },
+        message: "Please verify your phone number to complete sign up",
+      });
+    }
+
     return res.json({
       status: "authenticated",
       success: true,
@@ -91,6 +110,15 @@ const googleSignIn = async (req, res, next) => {
       needsOnboarding: profileStatus.needsOnboarding,
       missingFields: profileStatus.missingFields,
       profileIncomplete: !profileStatus.isComplete,
+      providerData: {
+        email,
+        email_verified: emailVerified,
+        first_name: givenName,
+        last_name: familyName,
+        firstName: givenName,
+        lastName: familyName,
+        picture,
+      },
       ...(profileStatus.needsOnboarding && {
         message: "Please complete your profile to continue",
       }),
@@ -577,6 +605,26 @@ const appleSignIn = async (req, res, next) => {
     // Check profile completeness (business logic in service)
     const profileStatus = oauthService.getProfileCompleteness(user);
 
+    // For new users, require phone verification via SMS magic link
+    if (isNewUser) {
+      return res.json({
+        status: "pending_phone_verification",
+        success: true,
+        needsPhoneVerification: true,
+        providerData: {
+          email,
+          email_verified: emailVerified,
+          is_private_email: isPrivateEmail,
+          first_name: firstName,
+          last_name: lastName,
+          firstName,
+          lastName,
+          picture: null, // Apple doesn't provide profile pictures
+        },
+        message: "Please verify your phone number to complete sign up",
+      });
+    }
+
     return res.json({
       status: "authenticated",
       success: true,
@@ -587,6 +635,16 @@ const appleSignIn = async (req, res, next) => {
       needsOnboarding: profileStatus.needsOnboarding,
       missingFields: profileStatus.missingFields,
       profileIncomplete: !profileStatus.isComplete,
+      providerData: {
+        email,
+        email_verified: emailVerified,
+        is_private_email: isPrivateEmail,
+        first_name: firstName,
+        last_name: lastName,
+        firstName,
+        lastName,
+        picture: null, // Apple doesn't provide profile pictures
+      },
       ...(profileStatus.needsOnboarding && {
         message: "Please complete your profile to continue",
       }),

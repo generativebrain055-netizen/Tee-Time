@@ -40,9 +40,9 @@
     "submit": {
         "production": {
             "ios": {
-                "appleId": "kevin@caspianbridge.com",
-                "ascAppId": "6757623508",
-                "appleTeamId": "P2DD49N89K"
+                "appleId": "email",
+                "ascAppId": "id",
+                "appleTeamId": "id"
             },
             "android": {
                 "serviceAccountKeyPath": "../google-play-service-account.json",

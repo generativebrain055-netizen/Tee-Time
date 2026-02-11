@@ -3,130 +3,171 @@
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { teeTimeApi } from "../../../services/api";
-import { TeeTime, TeeTimesMap } from "../types";
+import { useAuthStore } from "../../../stores";
+import type { TeeTime as ApiTeeTime } from "../../../services/api";
+import { CalendarTeeTime, TeeTimesMap } from "../types";
 import { createTeeTimesMap, generateCalendarDays, getDateKey } from "../utils";
 
-export type StatusFilter = "all" | "pending" | "confirmed" | "completed";
+export type StatusFilter = "all" | "pending" | "confirmed" | "completed" | "in_progress";
+export type RoleFilter = "all" | "hosting" | "invited";
+
+/** Calendar API may return entries with `date` (not teeDate); dateKey is the calendar object key. */
+function mapApiToCalendar(
+  api: ApiTeeTime & { date?: string },
+  currentUserId?: string,
+  dateKey?: string
+): CalendarTeeTime {
+  const participants = (api.participants || []).map((p) => ({
+    id: p.id,
+    userId: p.userId,
+    name: p.name,
+    avatar: p.avatar,
+    isCreator: p.isCreator,
+    status: "confirmed" as const,
+  }));
+  const creatorId = participants.find((p) => p.isCreator)?.userId;
+  const isOrganizer = !!currentUserId && (creatorId === currentUserId || !!(api.creator?.firstName));
+  const status =
+    api.status === "in_progress"
+      ? "in_progress"
+      : api.status === "confirmed"
+        ? "confirmed"
+        : api.status === "completed"
+          ? "completed"
+          : api.status === "cancelled"
+            ? "cancelled"
+            : "pending";
+  const dateStr = api.teeDate ?? api.date ?? dateKey ?? "";
+  return {
+    id: api.id,
+    date: dateStr,
+    time: api.teeTime ?? "",
+    course: api.courseName,
+    location: api.courseLocation || "",
+    players: api.participantCount ?? api.maxPlayers ?? 0,
+    status,
+    creatorId,
+    isOrganizer,
+    participants,
+  };
+}
 
 export const useCalendar = () => {
-    const today = new Date();
-    const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-    const [currentYear, setCurrentYear] = useState(today.getFullYear());
-    const [selectedDate, setSelectedDate] = useState<Date | null>(today);
-    const [teeTimes, setTeeTimes] = useState<TeeTime[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const today = new Date();
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(today);
+  const [teeTimes, setTeeTimes] = useState<CalendarTeeTime[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
 
-    const loadTeeTimes = useCallback(async () => {
-        try {
-            const startDate = new Date(currentYear, currentMonth - 1, 1);
-            const endDate = new Date(currentYear, currentMonth + 4, 0);
+  const loadTeeTimes = useCallback(async () => {
+    try {
+      const startDate = new Date(currentYear, currentMonth, 1);
+      const endDate = new Date(currentYear, currentMonth + 3, 0);
+      const start = startDate.toISOString().split("T")[0];
+      const end = endDate.toISOString().split("T")[0];
+      const response = await teeTimeApi.getCalendar(start, end);
+      console.log('Calendar API response:', JSON.stringify(response, null, 2));
+      if (response.success && response.calendar) {
+        const all: CalendarTeeTime[] = [];
+        Object.entries(response.calendar).forEach(([dateKey, times]) => {
+          console.log(`Date ${dateKey} has ${times.length} tee times`);
+          (times as (ApiTeeTime & { date?: string })[]).forEach((t) => {
+            console.log(`  Tee time ${t.id}:`, {
+              courseName: t.courseName,
+              participants: t.participants?.length || 0,
+              participantDetails: t.participants
+            });
+            all.push(mapApiToCalendar(t, currentUserId, dateKey));
+          });
+        });
+        setTeeTimes(all);
+      }
+    } catch (error) {
+      console.error("Failed to load calendar:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [currentYear, currentMonth, currentUserId]);
 
-            const start = startDate.toISOString().split("T")[0];
-            const end = endDate.toISOString().split("T")[0];
+  useEffect(() => {
+    loadTeeTimes();
+  }, [loadTeeTimes]);
 
-            const response = await teeTimeApi.getCalendar(start, end);
-            if (response.success && response.calendar) {
-                const allTeeTimes: TeeTime[] = [];
-                Object.entries(response.calendar).forEach(([dateStr, times]) => {
-                    (times as any[]).forEach((t: any) => {
-                        allTeeTimes.push({
-                            id: t.id,
-                            date: dateStr,
-                            time: t.teeTime,
-                            course: t.courseName,
-                            location: t.courseLocation || "",
-                            players: t.participantCount || 0,
-                            status: t.status || "pending",
-                        });
-                    });
-                });
-                setTeeTimes(allTeeTimes);
-            }
-        } catch (error) {
-            console.error("Failed to load calendar:", error);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [currentMonth, currentYear]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadTeeTimes();
+  }, [loadTeeTimes]);
 
-    useEffect(() => {
-        loadTeeTimes();
-    }, [loadTeeTimes]);
+  const filteredByStatus = useMemo(() => {
+    if (statusFilter === "all") return teeTimes;
+    return teeTimes.filter((tt) => tt.status === statusFilter);
+  }, [teeTimes, statusFilter]);
 
-    const onRefresh = useCallback(() => {
-        setRefreshing(true);
-        loadTeeTimes();
-    }, [loadTeeTimes]);
+  const filteredTeeTimes = useMemo(() => {
+    if (roleFilter === "all") return filteredByStatus;
+    if (roleFilter === "hosting") return filteredByStatus.filter((tt) => tt.isOrganizer);
+    return filteredByStatus.filter((tt) => !tt.isOrganizer);
+  }, [filteredByStatus, roleFilter]);
 
-    const teeTimesMap: TeeTimesMap = useMemo(
-        () => createTeeTimesMap(teeTimes),
-        [teeTimes]
-    );
+  const teeTimesMap: TeeTimesMap = useMemo(
+    () => createTeeTimesMap(filteredTeeTimes),
+    [filteredTeeTimes]
+  );
 
-    // Filter tee times by status
-    const filteredTeeTimes = useMemo(() => {
-        if (statusFilter === "all") return teeTimes;
-        return teeTimes.filter((tt) => tt.status === statusFilter);
-    }, [teeTimes, statusFilter]);
+  const calendarDays = useMemo(
+    () => generateCalendarDays(currentYear, currentMonth, selectedDate, teeTimesMap),
+    [currentYear, currentMonth, selectedDate, teeTimesMap]
+  );
 
-    const filteredTeeTimesMap: TeeTimesMap = useMemo(
-        () => createTeeTimesMap(filteredTeeTimes),
-        [filteredTeeTimes]
-    );
+  const selectedDateTeeTimes = useMemo(() => {
+    if (!selectedDate) return [];
+    const key = getDateKey(selectedDate);
+    return teeTimesMap.get(key) || [];
+  }, [selectedDate, teeTimesMap]);
 
-    const calendarDays = useMemo(
-        () => generateCalendarDays(currentYear, currentMonth, selectedDate, filteredTeeTimesMap),
-        [currentYear, currentMonth, selectedDate, filteredTeeTimesMap]
-    );
+  const handlePrevMonth = useCallback(() => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear((y) => y - 1);
+    } else setCurrentMonth((m) => m - 1);
+  }, [currentMonth]);
 
-    const selectedDateTeeTimes = useMemo(() => {
-        if (!selectedDate) return [];
-        const key = getDateKey(selectedDate);
-        return filteredTeeTimesMap.get(key) || [];
-    }, [selectedDate, filteredTeeTimesMap]);
+  const handleNextMonth = useCallback(() => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear((y) => y + 1);
+    } else setCurrentMonth((m) => m + 1);
+  }, [currentMonth]);
 
-    const handlePrevMonth = useCallback(() => {
-        if (currentMonth === 0) {
-            setCurrentMonth(11);
-            setCurrentYear((y) => y - 1);
-        } else {
-            setCurrentMonth((m) => m - 1);
-        }
-    }, [currentMonth]);
+  const handleDayPress = useCallback(
+    (day: number | "") => {
+      if (day === "") return;
+      setSelectedDate(new Date(currentYear, currentMonth, day));
+    },
+    [currentYear, currentMonth]
+  );
 
-    const handleNextMonth = useCallback(() => {
-        if (currentMonth === 11) {
-            setCurrentMonth(0);
-            setCurrentYear((y) => y + 1);
-        } else {
-            setCurrentMonth((m) => m + 1);
-        }
-    }, [currentMonth]);
-
-    const handleDayPress = useCallback(
-        (day: number | "") => {
-            if (day === "") return;
-            setSelectedDate(new Date(currentYear, currentMonth, day));
-        },
-        [currentYear, currentMonth]
-    );
-
-    return {
-        currentMonth,
-        currentYear,
-        selectedDate,
-        loading,
-        refreshing,
-        calendarDays,
-        selectedDateTeeTimes,
-        statusFilter,
-        setStatusFilter,
-        onRefresh,
-        handlePrevMonth,
-        handleNextMonth,
-        handleDayPress,
-    };
+  return {
+    currentMonth,
+    currentYear,
+    selectedDate,
+    loading,
+    refreshing,
+    calendarDays,
+    selectedDateTeeTimes,
+    statusFilter,
+    setStatusFilter,
+    roleFilter,
+    setRoleFilter,
+    onRefresh,
+    handlePrevMonth,
+    handleNextMonth,
+    handleDayPress,
+  };
 };

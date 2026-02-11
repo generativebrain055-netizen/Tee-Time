@@ -20,7 +20,7 @@ export interface UpcomingTeeTime {
   courseLocation?: string;
   teeDate: string;
   teeTime: string;
-  status: "pending" | "confirmed" | "cancelled" | "completed";
+  status: "pending" | "confirmed" | "cancelled" | "completed" | "in_progress";
   participants: Participant[];
   maxPlayers: number;
 }

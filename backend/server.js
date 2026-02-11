@@ -24,6 +24,7 @@ const avatarUploadService = require("./services/avatarUploadService");
 
 // Import routes
 const authRoutes = require("./routes/auth");
+const availabilityRoutes = require("./routes/availability");
 const rosterRoutes = require("./routes/roster");
 const teeTimeRoutes = require("./routes/teeTimes");
 const inviteRoutes = require("./routes/invites");
@@ -88,6 +89,7 @@ app.get("/health", (req, res) => {
 
 // API Routes
 app.use("/auth", authRoutes);
+app.use("/api/availability", availabilityRoutes);
 app.use("/api/roster", rosterRoutes);
 app.use("/api/tee-times", teeTimeRoutes);
 app.use("/api/tee-times", attendanceRoutes); // Attendance routes under tee-times

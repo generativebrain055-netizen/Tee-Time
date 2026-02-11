@@ -38,7 +38,3 @@ export {
 
 // Re-export all types
 export type * from "./api";
-
-// Legacy API exports for backward compatibility
-// TODO: Migrate consumers to use modular imports from ./api
-export * from "./api.legacy";

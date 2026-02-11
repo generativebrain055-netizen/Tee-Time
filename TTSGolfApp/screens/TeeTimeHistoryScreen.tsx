@@ -2,19 +2,17 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
     RefreshControl,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { StatusBar } from "expo-status-bar";
 import { MapPin, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react-native";
-import { Header } from "../components/common";
+import { ScreenShell, AppHeader } from "../ui";
 import { teeTimeApi, TeeTimeHistoryEntry } from "../services/api";
 
 const COLORS = {
-    primary: "#5DB075",
+    primary: "#5EBC68",
     bg: "#F6F6F6",
     white: "#FFFFFF",
     text: "#1C1C1E",
@@ -84,40 +82,47 @@ const HistoryItem = memo(({ item, onPress }: HistoryItemProps) => {
     const isUpcoming = new Date(item.teeDate) >= new Date();
 
     return (
-        <TouchableOpacity style={styles.historyCard} onPress={onPress} activeOpacity={0.7}>
-            <View style={styles.cardHeader}>
-                <View style={styles.courseInfo}>
-                    <Text style={styles.courseName} numberOfLines={1}>{item.courseName}</Text>
+        <TouchableOpacity 
+            className="bg-white rounded-md p-4 mb-3 shadow-sm"
+            onPress={onPress} 
+            activeOpacity={0.7}
+        >
+            <View className="flex-row justify-between items-start mb-3">
+                <View className="flex-1 mr-3">
+                    <Text className="text-base font-semibold text-gray-900 mb-1" numberOfLines={1}>{item.courseName}</Text>
                     {item.courseLocation && (
-                        <View style={styles.locationRow}>
+                        <View className="flex-row items-center gap-1">
                             <MapPin size={12} color={COLORS.textSub} />
-                            <Text style={styles.locationText} numberOfLines={1}>{item.courseLocation}</Text>
+                            <Text className="text-[13px] text-gray-500" numberOfLines={1}>{item.courseLocation}</Text>
                         </View>
                     )}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+                <View 
+                    className="flex-row items-center gap-1 px-2.5 py-1 rounded-md"
+                    style={{ backgroundColor: statusConfig.bg }}
+                >
                     <StatusIcon size={14} color={statusConfig.color} />
-                    <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+                    <Text className="text-xs font-semibold" style={{ color: statusConfig.color }}>{statusConfig.label}</Text>
                 </View>
             </View>
 
-            <View style={styles.cardBody}>
-                <View style={styles.dateTimeRow}>
-                    <View style={styles.infoItem}>
+            <View>
+                <View className="flex-row gap-5 mb-3">
+                    <View className="flex-row items-center gap-1.5">
                         <Calendar size={14} color={COLORS.textSub} />
-                        <Text style={styles.infoText}>{formatDate(item.teeDate)}</Text>
+                        <Text className="text-sm text-gray-900">{formatDate(item.teeDate)}</Text>
                     </View>
-                    <View style={styles.infoItem}>
+                    <View className="flex-row items-center gap-1.5">
                         <Clock size={14} color={COLORS.textSub} />
-                        <Text style={styles.infoText}>{formatTime(item.teeTime)}</Text>
+                        <Text className="text-sm text-gray-900">{formatTime(item.teeTime)}</Text>
                     </View>
                 </View>
 
-                <View style={styles.cardFooter}>
-                    <Text style={styles.roleText}>
-                        {item.userRole === "creator" ? "Organizer" : "Participant"}
+                <View className="flex-row justify-between items-center pt-3 border-t border-gray-200">
+                    <Text className="text-[13px] text-gray-500">
+                        {item.userRole === "organizer" ? "Organizer" : "Participant"}
                     </Text>
-                    <Text style={styles.playersText}>
+                    <Text className="text-[13px] text-gray-500">
                         {item.participantCount}/{item.maxPlayers} players
                     </Text>
                 </View>
@@ -132,14 +137,14 @@ interface FilterTabsProps {
 }
 
 const FilterTabs = memo(({ activeFilter, onFilterChange }: FilterTabsProps) => (
-    <View style={styles.filterContainer}>
+    <View className="flex-row px-4 py-3 bg-white border-b border-gray-200 gap-2">
         {FILTERS.map((filter) => (
             <TouchableOpacity
                 key={filter.key}
-                style={[styles.filterTab, activeFilter === filter.key && styles.filterTabActive]}
+                className={`px-4 py-2 rounded-full ${activeFilter === filter.key ? 'bg-green-500' : 'bg-gray-100'}`}
                 onPress={() => onFilterChange(filter.key)}
             >
-                <Text style={[styles.filterText, activeFilter === filter.key && styles.filterTextActive]}>
+                <Text className={`text-sm font-medium ${activeFilter === filter.key ? 'text-white' : 'text-gray-500'}`}>
                     {filter.label}
                 </Text>
             </TouchableOpacity>
@@ -191,10 +196,10 @@ export default function TeeTimeHistoryScreen({ navigation }: any) {
     ), [handleItemPress]);
 
     const renderEmpty = useCallback(() => (
-        <View style={styles.emptyContainer}>
+        <View className="items-center py-16 px-10">
             <Calendar size={48} color={COLORS.textSub} strokeWidth={1} />
-            <Text style={styles.emptyTitle}>No Tee Times</Text>
-            <Text style={styles.emptyText}>
+            <Text className="text-lg font-semibold text-gray-900 mt-4 mb-2">No Tee Times</Text>
+            <Text className="text-sm text-gray-500 text-center">
                 {filter === "all"
                     ? "Your tee time history will appear here"
                     : `No ${filter} tee times found`}
@@ -204,25 +209,26 @@ export default function TeeTimeHistoryScreen({ navigation }: any) {
 
     if (loading && !refreshing) {
         return (
-            <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
+            <ScreenShell>
+                <AppHeader title="Tee Time History" onBack={() => navigation?.goBack()} />
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            </ScreenShell>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-            <Header title="Tee Time History" onBack={() => navigation?.goBack()} />
+        <ScreenShell>
+            <AppHeader title="Tee Time History" onBack={() => navigation?.goBack()} />
 
             <FilterTabs activeFilter={filter} onFilterChange={handleFilterChange} />
 
             <FlashList
                 data={history}
                 renderItem={renderItem}
-                estimatedItemSize={140}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={{ padding: 16 }}
                 ListEmptyComponent={renderEmpty}
                 refreshControl={
                     <RefreshControl
@@ -232,142 +238,6 @@ export default function TeeTimeHistoryScreen({ navigation }: any) {
                     />
                 }
             />
-        </View>
+        </ScreenShell>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    filterContainer: {
-        flexDirection: "row",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: COLORS.white,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-        gap: 8,
-    },
-    filterTab: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: COLORS.bg,
-    },
-    filterTabActive: {
-        backgroundColor: COLORS.primary,
-    },
-    filterText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-    filterTextActive: {
-        color: COLORS.white,
-    },
-    listContent: {
-        padding: 16,
-    },
-    historyCard: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    cardHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 12,
-    },
-    courseInfo: {
-        flex: 1,
-        marginRight: 12,
-    },
-    courseName: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 4,
-    },
-    locationRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    locationText: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    statusBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: "600",
-    },
-    cardBody: {},
-    dateTimeRow: {
-        flexDirection: "row",
-        gap: 20,
-        marginBottom: 12,
-    },
-    infoItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-    },
-    infoText: {
-        fontSize: 14,
-        color: COLORS.text,
-    },
-    cardFooter: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border,
-    },
-    roleText: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    playersText: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    emptyContainer: {
-        alignItems: "center",
-        paddingVertical: 60,
-        paddingHorizontal: 40,
-    },
-    emptyTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-    },
-});

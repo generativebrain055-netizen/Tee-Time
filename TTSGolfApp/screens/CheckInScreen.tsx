@@ -2,30 +2,21 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
     Alert,
     ScrollView,
     Image,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, X, Users, AlertTriangle } from "lucide-react-native";
-import { Header } from "../components/common";
+import { ScreenShell, AppHeader } from "../ui";
+import { useColors } from "../ui/theme/ThemeContext";
 import { attendanceApi, AttendanceRecord } from "../services/api";
 
 const COLORS = {
-    primary: "#5DB075",
-    bg: "#F6F6F6",
+    primary: "#5EBC68",
     white: "#FFFFFF",
-    text: "#1C1C1E",
-    textSub: "#8A8A8E",
-    border: "#E5E5EA",
     danger: "#EF4444",
-    dangerBg: "#FEE2E2",
-    success: "#10B981",
-    successBg: "#D1FAE5",
 };
 
 interface CheckInScreenProps {
@@ -45,28 +36,32 @@ const ParticipantCheckbox = memo(({
     onToggle: () => void;
 }) => (
     <TouchableOpacity
-        style={[styles.participantRow, isSelected && styles.participantRowSelected]}
+        className={`flex-row items-center justify-between p-4 rounded-md mb-2.5 ${
+            isSelected ? "bg-red-100 border-2 border-red-500" : "bg-white"
+        }`}
         onPress={onToggle}
         activeOpacity={0.7}
     >
-        <View style={styles.participantInfo}>
-            <View style={styles.avatar}>
+        <View className="flex-row items-center flex-1">
+            <View className="w-11 h-11 rounded-full bg-primary justify-center items-center mr-3 overflow-hidden">
                 {participant.avatar ? (
-                    <Image source={{ uri: participant.avatar }} style={styles.avatarImage} />
+                    <Image source={{ uri: participant.avatar }} className="w-11 h-11 rounded-full" />
                 ) : (
-                    <Text style={styles.avatarInitial}>
+                    <Text className="text-lg font-semibold text-white">
                         {participant.name?.charAt(0)?.toUpperCase() || "?"}
                     </Text>
                 )}
             </View>
-            <View style={styles.participantDetails}>
-                <Text style={styles.participantName}>{participant.name}</Text>
+            <View className="flex-1">
+                <Text className="text-base font-semibold text-text-primary">{participant.name}</Text>
                 {participant.isCreator && (
-                    <Text style={styles.organizerLabel}>Organizer</Text>
+                    <Text className="text-xs text-primary mt-0.5">Organizer</Text>
                 )}
             </View>
         </View>
-        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+        <View className={`w-7 h-7 rounded-full border-2 justify-center items-center ${
+            isSelected ? "bg-red-500 border-red-500" : "border-[#E5E5EA]"
+        }`}>
             {isSelected && <Check size={16} color={COLORS.white} strokeWidth={3} />}
         </View>
     </TouchableOpacity>
@@ -74,7 +69,6 @@ const ParticipantCheckbox = memo(({
 
 export default function CheckInScreen({ route, navigation }: CheckInScreenProps) {
     const { teeTimeId, courseName } = route.params;
-    const insets = useSafeAreaInsets();
 
     const [mode, setMode] = useState<ScreenMode>("initial");
     const [loading, setLoading] = useState(true);
@@ -191,9 +185,12 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
+            <ScreenShell>
+                <AppHeader title="Check-In" onBack={() => navigation.goBack()} />
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            </ScreenShell>
         );
     }
 
@@ -201,78 +198,77 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
     const selectableParticipants = participants.filter(p => !p.isCreator);
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-            <Header
+        <ScreenShell>
+            <AppHeader
                 title={mode === "initial" ? "Check-In" : "Who Bailed?"}
                 onBack={() => mode === "who_bailed" ? setMode("initial") : navigation.goBack()}
             />
 
             {mode === "initial" ? (
-                <View style={styles.content}>
+                <View className="flex-1 p-5">
                     {/* Question */}
-                    <View style={styles.questionContainer}>
+                    <View className="items-center py-10">
                         <Users size={48} color={COLORS.primary} />
-                        <Text style={styles.questionTitle}>Is Everyone Here?</Text>
+                        <Text className="text-3xl font-bold text-text-primary mt-5 mb-2">Is Everyone Here?</Text>
                         {courseName && (
-                            <Text style={styles.courseName}>{courseName}</Text>
+                            <Text className="text-base text-[#8A8A8E] mb-1">{courseName}</Text>
                         )}
-                        <Text style={styles.participantCount}>
+                        <Text className="text-[15px] text-[#8A8A8E]">
                             {participants.length} player{participants.length !== 1 ? 's' : ''} confirmed
                         </Text>
                     </View>
 
                     {!checkInAvailable && checkInMessage && (
-                        <View style={styles.warningBanner}>
+                        <View className="flex-row items-center bg-amber-100 p-3 rounded-md mb-5 gap-2.5">
                             <AlertTriangle size={20} color="#F59E0B" />
-                            <Text style={styles.warningText}>{checkInMessage}</Text>
+                            <Text className="flex-1 text-sm text-amber-800">{checkInMessage}</Text>
                         </View>
                     )}
 
                     {/* Buttons */}
-                    <View style={styles.buttonContainer}>
+                    <View className="gap-4 mt-5">
                         <TouchableOpacity
-                            style={[styles.button, styles.yesButton]}
+                            className="flex-row items-center justify-center py-[18px] rounded-md gap-3 bg-primary"
                             onPress={handleYesEveryone}
                             disabled={submitting || !checkInAvailable}
                             activeOpacity={0.8}
                         >
                             <Check size={24} color={COLORS.white} />
-                            <Text style={styles.yesButtonText}>
+                            <Text className="text-lg font-semibold text-white">
                                 {submitting ? "Checking In..." : "Yes, Everyone's Here"}
                             </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                            style={[styles.button, styles.noButton]}
+                            className="flex-row items-center justify-center py-[18px] rounded-md gap-3 bg-white border-2 border-red-500"
                             onPress={handleNoSomeonesBailed}
                             disabled={submitting || !checkInAvailable}
                             activeOpacity={0.8}
                         >
                             <X size={24} color={COLORS.danger} />
-                            <Text style={styles.noButtonText}>No, Someone Bailed</Text>
+                            <Text className="text-lg font-semibold text-red-500">No, Someone Bailed</Text>
                         </TouchableOpacity>
                     </View>
 
                     {/* Info text */}
-                    <Text style={styles.infoText}>
+                    <Text className="text-[13px] text-[#8A8A8E] text-center mt-6">
                         Players marked as no-show will receive a -10 Social Rate penalty
                     </Text>
                 </View>
             ) : (
-                <View style={styles.content}>
+                <View className="flex-1 p-5">
                     {/* Who Bailed Header */}
-                    <View style={styles.bailedHeader}>
+                    <View className="items-center py-6 border-b border-[#E5E5EA] mb-4">
                         <AlertTriangle size={32} color={COLORS.danger} />
-                        <Text style={styles.bailedTitle}>Select No-Shows</Text>
-                        <Text style={styles.bailedSubtitle}>
+                        <Text className="text-2xl font-bold text-text-primary mt-3">Select No-Shows</Text>
+                        <Text className="text-sm text-[#8A8A8E] text-center mt-2 leading-5">
                             Tap to select players who didn't show up.{"\n"}
                             They will receive a -10 point penalty.
                         </Text>
                     </View>
 
                     {/* Participant List */}
-                    <ScrollView style={styles.participantList} showsVerticalScrollIndicator={false}>
+                    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                         {selectableParticipants.map(participant => (
                             <ParticipantCheckbox
                                 key={participant.id}
@@ -285,234 +281,30 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
 
                     {/* Selection Summary */}
                     {selectedNoShows.size > 0 && (
-                        <View style={styles.selectionSummary}>
-                            <Text style={styles.selectionText}>
+                        <View className="bg-red-100 p-3 rounded-md mt-3">
+                            <Text className="text-sm font-medium text-red-500 text-center">
                                 {selectedNoShows.size} player{selectedNoShows.size !== 1 ? 's' : ''} selected as no-show
                             </Text>
                         </View>
                     )}
 
                     {/* Confirm Button */}
-                    <View style={styles.confirmContainer}>
+                    <View className="pt-4 pb-5">
                         <TouchableOpacity
-                            style={[
-                                styles.confirmButton,
-                                selectedNoShows.size === 0 && styles.confirmButtonDisabled
-                            ]}
+                            className={`bg-red-500 py-4 rounded-md items-center ${
+                                selectedNoShows.size === 0 ? "opacity-50" : ""
+                            }`}
                             onPress={handleConfirmNoShows}
                             disabled={submitting}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.confirmButtonText}>
+                            <Text className="text-base font-semibold text-white">
                                 {submitting ? "Processing..." : "Confirm & Apply Penalties"}
                             </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             )}
-        </View>
+        </ScreenShell>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    content: {
-        flex: 1,
-        padding: 20,
-    },
-    questionContainer: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    questionTitle: {
-        fontSize: 28,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginTop: 20,
-        marginBottom: 8,
-    },
-    courseName: {
-        fontSize: 16,
-        color: COLORS.textSub,
-        marginBottom: 4,
-    },
-    participantCount: {
-        fontSize: 15,
-        color: COLORS.textSub,
-    },
-    warningBanner: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#FEF3C7",
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 20,
-        gap: 10,
-    },
-    warningText: {
-        flex: 1,
-        fontSize: 14,
-        color: "#92400E",
-    },
-    buttonContainer: {
-        gap: 16,
-        marginTop: 20,
-    },
-    button: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 18,
-        borderRadius: 16,
-        gap: 12,
-    },
-    yesButton: {
-        backgroundColor: COLORS.primary,
-    },
-    yesButtonText: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    noButton: {
-        backgroundColor: COLORS.white,
-        borderWidth: 2,
-        borderColor: COLORS.danger,
-    },
-    noButtonText: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.danger,
-    },
-    infoText: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginTop: 24,
-    },
-    bailedHeader: {
-        alignItems: "center",
-        paddingVertical: 24,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-        marginBottom: 16,
-    },
-    bailedTitle: {
-        fontSize: 24,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginTop: 12,
-    },
-    bailedSubtitle: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginTop: 8,
-        lineHeight: 20,
-    },
-    participantList: {
-        flex: 1,
-    },
-    participantRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        backgroundColor: COLORS.white,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 10,
-    },
-    participantRowSelected: {
-        backgroundColor: COLORS.dangerBg,
-        borderWidth: 2,
-        borderColor: COLORS.danger,
-    },
-    participantInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-        overflow: "hidden",
-    },
-    avatarImage: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-    },
-    avatarInitial: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    participantDetails: {
-        flex: 1,
-    },
-    participantName: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    organizerLabel: {
-        fontSize: 12,
-        color: COLORS.primary,
-        marginTop: 2,
-    },
-    checkbox: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.danger,
-        borderColor: COLORS.danger,
-    },
-    selectionSummary: {
-        backgroundColor: COLORS.dangerBg,
-        padding: 12,
-        borderRadius: 10,
-        marginTop: 12,
-    },
-    selectionText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.danger,
-        textAlign: "center",
-    },
-    confirmContainer: {
-        paddingTop: 16,
-        paddingBottom: 20,
-    },
-    confirmButton: {
-        backgroundColor: COLORS.danger,
-        paddingVertical: 16,
-        borderRadius: 12,
-        alignItems: "center",
-    },
-    confirmButtonDisabled: {
-        opacity: 0.5,
-    },
-    confirmButtonText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-});

@@ -8,7 +8,6 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    StyleSheet,
 } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
@@ -42,22 +41,22 @@ export const GroupDetailsView = memo(({
     onSubmit,
 }: GroupDetailsViewProps) => (
     <KeyboardAvoidingView
-        style={styles.modalContainer}
+        className="flex-1 bg-white pt-[50px]"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
     >
-        <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={onBack} style={styles.modalHeaderBtn}>
+        <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+            <TouchableOpacity onPress={onBack} className="w-15 items-center">
                 <ArrowLeft size={24} color={COLORS.textMain} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{editingGroup ? "Edit Group" : "Group Details"}</Text>
-            <View style={styles.modalHeaderBtn} />
+            <Text className="text-[17px] font-semibold text-gray-900">{editingGroup ? "Edit Group" : "Group Details"}</Text>
+            <View className="w-15" />
         </View>
 
-        <View style={styles.detailsContent}>
-            <Text style={styles.inputLabel}>Group Name</Text>
+        <View className="flex-1 p-5">
+            <Text className="text-sm font-semibold text-gray-500 mb-2 mt-4">Group Name</Text>
             <TextInput
-                style={styles.input}
+                className="bg-gray-100 rounded-md px-4 py-3.5 text-base text-gray-900"
                 placeholder="Enter group name"
                 placeholderTextColor={COLORS.textSub}
                 value={newGroupName}
@@ -67,35 +66,32 @@ export const GroupDetailsView = memo(({
                 returnKeyType="done"
             />
 
-            <Text style={styles.inputLabel}>Color</Text>
-            <View style={styles.colorPicker}>
+            <Text className="text-sm font-semibold text-gray-500 mb-2 mt-4">Color</Text>
+            <View className="flex-row gap-3">
                 {GROUP_COLORS.map((color) => (
                     <TouchableOpacity
                         key={color}
-                        style={[
-                            styles.colorOption,
-                            { backgroundColor: color },
-                            newGroupColor === color && styles.colorOptionSelected,
-                        ]}
+                        className={`w-9 h-9 rounded-full ${newGroupColor === color ? 'border-[3px]' : ''}`}
+                        style={{ backgroundColor: color, borderColor: newGroupColor === color ? COLORS.textMain : undefined }}
                         onPress={() => onColorChange(color)}
                     />
                 ))}
             </View>
 
             {!editingGroup && (
-                <View style={styles.membersPreview}>
-                    <Text style={styles.inputLabel}>Members ({selectedMembers.length})</Text>
-                    <View style={styles.membersAvatars}>
+                <View className="mt-6">
+                    <Text className="text-sm font-semibold text-gray-500 mb-2 mt-4">Members ({selectedMembers.length})</Text>
+                    <View className="flex-row mt-2">
                         {selectedMembers.slice(0, 5).map((id) => {
                             const friend = friends.find((f) => f.id === id);
                             if (!friend) return null;
                             return (
-                                <View key={id} style={styles.previewAvatar}>
+                                <View key={id} className="-mr-2">
                                     {friend.avatar ? (
-                                        <Image source={{ uri: friend.avatar }} style={styles.previewAvatarImage} />
+                                        <Image source={{ uri: friend.avatar }} className="w-9 h-9 rounded-full border-2 border-white" />
                                     ) : (
-                                        <View style={styles.previewAvatarPlaceholder}>
-                                            <Text style={styles.previewAvatarText}>
+                                        <View className="w-9 h-9 rounded-full bg-gray-200 justify-center items-center border-2 border-white">
+                                            <Text className="text-xs font-semibold text-gray-500">
                                                 {getInitials(friend.firstName, friend.lastName)}
                                             </Text>
                                         </View>
@@ -104,8 +100,8 @@ export const GroupDetailsView = memo(({
                             );
                         })}
                         {selectedMembers.length > 5 && (
-                            <View style={styles.previewAvatarMore}>
-                                <Text style={styles.previewAvatarMoreText}>+{selectedMembers.length - 5}</Text>
+                            <View className="w-9 h-9 rounded-full justify-center items-center border-2 border-white" style={{ backgroundColor: COLORS.primary }}>
+                                <Text className="text-xs font-semibold text-white">+{selectedMembers.length - 5}</Text>
                             </View>
                         )}
                     </View>
@@ -113,14 +109,15 @@ export const GroupDetailsView = memo(({
             )}
 
             <TouchableOpacity
-                style={[styles.createButton, creating && styles.createButtonDisabled]}
+                className={`rounded-md py-4 items-center mt-8 ${creating ? 'opacity-60' : ''}`}
+                style={{ backgroundColor: COLORS.primary }}
                 onPress={onSubmit}
                 disabled={creating}
             >
                 {creating ? (
                     <ActivityIndicator color={COLORS.white} />
                 ) : (
-                    <Text style={styles.createButtonText}>
+                    <Text className="text-base font-semibold text-white">
                         {editingGroup ? "Save Changes" : "Create Group"}
                     </Text>
                 )}
@@ -128,123 +125,3 @@ export const GroupDetailsView = memo(({
         </View>
     </KeyboardAvoidingView>
 ));
-
-const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-        paddingTop: 50,
-    },
-    modalHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    modalHeaderBtn: {
-        width: 60,
-        alignItems: "center",
-    },
-    modalTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    detailsContent: {
-        flex: 1,
-        padding: 20,
-    },
-    inputLabel: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-        marginBottom: 8,
-        marginTop: 16,
-    },
-    input: {
-        backgroundColor: "#F3F4F6",
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-    colorPicker: {
-        flexDirection: "row",
-        gap: 12,
-    },
-    colorOption: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-    },
-    colorOptionSelected: {
-        borderWidth: 3,
-        borderColor: COLORS.textMain,
-    },
-    membersPreview: {
-        marginTop: 24,
-    },
-    membersAvatars: {
-        flexDirection: "row",
-        marginTop: 8,
-    },
-    previewAvatar: {
-        marginRight: -8,
-    },
-    previewAvatarImage: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        borderWidth: 2,
-        borderColor: COLORS.white,
-    },
-    previewAvatarPlaceholder: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-        borderWidth: 2,
-        borderColor: COLORS.white,
-    },
-    previewAvatarText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    previewAvatarMore: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        borderWidth: 2,
-        borderColor: COLORS.white,
-    },
-    previewAvatarMoreText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    createButton: {
-        backgroundColor: COLORS.primary,
-        borderRadius: 12,
-        paddingVertical: 16,
-        alignItems: "center",
-        marginTop: 32,
-    },
-    createButtonDisabled: {
-        opacity: 0.6,
-    },
-    createButtonText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-});

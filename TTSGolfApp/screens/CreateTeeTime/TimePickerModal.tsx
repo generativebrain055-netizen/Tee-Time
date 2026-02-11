@@ -4,7 +4,6 @@ import {
     Text,
     Modal,
     TouchableOpacity,
-    StyleSheet,
     ScrollView,
     NativeSyntheticEvent,
     NativeScrollEvent,
@@ -90,14 +89,17 @@ export default function TimePickerModal({
             snapToInterval={ITEM_HEIGHT}
             decelerationRate="fast"
             onMomentumScrollEnd={onScrollEnd}
-            contentContainerStyle={styles.columnContent}
-            style={styles.column}
+            contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
+            className="w-[70px]"
+            style={{ height: ITEM_HEIGHT * VISIBLE_ITEMS }}
         >
             {items.map((item, index) => {
                 const isSelected = item === selected;
                 return (
-                    <View key={index} style={styles.itemContainer}>
-                        <Text style={[styles.itemText, isSelected && styles.itemTextSelected]}>
+                    <View key={index} className="justify-center items-center" style={{ height: ITEM_HEIGHT }}>
+                        <Text className={`text-xl ${
+                            isSelected ? "text-[#1F2937] font-semibold" : "text-[#9CA3AF]"
+                        }`}>
                             {item}
                         </Text>
                     </View>
@@ -108,37 +110,40 @@ export default function TimePickerModal({
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <View style={styles.overlay}>
-                <View style={styles.container}>
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+            <View className="flex-1 bg-black/40 justify-end">
+                <View className="bg-white rounded-t-2xl pb-10">
+                    <View className="flex-row items-center justify-between px-4 py-3.5 border-b border-border">
+                        <TouchableOpacity onPress={onClose} className="p-1">
                             <X size={24} color={COLORS.text} />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Time</Text>
-                        <TouchableOpacity onPress={handleDone} style={styles.headerButton}>
-                            <Text style={styles.doneText}>Done</Text>
+                        <Text className="text-[17px] font-semibold text-[#1F2937]">Time</Text>
+                        <TouchableOpacity onPress={handleDone} className="p-1 min-w-[60px]">
+                            <Text className="text-[17px] font-semibold text-[#007AFF] text-right">Done</Text>
                         </TouchableOpacity>
                     </View>
 
-                    <View style={styles.pickerContainer}>
-                        <View style={styles.selectionIndicator} />
-                        <View style={styles.columnsWrapper}>
+                    <View className="relative" style={{ height: ITEM_HEIGHT * VISIBLE_ITEMS }}>
+                        <View 
+                            className="absolute left-5 right-5 bg-surface-light rounded-md z-0"
+                            style={{ top: ITEM_HEIGHT * 2, height: ITEM_HEIGHT }}
+                        />
+                        <View className="flex-row justify-center px-10 z-10">
                             {renderColumn(
                                 HOURS,
                                 hour,
-                                hourRef,
+                                hourRef as any,
                                 (e) => handleScroll(e, HOURS, setHour)
                             )}
                             {renderColumn(
                                 MINUTES,
                                 minute,
-                                minuteRef,
+                                minuteRef as any,
                                 (e) => handleScroll(e, MINUTES, setMinute)
                             )}
                             {renderColumn(
                                 PERIODS,
                                 period,
-                                periodRef,
+                                periodRef as any,
                                 (e) => handleScroll(e, PERIODS, setPeriod)
                             )}
                         </View>
@@ -148,81 +153,3 @@ export default function TimePickerModal({
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.4)",
-        justifyContent: "flex-end",
-    },
-    container: {
-        backgroundColor: COLORS.white,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        paddingBottom: 40,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    headerButton: {
-        padding: 4,
-        minWidth: 60,
-    },
-    headerTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    doneText: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: "#007AFF",
-        textAlign: "right",
-    },
-    pickerContainer: {
-        height: ITEM_HEIGHT * VISIBLE_ITEMS,
-        position: "relative",
-    },
-    selectionIndicator: {
-        position: "absolute",
-        top: ITEM_HEIGHT * 2,
-        left: 20,
-        right: 20,
-        height: ITEM_HEIGHT,
-        backgroundColor: "#F2F2F7",
-        borderRadius: 8,
-        zIndex: 0,
-    },
-    columnsWrapper: {
-        flexDirection: "row",
-        justifyContent: "center",
-        paddingHorizontal: 40,
-        zIndex: 1,
-    },
-    column: {
-        width: 70,
-        height: ITEM_HEIGHT * VISIBLE_ITEMS,
-    },
-    columnContent: {
-        paddingVertical: ITEM_HEIGHT * 2,
-    },
-    itemContainer: {
-        height: ITEM_HEIGHT,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    itemText: {
-        fontSize: 20,
-        color: COLORS.textSub,
-    },
-    itemTextSelected: {
-        color: COLORS.text,
-        fontWeight: "600",
-    },
-});

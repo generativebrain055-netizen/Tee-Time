@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     Image,
     ActivityIndicator,
@@ -10,17 +9,11 @@ import {
     ScrollView,
     LayoutAnimation,
     Platform,
-    UIManager,
     Modal,
 } from "react-native";
 import { Star, ChevronDown, ChevronUp, ArrowUp, ArrowDown, SlidersHorizontal, Check, X } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { friendApi, rosterApi } from "../../services/api";
-
-// Enable LayoutAnimation on Android
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type SortOption = "position" | "socialRate" | "handicap" | "name" | "distance" | "membership";
 
@@ -88,19 +81,19 @@ const RosterItem = memo(({ item, index, onMoveUp, onMoveDown, onToggleSection, o
     const sortValue = formatSortValue(item, sortBy);
 
     return (
-        <TouchableOpacity style={styles.rosterItem} onPress={onPress} activeOpacity={0.7}>
+        <TouchableOpacity className="flex-row items-center py-3 px-3 bg-white border-b border-gray-100" onPress={onPress} activeOpacity={0.7}>
             {/* Reorder buttons - only show when sorting by position */}
             {showReorderButtons && (
-                <View style={styles.reorderButtons}>
+                <View className="flex-col mr-2 gap-0.5">
                     <TouchableOpacity
-                        style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}
+                        className={`p-1 rounded bg-gray-100 ${isFirst ? 'opacity-30' : ''}`}
                         onPress={onMoveUp}
                         disabled={isFirst}
                     >
                         <ArrowUp size={16} color={isFirst ? COLORS.textSub : COLORS.textMain} />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}
+                        className={`p-1 rounded bg-gray-100 ${isLast ? 'opacity-30' : ''}`}
                         onPress={onMoveDown}
                         disabled={isLast}
                     >
@@ -109,32 +102,32 @@ const RosterItem = memo(({ item, index, onMoveUp, onMoveDown, onToggleSection, o
                 </View>
             )}
 
-            <Text style={styles.rankNumber}>{index + 1}</Text>
+            <Text className="text-sm font-semibold text-gray-500 w-6 text-center">{index + 1}</Text>
 
-            <View style={styles.avatarContainer}>
+            <View className="ml-2">
                 {item.avatar ? (
-                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                    <Image source={{ uri: item.avatar }} className="w-11 h-11 rounded-full" />
                 ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitials}>
+                    <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center">
+                        <Text className="text-sm font-semibold text-gray-500">
                             {getInitials(item.firstName, item.lastName)}
                         </Text>
                     </View>
                 )}
             </View>
 
-            <View style={styles.infoContainer}>
-                <Text style={styles.name}>
+            <View className="flex-1 ml-3">
+                <Text className="text-[15px] font-semibold text-gray-900">
                     {item.firstName} {item.lastName}
                 </Text>
-                <Text style={styles.subText}>
+                <Text className="text-xs text-gray-500 mt-0.5">
                     {sortBy !== "position" && sortValue ? sortValue : (isOnDeck ? "On Deck" : "Roster")}
                 </Text>
             </View>
 
             {/* Move to other section button */}
             <TouchableOpacity
-                style={[styles.moveButton, isOnDeck ? styles.moveToRosterBtn : styles.moveToOnDeckBtn]}
+                className={`w-10 h-10 rounded-md justify-center items-center ${isOnDeck ? 'bg-green-50' : 'bg-amber-100'}`}
                 onPress={(e) => { e.stopPropagation(); onToggleSection(); }}
             >
                 <Star
@@ -159,24 +152,25 @@ interface SortModalProps {
 
 const SortModal = memo(({ visible, onClose, currentSort, onSelectSort }: SortModalProps) => (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-            <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Sort Roster By</Text>
-                    <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+        <TouchableOpacity className="flex-1 bg-black/50 justify-center items-center px-5" activeOpacity={1} onPress={onClose}>
+            <View className="bg-white rounded-md w-full max-w-[340px] overflow-hidden">
+                <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <Text className="text-lg font-semibold text-gray-900">Sort Roster By</Text>
+                    <TouchableOpacity onPress={onClose} className="p-1">
                         <X size={20} color={COLORS.textMain} />
                     </TouchableOpacity>
                 </View>
                 {SORT_OPTIONS.map((option) => (
                     <TouchableOpacity
                         key={option.key}
-                        style={[styles.sortOption, currentSort === option.key && styles.sortOptionActive]}
+                        className={`flex-row items-center justify-between px-5 py-3.5 border-b border-gray-100 ${currentSort === option.key ? 'bg-green-50' : ''}`}
                         onPress={() => {
                             onSelectSort(option.key);
                             onClose();
                         }}
                     >
-                        <Text style={[styles.sortOptionText, currentSort === option.key && styles.sortOptionTextActive]}>
+                        <Text className={`text-[15px] ${currentSort === option.key ? 'font-semibold' : 'text-gray-900'}`}
+                              style={currentSort === option.key ? { color: COLORS.primary } : {}}>
                             {option.label}
                         </Text>
                         {currentSort === option.key && <Check size={18} color={COLORS.primary} />}
@@ -203,12 +197,13 @@ interface SectionHeaderProps {
 }
 
 const SectionHeader = memo(({ title, count, isExpanded, onToggle, color, showSortButton, onSortPress, currentSort }: SectionHeaderProps) => (
-    <View style={[styles.sectionHeader, { borderLeftColor: color }]}>
-        <TouchableOpacity style={styles.sectionTitleTouchable} onPress={onToggle}>
-            <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>{title}</Text>
-                <View style={[styles.countBadge, { backgroundColor: color }]}>
-                    <Text style={styles.countText}>{count}</Text>
+    <View className="flex-row items-center justify-between px-4 py-2.5 bg-gray-50 border-l-4 mt-2"
+          style={{ borderLeftColor: color }}>
+        <TouchableOpacity className="flex-row items-center flex-1" onPress={onToggle}>
+            <View className="flex-row items-center gap-2.5 flex-1">
+                <Text className="text-base font-semibold text-gray-900">{title}</Text>
+                <View className="px-2 py-0.5 rounded-md" style={{ backgroundColor: color }}>
+                    <Text className="text-xs font-semibold text-white">{count}</Text>
                 </View>
             </View>
             {isExpanded ? (
@@ -218,9 +213,9 @@ const SectionHeader = memo(({ title, count, isExpanded, onToggle, color, showSor
             )}
         </TouchableOpacity>
         {showSortButton && (
-            <TouchableOpacity style={styles.sortButton} onPress={onSortPress}>
+            <TouchableOpacity className="flex-row items-center gap-1.5 px-2.5 py-1.5 bg-green-50 rounded-md" onPress={onSortPress}>
                 <SlidersHorizontal size={18} color={COLORS.primary} />
-                <Text style={styles.sortButtonText}>
+                <Text className="text-xs font-medium" style={{ color: COLORS.primary }}>
                     {SORT_OPTIONS.find(o => o.key === currentSort)?.label || "Sort"}
                 </Text>
             </TouchableOpacity>
@@ -239,6 +234,26 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
     const [onDeckExpanded, setOnDeckExpanded] = useState(true);
     const [sortBy, setSortBy] = useState<SortOption>("position");
     const [showSortModal, setShowSortModal] = useState(false);
+
+    // Client-side sorting function
+    const sortMembers = useCallback((members: RosterMember[], sort: SortOption): RosterMember[] => {
+        const sorted = [...members];
+        switch (sort) {
+            case "socialRate":
+                return sorted.sort((a, b) => (b.socialRate ?? -1) - (a.socialRate ?? -1));
+            case "handicap":
+                return sorted.sort((a, b) => (a.handicap ?? 999) - (b.handicap ?? 999));
+            case "distance":
+                return sorted.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
+            case "membership":
+                return sorted.sort((a, b) => (a.membership || "zzz").localeCompare(b.membership || "zzz"));
+            case "name":
+                return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+            case "position":
+            default:
+                return sorted.sort((a, b) => a.position - b.position);
+        }
+    }, []);
 
     const loadData = useCallback(async (sort: SortOption = "position") => {
         try {
@@ -325,26 +340,6 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             setRefreshing(false);
         }
     }, [sortMembers]);
-
-    // Client-side sorting function
-    const sortMembers = useCallback((members: RosterMember[], sort: SortOption): RosterMember[] => {
-        const sorted = [...members];
-        switch (sort) {
-            case "socialRate":
-                return sorted.sort((a, b) => (b.socialRate ?? -1) - (a.socialRate ?? -1));
-            case "handicap":
-                return sorted.sort((a, b) => (a.handicap ?? 999) - (b.handicap ?? 999));
-            case "distance":
-                return sorted.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
-            case "membership":
-                return sorted.sort((a, b) => (a.membership || "zzz").localeCompare(b.membership || "zzz"));
-            case "name":
-                return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-            case "position":
-            default:
-                return sorted.sort((a, b) => a.position - b.position);
-        }
-    }, []);
 
     useEffect(() => {
         loadData(sortBy);
@@ -492,9 +487,22 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
+            <ScrollView className="flex-1 bg-white" showsVerticalScrollIndicator={false}>
+                <View className="px-4 py-3">
+                    <View className="w-32 h-5 bg-gray-200 rounded mb-4" />
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                        <View key={i} className="flex-row items-center py-3 border-b border-gray-100">
+                            <View className="w-6 h-4 bg-gray-200 rounded mr-2" />
+                            <View className="w-11 h-11 rounded-full bg-gray-200 ml-2" />
+                            <View className="flex-1 ml-3">
+                                <View className="w-32 h-4 bg-gray-200 rounded mb-2" />
+                                <View className="w-20 h-3 bg-gray-200 rounded" />
+                            </View>
+                            <View className="w-10 h-10 bg-gray-200 rounded-md" />
+                        </View>
+                    ))}
+                </View>
+            </ScrollView>
         );
     }
 
@@ -504,8 +512,8 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
     return (
         <>
             <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
+                className="flex-1 bg-white"
+                contentContainerStyle={{ paddingBottom: 20 }}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -516,8 +524,8 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 }
             >
                 {/* Info Banner */}
-                <View style={styles.infoBanner}>
-                    <Text style={styles.infoText}>
+                <View className="bg-green-50 px-4 py-3 mx-4 mt-4 mb-2 rounded-md">
+                    <Text className="text-[13px] text-green-800 leading-[18px]">
                         {sortBy === "position"
                             ? "Use arrows to reorder players. Tap the star to move between Roster and On Deck."
                             : "Sorted by " + SORT_OPTIONS.find(o => o.key === sortBy)?.label + ". Switch to Manual Order to reorder."}
@@ -537,11 +545,11 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 />
 
                 {rosterExpanded && (
-                    <View style={styles.sectionContent}>
+                    <View className="bg-white">
                         {rosterMembers.length === 0 ? (
-                            <View style={styles.emptySection}>
-                                <Text style={styles.emptyText}>No players in roster</Text>
-                                <Text style={styles.emptySubtext}>Add friends to build your roster</Text>
+                            <View className="items-center py-8 px-5">
+                                <Text className="text-[15px] font-medium text-gray-900 mt-3">No players in roster</Text>
+                                <Text className="text-[13px] text-gray-500 mt-1">Add friends to build your roster</Text>
                             </View>
                         ) : (
                             rosterMembers.map((item, index) => (
@@ -574,18 +582,18 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 />
 
                 {onDeckExpanded && (
-                    <View style={styles.sectionContent}>
-                        <View style={styles.onDeckInfo}>
-                            <Text style={styles.onDeckInfoText}>
+                    <View className="bg-white">
+                        <View className="bg-amber-100 px-4 py-2.5 mx-4 mt-3 rounded-md">
+                            <Text className="text-xs text-amber-900 leading-4">
                                 Reserve players that can be manually selected if Roster fails to fill tee time
                             </Text>
                         </View>
 
                         {onDeckMembers.length === 0 ? (
-                            <View style={styles.emptySection}>
+                            <View className="items-center py-8 px-5">
                                 <Star size={32} color={COLORS.textSub} />
-                                <Text style={styles.emptyText}>No players on deck</Text>
-                                <Text style={styles.emptySubtext}>Move players here as backup options</Text>
+                                <Text className="text-[15px] font-medium text-gray-900 mt-3">No players on deck</Text>
+                                <Text className="text-[13px] text-gray-500 mt-1">Move players here as backup options</Text>
                             </View>
                         ) : (
                             onDeckMembers.map((item, index) => (
@@ -608,7 +616,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                     </View>
                 )}
 
-                <View style={{ height: 120 }} />
+                <View className="h-[120px]" />
             </ScrollView>
 
             <SortModal
@@ -620,244 +628,3 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         </>
     );
 }
-
-
-const styles = StyleSheet.create({
-    loadingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    scrollView: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-    },
-    scrollContent: {
-        paddingBottom: 20,
-    },
-    infoBanner: {
-        backgroundColor: "#E8F5E9",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        marginHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 8,
-        borderRadius: 8,
-    },
-    infoText: {
-        fontSize: 13,
-        color: "#2E7D32",
-        lineHeight: 18,
-    },
-    sectionHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        backgroundColor: "#F9FAFB",
-        borderLeftWidth: 4,
-        marginTop: 8,
-    },
-    sectionTitleTouchable: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-    },
-    sectionTitleContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        flex: 1,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    countBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 12,
-    },
-    countText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    sortButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        backgroundColor: "#E8F5E9",
-        borderRadius: 6,
-    },
-    sortButtonText: {
-        fontSize: 12,
-        fontWeight: "500",
-        color: COLORS.primary,
-    },
-    sectionContent: {
-        backgroundColor: COLORS.white,
-    },
-    emptySection: {
-        alignItems: "center",
-        paddingVertical: 32,
-        paddingHorizontal: 20,
-    },
-    emptyText: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-        marginTop: 12,
-    },
-    emptySubtext: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 4,
-    },
-    onDeckInfo: {
-        backgroundColor: "#FEF3C7",
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        marginHorizontal: 16,
-        marginTop: 12,
-        borderRadius: 8,
-    },
-    onDeckInfoText: {
-        fontSize: 12,
-        color: "#92400E",
-        lineHeight: 16,
-    },
-    rosterItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        backgroundColor: COLORS.white,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    reorderButtons: {
-        flexDirection: "column",
-        marginRight: 8,
-        gap: 2,
-    },
-    reorderBtn: {
-        padding: 4,
-        borderRadius: 4,
-        backgroundColor: "#F3F4F6",
-    },
-    reorderBtnDisabled: {
-        opacity: 0.3,
-    },
-    rankNumber: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-        width: 24,
-        textAlign: "center",
-    },
-    avatarContainer: {
-        marginLeft: 8,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-    },
-    avatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    infoContainer: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    name: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    subText: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    moveButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 8,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    moveToOnDeckBtn: {
-        backgroundColor: "#FEF3C7",
-    },
-    moveToRosterBtn: {
-        backgroundColor: "#E8F5E9",
-    },
-    // Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 20,
-    },
-    modalContent: {
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        width: "100%",
-        maxWidth: 340,
-        overflow: "hidden",
-    },
-    modalHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    modalCloseBtn: {
-        padding: 4,
-    },
-    sortOption: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    sortOptionActive: {
-        backgroundColor: "#E8F5E9",
-    },
-    sortOptionText: {
-        fontSize: 15,
-        color: COLORS.textMain,
-    },
-    sortOptionTextActive: {
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-});

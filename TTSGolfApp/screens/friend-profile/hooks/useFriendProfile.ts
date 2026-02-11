@@ -7,15 +7,18 @@ import { friendApi, DiscoveredUser } from "../../../services/api";
 import { FriendProfileData } from "../types";
 
 export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) => {
-    const [profile, setProfile] = useState<FriendProfileData | null>(initialUser || null);
-    const [loading, setLoading] = useState(!initialUser);
+    const [profile, setProfile] = useState<FriendProfileData | null>(null); // Don't use initialUser
+    const [loading, setLoading] = useState(true); // Always start with loading
     const [refreshing, setRefreshing] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
     const fetchProfile = useCallback(async () => {
         try {
+            console.log('[FriendProfile] Fetching profile for userId:', userId);
             const response = await friendApi.getUserProfile(userId);
+            console.log('[FriendProfile] Profile response:', JSON.stringify(response, null, 2));
             if (response.success) {
+                console.log('[FriendProfile] Friendship status:', response.profile?.friendshipStatus);
                 setProfile(response.profile);
             }
         } catch (error) {
@@ -26,10 +29,8 @@ export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) =
     }, [userId]);
 
     useEffect(() => {
-        if (!initialUser) {
-            fetchProfile();
-        }
-    }, [fetchProfile, initialUser]);
+        fetchProfile();
+    }, [fetchProfile]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);

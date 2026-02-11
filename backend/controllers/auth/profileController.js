@@ -63,11 +63,13 @@ const getCurrentUser = async (req, res, next) => {
         averageScore: user.average_score,
         isVerified: user.is_verified,
         createdAt: user.created_at,
+        clubs: user.clubs || [],
         // Include preferences as nested object for frontend compatibility
         preferences: {
           preferredTeeTime: user.preferred_tee_time,
           walkOrRide: user.walk_or_ride,
           playingPartnerPreference: user.playing_partner_preference,
+          drinkOfChoice: user.drink_of_choice,
         },
       },
     });
@@ -95,11 +97,13 @@ const updateProfile = async (req, res, next) => {
       avatarUrl,
       profilePhotoBase64,
       preferences,
+      clubs,
     } = req.body;
 
     logger.info("📝 [PROFILE] Update request:", {
       userId,
       preferences,
+      clubs: clubs ? `${clubs.length} clubs` : 'no clubs',
       body: { ...req.body, profilePhotoBase64: req.body.profilePhotoBase64 ? "[base64]" : undefined },
     });
 
@@ -140,6 +144,15 @@ const updateProfile = async (req, res, next) => {
       if (preferences.playingPartnerPreference !== undefined) {
         updates.playingPartnerPreference = preferences.playingPartnerPreference;
       }
+      if (preferences.drinkOfChoice !== undefined) {
+        updates.drinkOfChoice = preferences.drinkOfChoice;
+      }
+    }
+
+    // Handle clubs array
+    if (clubs !== undefined) {
+      updates.clubs = clubs;
+      logger.info("📝 [PROFILE] Updating clubs:", { clubs });
     }
 
     logger.info("📝 [PROFILE] Updates to apply:", updates);
@@ -176,11 +189,13 @@ const updateProfile = async (req, res, next) => {
         location: user.location,
         homeCourse: user.home_course,
         bio: user.bio,
+        clubs: user.clubs || [],
         // Include preferences as nested object for frontend compatibility
         preferences: {
           preferredTeeTime: user.preferred_tee_time,
           walkOrRide: user.walk_or_ride,
           playingPartnerPreference: user.playing_partner_preference,
+          drinkOfChoice: user.drink_of_choice,
         },
       },
     });

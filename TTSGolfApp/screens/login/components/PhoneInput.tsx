@@ -49,7 +49,7 @@ const PhoneInput = memo(({
                 ref={inputRef}
                 style={[styles.input, hasError && styles.inputError]}
                 placeholder={selectedCountry.placeholder}
-                placeholderTextColor={LOGIN_COLORS.textPlaceholder}
+                placeholderTextColor="#9CA3AF"
                 keyboardType="phone-pad"
                 value={value}
                 onChangeText={(text) => onChange(text.replace(/\D/g, ""))}
@@ -60,7 +60,7 @@ const PhoneInput = memo(({
             {value.length > 0 && (
                 <TouchableOpacity style={styles.clearButton} onPress={onClear}>
                     <View style={styles.clearButtonInner}>
-                        <X size={12} color={LOGIN_COLORS.textSub} strokeWidth={2} />
+                        <X size={12} color="#6B7280" strokeWidth={2} />
                     </View>
                 </TouchableOpacity>
             )}
@@ -81,29 +81,29 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         height: 56,
-        backgroundColor: LOGIN_COLORS.white,
+        backgroundColor: "#FFFFFF",
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: LOGIN_COLORS.border,
+        borderColor: "#E5E7EB",
         paddingHorizontal: 16,
     },
     inputContainerFocused: {
-        borderColor: LOGIN_COLORS.textMain,
-        borderWidth: 1.5,
+        borderColor: "#16A34A",
+        borderWidth: 2,
     },
     inputContainerError: {
-        borderColor: LOGIN_COLORS.error,
-        backgroundColor: LOGIN_COLORS.errorLight,
+        borderColor: "#EF4444",
+        backgroundColor: "#FEF2F2",
     },
     input: {
         flex: 1,
         height: "100%",
         fontSize: 16,
-        color: LOGIN_COLORS.textMain,
+        color: "#111827",
         fontWeight: "400",
     },
     inputError: {
-        color: LOGIN_COLORS.error,
+        color: "#EF4444",
     },
     clearButton: {
         padding: 4,
@@ -112,13 +112,13 @@ const styles = StyleSheet.create({
         width: 20,
         height: 20,
         borderRadius: 10,
-        backgroundColor: LOGIN_COLORS.border,
+        backgroundColor: "#E5E7EB",
         justifyContent: "center",
         alignItems: "center",
     },
     errorText: {
         fontSize: 13,
-        color: LOGIN_COLORS.error,
+        color: "#EF4444",
         marginTop: 8,
         marginLeft: 4,
     },

@@ -3,19 +3,11 @@ import {
   View,
   TextInput as RNTextInput,
   Text,
-  StyleSheet,
   ViewStyle,
   TextStyle,
   KeyboardTypeOptions,
 } from "react-native";
-import {
-  colors,
-  spacing,
-  borderRadius,
-  fontSize,
-  fontWeight,
-  inputHeight,
-} from "../theme";
+import { colors } from "../theme";
 
 interface TextInputProps {
   label?: string;
@@ -46,20 +38,6 @@ interface OTPInputProps {
   style?: ViewStyle;
 }
 
-interface Styles {
-  container: ViewStyle;
-  label: TextStyle;
-  input: TextStyle;
-  inputCentered: TextStyle;
-  inputMultiline: TextStyle;
-  inputError: ViewStyle;
-  inputDisabled: TextStyle;
-  errorText: TextStyle;
-  otpContainer: ViewStyle;
-  otpInput: TextStyle;
-  otpInputPlaceholder: TextStyle;
-}
-
 /**
  * Styled Text Input Component
  * Consistent input styling across the app
@@ -85,15 +63,15 @@ export const TextInput: React.FC<TextInputProps> = ({
   containerStyle,
 }) => {
   return (
-    <View style={[styles.container, style, containerStyle]}>
-      {label && <Text style={[styles.label, labelStyle]}>{label}</Text>}
+    <View className="mb-6" style={[style, containerStyle]}>
+      {label && <Text className="text-base font-bold text-text-primary mb-2" style={labelStyle}>{label}</Text>}
       <RNTextInput
+        className="w-full h-14 bg-surface-secondary rounded-md px-6 text-lg text-text-primary"
         style={[
-          styles.input,
-          centered && styles.inputCentered,
-          multiline && styles.inputMultiline,
-          error && styles.inputError,
-          !editable && styles.inputDisabled,
+          centered && { textAlign: "center" },
+          multiline && { height: "auto", minHeight: 56, paddingVertical: 16, textAlignVertical: "top" },
+          error && { borderWidth: 1, borderColor: colors.error },
+          !editable && { backgroundColor: "#E8E8E8", color: "#9E9E9E" },
           inputStyle,
         ]}
         placeholder={placeholder}
@@ -109,7 +87,7 @@ export const TextInput: React.FC<TextInputProps> = ({
         multiline={multiline}
         numberOfLines={numberOfLines}
       />
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && <Text className="mt-1 text-sm" style={{ color: colors.error }}>{error}</Text>}
     </View>
   );
 };
@@ -134,9 +112,12 @@ export const OTPInput: React.FC<OTPInputProps> = ({
   };
 
   return (
-    <View style={[styles.otpContainer, style]}>
+    <View className="w-full" style={style}>
       <RNTextInput
-        style={[styles.otpInput, !value && styles.otpInputPlaceholder]}
+        className="w-full h-14 bg-surface-secondary rounded-md px-6 text-4xl font-semibold text-text-primary text-center"
+        style={[
+          { letterSpacing: value ? 8 : 0 },
+        ]}
         placeholder={"0".repeat(actualMaxLength)}
         placeholderTextColor={colors.placeholder}
         value={value}
@@ -148,67 +129,5 @@ export const OTPInput: React.FC<OTPInputProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create<Styles>({
-  container: {
-    marginBottom: spacing.xl,
-  },
-  label: {
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold as TextStyle["fontWeight"],
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  input: {
-    width: "100%",
-    height: inputHeight.lg,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.xxl,
-    fontSize: fontSize.lg,
-    color: colors.textPrimary,
-  },
-  inputCentered: {
-    textAlign: "center",
-  },
-  inputMultiline: {
-    height: "auto",
-    minHeight: inputHeight.lg,
-    paddingVertical: spacing.lg,
-    textAlignVertical: "top",
-  },
-  inputError: {
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  inputDisabled: {
-    backgroundColor: colors.surfaceDark,
-    color: colors.textTertiary,
-  },
-  errorText: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.error,
-  },
-  // OTP Input
-  otpContainer: {
-    width: "100%",
-  },
-  otpInput: {
-    width: "100%",
-    height: inputHeight.lg,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.xxl,
-    fontSize: fontSize.xxxl,
-    fontWeight: fontWeight.semibold as TextStyle["fontWeight"],
-    color: colors.textPrimary,
-    textAlign: "center",
-    letterSpacing: 8,
-  },
-  otpInputPlaceholder: {
-    letterSpacing: 0,
-  },
-});
 
 export default { TextInput, OTPInput };

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Alert } from "react-native";
 import {
     Settings,
     Bell,
@@ -31,9 +31,9 @@ export function ProfilePhotoSection({
     onChangePhoto: () => void;
 }) {
     return (
-        <View style={styles.photoSection}>
-            <Text style={styles.sectionLabel}>Profile Photo</Text>
-            <View style={styles.avatarWrapper}>
+        <View className="bg-white py-8 px-5 items-center mb-4">
+            <Text className="text-base font-semibold text-gray-900 self-start mb-5">Profile Photo</Text>
+            <View className="mb-4">
                 <Avatar
                     uri={profile.avatar}
                     size={120}
@@ -44,9 +44,9 @@ export function ProfilePhotoSection({
             {isEditMode && (
                 <>
                     <TouchableOpacity onPress={onChangePhoto}>
-                        <Text style={styles.changePhotoText}>Change Photo</Text>
+                        <Text className="text-base font-semibold text-blue-600 mb-2">Change Photo</Text>
                     </TouchableOpacity>
-                    <Text style={styles.photoHint}>JPG, PNG or GIF. Max size 5MB</Text>
+                    <Text className="text-[13px] text-gray-500">JPG, PNG or GIF. Max size 5MB</Text>
                 </>
             )}
         </View>
@@ -63,8 +63,8 @@ export function BasicInfoSection({
     const currentProfile = isEditMode ? editedProfile : profile;
 
     return (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Basic Information</Text>
+        <View className="bg-white py-6 px-5 mb-4">
+            <Text className="text-lg font-bold text-gray-900 mb-5">Basic Information</Text>
 
             <InputField
                 label="Full Name"
@@ -91,9 +91,10 @@ export function BasicInfoSection({
             <InputField
                 label="Phone"
                 value={currentProfile.phone}
-                onChangeText={(text) => setEditedProfile({ ...editedProfile, phone: text })}
+                onChangeText={(text) => setEditedProfile({ ...editedProfile, phone: text.replace(/\D/g, "") })}
                 keyboardType="phone-pad"
                 isEditMode={isEditMode}
+                maxLength={15}
             />
 
             <InputField
@@ -124,8 +125,8 @@ export function EquipmentSection({
     const currentProfile = isEditMode ? editedProfile : profile;
 
     return (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Equipment</Text>
+        <View className="bg-white py-6 px-5 mb-4">
+            <Text className="text-lg font-bold text-gray-900 mb-5">My Equipment</Text>
 
             <InputField
                 label="Driver"
@@ -188,8 +189,8 @@ export function PreferencesSection({
     const currentProfile = isEditMode ? editedProfile : profile;
 
     return (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Playing Preferences</Text>
+        <View className="bg-white py-6 px-5 mb-4">
+            <Text className="text-lg font-bold text-gray-900 mb-5">Playing Preferences</Text>
 
             <InputField
                 label="Preferred Tee Time"
@@ -240,13 +241,13 @@ export function SettingsSection() {
     ];
 
     return (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Settings</Text>
+        <View className="bg-white py-6 px-5 mb-4">
+            <Text className="text-lg font-bold text-gray-900 mb-5">Settings</Text>
             {settingsItems.map((item, index) => (
-                <TouchableOpacity key={index} style={styles.settingsItem}>
-                    <View style={styles.settingsItemLeft}>
+                <TouchableOpacity key={index} className="flex-row justify-between items-center py-4 border-b border-gray-200">
+                    <View className="flex-row items-center gap-3">
                         <item.icon size={20} color={COLORS.textSub} />
-                        <Text style={styles.settingsItemText}>{item.label}</Text>
+                        <Text className="text-base text-gray-900">{item.label}</Text>
                     </View>
                     <ChevronRight size={20} color={COLORS.textSub} />
                 </TouchableOpacity>
@@ -258,85 +259,9 @@ export function SettingsSection() {
 // --- SIGN OUT BUTTON ---
 export function SignOutButton({ onSignOut }: { onSignOut: () => void }) {
     return (
-        <TouchableOpacity style={styles.signOutButton} onPress={onSignOut}>
+        <TouchableOpacity className="flex-row items-center justify-center gap-3 bg-white py-4 mx-5 rounded-md border border-red-500" onPress={onSignOut}>
             <LogOut size={20} color={COLORS.red} />
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <Text className="text-base font-semibold text-red-500">Sign Out</Text>
         </TouchableOpacity>
     );
 }
-
-const styles = StyleSheet.create({
-    photoSection: {
-        backgroundColor: COLORS.white,
-        paddingVertical: 32,
-        paddingHorizontal: 20,
-        alignItems: "center",
-        marginBottom: 16,
-    },
-    sectionLabel: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textMain,
-        alignSelf: "flex-start",
-        marginBottom: 20,
-    },
-    avatarWrapper: {
-        marginBottom: 16,
-    },
-    changePhotoText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-        marginBottom: 8,
-    },
-    photoHint: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    section: {
-        backgroundColor: COLORS.white,
-        paddingVertical: 24,
-        paddingHorizontal: 20,
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 20,
-    },
-    settingsItem: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.divider,
-    },
-    settingsItemLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    settingsItemText: {
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-    signOutButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        backgroundColor: COLORS.white,
-        paddingVertical: 16,
-        marginHorizontal: 20,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.red,
-    },
-    signOutText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.red,
-    },
-});

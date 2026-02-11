@@ -1,193 +1,242 @@
 /**
- * Full Calendar Screen - Modular Implementation
+ * Full Calendar Screen - Schedule
  */
 import React, { useCallback, memo, useState } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Text, TouchableOpacity, Modal, Pressable } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { Filter, Check } from "lucide-react-native";
+import { View, ScrollView, RefreshControl, Text, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-import { useCalendar, StatusFilter } from "./hooks/useCalendar";
+import { useCalendar, StatusFilter, RoleFilter } from "./hooks/useCalendar";
 import { CalendarGrid, TeeTimesList } from "./components";
 import { CALENDAR_COLORS } from "./constants";
-import { Header } from "../../components/common";
+import { ScreenShell, AppHeader, ContentArea } from "../../ui";
+
+const PRIMARY_GREEN = "#5EBC68";
 
 interface Props {
-    navigation: any;
+  navigation: any;
 }
 
-const FILTERS: { key: StatusFilter; label: string }[] = [
-    { key: "all", label: "All Tee Times" },
-    { key: "pending", label: "Pending" },
-    { key: "confirmed", label: "Confirmed" },
-    { key: "completed", label: "Completed" },
+const STATUS_OPTIONS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "in_progress", label: "In progress" },
+  { key: "completed", label: "Completed" },
 ];
 
-export default function FullCalendarScreen({ navigation }: Props) {
-    const {
-        currentMonth,
-        currentYear,
-        selectedDate,
-        loading,
-        refreshing,
-        calendarDays,
-        selectedDateTeeTimes,
-        statusFilter,
-        setStatusFilter,
-        onRefresh,
-        handlePrevMonth,
-        handleNextMonth,
-        handleDayPress,
-    } = useCalendar();
+const ROLE_OPTIONS: { key: RoleFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "hosting", label: "I'm hosting" },
+  { key: "invited", label: "I'm invited" },
+];
 
-    const [showFilterModal, setShowFilterModal] = useState(false);
-
-    const handleBack = useCallback(() => {
-        navigation?.goBack();
-    }, [navigation]);
-
-    const handleFilterSelect = useCallback((filter: StatusFilter) => {
-        setStatusFilter(filter);
-        setShowFilterModal(false);
-    }, [setStatusFilter]);
-
-    const handleTeeTimePress = useCallback((teeTimeId: string) => {
-        navigation?.navigate("TeeTimeDetail", { teeTimeId });
-    }, [navigation]);
-
-    const activeFilterLabel = FILTERS.find(f => f.key === statusFilter)?.label || "All";
-
+const FilterDropdown = memo(
+  ({
+    label,
+    options,
+    selectedKey,
+    onSelect,
+    isOpen,
+    onToggle,
+  }: {
+    label: string;
+    options: { key: string; label: string }[];
+    selectedKey: string;
+    onSelect: (key: string) => void;
+    isOpen: boolean;
+    onToggle: () => void;
+  }) => {
+    const selectedLabel = options.find((o) => o.key === selectedKey)?.label ?? "All";
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-            <Header
-                title="Calendar"
-                onBack={handleBack}
-                rightComponent={
-                    <TouchableOpacity
-                        style={styles.filterButton}
-                        onPress={() => setShowFilterModal(true)}
-                    >
-                        <Filter size={20} color={CALENDAR_COLORS.primary} />
-                    </TouchableOpacity>
-                }
-            />
-            <ScrollView
-                style={styles.scrollView}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={[CALENDAR_COLORS.primary]}
-                    />
-                }
-            >
-                <CalendarGrid
-                    currentMonth={currentMonth}
-                    currentYear={currentYear}
-                    calendarDays={calendarDays}
-                    onPrevMonth={handlePrevMonth}
-                    onNextMonth={handleNextMonth}
-                    onDayPress={handleDayPress}
-                />
-                <TeeTimesList
-                    selectedDate={selectedDate}
-                    teeTimes={selectedDateTeeTimes}
-                    loading={loading}
-                    onTeeTimePress={handleTeeTimePress}
-                    onCancelSuccess={onRefresh}
-                />
-            </ScrollView>
-
-            {/* Filter Dropdown Modal */}
-            <Modal
-                visible={showFilterModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowFilterModal(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowFilterModal(false)}>
-                    <View style={styles.dropdownContainer}>
-                        <Text style={styles.dropdownTitle}>Filter by Status</Text>
-                        {FILTERS.map((filter) => (
-                            <TouchableOpacity
-                                key={filter.key}
-                                style={styles.dropdownItem}
-                                onPress={() => handleFilterSelect(filter.key)}
-                            >
-                                <Text style={[
-                                    styles.dropdownItemText,
-                                    statusFilter === filter.key && styles.dropdownItemTextActive
-                                ]}>
-                                    {filter.label}
-                                </Text>
-                                {statusFilter === filter.key && (
-                                    <Check size={18} color={CALENDAR_COLORS.primary} />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </Pressable>
-            </Modal>
-        </View>
+      <View className="relative">
+        <TouchableOpacity
+          className="flex-row items-center gap-1.5 bg-gray-100 rounded-lg px-4 py-2.5"
+          onPress={onToggle}
+          activeOpacity={0.7}
+        >
+          <Text className="text-sm font-semibold text-gray-700" style={{ fontFamily: 'Inter_600SemiBold' }}>
+            {label}: {selectedLabel}
+          </Text>
+          {isOpen ? (
+            <ChevronUp size={16} color="#6B7280" />
+          ) : (
+            <ChevronDown size={16} color="#6B7280" />
+          )}
+        </TouchableOpacity>
+        {isOpen && (
+          <View
+            className="absolute top-full left-0 mt-1 bg-[#EEEEEE] rounded-lg py-1 min-w-[180px] z-50"
+            style={{
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            {options.map((opt) => {
+              const isSelected = opt.key === selectedKey;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  className="flex-row items-center gap-2 px-4 py-2.5"
+                  onPress={() => {
+                    onSelect(opt.key);
+                    onToggle();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    className="w-4 h-4 rounded-full border-2 items-center justify-center"
+                    style={{
+                      borderColor: isSelected ? PRIMARY_GREEN : "#D1D5DB",
+                      backgroundColor: isSelected ? PRIMARY_GREEN : "transparent",
+                    }}
+                  >
+                    {isSelected ? (
+                      <Text className="text-white text-[10px] font-bold">✓</Text>
+                    ) : null}
+                  </View>
+                  <Text
+                    className="text-sm font-medium"
+                    style={{ color: isSelected ? "#1F2937" : "#6B7280", fontFamily: 'Inter_500Medium' }}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
     );
-}
+  }
+);
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: CALENDAR_COLORS.bg,
+export default function FullCalendarScreen({ navigation }: Props) {
+  const {
+    currentMonth,
+    currentYear,
+    selectedDate,
+    loading,
+    refreshing,
+    calendarDays,
+    selectedDateTeeTimes,
+    statusFilter,
+    setStatusFilter,
+    roleFilter,
+    setRoleFilter,
+    onRefresh,
+    handlePrevMonth,
+    handleNextMonth,
+    handleDayPress,
+  } = useCalendar();
+
+  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+
+  const insets = useSafeAreaInsets();
+
+  const handleBack = useCallback(() => {
+    navigation?.goBack();
+  }, [navigation]);
+
+  const handleTeeTimePress = useCallback(
+    (teeTimeId: string) => {
+      navigation?.navigate("TeeTimeDetail", { teeTimeId });
     },
-    scrollView: {
-        flex: 1,
-    },
-    filterButton: {
-        width: 40,
-        height: 40,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.4)",
-        justifyContent: "flex-start",
-        alignItems: "flex-end",
-        paddingTop: 100,
-        paddingRight: 16,
-    },
-    dropdownContainer: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 12,
-        paddingVertical: 8,
-        minWidth: 180,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    dropdownTitle: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: CALENDAR_COLORS.textSecondary,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        textTransform: "uppercase",
-        letterSpacing: 0.5,
-    },
-    dropdownItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    dropdownItemText: {
-        fontSize: 15,
-        color: CALENDAR_COLORS.text,
-    },
-    dropdownItemTextActive: {
-        color: CALENDAR_COLORS.primary,
-        fontWeight: "600",
-    },
-});
+    [navigation]
+  );
+
+  return (
+    <ScreenShell>
+
+      <AppHeader title="Schedule" onBack={handleBack} />
+
+      <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+        {/* Calendar Section - 48% (reduced from 55%) */}
+        <View style={{ 
+          flex: 0.48, 
+          marginHorizontal: 16, 
+          marginTop: 16,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 2,
+        }}>
+          <CalendarGrid
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            calendarDays={calendarDays}
+            onPrevMonth={handlePrevMonth}
+            onNextMonth={handleNextMonth}
+            onDayPress={handleDayPress}
+          />
+        </View>
+
+        {/* Tee Times Section - 52% (increased from 45%) */}
+        <View style={{ flex: 0.52, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 80 }}>
+          <View style={{
+            backgroundColor: '#F9FAFB',
+            borderRadius: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2,
+            flex: 1,
+            overflow: 'hidden',
+          }}>
+            {/* Filter bar */}
+            <View style={{ 
+              paddingHorizontal: 12, 
+              paddingTop: 12, 
+              paddingBottom: 12,
+              backgroundColor: '#F9FAFB',
+            }}>
+              <View className="flex-row gap-3">
+                <FilterDropdown
+                  label="Role"
+                  options={ROLE_OPTIONS}
+                  selectedKey={roleFilter}
+                  onSelect={(k) => setRoleFilter(k as RoleFilter)}
+                  isOpen={roleDropdownOpen}
+                  onToggle={() => {
+                    setRoleDropdownOpen((v) => !v);
+                    setStatusDropdownOpen(false);
+                  }}
+                />
+                <FilterDropdown
+                  label="Status"
+                  options={STATUS_OPTIONS}
+                  selectedKey={statusFilter}
+                  onSelect={(k) => setStatusFilter(k as StatusFilter)}
+                  isOpen={statusDropdownOpen}
+                  onToggle={() => {
+                    setStatusDropdownOpen((v) => !v);
+                    setRoleDropdownOpen(false);
+                  }}
+                />
+              </View>
+            </View>
+
+            {/* Scrollable Tee Times List */}
+            <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+              <TeeTimesList
+                selectedDate={selectedDate}
+                teeTimes={selectedDateTeeTimes}
+                loading={loading}
+                onTeeTimePress={handleTeeTimePress}
+                onCancelSuccess={onRefresh}
+              />
+            </View>
+          </View>
+        </View>
+      </View>
+    </ScreenShell>
+  );
+}

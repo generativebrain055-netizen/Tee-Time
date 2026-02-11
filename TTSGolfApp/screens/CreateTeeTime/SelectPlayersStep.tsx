@@ -2,7 +2,6 @@ import React from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     Image,
@@ -29,48 +28,52 @@ export default function SelectPlayersStep({
     };
 
     return (
-        <View style={styles.content}>
-            <Text style={styles.stepTitle}>
+        <View className="flex-1 px-5 pt-6">
+            <Text className="text-base font-semibold text-[#1F2937] mb-5">
                 Select players ({selectedPlayers.length}/{groupSize - 1})
             </Text>
-            <ScrollView style={styles.playerList} showsVerticalScrollIndicator={false}>
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                 {friends.map((friend) => {
                     const isSelected = selectedPlayers.includes(friend.id);
                     return (
                         <TouchableOpacity
                             key={friend.id}
-                            style={[styles.playerItem, isSelected && styles.playerItemSelected]}
+                            className={`flex-row items-center p-3 rounded-md mb-2 ${
+                                isSelected ? "bg-primary-100" : "bg-bg-muted"
+                            }`}
                             onPress={() => onTogglePlayer(friend.id)}
                         >
-                            <View style={styles.avatarContainer}>
+                            <View className="mr-3">
                                 {friend.avatar ? (
-                                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                                    <Image source={{ uri: friend.avatar }} className="w-12 h-12 rounded-full" />
                                 ) : (
-                                    <View style={styles.avatarPlaceholder}>
-                                        <Text style={styles.avatarInitials}>
+                                    <View className="w-12 h-12 rounded-full bg-primary justify-center items-center">
+                                        <Text className="text-base font-semibold text-white">
                                             {getInitials(friend.firstName, friend.lastName)}
                                         </Text>
                                     </View>
                                 )}
                             </View>
-                            <View style={styles.playerInfo}>
-                                <Text style={styles.playerName}>
+                            <View className="flex-1">
+                                <Text className="text-[15px] font-semibold text-[#1F2937]">
                                     {friend.firstName} {friend.lastName}
                                 </Text>
-                                <Text style={styles.playerSub}>
+                                <Text className="text-[13px] text-[#9CA3AF] mt-0.5">
                                     {friend.handicap ? `HCP ${friend.handicap}` : friend.homeCourse || "Golf buddy"}
                                 </Text>
                             </View>
-                            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                            <View className={`w-6 h-6 rounded-full justify-center items-center ${
+                                isSelected ? "bg-primary border-primary" : "border-2 border-border"
+                            }`}>
                                 {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
                             </View>
                         </TouchableOpacity>
                     );
                 })}
                 {friends.length === 0 && (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyTitle}>No friends yet</Text>
-                        <Text style={styles.emptyText}>
+                    <View className="items-center py-10">
+                        <Text className="text-base font-semibold text-[#1F2937] mb-2">No friends yet</Text>
+                        <Text className="text-sm text-[#9CA3AF] text-center px-5">
                             Add friends from the Availability screen to invite them to tee times
                         </Text>
                     </View>
@@ -80,94 +83,3 @@ export default function SelectPlayersStep({
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-    },
-    stepTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 20,
-    },
-    playerList: {
-        flex: 1,
-    },
-    playerItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 8,
-        backgroundColor: "#F9FAFB",
-    },
-    playerItemSelected: {
-        backgroundColor: "#DCFCE7",
-    },
-    avatarContainer: {
-        marginRight: 12,
-    },
-    avatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
-    avatarPlaceholder: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    playerInfo: {
-        flex: 1,
-    },
-    playerName: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    playerSub: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    emptyState: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        paddingHorizontal: 20,
-    },
-});

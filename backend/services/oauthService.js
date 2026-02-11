@@ -436,16 +436,20 @@ const findOrCreateOAuthUser = async ({
 
 /**
  * Check what profile fields are missing for OAuth users
+ * Only checks REQUIRED fields for OAuth flow
  * @param {Object} user - User record
  * @returns {Object} - Profile completeness status
  */
 const getProfileCompleteness = (user) => {
   const missingFields = [];
 
+  // Required fields for OAuth users
   if (!user.first_name) missingFields.push("firstName");
   if (!user.last_name) missingFields.push("lastName");
-  if (!user.location) missingFields.push("location");
-  if (!user.home_course) missingFields.push("homeCourse");
+  if (!user.phone_number) missingFields.push("phoneNumber");
+
+  // Optional fields - don't block onboarding
+  // location and home_course can be added later from profile settings
 
   return {
     isComplete: missingFields.length === 0,

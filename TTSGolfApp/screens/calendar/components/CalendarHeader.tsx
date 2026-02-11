@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 import { CALENDAR_COLORS } from "../constants";
 
@@ -8,40 +8,13 @@ interface CalendarHeaderProps {
 }
 
 const CalendarHeader = memo(({ onBack }: CalendarHeaderProps) => (
-    <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+    <View className="flex-row justify-between items-center px-4 pt-12 pb-4 bg-white">
+        <TouchableOpacity className="w-10 h-10 justify-center items-center -ml-2" onPress={onBack}>
             <ArrowLeft size={24} color={CALENDAR_COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Calendar</Text>
-        <View style={styles.spacer} />
+        <Text className="text-xl font-bold text-text-primary">Calendar</Text>
+        <View className="w-10" />
     </View>
 ));
-
-const styles = StyleSheet.create({
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 16,
-        backgroundColor: CALENDAR_COLORS.white,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        justifyContent: "center",
-        alignItems: "center",
-        marginLeft: -8,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: CALENDAR_COLORS.text,
-    },
-    spacer: {
-        width: 40,
-    },
-});
 
 export default CalendarHeader;

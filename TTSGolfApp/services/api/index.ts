@@ -32,6 +32,8 @@ export { notificationApi } from "./notificationApi";
 export { socialRateApi } from "./socialRateApi";
 export { attendanceApi } from "./attendanceApi";
 export { draftApi } from "./draftApi";
+export { availabilityApi } from "./availabilityApi";
+export { default as onboardingApi } from "./onboardingApi";
 
 // Types
 export type {
@@ -88,3 +90,10 @@ export type {
   // Generic types
   ApiResponse,
 } from "./types";
+
+// Onboarding types
+export type {
+  OnboardingStep,
+  OnboardingStatus,
+  OnboardingRequiredResponse,
+} from "./onboardingApi";

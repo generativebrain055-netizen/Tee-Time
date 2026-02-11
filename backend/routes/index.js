@@ -5,6 +5,7 @@
 
 const attendanceRoutes = require("./attendance");
 const authRoutes = require("./auth");
+const availabilityRoutes = require("./availability");
 const coursesRoutes = require("./courses");
 const draftRoutes = require("./draft");
 const friendsRoutes = require("./friends");
@@ -17,6 +18,7 @@ const teeTimesRoutes = require("./teeTimes");
 module.exports = {
   attendanceRoutes,
   authRoutes,
+  availabilityRoutes,
   coursesRoutes,
   draftRoutes,
   friendsRoutes,

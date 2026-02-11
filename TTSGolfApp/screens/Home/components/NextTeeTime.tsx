@@ -1,29 +1,25 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
-import { Clock, MapPin, Users, Check } from "lucide-react-native";
-import { COLORS } from "../constants";
+import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
+import { Clock, MapPin, Check, Calendar, Users } from "lucide-react-native";
+import { MotiView } from "moti";
+import { Card } from "react-native-paper";
 import { UpcomingTeeTime } from "../types";
+import { transitions } from "../../../theme/animations";
+
+// Import tick icon
+const TickIcon = require('../../../assets/Tick.png');
 
 interface NextTeeTimeProps {
   teeTime: UpcomingTeeTime | null;
   currentUserId?: string;
   onPress?: (teeTimeId: string) => void;
+  /** e.g. "Dec 30th" for empty state title */
+  selectedDateLabel?: string;
 }
-
-// Pure helper functions - outside component
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  };
-  return date.toLocaleDateString("en-US", options);
-};
 
 const formatTime = (timeStr: string): string => {
   const [hours, minutes] = timeStr.split(":");
-  const hour = parseInt(hours);
+  const hour = parseInt(hours, 10);
   const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
   return `${hour12}:${minutes} ${ampm}`;
@@ -32,29 +28,24 @@ const formatTime = (timeStr: string): string => {
 const getDateSuffix = (day: number): string => {
   if (day >= 11 && day <= 13) return "th";
   switch (day % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
   }
 };
 
 const formatDateWithSuffix = (dateStr: string): string => {
   const date = new Date(dateStr);
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
   const month = date.toLocaleDateString("en-US", { month: "short" });
   const day = date.getDate();
-  return `${month} ${day}${getDateSuffix(day)}`;
+  return `${weekday}, ${month} ${day}${getDateSuffix(day)}`;
 };
 
 const getInitials = (name: string): string => {
   const parts = name.split(" ");
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   return name.substring(0, 2).toUpperCase();
 };
 
@@ -66,269 +57,133 @@ const getShortName = (name: string): string => {
   return shortName.length > 6 ? `${shortName.substring(0, 5)}...` : shortName;
 };
 
-function NextTeeTime({ teeTime, currentUserId, onPress }: NextTeeTimeProps) {
+
+
+function NextTeeTime({
+  teeTime,
+  currentUserId,
+  onPress,
+  selectedDateLabel,
+}: NextTeeTimeProps) {
   if (!teeTime) {
+    const emptyTitle = selectedDateLabel
+      ? `Next tee time (${selectedDateLabel})`
+      : "Next tee time";
     return (
-      <View style={styles.container}>
-        <Text style={styles.sectionTitle}>Next tee time</Text>
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No upcoming tee times</Text>
-          <Text style={styles.emptySubtext}>Create one to get started!</Text>
-        </View>
+      <View className="bg-white flex-1 px-4 py-4 pb-6">
+        <Text className="font-sans-semibold text-sm text-gray-500 mb-4">{emptyTitle}</Text>
+        <MotiView
+          from={{ opacity: 0, translateY: 8 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={transitions.standard}
+          className="flex-1 py-10 px-4 items-center justify-center bg-white rounded-2xl border border-gray-200"
+        >
+          <View className="mb-4 opacity-50">
+            <Calendar size={40} color="#D1D5DB" strokeWidth={1.5} />
+          </View>
+          <Text className="font-sans-medium text-sm text-gray-500 text-center leading-5">
+            No tee times scheduled{'\n'}for this day
+          </Text>
+        </MotiView>
       </View>
     );
   }
 
+  const formattedDate = formatDateWithSuffix(teeTime.teeDate);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.sectionTitle}>
-        Next tee time ({formatDateWithSuffix(teeTime.teeDate)})
+    <View className="bg-white pt-4 px-4 pb-6">
+      <Text className="font-sans-semibold text-sm text-gray-500 mb-4">
+        Next tee time ({formattedDate})
       </Text>
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => onPress?.(teeTime.id)}
-        activeOpacity={0.7}
+      <MotiView
+        from={{ opacity: 0, translateY: 12 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={transitions.standard}
       >
-        <View style={styles.cardHeader}>
-          <Text style={styles.dateText}>{formatDate(teeTime.teeDate)}</Text>
-          <View style={styles.statusBadge}>
-            <Check size={12} color={COLORS.confirmedText} strokeWidth={2.5} />
-            <Text style={styles.statusText}>
-              {teeTime.status.charAt(0).toUpperCase() + teeTime.status.slice(1)}
-            </Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => onPress?.(teeTime.id)}
+          className="bg-white rounded-2xl p-5 border-l-4 border-l-success"
+          style={{
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2,
+          }}
+        >
+          <View className="flex-row justify-between items-center mb-4">
+            <Text className="font-sans-bold text-base text-gray-900">{formattedDate}</Text>
+            <View className="flex-row items-center gap-1.5 bg-green-50 rounded-full px-3 py-1.5">
+              <Image 
+                source={TickIcon} 
+                className="w-3.5 h-3.5"
+                resizeMode="contain"
+              />
+              <Text className="font-sans-semibold text-xs text-success-dark">Confirmed</Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.timeRow}>
-          <Clock size={16} color={COLORS.textSecondary} strokeWidth={1.5} />
-          <Text style={styles.timeText}>{formatTime(teeTime.teeTime)}</Text>
-        </View>
-
-        <View style={styles.locationRow}>
-          <MapPin size={16} color={COLORS.textSecondary} strokeWidth={1.5} />
-          <View style={styles.locationInfo}>
-            <Text style={styles.courseName}>{teeTime.courseName}</Text>
-            {teeTime.courseLocation && (
-              <Text style={styles.courseLocation}>
-                {teeTime.courseLocation}
-              </Text>
-            )}
+          <View className="flex-row items-center gap-3 mb-3">
+            <Clock size={18} color="#9CA3AF" />
+            <Text className="font-sans-semibold text-base text-gray-900">{formatTime(teeTime.teeTime)}</Text>
           </View>
-        </View>
 
-        <View style={styles.participantsSection}>
-          <Users size={16} color={COLORS.textSecondary} strokeWidth={1.5} />
-          <View style={styles.participantsList}>
-            {teeTime.participants.map((p, index) => {
-              const isCurrentUser = p.userId === currentUserId;
-              return (
-                <View key={p.id || index} style={styles.participantItem}>
-                  <View style={styles.avatarContainer}>
-                    {p.avatar ? (
-                      <Image source={{ uri: p.avatar }} style={styles.avatar} />
-                    ) : (
-                      <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitials}>
-                          {getInitials(p.name)}
-                        </Text>
+          <View className="flex-row items-start gap-3 mb-6">
+            <MapPin size={18} color="#9CA3AF" style={{ marginTop: 2 }} />
+            <View>
+              <Text className="font-sans-semibold text-base text-gray-900">{teeTime.courseName}</Text>
+              {teeTime.courseLocation && (
+                <Text className="font-sans text-xs text-gray-500 mt-0.5">
+                  {teeTime.courseLocation}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View className="flex-row items-center gap-2">
+            <Users size={18} color="#9CA3AF" />
+            <View className="flex-row items-start gap-4">
+              {teeTime.participants.map((p, index) => {
+                const isCurrentUser = p.userId === currentUserId;
+                const displayName = isCurrentUser ? "You" : getShortName(p.name);
+                return (
+                  <View key={p.id || index} className="items-center gap-1 min-h-[70px]">
+                    <View className="relative">
+                      {p.avatar ? (
+                        <Image
+                          source={{ uri: p.avatar }}
+                          className="w-12 h-12 rounded-full border-2 border-white"
+                        />
+                      ) : (
+                        <View className="w-12 h-12 rounded-full bg-success justify-center items-center border-2 border-white">
+                          <Text className="font-sans-semibold text-sm text-white">
+                            {getInitials(p.name)}
+                          </Text>
+                        </View>
+                      )}
+                      <View className="absolute -bottom-0.5 -right-0.5 w-[18px] h-[18px] items-center justify-center">
+                        <Image 
+                          source={TickIcon} 
+                          className="w-[18px] h-[18px]"
+                          resizeMode="contain"
+                        />
                       </View>
-                    )}
-                    <View style={styles.checkBadge}>
-                      <Check size={8} color={COLORS.white} strokeWidth={3} />
                     </View>
+                    <Text className="font-sans-medium text-[10px] text-gray-600">{displayName}</Text>
+                    {p.isCreator && (
+                      <Text className="font-sans text-[9px] text-gray-400 -mt-0.5">(host)</Text>
+                    )}
                   </View>
-                  <Text style={styles.participantName}>
-                    {isCurrentUser ? "You" : getShortName(p.name)}
-                  </Text>
-                  {p.isCreator && !isCurrentUser && (
-                    <Text style={styles.hostLabel}>(host)</Text>
-                  )}
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </MotiView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: COLORS.white,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 16,
-    marginLeft: 4,
-  },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: 20,
-    borderLeftWidth: 6,
-    borderLeftColor: COLORS.primary,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 6,
-    marginBottom: 8,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  dateText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.text,
-    letterSpacing: -0.5,
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.confirmedBg,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-    gap: 6,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.confirmedText,
-  },
-  timeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-  timeText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 20,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  courseName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  courseLocation: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: 4,
-  },
-  participantsSection: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#F2F2F7", // Lighter border
-  },
-  participantsList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12, // Tighter gap
-    flex: 1,
-  },
-  participantItem: {
-    alignItems: "center",
-  },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: COLORS.white,
-  },
-  avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F2F2F7",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: COLORS.white,
-  },
-  avatarInitials: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  checkBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.greenAccent,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: COLORS.white,
-  },
-  participantName: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.text,
-    textAlign: "center",
-  },
-  hostLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: COLORS.primary,
-    marginTop: 0,
-  },
-  emptyCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#F2F2F7",
-    borderStyle: "dashed",
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginTop: 8,
-  },
-  emptySubtext: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    marginTop: 6,
-    textAlign: "center",
-  },
-});
 
 export default memo(NextTeeTime);

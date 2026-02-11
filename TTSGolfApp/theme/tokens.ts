@@ -10,8 +10,8 @@
 export const colorTokens = {
   // Brand Colors
   brand: {
-    primary: "#5DB075",
-    primaryDark: "#4a9c63",
+    primary: "#5EBC68",
+    primaryDark: "#4BA85A",
     primaryLight: "#E8F5E9",
     primaryContainer: "#D1FAE5",
     onPrimary: "#FFFFFF",
@@ -81,7 +81,7 @@ export const colorTokens = {
     default: "rgba(0, 0, 0, 0.1)",
     medium: "rgba(0, 0, 0, 0.15)",
     heavy: "rgba(0, 0, 0, 0.25)",
-    primary: "rgba(93, 176, 117, 0.3)",
+    primary: "rgba(94, 188, 104, 0.3)",
   },
 
   // Overlay Colors

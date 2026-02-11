@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TextInput, StyleSheet } from "react-native";
+import { View, Text, TextInput } from "react-native";
 import { COLORS } from "../../constants/colors";
 
 interface InputFieldProps {
@@ -9,6 +9,7 @@ interface InputFieldProps {
     keyboardType?: "default" | "email-address" | "phone-pad" | "numeric";
     editable?: boolean;
     isEditMode: boolean;
+    maxLength?: number;
 }
 
 export default function InputField({
@@ -18,59 +19,27 @@ export default function InputField({
     keyboardType = "default",
     editable = true,
     isEditMode,
+    maxLength,
 }: InputFieldProps) {
     return (
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>{label}</Text>
+        <View className="mb-5">
+            <Text className="text-sm font-medium text-gray-500 mb-2">{label}</Text>
             {isEditMode && editable ? (
                 <TextInput
-                    style={styles.input}
+                    className="bg-gray-100 rounded-md px-4 py-3.5 text-base text-gray-900 border border-gray-200"
                     value={value}
                     onChangeText={onChangeText}
                     keyboardType={keyboardType}
                     autoCapitalize={keyboardType === "email-address" ? "none" : "words"}
                     placeholder={`Enter ${label.toLowerCase()}`}
                     placeholderTextColor={COLORS.placeholder}
+                    maxLength={maxLength}
                 />
             ) : (
-                <View style={styles.inputDisplay}>
-                    <Text style={styles.inputValue}>{value || "Not set"}</Text>
+                <View className="bg-gray-100 rounded-md px-4 py-3.5 border border-gray-200">
+                    <Text className="text-base text-gray-900">{value || "Not set"}</Text>
                 </View>
             )}
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    inputGroup: {
-        marginBottom: 20,
-    },
-    inputLabel: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: COLORS.secondary,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
-        color: COLORS.textMain,
-        borderWidth: 1,
-        borderColor: COLORS.divider,
-    },
-    inputDisplay: {
-        backgroundColor: COLORS.secondary,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderWidth: 1,
-        borderColor: COLORS.divider,
-    },
-    inputValue: {
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-});

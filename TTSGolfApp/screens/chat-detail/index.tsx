@@ -6,7 +6,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    StyleSheet,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useChat } from "./hooks/useChat";
@@ -50,32 +49,44 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         setShowMenu(false);
     }, [setShowMenu]);
 
+    const handleHeaderPress = useCallback(() => {
+        if (chatInfo.isGroup && chatInfo.groupId) {
+            navigation?.navigate("GroupProfile", { groupId: chatInfo.groupId });
+        }
+    }, [navigation, chatInfo.isGroup, chatInfo.groupId]);
+
+    // Add the header press handler to chatInfo
+    const chatInfoWithHandler = {
+        ...chatInfo,
+        onHeaderPress: handleHeaderPress,
+    };
+
     if (loading) {
         return (
-            <View style={[styles.container, styles.loadingContainer]}>
+            <View className="flex-1 bg-bg-muted justify-center items-center">
                 <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <View className="flex-1 bg-bg-muted">
             <StatusBar style="dark" />
             <KeyboardAvoidingView
-                style={styles.keyboardView}
+                className="flex-1"
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
-                <ChatHeader chatInfo={chatInfo} onBack={handleBack} onMenuPress={handleMenuPress} />
+                <ChatHeader chatInfo={chatInfoWithHandler} onBack={handleBack} onMenuPress={handleMenuPress} />
                 <ScrollView
                     ref={scrollViewRef}
-                    style={styles.messagesContainer}
-                    contentContainerStyle={styles.messagesContent}
+                    className="flex-1 bg-bg-muted"
+                    contentContainerStyle={{ paddingVertical: 16, paddingHorizontal: 16, flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                 >
                     {messages.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyText}>No messages yet</Text>
-                            <Text style={styles.emptySubtext}>Send a message to start the conversation</Text>
+                        <View className="flex-1 justify-center items-center pt-[100px]">
+                            <Text className="text-base font-semibold text-[#111827]">No messages yet</Text>
+                            <Text className="text-sm text-text-secondary mt-1">Send a message to start the conversation</Text>
                         </View>
                     ) : (
                         messages.map((message) => <MessageBubble key={message.id} message={message} />)
@@ -89,23 +100,3 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
 }
 
 export default memo(ChatDetailScreen);
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.bg },
-    loadingContainer: { justifyContent: "center", alignItems: "center" },
-    keyboardView: { flex: 1 },
-    messagesContainer: { flex: 1, backgroundColor: COLORS.bg },
-    messagesContent: {
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        flexGrow: 1,
-    },
-    emptyState: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        paddingTop: 100,
-    },
-    emptyText: { fontSize: 16, fontWeight: "600", color: COLORS.textMain },
-    emptySubtext: { fontSize: 14, color: COLORS.textSub, marginTop: 4 },
-});

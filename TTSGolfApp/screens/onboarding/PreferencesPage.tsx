@@ -2,10 +2,8 @@ import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
-  Modal,
-  FlatList,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -13,19 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, ChevronDown, Check } from "lucide-react-native";
 import type { PreferencesPageProps, PreferencesData } from "../../types";
-
-// Consistent colors with login screen
-const COLORS = {
-  primary: "#5DB075",
-  primaryLight: "#E8F5E9",
-  white: "#FFFFFF",
-  black: "#000000",
-  textMain: "#1A1A1A",
-  textSub: "#6B7280",
-  textPlaceholder: "#9CA3AF",
-  border: "#E5E7EB",
-  surface: "#F9FAFB",
-};
+import { ONBOARDING_COLORS as COLORS } from "./constants";
 
 interface DropdownOption {
   label: string;
@@ -36,8 +22,8 @@ const TIME_OPTIONS: DropdownOption[] = [
   { label: "Morning", value: "morning" },
   { label: "Late morning", value: "late_morning" },
   { label: "Afternoon", value: "afternoon" },
+  { label: "Late afternoon", value: "late_afternoon" },
   { label: "Evening", value: "evening" },
-  { label: "Any time", value: "any" },
 ];
 
 const PLAY_STYLE_OPTIONS: DropdownOption[] = [
@@ -61,6 +47,7 @@ interface DropdownProps {
   options: DropdownOption[];
   onSelect: (value: string) => void;
   placeholder?: string;
+  zIndex?: number;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -69,6 +56,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   options,
   onSelect,
   placeholder = "Select...",
+  zIndex = 1,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value);
@@ -79,67 +67,80 @@ const Dropdown: React.FC<DropdownProps> = ({
   }, [onSelect]);
 
   return (
-    <View style={styles.dropdownContainer}>
-      <Text style={styles.dropdownLabel}>{label}</Text>
-      <TouchableOpacity
-        style={styles.dropdownButton}
-        onPress={() => setIsOpen(true)}
-        activeOpacity={0.7}
-      >
-        <Text
-          style={[
-            styles.dropdownButtonText,
-            !selectedOption && styles.dropdownPlaceholder,
-          ]}
-        >
-          {selectedOption?.label || placeholder}
-        </Text>
-        <ChevronDown size={20} color={COLORS.textSub} />
-      </TouchableOpacity>
-
-      <Modal
-        visible={isOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsOpen(false)}
-      >
+    <View className="mb-6" style={{ zIndex: isOpen ? zIndex : 1 }}>
+      <Text className="text-[15px] font-medium text-gray-900 mb-[10px]">{label}</Text>
+      <View style={{ position: 'relative' }}>
         <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsOpen(false)}
+          className="flex-row items-center justify-between h-14 bg-white rounded-md border border-gray-200 px-4"
+          onPress={() => setIsOpen(!isOpen)}
+          activeOpacity={0.7}
         >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{label}</Text>
-            </View>
-            <FlatList
-              data={options}
-              keyExtractor={(item) => item.value}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.optionItem,
-                    item.value === value && styles.optionItemSelected,
-                  ]}
-                  onPress={() => handleSelect(item.value)}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      item.value === value && styles.optionTextSelected,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                  {item.value === value && (
-                    <Check size={20} color={COLORS.primary} />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
+          <Text
+            className={`text-base ${!selectedOption ? "text-gray-400" : "text-gray-900"}`}
+          >
+            {selectedOption?.label || placeholder}
+          </Text>
+          <ChevronDown 
+            size={20} 
+            color={COLORS.textSub}
+            style={{ transform: [{ rotate: isOpen ? '180deg' : '0deg' }] }}
+          />
         </TouchableOpacity>
-      </Modal>
+
+        {/* Inline Dropdown Options */}
+        {isOpen && (
+          <View 
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              marginTop: 4,
+              backgroundColor: 'white',
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: '#E5E7EB',
+              overflow: 'hidden',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 5,
+              zIndex: zIndex,
+            }}
+          >
+            {options.map((item, index) => (
+              <TouchableOpacity
+                key={item.value}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  borderBottomWidth: index < options.length - 1 ? 1 : 0,
+                  borderBottomColor: '#F3F4F6',
+                  backgroundColor: item.value === value ? '#F0FDF4' : 'white',
+                }}
+                onPress={() => handleSelect(item.value)}
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    color: item.value === value ? COLORS.primary : '#111827',
+                    fontWeight: item.value === value ? '600' : '400',
+                  }}
+                >
+                  {item.label}
+                </Text>
+                {item.value === value && (
+                  <Check size={20} color={COLORS.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 };
@@ -157,7 +158,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     initialPreferences.playStyle || ""
   );
   const [partnerCount, setPartnerCount] = useState<string>(
-    initialPreferences.playerCount || ""
+    String(initialPreferences.playerCount || "")
   );
 
   const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
@@ -184,34 +185,29 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     onNext({ preferences: preferencesData });
   }, [isValid, playStyle, preferredTime, partnerCount, onNext]);
 
-  const handleSkip = useCallback((): void => {
-    onNext({ preferences: null });
-  }, [onNext]);
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+    <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
       <StatusBar style="dark" />
 
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+        <View className="flex-1 px-6">
+          <View className="h-14 flex-row items-center justify-between">
+            <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
               <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
-            </TouchableOpacity>
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBar, { width: "90%" }]} />
-            </View>
-            <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-              <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.mainContent}>
-            <Text style={styles.title}>Playing preferences</Text>
-            <Text style={styles.subtitle}>Tell us how you like to play</Text>
+          <ScrollView 
+            className="flex-1 pt-4"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
+            <Text className="text-[28px] font-bold text-gray-900 mb-2">Playing preferences</Text>
+            <Text className="text-[15px] text-gray-500 leading-[22px] mb-8">Tell us how you like to play</Text>
 
             <Dropdown
               label="What time of day do you like to play?"
@@ -219,6 +215,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
               options={TIME_OPTIONS}
               onSelect={setPreferredTime}
               placeholder="Select time..."
+              zIndex={103}
             />
 
             <Dropdown
@@ -227,6 +224,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
               options={PLAY_STYLE_OPTIONS}
               onSelect={setPlayStyle}
               placeholder="Select preference..."
+              zIndex={102}
             />
 
             <Dropdown
@@ -235,17 +233,18 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
               options={PARTNER_COUNT_OPTIONS}
               onSelect={setPartnerCount}
               placeholder="Select group size..."
+              zIndex={101}
             />
-          </View>
+          </ScrollView>
 
-          <View style={styles.bottomSection}>
+          <View className="pb-8">
             <TouchableOpacity
-              style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
+              className={`h-14 bg-primary rounded-md justify-center items-center ${!isValid ? "opacity-60" : ""}`}
               onPress={handleNext}
               disabled={!isValid}
               activeOpacity={0.8}
             >
-              <Text style={styles.nextButtonText}>Next</Text>
+              <Text className="text-base font-semibold text-white">Next</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -253,155 +252,3 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     </View>
   );
 };
-
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  header: {
-    height: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  progressBarContainer: {
-    flex: 1,
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    marginHorizontal: 16,
-  },
-  progressBar: {
-    height: "100%",
-    backgroundColor: COLORS.primary,
-    borderRadius: 2,
-  },
-  skipButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  skipText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textSub,
-  },
-  mainContent: {
-    flex: 1,
-    paddingTop: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: COLORS.textMain,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: COLORS.textSub,
-    lineHeight: 22,
-    marginBottom: 32,
-  },
-  dropdownContainer: {
-    marginBottom: 24,
-  },
-  dropdownLabel: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: COLORS.textMain,
-    marginBottom: 10,
-  },
-  dropdownButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: 56,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 16,
-  },
-  dropdownButtonText: {
-    fontSize: 16,
-    color: COLORS.textMain,
-  },
-  dropdownPlaceholder: {
-    color: COLORS.textPlaceholder,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "60%",
-  },
-  modalHeader: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: COLORS.textMain,
-    textAlign: "center",
-  },
-  optionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
-  },
-  optionItemSelected: {
-    backgroundColor: COLORS.primaryLight,
-  },
-  optionText: {
-    fontSize: 16,
-    color: COLORS.textMain,
-  },
-  optionTextSelected: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  bottomSection: {
-    paddingBottom: 32,
-  },
-  nextButton: {
-    height: 56,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  nextButtonDisabled: {
-    opacity: 0.6,
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.white,
-  },
-});

@@ -2,7 +2,6 @@ import React, { memo, useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     Image,
     Alert,
@@ -38,27 +37,27 @@ const BlockedUserItem = memo(({
     const initial = name.charAt(0).toUpperCase();
 
     return (
-        <View style={styles.userItem}>
-            <View style={styles.userAvatar}>
+        <View className="flex-row items-center px-4 py-3">
+            <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center overflow-hidden">
                 {user.avatar ? (
-                    <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                    <Image source={{ uri: user.avatar }} className="w-11 h-11 rounded-full" />
                 ) : (
-                    <Text style={styles.avatarInitial}>{initial}</Text>
+                    <Text className="text-lg font-semibold text-gray-500">{initial}</Text>
                 )}
             </View>
-            <View style={styles.userInfo}>
-                <Text style={styles.userName}>{name}</Text>
+            <View className="flex-1 ml-3">
+                <Text className="text-[15px] font-medium text-gray-900">{name}</Text>
                 {user.username && user.firstName && (
-                    <Text style={styles.userUsername}>@{user.username}</Text>
+                    <Text className="text-[13px] text-gray-500 mt-0.5">@{user.username}</Text>
                 )}
             </View>
             <TouchableOpacity
-                style={styles.unblockButton}
+                className="flex-row items-center gap-1 px-3 py-2 bg-blue-50 rounded-md"
                 onPress={() => onUnblock(user.id, name)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
                 <Unlock size={16} color={COLORS.primary} />
-                <Text style={styles.unblockText}>Unblock</Text>
+                <Text className="text-[13px] font-semibold text-blue-600">Unblock</Text>
             </TouchableOpacity>
         </View>
     );
@@ -75,7 +74,7 @@ export const BlockedUsersCard = memo(({ onRefresh }: BlockedUsersCardProps) => {
         try {
             const response = await friendApi.getBlockedUsers();
             if (response.success) {
-                setBlockedUsers(response.blockedUsers || []);
+                setBlockedUsers((response.blockedUsers || []) as BlockedUser[]);
             }
         } catch (error) {
             console.error("Failed to load blocked users:", error);
@@ -123,15 +122,15 @@ export const BlockedUsersCard = memo(({ onRefresh }: BlockedUsersCardProps) => {
     }, []);
 
     return (
-        <View style={styles.card}>
-            <TouchableOpacity style={styles.header} onPress={toggleExpanded}>
-                <View style={styles.headerLeft}>
-                    <View style={styles.iconContainer}>
+        <View className="bg-white rounded-md mx-5 mt-4 overflow-hidden">
+            <TouchableOpacity className="flex-row items-center justify-between p-4" onPress={toggleExpanded}>
+                <View className="flex-row items-center gap-3">
+                    <View className="w-10 h-10 rounded-full bg-red-100 justify-center items-center">
                         <ShieldOff size={20} color={COLORS.red} />
                     </View>
                     <View>
-                        <Text style={styles.title}>Blocked Users</Text>
-                        <Text style={styles.subtitle}>
+                        <Text className="text-[15px] font-semibold text-gray-900">Blocked Users</Text>
+                        <Text className="text-[13px] text-gray-500 mt-0.5">
                             {blockedUsers.length > 0
                                 ? `${blockedUsers.length} blocked`
                                 : "Manage blocked users"}
@@ -146,21 +145,21 @@ export const BlockedUsersCard = memo(({ onRefresh }: BlockedUsersCardProps) => {
             </TouchableOpacity>
 
             {expanded && (
-                <View style={styles.content}>
+                <View className="border-t border-gray-200">
                     {loading ? (
-                        <View style={styles.loadingContainer}>
+                        <View className="p-6 items-center">
                             <ActivityIndicator size="small" color={COLORS.primary} />
                         </View>
                     ) : blockedUsers.length === 0 ? (
-                        <View style={styles.emptyContainer}>
+                        <View className="p-6 items-center">
                             <UserX size={32} color={COLORS.textSub} />
-                            <Text style={styles.emptyText}>No blocked users</Text>
-                            <Text style={styles.emptySubtext}>
+                            <Text className="text-[15px] font-semibold text-gray-900 mt-3">No blocked users</Text>
+                            <Text className="text-[13px] text-gray-500 text-center mt-1 px-4">
                                 Users you block won't be able to send you friend requests or invites
                             </Text>
                         </View>
                     ) : (
-                        <View style={styles.usersList}>
+                        <View className="py-2">
                             {blockedUsers.map((user) => (
                                 <BlockedUserItem
                                     key={user.id}
@@ -174,124 +173,4 @@ export const BlockedUsersCard = memo(({ onRefresh }: BlockedUsersCardProps) => {
             )}
         </View>
     );
-});
-
-const styles = StyleSheet.create({
-    card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        marginHorizontal: 20,
-        marginTop: 16,
-        overflow: "hidden",
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: 16,
-    },
-    headerLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    iconContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "#FEE2E2",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    title: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    subtitle: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    content: {
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border,
-    },
-    loadingContainer: {
-        padding: 24,
-        alignItems: "center",
-    },
-    emptyContainer: {
-        padding: 24,
-        alignItems: "center",
-    },
-    emptyText: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginTop: 12,
-    },
-    emptySubtext: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginTop: 4,
-        paddingHorizontal: 16,
-    },
-    usersList: {
-        paddingVertical: 8,
-    },
-    userItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    userAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-        overflow: "hidden",
-    },
-    avatarImage: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-    },
-    avatarInitial: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    userInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    userName: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.text,
-    },
-    userUsername: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    unblockButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        backgroundColor: COLORS.primaryLight || "#E8F5E9",
-        borderRadius: 8,
-    },
-    unblockText: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
 });

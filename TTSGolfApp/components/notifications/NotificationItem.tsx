@@ -5,7 +5,7 @@
  */
 
 import React, { memo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import {
   Bell,
   Users,
@@ -82,33 +82,46 @@ export const NotificationItem = memo(function NotificationItem({
 
   return (
     <TouchableOpacity
-      style={[styles.card, !item.isRead && styles.unreadCard]}
+      className="bg-white rounded-md p-4 border border-black/[0.03]"
+      style={[
+        {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 3,
+        },
+        !item.isRead && {
+          borderColor: COLORS.primaryLight || "#E8F5E9",
+          borderWidth: 1.5,
+          shadowOpacity: 0.1,
+        },
+      ]}
       onPress={() => onPress(item)}
       activeOpacity={0.9}
     >
       {/* Header */}
-      <View style={styles.cardHeader}>
+      <View className="flex-row items-start">
         <View
-          style={[
-            styles.iconContainer,
-            !item.isRead && styles.unreadIconContainer,
-          ]}
+          className={`w-10 h-10 rounded-full justify-center items-center ${
+            !item.isRead ? "bg-[#E8F5E9]" : "bg-gray-100"
+          }`}
         >
           {getNotificationIcon(notifType)}
         </View>
 
-        <View style={styles.headerTextContainer}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, !item.isRead && styles.unreadTitle]}>
+        <View className="flex-1 mx-3">
+          <View className="flex-row items-center flex-wrap">
+            <Text className={`text-[15px] font-semibold mr-1.5 ${!item.isRead ? "text-[#111827]" : ""}`} style={{ color: COLORS.text }}>
               {item.title}
             </Text>
-            {!item.isRead && <View style={styles.unreadDot} />}
+            {!item.isRead && <View className="w-2 h-2 rounded-full bg-primary ml-1" />}
           </View>
-          <Text style={styles.time}>{formatTimeAgo(item.createdAt)}</Text>
+          <Text className="text-xs text-gray-400 mt-0.5">{formatTimeAgo(item.createdAt)}</Text>
         </View>
 
         <TouchableOpacity
-          style={styles.deleteButton}
+          className="p-1"
           onPress={() => onDelete(item.id)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -117,22 +130,22 @@ export const NotificationItem = memo(function NotificationItem({
       </View>
 
       {/* Content */}
-      <View style={styles.cardContent}>
-        <Text style={styles.body}>{item.body}</Text>
+      <View className="mt-3 pl-[52px]">
+        <Text className="text-sm leading-5" style={{ color: COLORS.textSecondary || "#4B5563" }}>{item.body}</Text>
 
         {deadlineText && item.data?.type === "tee_time_invite" && (
           <View
-            style={[
-              styles.deadlineBadge,
-              isUrgent && styles.deadlineBadgeUrgent,
-            ]}
+            className={`flex-row items-center px-2.5 py-1.5 rounded-full self-start mt-2 border ${
+              isUrgent
+                ? "bg-[#FEF2F2] border-[#FECACA]"
+                : "bg-[#FFF7ED] border-[#FFEDD5]"
+            }`}
           >
             <Clock size={12} color={isUrgent ? "#DC2626" : "#D97706"} />
             <Text
-              style={[
-                styles.deadlineText,
-                isUrgent && styles.deadlineTextUrgent,
-              ]}
+              className={`text-xs font-semibold ml-1.5 ${
+                isUrgent ? "text-[#DC2626]" : "text-[#C2410C]"
+              }`}
             >
               {deadlineText}
             </Text>
@@ -144,194 +157,73 @@ export const NotificationItem = memo(function NotificationItem({
       {(isFriendRequestActionable ||
         isSpotOpenedActionable ||
         isRosterExhaustedActionable) && (
-        <View style={styles.actionContainer}>
+        <View className="flex-row justify-end gap-2 mt-4 pl-[52px]">
           {isFriendRequestActionable && onAcceptFriend && onDeclineFriend && (
             <>
               <TouchableOpacity
-                style={[styles.button, styles.primaryButton]}
+                className="flex-row items-center justify-center py-2 px-3.5 rounded-md gap-1.5"
+                style={{
+                  backgroundColor: COLORS.primary,
+                  shadowColor: COLORS.primary,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 3,
+                  elevation: 2,
+                }}
                 onPress={() => onAcceptFriend(item)}
               >
                 <UserPlus size={14} color="#FFF" />
-                <Text style={styles.primaryButtonText}>Accept</Text>
+                <Text className="text-white font-semibold text-[13px]">Accept</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
+                className="flex-row items-center justify-center py-2 px-3.5 rounded-md gap-1.5 bg-gray-100 border border-gray-200"
                 onPress={() => onDeclineFriend(item)}
               >
                 <X size={14} color={COLORS.textSecondary} />
-                <Text style={styles.secondaryButtonText}>Decline</Text>
+                <Text className="font-semibold text-[13px]" style={{ color: COLORS.textSecondary || "#4B5563" }}>Decline</Text>
               </TouchableOpacity>
             </>
           )}
 
           {isSpotOpenedActionable && onAcceptSpot && (
             <TouchableOpacity
-              style={[styles.button, styles.primaryButton, { flex: 1 }]}
+              className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md gap-1.5"
+              style={{
+                backgroundColor: COLORS.primary,
+                shadowColor: COLORS.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 3,
+                elevation: 2,
+              }}
               onPress={() => onAcceptSpot(item)}
             >
               <Calendar size={14} color="#FFF" />
-              <Text style={styles.primaryButtonText}>Accept Spot</Text>
+              <Text className="text-white font-semibold text-[13px]">Accept Spot</Text>
             </TouchableOpacity>
           )}
 
           {isRosterExhaustedActionable && onSelectOnDeck && (
             <TouchableOpacity
-              style={[styles.button, styles.warningButton, { flex: 1 }]}
+              className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md gap-1.5"
+              style={{
+                backgroundColor: COLORS.error || "#EF4444",
+                shadowColor: COLORS.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 3,
+                elevation: 2,
+              }}
               onPress={() => onSelectOnDeck(item)}
             >
               <Users size={14} color="#FFF" />
-              <Text style={styles.primaryButtonText}>Select from On-Deck</Text>
+              <Text className="text-white font-semibold text-[13px]">Select from On-Deck</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
     </TouchableOpacity>
   );
-});
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.03)",
-  },
-  unreadCard: {
-    backgroundColor: COLORS.white,
-    borderColor: COLORS.primaryLight || "#E8F5E9",
-    borderWidth: 1.5,
-    shadowOpacity: 0.1,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  headerTextContainer: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  unreadIconContainer: {
-    backgroundColor: COLORS.primaryLight || "#E8F5E9",
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginRight: 6,
-  },
-  unreadTitle: {
-    color: COLORS.text,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-    marginLeft: 4,
-  },
-  time: {
-    fontSize: 12,
-    color: COLORS.placeholder,
-    marginTop: 2,
-  },
-  deleteButton: {
-    padding: 4,
-  },
-  cardContent: {
-    marginTop: 12,
-    paddingLeft: 52,
-  },
-  body: {
-    fontSize: 14,
-    color: COLORS.textSecondary || "#4B5563",
-    lineHeight: 20,
-  },
-  deadlineBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF7ED",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#FFEDD5",
-  },
-  deadlineBadgeUrgent: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
-  },
-  deadlineText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#C2410C",
-    marginLeft: 5,
-  },
-  deadlineTextUrgent: {
-    color: "#DC2626",
-  },
-  actionContainer: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
-    marginTop: 16,
-    paddingLeft: 52,
-  },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    gap: 6,
-  },
-  primaryButton: {
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  secondaryButton: {
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  warningButton: {
-    backgroundColor: COLORS.error || "#EF4444",
-  },
-  primaryButtonText: {
-    color: "#FFF",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-  secondaryButtonText: {
-    color: COLORS.textSecondary || "#4B5563",
-    fontWeight: "600",
-    fontSize: 13,
-  },
 });
 
 export default NotificationItem;

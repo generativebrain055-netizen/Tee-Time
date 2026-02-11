@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, Text, Image } from "react-native";
 import { COLORS } from "../styles";
 import { ChatMessage } from "../types";
 
@@ -9,80 +9,28 @@ interface MessageBubbleProps {
 
 export const MessageBubble = memo(({ message }: MessageBubbleProps) => (
     <View
-        style={[
-            styles.messageContainer,
-            message.isMe ? styles.myMessageContainer : styles.otherMessageContainer,
-        ]}
+        className={`flex-row mb-4 items-end ${
+            message.isMe ? "justify-end" : "justify-start"
+        }`}
     >
         {!message.isMe && (
-            <Image source={{ uri: message.senderImg }} style={styles.messageAvatar} />
+            <Image source={{ uri: message.senderImg }} className="w-8 h-8 rounded-[16px] bg-[#E5E5E5] mr-2" />
         )}
         <View
-            style={[
-                styles.messageBubble,
-                message.isMe ? styles.myMessageBubble : styles.otherMessageBubble,
-            ]}
+            className={`max-w-[70%] rounded-md px-4 py-2.5 ${
+                message.isMe 
+                    ? "bg-[#E8F4FD] rounded-br-[4px]" 
+                    : "bg-white rounded-bl-[4px]"
+            }`}
+            style={message.isMe ? {} : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}
         >
-            <Text
-                style={[
-                    styles.messageText,
-                    message.isMe ? styles.myMessageText : styles.otherMessageText,
-                ]}
-            >
+            <Text className={`text-[15px] leading-5 ${message.isMe ? "text-[#111827]" : "text-[#111827]"}`}>
                 {message.message}
             </Text>
-            <Text
-                style={[
-                    styles.messageTime,
-                    message.isMe ? styles.myMessageTime : styles.otherMessageTime,
-                ]}
-            >
+            <Text className={`text-[11px] mt-1 ${message.isMe ? "text-text-secondary text-right" : "text-text-secondary"}`}>
                 {message.time}
             </Text>
         </View>
-        {message.isMe && <View style={styles.messageSpacer} />}
+        {message.isMe && <View className="w-10" />}
     </View>
 ));
-
-const styles = StyleSheet.create({
-    messageContainer: {
-        flexDirection: "row",
-        marginBottom: 16,
-        alignItems: "flex-end",
-    },
-    myMessageContainer: { justifyContent: "flex-end" },
-    otherMessageContainer: { justifyContent: "flex-start" },
-    messageAvatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: COLORS.divider,
-        marginRight: 8,
-    },
-    messageSpacer: { width: 40 },
-    messageBubble: {
-        maxWidth: "70%",
-        borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-    },
-    myMessageBubble: {
-        backgroundColor: COLORS.myMessageBg,
-        borderBottomRightRadius: 4,
-    },
-    otherMessageBubble: {
-        backgroundColor: COLORS.otherMessageBg,
-        borderBottomLeftRadius: 4,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    messageText: { fontSize: 15, lineHeight: 20 },
-    myMessageText: { color: COLORS.textMain },
-    otherMessageText: { color: COLORS.textMain },
-    messageTime: { fontSize: 11, marginTop: 4 },
-    myMessageTime: { color: COLORS.textSub, textAlign: "right" },
-    otherMessageTime: { color: COLORS.textSub },
-});

@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator } from "react-native";
 import { X } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { Friend } from "../../../../services/api";
@@ -25,28 +25,28 @@ export const AddPeopleModal = memo(({
     onAddMembers,
 }: AddPeopleModalProps) => (
     <Modal visible={visible} animationType="slide">
-        <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={onClose} style={styles.modalHeaderBtn}>
+        <View className="flex-1 pt-[50px]" style={{ backgroundColor: COLORS.white }}>
+            <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+                <TouchableOpacity className="w-20 items-center" onPress={onClose}>
                     <X size={24} color={COLORS.textMain} />
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>Add People</Text>
+                <Text className="text-[17px] font-semibold" style={{ color: COLORS.textMain }}>Add People</Text>
                 <TouchableOpacity
+                    className="w-20 items-center"
                     onPress={onAddMembers}
-                    style={styles.modalHeaderBtn}
                     disabled={selectedFriends.length === 0 || addingMembers}
                 >
                     {addingMembers ? (
                         <ActivityIndicator size="small" color={COLORS.primary} />
                     ) : (
-                        <Text style={[styles.addText, selectedFriends.length === 0 && styles.addTextDisabled]}>
+                        <Text className="text-base font-semibold" style={{ color: selectedFriends.length === 0 ? COLORS.textSub : COLORS.primary }}>
                             Add ({selectedFriends.length})
                         </Text>
                     )}
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.friendsList}>
+            <View className="flex-1 px-4">
                 {friends.length > 0 ? (
                     <FlatList
                         data={friends}
@@ -60,64 +60,12 @@ export const AddPeopleModal = memo(({
                         keyExtractor={(item) => item.id}
                     />
                 ) : (
-                    <View style={styles.emptyFriends}>
-                        <Text style={styles.emptyText}>No friends available to add</Text>
-                        <Text style={styles.emptySubtext}>All your friends are already in this group</Text>
+                    <View className="items-center py-10">
+                        <Text className="text-sm font-medium" style={{ color: COLORS.textSub }}>No friends available to add</Text>
+                        <Text className="text-xs mt-1" style={{ color: COLORS.textSub }}>All your friends are already in this group</Text>
                     </View>
                 )}
             </View>
         </View>
     </Modal>
 ));
-
-const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-        paddingTop: 50,
-    },
-    modalHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    modalHeaderBtn: {
-        width: 80,
-        alignItems: "center",
-    },
-    modalTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    addText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    addTextDisabled: {
-        color: COLORS.textSub,
-    },
-    friendsList: {
-        flex: 1,
-        paddingHorizontal: 16,
-    },
-    emptyFriends: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-    emptySubtext: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginTop: 4,
-    },
-});

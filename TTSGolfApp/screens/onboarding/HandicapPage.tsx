@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
@@ -14,20 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, AlertCircle, HelpCircle } from "lucide-react-native";
 import type { HandicapPageProps } from "../../types";
-
-// Colors - consistent with LoginScreen
-const COLORS = {
-  primary: "#5DB075",
-  primaryLight: "#E8F5E9",
-  white: "#FFFFFF",
-  black: "#000000",
-  textMain: "#1A1A1A",
-  textSub: "#6B7280",
-  textPlaceholder: "#9CA3AF",
-  border: "#E5E7EB",
-  surface: "#F9FAFB",
-  error: "#EF4444",
-};
+import { ONBOARDING_COLORS as COLORS } from "./constants";
 
 export const HandicapPage: React.FC<HandicapPageProps> = ({
   onNext,
@@ -67,44 +53,37 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
     onNext({ handicap: handicapValue });
   };
 
-  const handleSkip = (): void => {
-    onNext({ handicap: null });
-  };
-
   const isValid = handicap === "" || (error === "" && handicap !== "");
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+    <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
       <StatusBar style="dark" />
 
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.content}>
+          <View className="flex-1 px-6">
             {/* Header */}
-            <View style={styles.header}>
-              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <View className="h-14 flex-row justify-between items-center">
+              <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
                 <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-                <Text style={styles.skipText}>Skip</Text>
               </TouchableOpacity>
             </View>
 
             {/* Main Content */}
-            <View style={styles.mainContent}>
-              <Text style={styles.title}>What's your handicap?</Text>
-              <Text style={styles.subtitle}>
+            <View className="flex-1 pt-4">
+              <Text className="text-[28px] font-bold text-gray-900 mb-2">What's your handicap?</Text>
+              <Text className="text-[15px] text-gray-500 leading-[22px] mb-10">
                 This helps us match you with players of similar skill
               </Text>
 
               {/* Form */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Handicap index</Text>
+              <View className="mb-6">
+                <Text className="text-[13px] font-semibold text-gray-500 mb-2">Handicap index</Text>
                 <TextInput
-                  style={[styles.input, error && styles.inputError]}
+                  className={`h-14 bg-gray-50 rounded-md px-4 text-base text-gray-900 ${error ? "border border-red-500" : ""}`}
                   placeholder="Enter your handicap (e.g., 12.5)"
                   placeholderTextColor={COLORS.textPlaceholder}
                   value={handicap}
@@ -114,50 +93,50 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
                   onSubmitEditing={handleNext}
                 />
                 {error ? (
-                  <View style={styles.errorContainer}>
+                  <View className="flex-row items-center gap-[6px] mt-2">
                     <AlertCircle size={14} color={COLORS.error} />
-                    <Text style={styles.errorText}>{error}</Text>
+                    <Text className="text-[13px] text-red-500">{error}</Text>
                   </View>
                 ) : null}
               </View>
 
               {/* Info Card */}
-              <View style={styles.infoCard}>
+              <View className="flex-row bg-green-50 rounded-md p-4 gap-3 mb-6">
                 <HelpCircle size={24} color={COLORS.primary} />
-                <View style={styles.infoContent}>
-                  <Text style={styles.infoTitle}>Don't have a handicap?</Text>
-                  <Text style={styles.infoText}>
+                <View className="flex-1">
+                  <Text className="text-[15px] font-semibold text-gray-900 mb-1">Don't have a handicap?</Text>
+                  <Text className="text-sm text-gray-500 leading-5">
                     No worries! You can skip this for now and add it later in your profile settings.
                   </Text>
                 </View>
               </View>
 
               {/* Range Hints */}
-              <View style={styles.rangeHints}>
-                <View style={styles.rangeHint}>
-                  <Text style={styles.rangeLabel}>Scratch</Text>
-                  <Text style={styles.rangeValue}>0</Text>
+              <View className="flex-row justify-around py-4 border-t border-gray-200">
+                <View className="items-center">
+                  <Text className="text-xs text-gray-500 mb-1">Scratch</Text>
+                  <Text className="text-base font-semibold text-primary">0</Text>
                 </View>
-                <View style={styles.rangeHint}>
-                  <Text style={styles.rangeLabel}>Average</Text>
-                  <Text style={styles.rangeValue}>15-20</Text>
+                <View className="items-center">
+                  <Text className="text-xs text-gray-500 mb-1">Average</Text>
+                  <Text className="text-base font-semibold text-primary">15-20</Text>
                 </View>
-                <View style={styles.rangeHint}>
-                  <Text style={styles.rangeLabel}>Beginner</Text>
-                  <Text style={styles.rangeValue}>25+</Text>
+                <View className="items-center">
+                  <Text className="text-xs text-gray-500 mb-1">Beginner</Text>
+                  <Text className="text-base font-semibold text-primary">25+</Text>
                 </View>
               </View>
             </View>
 
             {/* Bottom Section */}
-            <View style={styles.bottomSection}>
+            <View className="pb-8">
               <TouchableOpacity
-                style={[styles.nextButton, !isValid && styles.nextButtonDisabled]}
+                className={`h-14 bg-primary rounded-md justify-center items-center ${!isValid ? "opacity-60" : ""}`}
                 onPress={handleNext}
                 disabled={!isValid}
                 activeOpacity={0.8}
               >
-                <Text style={styles.nextButtonText}>
+                <Text className="text-base font-semibold text-white">
                   {handicap ? "Next" : "Skip"}
                 </Text>
               </TouchableOpacity>
@@ -168,145 +147,3 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  header: {
-    height: 56,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  skipButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  skipText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textSub,
-  },
-  mainContent: {
-    flex: 1,
-    paddingTop: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: COLORS.textMain,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: COLORS.textSub,
-    lineHeight: 22,
-    marginBottom: 40,
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.textSub,
-    marginBottom: 8,
-  },
-  input: {
-    height: 56,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: COLORS.textMain,
-  },
-  inputError: {
-    borderWidth: 1,
-    borderColor: COLORS.error,
-  },
-  errorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-  },
-  errorText: {
-    fontSize: 13,
-    color: COLORS.error,
-  },
-  infoCard: {
-    flexDirection: "row",
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    marginBottom: 24,
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: COLORS.textMain,
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 14,
-    color: COLORS.textSub,
-    lineHeight: 20,
-  },
-  rangeHints: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  rangeHint: {
-    alignItems: "center",
-  },
-  rangeLabel: {
-    fontSize: 12,
-    color: COLORS.textSub,
-    marginBottom: 4,
-  },
-  rangeValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.primary,
-  },
-  bottomSection: {
-    paddingBottom: 32,
-  },
-  nextButton: {
-    height: 56,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  nextButtonDisabled: {
-    opacity: 0.6,
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.white,
-  },
-});

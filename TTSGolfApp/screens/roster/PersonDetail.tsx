@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
@@ -47,7 +47,7 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
                 rosterApi.getMemberHistory(person.id)
             ]);
             if (profileRes.success) setProfile(profileRes.profile);
-            if (historyRes.success) setHistory(historyRes.history);
+            if (historyRes.success) setHistory((historyRes.history || []) as any);
         } catch (error) {
             console.error("Failed to load profile:", error);
         } finally {
@@ -127,60 +127,62 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
 
 
     const StatCard = ({ icon: Icon, label, value, color = COLORS.primary }: any) => (
-        <View style={styles.statCard}>
+        <View className="w-[47%] bg-gray-50 rounded-md p-4 items-center gap-1">
             <Icon size={20} color={color} />
-            <Text style={styles.statValue}>{value ?? 'N/A'}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
+            <Text className="text-2xl font-bold text-gray-900">{value ?? 'N/A'}</Text>
+            <Text className="text-xs text-gray-500">{label}</Text>
         </View>
     );
 
     const TabButton = ({ tab, label }: { tab: typeof activeTab; label: string }) => (
         <TouchableOpacity
-            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+            className={`flex-1 py-3.5 items-center ${activeTab === tab ? 'border-b-2' : ''}`}
+            style={activeTab === tab ? { borderBottomColor: COLORS.primary } : {}}
             onPress={() => setActiveTab(tab)}
         >
-            <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>{label}</Text>
+            <Text className={`text-sm font-medium ${activeTab === tab ? 'font-semibold' : 'text-gray-500'}`}
+                  style={activeTab === tab ? { color: COLORS.primary } : {}}>{label}</Text>
         </TouchableOpacity>
     );
 
     const renderStatsTab = () => (
-        <View style={styles.tabContent}>
+        <View className="p-4">
             {/* Social Rate Highlight */}
             {profile?.stats.socialRate != null && (
-                <View style={styles.socialRateCard}>
-                    <View style={styles.socialRateHeader}>
+                <View className="bg-amber-50 rounded-md p-5 items-center mb-4 border border-amber-100">
+                    <View className="flex-row items-center gap-2 mb-2">
                         <Star size={24} color="#F59E0B" fill="#F59E0B" />
-                        <Text style={styles.socialRateTitle}>Social Rate</Text>
+                        <Text className="text-sm font-semibold text-amber-900">Social Rate</Text>
                     </View>
-                    <Text style={styles.socialRateValue}>{Number(profile.stats.socialRate).toFixed(1)}</Text>
-                    <Text style={styles.socialRateDesc}>Reliability score based on attendance history</Text>
+                    <Text className="text-5xl font-bold text-amber-500">{Number(profile.stats.socialRate).toFixed(1)}</Text>
+                    <Text className="text-xs text-amber-900 text-center mt-1">Reliability score based on attendance history</Text>
                 </View>
             )}
 
-            <View style={styles.statsGrid}>
+            <View className="flex-row flex-wrap gap-3 mb-4">
                 <StatCard icon={Award} label="Handicap" value={profile?.stats.handicap} />
                 <StatCard icon={TrendingUp} label="Rounds" value={profile?.stats.roundsPlayed} />
                 <StatCard icon={Users} label="Played Together" value={profile?.stats.timesPlayedTogether} />
                 <StatCard icon={Calendar} label="Avg Score" value={profile?.stats.averageScore} />
             </View>
 
-            <View style={styles.infoSection}>
-                <Text style={styles.infoSectionTitle}>Invite Stats</Text>
-                <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Acceptance Rate</Text>
-                    <Text style={styles.infoValue}>{profile?.stats.acceptanceRate || 'N/A'}</Text>
+            <View className="mb-5">
+                <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Invite Stats</Text>
+                <View className="flex-row justify-between py-3 border-b border-gray-100">
+                    <Text className="text-sm text-gray-900">Acceptance Rate</Text>
+                    <Text className="text-sm text-gray-500 font-medium">{profile?.stats.acceptanceRate || 'N/A'}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Total Invites</Text>
-                    <Text style={styles.infoValue}>{profile?.stats.totalInvites || 0}</Text>
+                <View className="flex-row justify-between py-3 border-b border-gray-100">
+                    <Text className="text-sm text-gray-900">Total Invites</Text>
+                    <Text className="text-sm text-gray-500 font-medium">{profile?.stats.totalInvites || 0}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Invites Accepted</Text>
-                    <Text style={styles.infoValue}>{profile?.stats.invitesAccepted || 0}</Text>
+                <View className="flex-row justify-between py-3 border-b border-gray-100">
+                    <Text className="text-sm text-gray-900">Invites Accepted</Text>
+                    <Text className="text-sm text-gray-500 font-medium">{profile?.stats.invitesAccepted || 0}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Last Played Together</Text>
-                    <Text style={styles.infoValue}>
+                <View className="flex-row justify-between py-3 border-b border-gray-100">
+                    <Text className="text-sm text-gray-900">Last Played Together</Text>
+                    <Text className="text-sm text-gray-500 font-medium">
                         {profile?.stats.lastPlayedTogether
                             ? new Date(profile.stats.lastPlayedTogether).toLocaleDateString()
                             : 'Never'}
@@ -188,39 +190,39 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
                 </View>
             </View>
 
-            <View style={styles.infoSection}>
-                <Text style={styles.infoSectionTitle}>Preferences</Text>
+            <View className="mb-5">
+                <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Preferences</Text>
                 {profile?.preferences.homeCourse && (
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoIconRow}>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <View className="flex-row items-center gap-2">
                             <MapPin size={16} color={COLORS.textSub} />
-                            <Text style={styles.infoLabel}>Home Course</Text>
+                            <Text className="text-sm text-gray-900">Home Course</Text>
                         </View>
-                        <Text style={styles.infoValue}>{profile.preferences.homeCourse}</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.preferences.homeCourse}</Text>
                     </View>
                 )}
                 {profile?.preferences.location && (
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoIconRow}>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <View className="flex-row items-center gap-2">
                             <MapPin size={16} color={COLORS.textSub} />
-                            <Text style={styles.infoLabel}>Location</Text>
+                            <Text className="text-sm text-gray-900">Location</Text>
                         </View>
-                        <Text style={styles.infoValue}>{profile.preferences.location}</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.preferences.location}</Text>
                     </View>
                 )}
                 {profile?.preferences.preferredTeeTime && (
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoIconRow}>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <View className="flex-row items-center gap-2">
                             <Clock size={16} color={COLORS.textSub} />
-                            <Text style={styles.infoLabel}>Preferred Time</Text>
+                            <Text className="text-sm text-gray-900">Preferred Time</Text>
                         </View>
-                        <Text style={styles.infoValue}>{profile.preferences.preferredTeeTime}</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.preferences.preferredTeeTime}</Text>
                     </View>
                 )}
                 {profile?.preferences.walkOrRide && (
-                    <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Play Style</Text>
-                        <Text style={styles.infoValue}>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <Text className="text-sm text-gray-900">Play Style</Text>
+                        <Text className="text-sm text-gray-500 font-medium">
                             {profile.preferences.walkOrRide === 'walk' ? 'Walker' :
                                 profile.preferences.walkOrRide === 'ride' ? 'Rider' : 'Either'}
                         </Text>
@@ -229,18 +231,18 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
             </View>
 
             {profile?.membership && (
-                <View style={styles.infoSection}>
-                    <Text style={styles.infoSectionTitle}>Club Memberships</Text>
-                    <View style={styles.membershipBadge}>
-                        <Text style={styles.membershipText}>{profile.membership}</Text>
+                <View className="mb-5">
+                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Club Memberships</Text>
+                    <View className="bg-green-50 px-3 py-2 rounded-md self-start">
+                        <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>{profile.membership}</Text>
                     </View>
                 </View>
             )}
 
             {profile?.distanceToCourse && (
-                <View style={styles.infoSection}>
-                    <Text style={styles.infoSectionTitle}>Distance</Text>
-                    <Text style={styles.distanceText}>{profile.distanceToCourse} miles from your home course</Text>
+                <View className="mb-5">
+                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Distance</Text>
+                    <Text className="text-sm text-gray-900">{profile.distanceToCourse} miles from your home course</Text>
                 </View>
             )}
         </View>
@@ -248,30 +250,30 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
 
 
     const renderHistoryTab = () => (
-        <View style={styles.tabContent}>
-            <Text style={styles.infoSectionTitle}>Playing History</Text>
+        <View className="p-4">
+            <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Playing History</Text>
             {history.length === 0 ? (
-                <View style={styles.emptyHistory}>
+                <View className="items-center py-10">
                     <Calendar size={48} color={COLORS.textSub} strokeWidth={1} />
-                    <Text style={styles.emptyText}>No playing history yet</Text>
-                    <Text style={styles.emptySubtext}>Invite them to a tee time to start building history</Text>
+                    <Text className="text-[15px] font-medium text-gray-900 mt-3">No playing history yet</Text>
+                    <Text className="text-[13px] text-gray-500 mt-1 text-center">Invite them to a tee time to start building history</Text>
                 </View>
             ) : (
                 history.map((h) => (
-                    <View key={h.id} style={styles.historyItem}>
-                        <View style={styles.historyLeft}>
-                            <Text style={styles.historyDate}>
+                    <View key={h.id} className="flex-row justify-between items-center py-3.5 border-b border-gray-100">
+                        <View className="flex-1">
+                            <Text className="text-sm font-semibold text-gray-900">
                                 {h.teeDate ? new Date(h.teeDate).toLocaleDateString('en-US', {
                                     weekday: 'short',
                                     month: 'short',
                                     day: 'numeric'
                                 }) : 'Unknown date'}
                             </Text>
-                            <Text style={styles.historyCourse}>{h.courseName || 'Unknown course'}</Text>
-                            {h.teeTime && <Text style={styles.historyTime}>{h.teeTime}</Text>}
+                            <Text className="text-[13px] text-gray-500 mt-0.5">{h.courseName || 'Unknown course'}</Text>
+                            {h.teeTime && <Text className="text-xs text-gray-500 mt-0.5">{h.teeTime}</Text>}
                         </View>
-                        <View style={[styles.historyStatus, h.playedTogether ? styles.historyPlayed : styles.historyMissed]}>
-                            <Text style={[styles.historyStatusText, h.playedTogether ? styles.historyPlayedText : styles.historyMissedText]}>
+                        <View className={`px-3 py-1.5 rounded-md ${h.playedTogether ? 'bg-green-50' : 'bg-red-50'}`}>
+                            <Text className={`text-xs font-semibold ${h.playedTogether ? 'text-green-600' : 'text-red-500'}`}>
                                 {h.playedTogether ? 'Played' : h.inviteStatus || 'Missed'}
                             </Text>
                         </View>
@@ -282,122 +284,129 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
     );
 
     const renderEquipmentTab = () => (
-        <View style={styles.tabContent}>
-            <View style={styles.infoSection}>
-                <Text style={styles.infoSectionTitle}>Equipment</Text>
+        <View className="p-4">
+            <View className="mb-5">
+                <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Equipment</Text>
                 {profile?.equipment?.driver && (
-                    <View style={styles.equipmentRow}>
-                        <Text style={styles.equipmentLabel}>Driver</Text>
-                        <Text style={styles.equipmentValue}>{profile.equipment.driver}</Text>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <Text className="text-sm text-gray-900">Driver</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.equipment.driver}</Text>
                     </View>
                 )}
                 {profile?.equipment?.irons && (
-                    <View style={styles.equipmentRow}>
-                        <Text style={styles.equipmentLabel}>Irons</Text>
-                        <Text style={styles.equipmentValue}>{profile.equipment.irons}</Text>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <Text className="text-sm text-gray-900">Irons</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.equipment.irons}</Text>
                     </View>
                 )}
                 {profile?.equipment?.putter && (
-                    <View style={styles.equipmentRow}>
-                        <Text style={styles.equipmentLabel}>Putter</Text>
-                        <Text style={styles.equipmentValue}>{profile.equipment.putter}</Text>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <Text className="text-sm text-gray-900">Putter</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.equipment.putter}</Text>
                     </View>
                 )}
                 {profile?.equipment?.ball && (
-                    <View style={styles.equipmentRow}>
-                        <Text style={styles.equipmentLabel}>Ball</Text>
-                        <Text style={styles.equipmentValue}>{profile.equipment.ball}</Text>
+                    <View className="flex-row justify-between py-3 border-b border-gray-100">
+                        <Text className="text-sm text-gray-900">Ball</Text>
+                        <Text className="text-sm text-gray-500 font-medium">{profile.equipment.ball}</Text>
                     </View>
                 )}
                 {!profile?.equipment?.driver && !profile?.equipment?.irons && !profile?.equipment?.putter && !profile?.equipment?.ball && (
-                    <View style={styles.emptyHistory}>
-                        <Text style={styles.emptyText}>No equipment info available</Text>
+                    <View className="items-center py-10">
+                        <Text className="text-[15px] font-medium text-gray-900 mt-3">No equipment info available</Text>
                     </View>
                 )}
             </View>
 
             {profile?.contact?.bio && (
-                <View style={styles.infoSection}>
-                    <Text style={styles.infoSectionTitle}>Bio</Text>
-                    <Text style={styles.bioText}>{profile.contact.bio}</Text>
+                <View className="mb-5">
+                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Bio</Text>
+                    <Text className="text-sm text-gray-900 leading-[22px]">{profile.contact.bio}</Text>
                 </View>
             )}
         </View>
     );
 
     return (
-        <View style={styles.container}>
+        <View className="flex-1 bg-white">
             <StatusBar style="dark" />
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <View className="flex-row justify-between items-center px-4 pt-12 pb-2 bg-white z-10">
+                <TouchableOpacity className="w-10 h-10 justify-center items-center -ml-2" onPress={onBack}>
                     <ArrowLeft size={24} color="black" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Profile</Text>
-                <TouchableOpacity style={styles.moreButton} onPress={() => setShowMoreMenu(!showMoreMenu)}>
+                <Text className="text-lg font-semibold text-gray-900">Profile</Text>
+                <TouchableOpacity className="w-8 h-8 justify-center items-center" onPress={() => setShowMoreMenu(!showMoreMenu)}>
                     <MoreHorizontal size={24} color="black" />
                 </TouchableOpacity>
             </View>
 
             {/* More Menu Dropdown */}
             {showMoreMenu && (
-                <View style={styles.moreMenu}>
-                    <TouchableOpacity style={styles.moreMenuItem} onPress={() => { setShowMoreMenu(false); handleRemove(); }}>
+                <View className="absolute top-[90px] right-4 bg-white rounded-md shadow-2xl z-[100] min-w-[180px]"
+                      style={{
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.15,
+                          shadowRadius: 12,
+                          elevation: 8
+                      }}>
+                    <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleRemove(); }}>
                         <Trash2 size={18} color="#EF4444" />
-                        <Text style={styles.moreMenuTextDanger}>Remove from Roster</Text>
+                        <Text className="text-[15px] text-red-500 font-medium">Remove from Roster</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.moreMenuItem} onPress={() => { setShowMoreMenu(false); handleBlock(); }}>
+                    <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleBlock(); }}>
                         <Ban size={18} color="#EF4444" />
-                        <Text style={styles.moreMenuTextDanger}>Block User</Text>
+                        <Text className="text-[15px] text-red-500 font-medium">Block User</Text>
                     </TouchableOpacity>
                 </View>
             )}
 
             {loading ? (
-                <View style={styles.loadingContainer}>
+                <View className="flex-1 justify-center items-center">
                     <ActivityIndicator size="large" color={COLORS.primary} />
                 </View>
             ) : (
                 <ScrollView showsVerticalScrollIndicator={false}>
-                    <View style={styles.profileHeader}>
+                    <View className="items-center py-6 border-b border-gray-100">
                         {profile?.contact.avatar || person.img ? (
                             <Image
                                 source={{ uri: profile?.contact.avatar || person.img }}
-                                style={styles.avatar}
+                                className="w-[100px] h-[100px] rounded-full bg-gray-200"
                             />
                         ) : (
-                            <View style={styles.avatarPlaceholder}>
-                                <Text style={styles.avatarInitials}>
+                            <View className="w-[100px] h-[100px] rounded-full bg-gray-200 justify-center items-center">
+                                <Text className="text-[32px] font-semibold text-gray-500">
                                     {person.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                                 </Text>
                             </View>
                         )}
-                        <Text style={styles.profileName}>{profile?.contact.name || person.name}</Text>
+                        <Text className="text-2xl font-bold text-gray-900 mt-4">{profile?.contact.name || person.name}</Text>
                         {profile?.contact.username && (
-                            <Text style={styles.username}>@{profile.contact.username}</Text>
+                            <Text className="text-sm text-gray-500 mt-1">@{profile.contact.username}</Text>
                         )}
                         {profile?.groupName && (
-                            <View style={[styles.groupBadge, { backgroundColor: profile.groupColor || '#E8F5E9' }]}>
-                                <Text style={styles.groupBadgeText}>{profile.groupName}</Text>
+                            <View className="px-3 py-1 rounded-md mt-2" style={{ backgroundColor: profile.groupColor || '#E8F5E9' }}>
+                                <Text className="text-xs font-semibold text-gray-900">{profile.groupName}</Text>
                             </View>
                         )}
                     </View>
 
-                    <View style={styles.profileActions}>
-                        <TouchableOpacity style={styles.profileActionBtn} onPress={handleMessage}>
-                            <View style={styles.actionIconContainer}>
+                    <View className="flex-row justify-center gap-10 py-5 border-b border-gray-100">
+                        <TouchableOpacity className="items-center gap-2" onPress={handleMessage}>
+                            <View className="w-12 h-12 rounded-full bg-green-50 justify-center items-center">
                                 <MessageCircle size={22} color={COLORS.primary} />
                             </View>
-                            <Text style={styles.profileActionText}>Message</Text>
+                            <Text className="text-xs font-medium text-gray-900">Message</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.profileActionBtn} onPress={handleInvite}>
-                            <View style={styles.actionIconContainer}>
+                        <TouchableOpacity className="items-center gap-2" onPress={handleInvite}>
+                            <View className="w-12 h-12 rounded-full bg-green-50 justify-center items-center">
                                 <Calendar size={22} color={COLORS.primary} />
                             </View>
-                            <Text style={styles.profileActionText}>Invite</Text>
+                            <Text className="text-xs font-medium text-gray-900">Invite</Text>
                         </TouchableOpacity>
                     </View>
 
-                    <View style={styles.tabBar}>
+                    <View className="flex-row border-b border-gray-100">
                         <TabButton tab="stats" label="Stats" />
                         <TabButton tab="history" label="History" />
                         <TabButton tab="equipment" label="Equipment" />
@@ -407,159 +416,9 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
                     {activeTab === 'history' && renderHistoryTab()}
                     {activeTab === 'equipment' && renderEquipmentTab()}
 
-                    <View style={{ height: 40 }} />
+                    <View className="h-10" />
                 </ScrollView>
             )}
         </View>
     );
 }
-
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.white },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingTop: 48,
-        paddingBottom: 8,
-        backgroundColor: COLORS.white,
-        zIndex: 10,
-    },
-    backButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center", marginLeft: -8 },
-    headerTitle: { fontSize: 18, fontWeight: "600", color: COLORS.textMain },
-    moreButton: { width: 32, height: 32, justifyContent: "center", alignItems: "center" },
-    moreMenu: {
-        position: "absolute",
-        top: 90,
-        right: 16,
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 8,
-        zIndex: 100,
-        minWidth: 180,
-    },
-    moreMenuItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    moreMenuTextDanger: { fontSize: 15, color: "#EF4444", fontWeight: "500" },
-    loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-    profileHeader: { alignItems: "center", paddingVertical: 24, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-    avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: COLORS.divider },
-    avatarPlaceholder: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: { fontSize: 32, fontWeight: "600", color: COLORS.textSub },
-    profileName: { fontSize: 24, fontWeight: "bold", color: COLORS.textMain, marginTop: 16 },
-    username: { fontSize: 14, color: COLORS.textSub, marginTop: 4 },
-    groupBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginTop: 8 },
-    groupBadgeText: { fontSize: 12, fontWeight: "600", color: COLORS.textMain },
-    profileActions: {
-        flexDirection: "row",
-        justifyContent: "center",
-        gap: 40,
-        paddingVertical: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    profileActionBtn: { alignItems: "center", gap: 8 },
-    actionIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: "#E8F5E9",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    profileActionText: { fontSize: 12, fontWeight: "500", color: COLORS.textMain },
-    tabBar: {
-        flexDirection: "row",
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    tabButton: { flex: 1, paddingVertical: 14, alignItems: "center" },
-    tabButtonActive: { borderBottomWidth: 2, borderBottomColor: COLORS.primary },
-    tabButtonText: { fontSize: 14, fontWeight: "500", color: COLORS.textSub },
-    tabButtonTextActive: { color: COLORS.primary, fontWeight: "600" },
-    tabContent: { padding: 16 },
-    socialRateCard: {
-        backgroundColor: "#FFFBEB",
-        borderRadius: 16,
-        padding: 20,
-        alignItems: "center",
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: "#FEF3C7",
-    },
-    socialRateHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-    socialRateTitle: { fontSize: 14, fontWeight: "600", color: "#92400E" },
-    socialRateValue: { fontSize: 48, fontWeight: "bold", color: "#F59E0B" },
-    socialRateDesc: { fontSize: 12, color: "#92400E", textAlign: "center", marginTop: 4 },
-    statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 16 },
-    statCard: {
-        width: "47%",
-        backgroundColor: "#F9FAFB",
-        borderRadius: 12,
-        padding: 16,
-        alignItems: "center",
-        gap: 4,
-    },
-    statValue: { fontSize: 24, fontWeight: "bold", color: COLORS.textMain },
-    statLabel: { fontSize: 12, color: COLORS.textSub },
-    infoSection: { marginBottom: 20 },
-    infoSectionTitle: { fontSize: 14, fontWeight: "600", color: COLORS.textSub, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 },
-    infoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-    infoIconRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    infoLabel: { fontSize: 14, color: COLORS.textMain },
-    infoValue: { fontSize: 14, color: COLORS.textSub, fontWeight: "500" },
-    membershipBadge: { backgroundColor: "#E8F5E9", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignSelf: "flex-start" },
-    membershipText: { fontSize: 14, fontWeight: "500", color: COLORS.primary },
-    distanceText: { fontSize: 14, color: COLORS.textMain },
-    emptyHistory: { alignItems: "center", paddingVertical: 40 },
-    emptyText: { fontSize: 15, fontWeight: "500", color: COLORS.textMain, marginTop: 12 },
-    emptySubtext: { fontSize: 13, color: COLORS.textSub, marginTop: 4, textAlign: "center" },
-    historyItem: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    historyLeft: { flex: 1 },
-    historyDate: { fontSize: 14, fontWeight: "600", color: COLORS.textMain },
-    historyCourse: { fontSize: 13, color: COLORS.textSub, marginTop: 2 },
-    historyTime: { fontSize: 12, color: COLORS.textSub, marginTop: 2 },
-    historyStatus: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-    historyPlayed: { backgroundColor: "#E8F5E9" },
-    historyMissed: { backgroundColor: "#FEE2E2" },
-    historyStatusText: { fontSize: 12, fontWeight: "600" },
-    historyPlayedText: { color: COLORS.primary },
-    historyMissedText: { color: "#EF4444" },
-    equipmentRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    equipmentLabel: { fontSize: 14, color: COLORS.textMain },
-    equipmentValue: { fontSize: 14, color: COLORS.textSub, fontWeight: "500" },
-    bioText: { fontSize: 14, color: COLORS.textMain, lineHeight: 22 },
-});

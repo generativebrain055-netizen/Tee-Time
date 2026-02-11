@@ -2,15 +2,34 @@ import "./global.css";
 import React, { useState, useEffect, Suspense, lazy } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PaperProvider } from "react-native-paper";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import * as Font from "expo-font";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fontAssets } from "./theme/fonts";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+
+// New design system imports
+import {
+  AppThemeProvider,
+  useAppTheme,
+  paperLightTheme,
+  paperDarkTheme,
+} from "./ui/theme";
+import { ToastProvider } from "./ui/feedback";
+import { UserProvider } from "./contexts";
+
 import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 // Lazy-load Login and Onboarding (defers Firebase/OAuth init until user taps "Sign in" or "Create account")
 const LoginScreen = lazy(() => import("./screens/login"));
 const OnboardingModule = lazy(() => import("./screens/onboarding").then((m) => ({ default: m.OnboardingScreen })));
 const OAuthOnboardingModule = lazy(() => import("./screens/onboarding/OAuthOnboardingScreen").then((m) => ({ default: m.OAuthOnboardingScreen })));
+const OAuthPhoneEntryModule = lazy(() => import("./screens/onboarding/OAuthPhoneEntryScreen"));
+const OAuthMagicLinkVerificationModule = lazy(() => import("./screens/onboarding/OAuthMagicLinkVerificationScreen"));
+const OAuthProfileCompletionModule = lazy(() => import("./screens/onboarding/OAuthProfileCompletionScreen"));
+const AvailabilityOnboardingModule = lazy(() => import("./screens/onboarding/AvailabilityOnboardingScreen"));
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
 import MessagesScreen from "./screens/Messages";
@@ -20,6 +39,7 @@ import ProfileScreen from "./screens/profile";
 import CreateTeeTimeScreen from "./screens/CreateTeeTime";
 import InvitesScreen from "./screens/InvitesScreen";
 import AvailabilityScreen from "./screens/AvailabilityScreen";
+import EditAvailabilityScreen from "./screens/EditAvailabilityScreen";
 import FriendProfileScreen from "./screens/friend-profile";
 import GroupProfileScreen from "./screens/roster/group-profile";
 import EditProfileScreen from "./screens/profile/EditProfileScreen";
@@ -31,6 +51,12 @@ import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
 import CheckInScreen from "./screens/CheckInScreen";
 import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
 import SelectOnDeckScreen from "./screens/SelectOnDeckScreen";
+import FindPlayersScreen from "./screens/FindPlayersScreen";
+import UserProfileScreen from "./screens/UserProfileScreen";
+import SettingsScreen from "./screens/SettingsScreen";
+import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
+import HelpSupportScreen from "./screens/HelpSupportScreen";
+import CreateGroupScreen from "./screens/CreateGroupScreen";
 
 type ScreenName =
   | "Splash"
@@ -38,6 +64,10 @@ type ScreenName =
   | "Login"
   | "Onboarding"
   | "OAuthOnboarding"
+  | "OAuthPhoneEntry"
+  | "OAuthMagicLinkVerification"
+  | "OAuthProfileCompletion"
+  | "AvailabilityOnboarding"
   | "HomePage"
   | "Home"
   | "Roster"
@@ -49,9 +79,14 @@ type ScreenName =
   | "EditProfile"
   | "QRCode"
   | "ScanQR"
+  | "Settings"
+  | "NotificationSettings"
+  | "HelpSupport"
   | "CreateTeeTime"
+  | "CreateGroup"
   | "Invites"
   | "Availability"
+  | "EditAvailability"
   | "Community"
   | "FriendProfile"
   | "GroupProfile"
@@ -59,7 +94,9 @@ type ScreenName =
   | "TeeTimeDetail"
   | "TeeTimeHistory"
   | "CheckIn"
-  | "SelectOnDeck";
+  | "SelectOnDeck"
+  | "FindPlayers"
+  | "UserProfile";
 
 interface UserData {
   firstName: string;
@@ -90,12 +127,23 @@ interface Navigation {
 export default function App(): React.ReactElement {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>("Splash");
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const [screenParams, setScreenParams] = useState<NavigationParams>({});
   const [screenHistory, setScreenHistory] = useState<
     { screen: ScreenName; params: NavigationParams }[]
   >([{ screen: "Splash", params: {} }]);
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
+
+  // Load fonts
+  useEffect(() => {
+    Font.loadAsync(fontAssets)
+      .then(() => setFontsLoaded(true))
+      .catch((err) => {
+        console.warn("Font loading error:", err);
+        setFontsLoaded(true); // Continue even if fonts fail
+      });
+  }, []);
 
   // Set up session expired handler
   useEffect(() => {
@@ -234,6 +282,69 @@ export default function App(): React.ReactElement {
             />
           </Suspense>
         );
+      case "OAuthPhoneEntry":
+        return (
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <OAuthPhoneEntryModule
+              key={`oauth-phone-entry-${screenKey}`}
+              navigation={navigation as any}
+              route={{ params: screenParams } as any}
+            />
+          </Suspense>
+        );
+      case "OAuthMagicLinkVerification":
+        return (
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <OAuthMagicLinkVerificationModule
+              key={`oauth-magic-link-${screenKey}`}
+              navigation={navigation as any}
+              route={{ params: screenParams } as any}
+            />
+          </Suspense>
+        );
+      case "OAuthProfileCompletion":
+        return (
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <OAuthProfileCompletionModule
+              key={`oauth-profile-completion-${screenKey}`}
+              navigation={navigation as any}
+              route={{ params: screenParams } as any}
+            />
+          </Suspense>
+        );
+      case "AvailabilityOnboarding":
+        return (
+          <Suspense
+            fallback={
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+              </View>
+            }
+          >
+            <AvailabilityOnboardingModule
+              key={`availability-onboarding-${screenKey}`}
+              navigation={navigation as any}
+            />
+          </Suspense>
+        );
       case "HomePage":
       case "Home":
         return (
@@ -325,6 +436,57 @@ export default function App(): React.ReactElement {
             navigation={navigation as any}
           />
         );
+      case "EditAvailability":
+        return (
+          <EditAvailabilityScreen
+            key={`edit-availability-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "Settings":
+        return (
+          <SettingsScreen
+            key={`settings-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "NotificationSettings":
+        return (
+          <NotificationSettingsScreen
+            key={`notification-settings-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "HelpSupport":
+        return (
+          <HelpSupportScreen
+            key={`help-support-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "CreateGroup":
+        return (
+          <CreateGroupScreen
+            key={`create-group-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "FindPlayers":
+        return (
+          <FindPlayersScreen
+            key={`find-players-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "UserProfile":
+        return (
+          <UserProfileScreen
+            key={`user-profile-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
       case "FriendProfile":
         return (
           <FriendProfileScreen
@@ -397,9 +559,50 @@ export default function App(): React.ReactElement {
     }
   };
 
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FFFFFF" }}>
+          <ActivityIndicator size="large" color="#5EBC68" />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>{renderScreen()}</SafeAreaProvider>
+      <AppThemeProvider>
+        <AppInner navigation={navigation} renderScreen={renderScreen} />
+      </AppThemeProvider>
     </ErrorBoundary>
+  );
+}
+
+/**
+ * Inner component that sits inside AppThemeProvider so it can read the theme.
+ * This avoids the "useAppTheme outside provider" error.
+ */
+function AppInner({
+  navigation,
+  renderScreen,
+}: {
+  navigation: Navigation;
+  renderScreen: () => React.ReactElement;
+}) {
+  const { isDark } = useAppTheme();
+  const theme = isDark ? paperDarkTheme : paperLightTheme;
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <PaperProvider theme={theme}>
+        <SafeAreaProvider>
+          <UserProvider>
+            <ToastProvider>
+              {renderScreen()}
+            </ToastProvider>
+          </UserProvider>
+        </SafeAreaProvider>
+      </PaperProvider>
+    </GestureHandlerRootView>
   );
 }

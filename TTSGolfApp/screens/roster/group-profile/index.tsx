@@ -2,7 +2,7 @@
  * Group Profile Screen - Modular Implementation
  */
 import React, { useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../constants/colors";
@@ -127,7 +127,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     // Loading state
     if (loading) {
         return (
-            <View style={[styles.container, styles.centered]}>
+            <View className="flex-1 justify-center items-center bg-gray-50">
                 <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
@@ -136,10 +136,10 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     // Error state
     if (!group) {
         return (
-            <View style={[styles.container, styles.centered]}>
-                <Text style={styles.errorText}>Group not found</Text>
-                <TouchableOpacity style={styles.backLink} onPress={handleBack}>
-                    <Text style={styles.backLinkText}>Go back</Text>
+            <View className="flex-1 justify-center items-center bg-gray-50">
+                <Text className="text-base text-gray-600 mb-4">Group not found</Text>
+                <TouchableOpacity className="py-2 px-4" onPress={handleBack}>
+                    <Text className="text-base font-medium" style={{ color: COLORS.primary }}>Go back</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -149,11 +149,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     const avgHandicap = calculateAvgHandicap(members);
 
     return (
-        <View style={styles.container}>
+        <View className="flex-1 bg-gray-50">
             <StatusBar style="light" />
 
             <ScrollView
-                style={styles.scrollView}
+                className="flex-1"
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
@@ -197,7 +197,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     onBlockMember={handleBlockMember}
                 />
 
-                <View style={styles.bottomSpacer} />
+                <View className="h-10" />
             </ScrollView>
 
             <AddMembersModal
@@ -213,34 +213,3 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    scrollView: {
-        flex: 1,
-    },
-    errorText: {
-        fontSize: 16,
-        color: COLORS.textSub,
-        marginBottom: 16,
-    },
-    backLink: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-    },
-    backLinkText: {
-        fontSize: 16,
-        color: COLORS.primary,
-        fontWeight: "500",
-    },
-    bottomSpacer: {
-        height: 40,
-    },
-});

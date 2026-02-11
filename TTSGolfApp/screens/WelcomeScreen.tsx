@@ -1,20 +1,14 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import {
   View,
   Text,
   Image,
-  StyleSheet,
   Dimensions,
   Animated,
-  Easing,
-  ViewStyle,
-  TextStyle,
-  ImageStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { PrimaryButton, SecondaryButton } from "../components";
-import { colors, spacing, fontSize, fontWeight } from "../theme";
 
 const { width } = Dimensions.get("window");
 
@@ -36,19 +30,6 @@ interface WelcomeScreenProps {
   navigation: Navigation;
 }
 
-interface Styles {
-  container: ViewStyle;
-  safeArea: ViewStyle;
-  logoSection: ViewStyle;
-  welcomeText: TextStyle;
-  logo: ImageStyle;
-  tagline: TextStyle;
-  buttonsSection: ViewStyle;
-  buttonSpacing: ViewStyle;
-  termsText: TextStyle;
-  termsLink: TextStyle;
-}
-
 export default function WelcomeScreen({
   navigation,
 }: WelcomeScreenProps): React.ReactElement {
@@ -59,113 +40,54 @@ export default function WelcomeScreen({
   const buttonsFadeAnim = useRef(new Animated.Value(1)).current;
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-white">
       <StatusBar style="dark" />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView className="flex-1 justify-between px-[8%] pb-6">
         <Animated.View
-          style={[
-            styles.logoSection,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: slideUpAnim },
-                { scale: logoScaleAnim },
-              ],
-            },
-          ]}
+          className="flex-1 justify-center items-center pt-16"
+          style={{
+            opacity: fadeAnim,
+            transform: [
+              { translateY: slideUpAnim },
+              { scale: logoScaleAnim },
+            ],
+          }}
         >
-          <Text style={styles.welcomeText}>WELCOME TO</Text>
+          <Text className="text-sm font-semibold text-gray-400 tracking-[2px] mb-6">WELCOME TO</Text>
           <Image
             source={require("../assets/compact-logo.png")}
-            style={styles.logo}
+            style={{ width: width * 0.7, height: 150 }}
+            className="mb-4"
             resizeMode="contain"
           />
-          <Text style={styles.tagline}>Golf scheduling made simple</Text>
+          <Text className="text-lg text-gray-500 font-medium">Golf scheduling made simple</Text>
         </Animated.View>
 
         <Animated.View
-          style={[
-            styles.buttonsSection,
-            {
-              opacity: buttonsFadeAnim,
-              transform: [{ translateY: buttonsSlideAnim }],
-            },
-          ]}
+          className="pb-12 px-4 gap-3"
+          style={{
+            opacity: buttonsFadeAnim,
+            transform: [{ translateY: buttonsSlideAnim }],
+          }}
         >
           <PrimaryButton
             title="Create account"
             onPress={() => navigation.navigate("Onboarding")}
             icon="arrow-forward"
-            style={styles.buttonSpacing}
           />
 
           <SecondaryButton
             title="Sign in"
             onPress={() => navigation.navigate("Login")}
-            style={styles.buttonSpacing}
           />
 
-          <Text style={styles.termsText}>
+          <Text className="text-xs text-gray-400 text-center leading-[18px] mt-2">
             Joining our app means you agree with our{" "}
-            <Text style={styles.termsLink}>Terms of Service</Text>
-            {"\n"}and <Text style={styles.termsLink}>Privacy Policy</Text>
+            <Text className="underline text-gray-400">Terms of Service</Text>
+            {"\n"}and <Text className="underline text-gray-400">Privacy Policy</Text>
           </Text>
         </Animated.View>
       </SafeAreaView>
     </View>
   );
 }
-
-const styles = StyleSheet.create<Styles>({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  safeArea: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: width * 0.08,
-    paddingBottom: spacing.xl,
-  },
-  logoSection: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingTop: spacing.massive,
-  },
-  welcomeText: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold as TextStyle["fontWeight"],
-    color: colors.textTertiary,
-    letterSpacing: 2,
-    marginBottom: spacing.xl,
-  },
-  logo: {
-    width: width * 0.7,
-    height: 150,
-    marginBottom: spacing.lg,
-  },
-  tagline: {
-    fontSize: fontSize.lg,
-    color: colors.textSecondary,
-    fontWeight: fontWeight.medium as TextStyle["fontWeight"],
-  },
-  buttonsSection: {
-    paddingBottom: spacing.huge,
-    paddingHorizontal: spacing.md,
-  },
-  buttonSpacing: {
-    marginBottom: spacing.md,
-  },
-  termsText: {
-    fontSize: fontSize.xs,
-    color: colors.textTertiary,
-    textAlign: "center",
-    lineHeight: 16,
-    marginTop: spacing.md,
-  },
-  termsLink: {
-    color: colors.primary,
-    fontWeight: fontWeight.semibold as TextStyle["fontWeight"],
-  },
-});

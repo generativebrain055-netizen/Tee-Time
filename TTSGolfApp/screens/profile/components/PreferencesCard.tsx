@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import { COLORS } from "../../../constants/colors";
 
 interface PreferenceRowProps {
@@ -8,9 +8,9 @@ interface PreferenceRowProps {
 }
 
 export const PreferenceRow = memo(({ label, value }: PreferenceRowProps) => (
-    <View style={styles.preferenceRow}>
-        <Text style={styles.preferenceLabel}>{label}</Text>
-        <Text style={styles.preferenceValue}>{value}</Text>
+    <View className="py-2">
+        <Text className="text-[11px] font-semibold text-gray-500 tracking-wide mb-1">{label}</Text>
+        <Text className="text-[15px] font-medium text-gray-900">{value}</Text>
     </View>
 ));
 
@@ -21,54 +21,16 @@ interface PreferencesCardProps {
 }
 
 const PreferencesCard = memo(({ teeTimePreference, walkOrRide, groupSize }: PreferencesCardProps) => (
-    <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Playing preferences</Text>
-        <View style={styles.preferencesCard}>
+    <View className="px-5 mb-6">
+        <Text className="text-base font-bold text-gray-900 mb-3">Playing preferences</Text>
+        <View className="bg-white rounded-md p-4">
             <PreferenceRow label="TEE TIME PREFERENCE" value={teeTimePreference} />
-            <View style={styles.divider} />
+            <View className="h-[1px] bg-gray-200 my-2" />
             <PreferenceRow label="RIDE OR WALK" value={walkOrRide} />
-            <View style={styles.divider} />
+            <View className="h-[1px] bg-gray-200 my-2" />
             <PreferenceRow label="GROUP SIZE" value={groupSize} />
         </View>
     </View>
 ));
-
-const styles = StyleSheet.create({
-    section: {
-        paddingHorizontal: 20,
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 12,
-    },
-    preferencesCard: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
-    },
-    preferenceRow: {
-        paddingVertical: 8,
-    },
-    preferenceLabel: {
-        fontSize: 11,
-        fontWeight: "600",
-        color: COLORS.textSub,
-        letterSpacing: 0.5,
-        marginBottom: 4,
-    },
-    preferenceValue: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: COLORS.divider,
-        marginVertical: 8,
-    },
-});
 
 export default PreferencesCard;

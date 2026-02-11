@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TextInput, TouchableOpacity } from "react-native";
 import { Image as ImageIcon, Smile, Send } from "lucide-react-native";
 import { COLORS } from "../styles";
 
@@ -10,23 +10,25 @@ interface MessageInputProps {
 }
 
 export const MessageInput = memo(({ value, onChangeText, onSend }: MessageInputProps) => (
-    <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.inputButton}>
+    <View className="flex-row items-center px-4 py-3 bg-white border-t border-border pb-7">
+        <TouchableOpacity className="w-10 h-10 justify-center items-center">
             <ImageIcon size={24} color={COLORS.textSub} />
         </TouchableOpacity>
         <TextInput
-            style={styles.input}
+            className="flex-1 bg-[#F3F4F6] rounded-[20px] px-4 py-2.5 text-[15px] text-[#111827] max-h-[100px] min-h-[40px]"
             placeholder="Type a message..."
             placeholderTextColor={COLORS.textSub}
             value={value}
             onChangeText={onChangeText}
             multiline
         />
-        <TouchableOpacity style={styles.inputButton}>
+        <TouchableOpacity className="w-10 h-10 justify-center items-center">
             <Smile size={24} color={COLORS.textSub} />
         </TouchableOpacity>
         <TouchableOpacity
-            style={[styles.sendButton, value.trim() && styles.sendButtonActive]}
+            className={`w-10 h-10 rounded-[20px] justify-center items-center ml-2 ${
+                value.trim() ? "bg-primary" : "bg-[#F3F4F6]"
+            }`}
             onPress={onSend}
             disabled={!value.trim()}
         >
@@ -34,43 +36,3 @@ export const MessageInput = memo(({ value, onChangeText, onSend }: MessageInputP
         </TouchableOpacity>
     </View>
 ));
-
-const styles = StyleSheet.create({
-    inputContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: COLORS.white,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.divider,
-        paddingBottom: 28,
-    },
-    inputButton: {
-        width: 40,
-        height: 40,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    input: {
-        flex: 1,
-        backgroundColor: COLORS.secondary,
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 15,
-        color: COLORS.textMain,
-        maxHeight: 100,
-        minHeight: 40,
-    },
-    sendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: COLORS.secondary,
-        marginLeft: 8,
-    },
-    sendButtonActive: { backgroundColor: COLORS.primary },
-});

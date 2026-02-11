@@ -2,19 +2,24 @@ import React, { useState, useEffect, useCallback, memo } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
     Alert,
     Image,
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FlashList } from "@shopify/flash-list";
 import { Check, Users, Clock } from "lucide-react-native";
-import { COLORS } from "../constants/colors";
-import { Header } from "../components/common";
+import { ScreenShell, AppHeader } from "../ui";
+import { useColors } from "../ui/theme/ThemeContext";
 import { rosterApi, teeTimeApi } from "../services/api";
+
+const COLORS = {
+    primary: "#5EBC68",
+    white: "#FFFFFF",
+    textSub: "#6B7280",
+    requested: "#D97706",
+};
 
 interface OnDeckPlayer {
     id: string;
@@ -57,41 +62,36 @@ const PlayerItem = memo(({
 
     return (
         <TouchableOpacity
-            style={[
-                styles.playerItem,
-                isSelected && styles.playerItemSelected,
-                disabled && !isSelected && styles.playerItemDisabled
-            ]}
+            className={`flex-row items-center bg-white px-4 py-3 border-b border-gray-200 ${isSelected ? 'bg-green-50' : ''} ${disabled && !isSelected ? 'opacity-50' : ''}`}
             onPress={onToggle}
             disabled={disabled && !isSelected}
             activeOpacity={0.7}
         >
-            <View style={styles.playerAvatar}>
+            <View className="w-12 h-12 rounded-full bg-gray-200 justify-center items-center overflow-hidden">
                 {player.contact.avatar ? (
-                    <Image source={{ uri: player.contact.avatar }} style={styles.avatarImage} />
+                    <Image source={{ uri: player.contact.avatar }} className="w-12 h-12 rounded-full" />
                 ) : (
-                    <Text style={styles.avatarInitial}>{initial}</Text>
+                    <Text className="text-xl font-semibold text-gray-500">{initial}</Text>
                 )}
             </View>
-            <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>{name}</Text>
-                <View style={styles.playerMeta}>
+            <View className="flex-1 ml-3">
+                <Text className="text-base font-medium text-gray-900">{name}</Text>
+                <View className="flex-row gap-3 mt-1">
                     {player.contact.handicap !== null && (
-                        <Text style={styles.playerHandicap}>
+                        <Text className="text-sm text-gray-500">
                             HCP {player.contact.handicap}
                         </Text>
                     )}
                     {player.contact.socialRate !== null && (
-                        <Text style={styles.playerSocialRate}>
+                        <Text className="text-sm text-primary">
                             SR {player.contact.socialRate}
                         </Text>
                     )}
                 </View>
             </View>
-            <View style={[
-                styles.checkbox,
-                isSelected && styles.checkboxSelected
-            ]}>
+            <View
+                className={`w-6 h-6 rounded-full border-2 justify-center items-center ${isSelected ? 'bg-primary border-primary' : 'border-gray-200'}`}
+            >
                 {isSelected && <Check size={16} color={COLORS.white} />}
             </View>
         </TouchableOpacity>
@@ -115,7 +115,7 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
         try {
             const response = await rosterApi.getOnDeck();
             if (response.success) {
-                setOnDeckPlayers(response.onDeck);
+                setOnDeckPlayers(response.onDeck as any);
             }
         } catch (error) {
             console.error("Error loading on-deck players:", error);
@@ -174,10 +174,10 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
     ), [selectedIds, spotsRemaining, togglePlayer]);
 
     const renderEmpty = () => (
-        <View style={styles.emptyContainer}>
+        <View className="flex-1 justify-center items-center px-10 pt-16">
             <Users size={48} color={COLORS.textSub} strokeWidth={1} />
-            <Text style={styles.emptyTitle}>No On-Deck Players</Text>
-            <Text style={styles.emptyText}>
+            <Text className="text-lg font-semibold text-gray-900 mt-4 mb-2">No On-Deck Players</Text>
+            <Text className="text-sm text-gray-500 text-center leading-5">
                 You don't have any On-Deck players in your roster. Add players to On-Deck from your roster to use this feature.
             </Text>
         </View>
@@ -185,46 +185,48 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
 
     if (loading) {
         return (
-            <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
+            <ScreenShell>
+                <AppHeader title="Select On-Deck Players" onBack={() => navigation.goBack()} />
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            </ScreenShell>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-
-            <Header
+        <ScreenShell>
+            <AppHeader
                 title="Select On-Deck Players"
                 onBack={() => navigation.goBack()}
             />
 
             {/* Info Banner */}
-            <View style={styles.infoBanner}>
+            <View className="flex-row items-center bg-amber-100 px-4 py-3 gap-3">
                 <Clock size={18} color={COLORS.requested} />
-                <View style={styles.infoBannerText}>
-                    <Text style={styles.infoBannerTitle}>
+                <View className="flex-1">
+                    <Text className="text-[15px] font-semibold text-gray-900">
                         {spotsRemaining} spot{spotsRemaining > 1 ? 's' : ''} remaining
                     </Text>
-                    <Text style={styles.infoBannerSubtitle}>
+                    <Text className="text-sm text-gray-500 mt-0.5">
                         {courseName || 'Your tee time'} • First Come First Served
                     </Text>
                 </View>
             </View>
 
             {/* Player List */}
-            <View style={styles.listContainer}>
+            <View className="flex-1">
                 <FlashList
                     data={onDeckPlayers}
                     renderItem={renderPlayer}
+                    // @ts-expect-error - FlashList types mismatch
                     estimatedItemSize={72}
                     keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContent}
+                    contentContainerStyle={{ paddingBottom: 20 }}
                     ListEmptyComponent={renderEmpty}
                     ListHeaderComponent={
                         onDeckPlayers.length > 0 ? (
-                            <Text style={styles.listHeader}>
+                            <Text className="text-sm text-gray-500 px-4 py-3">
                                 Select up to {spotsRemaining} player{spotsRemaining > 1 ? 's' : ''} to invite
                             </Text>
                         ) : null
@@ -234,188 +236,25 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
 
             {/* Footer */}
             {onDeckPlayers.length > 0 && (
-                <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-                    <Text style={styles.selectedCount}>
+                <View className="bg-white px-4 pt-4 border-t border-gray-200" style={{ paddingBottom: insets.bottom + 16 }}>
+                    <Text className="text-sm text-gray-500 text-center mb-3">
                         {selectedIds.length} of {spotsRemaining} selected
                     </Text>
                     <TouchableOpacity
-                        style={[
-                            styles.sendButton,
-                            (selectedIds.length === 0 || submitting) && styles.sendButtonDisabled
-                        ]}
+                        className={`bg-primary rounded-md py-4 items-center ${(selectedIds.length === 0 || submitting) ? 'opacity-50' : ''}`}
                         onPress={handleSendInvites}
                         disabled={selectedIds.length === 0 || submitting}
                     >
                         {submitting ? (
                             <ActivityIndicator color={COLORS.white} size="small" />
                         ) : (
-                            <Text style={styles.sendButtonText}>
+                            <Text className="text-white text-base font-semibold">
                                 Send FCFS Invites
                             </Text>
                         )}
                     </TouchableOpacity>
                 </View>
             )}
-        </View>
+        </ScreenShell>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    infoBanner: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#FEF3C7",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        gap: 12,
-    },
-    infoBannerText: {
-        flex: 1,
-    },
-    infoBannerTitle: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    infoBannerSubtitle: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    listContainer: {
-        flex: 1,
-    },
-    listContent: {
-        paddingBottom: 20,
-    },
-    listHeader: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    playerItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: COLORS.white,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
-    },
-    playerItemSelected: {
-        backgroundColor: "#F0FDF4",
-    },
-    playerItemDisabled: {
-        opacity: 0.5,
-    },
-    playerAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-        overflow: "hidden",
-    },
-    avatarImage: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
-    avatarInitial: {
-        fontSize: 20,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    playerInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    playerName: {
-        fontSize: 16,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    playerMeta: {
-        flexDirection: "row",
-        gap: 12,
-        marginTop: 4,
-    },
-    playerHandicap: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    playerSocialRate: {
-        fontSize: 13,
-        color: COLORS.primary,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        paddingHorizontal: 40,
-        paddingTop: 60,
-    },
-    emptyTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textMain,
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        lineHeight: 20,
-    },
-    footer: {
-        backgroundColor: COLORS.white,
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.border,
-    },
-    selectedCount: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginBottom: 12,
-    },
-    sendButton: {
-        backgroundColor: COLORS.primary,
-        borderRadius: 12,
-        paddingVertical: 16,
-        alignItems: "center",
-    },
-    sendButtonDisabled: {
-        opacity: 0.5,
-    },
-    sendButtonText: {
-        color: COLORS.white,
-        fontSize: 16,
-        fontWeight: "600",
-    },
-});

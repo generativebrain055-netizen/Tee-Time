@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Image } from "react-native";
 import { X, Check } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { Friend } from "../../../../services/api";
@@ -20,165 +20,60 @@ export const SelectMembersView = memo(({
     onNext,
     onToggleMember,
 }: SelectMembersViewProps) => (
-    <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={onClose} style={styles.modalHeaderBtn}>
+    <View className="flex-1 bg-white pt-[50px]">
+        <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+            <TouchableOpacity onPress={onClose} className="w-15 items-center">
                 <X size={24} color={COLORS.textMain} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Select Members</Text>
+            <Text className="text-[17px] font-semibold text-gray-900">Select Members</Text>
             <TouchableOpacity
                 onPress={onNext}
-                style={styles.modalHeaderBtn}
+                className="w-15 items-center"
                 disabled={selectedMembers.length === 0}
             >
-                <Text style={[styles.nextText, selectedMembers.length === 0 && styles.nextTextDisabled]}>
+                <Text className={`text-base font-semibold ${selectedMembers.length === 0 ? 'text-gray-500' : ''}`} style={selectedMembers.length > 0 ? { color: COLORS.primary } : undefined}>
                     Next
                 </Text>
             </TouchableOpacity>
         </View>
 
-        <Text style={styles.selectedCount}>{selectedMembers.length} selected</Text>
+        <Text className="text-sm text-gray-500 px-4 py-3">{selectedMembers.length} selected</Text>
 
-        <ScrollView style={styles.membersList} showsVerticalScrollIndicator={false}>
+        <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}>
             {friends.map((friend) => {
                 const isSelected = selectedMembers.includes(friend.id);
                 return (
                     <TouchableOpacity
                         key={friend.id}
-                        style={styles.memberItem}
+                        className="flex-row items-center py-3 border-b border-gray-100"
                         onPress={() => onToggleMember(friend.id)}
                     >
-                        <View style={styles.memberAvatar}>
+                        <View className="mr-3">
                             {friend.avatar ? (
-                                <Image source={{ uri: friend.avatar }} style={styles.avatarImage} />
+                                <Image source={{ uri: friend.avatar }} className="w-11 h-11 rounded-full" />
                             ) : (
-                                <View style={styles.avatarPlaceholder}>
-                                    <Text style={styles.avatarInitials}>
+                                <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center">
+                                    <Text className="text-sm font-semibold text-gray-500">
                                         {getInitials(friend.firstName, friend.lastName)}
                                     </Text>
                                 </View>
                             )}
                         </View>
-                        <Text style={styles.memberName}>
+                        <Text className="flex-1 text-[15px] font-medium text-gray-900">
                             {friend.firstName} {friend.lastName}
                         </Text>
-                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        <View className={`w-6 h-6 rounded-full border-2 justify-center items-center ${isSelected ? '' : 'border-gray-200'}`} style={isSelected ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : undefined}>
                             {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
                         </View>
                     </TouchableOpacity>
                 );
             })}
             {friends.length === 0 && (
-                <View style={styles.emptyMembers}>
-                    <Text style={styles.emptyText}>No friends yet</Text>
-                    <Text style={styles.emptySubtext}>Add friends from Availability first</Text>
+                <View className="items-center py-10">
+                    <Text className="text-base font-semibold text-gray-900">No friends yet</Text>
+                    <Text className="text-sm text-gray-500 mt-1">Add friends from Availability first</Text>
                 </View>
             )}
         </ScrollView>
     </View>
 ));
-
-const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-        paddingTop: 50,
-    },
-    modalHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    modalHeaderBtn: {
-        width: 60,
-        alignItems: "center",
-    },
-    modalTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    nextText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    nextTextDisabled: {
-        color: COLORS.textSub,
-    },
-    selectedCount: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    membersList: {
-        flex: 1,
-        paddingHorizontal: 16,
-    },
-    memberItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    memberAvatar: {
-        marginRight: 12,
-    },
-    avatarImage: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-    },
-    avatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    memberName: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    emptyMembers: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        marginTop: 4,
-    },
-});

@@ -1,182 +1,107 @@
 import React, { memo, useCallback } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { CalendarDay } from "../types";
-import { CALENDAR_COLORS, MONTHS } from "../constants";
+import { MONTHS } from "../constants";
+
+const PRIMARY_GREEN = "#5EBC68";
 
 interface DayCellProps {
-    item: CalendarDay;
-    onPress: (day: number | "") => void;
+  item: CalendarDay;
+  onPress: (day: number | "") => void;
 }
 
 const DayCell = memo(({ item, onPress }: DayCellProps) => {
-    const handlePress = useCallback(() => onPress(item.day), [item.day, onPress]);
+  const handlePress = useCallback(() => onPress(item.day), [item.day, onPress]);
 
-    if (item.day === "") {
-        return <View style={styles.dayCell} />;
-    }
+  if (item.day === "") {
+    return <View style={{ width: '14.28%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center' }} />;
+  }
 
-    const cellStyle = [
-        styles.dayCellInner,
-        item.isSelected && styles.selectedDayBg,
-        !item.isSelected && item.isToday && styles.todayBg,
-        !item.isSelected && !item.isToday && item.hasEvent && styles.eventDayBg,
-    ];
-
-    const textStyle = [
-        styles.dayText,
-        item.isSelected && styles.selectedDayText,
-        !item.isSelected && item.isToday && styles.todayText,
-    ];
-
-    return (
-        <TouchableOpacity style={styles.dayCell} onPress={handlePress}>
-            <View style={cellStyle}>
-                <Text style={textStyle}>{item.day}</Text>
-                {item.hasEvent && !item.isSelected && <View style={styles.eventDot} />}
-            </View>
-        </TouchableOpacity>
-    );
+  return (
+    <View style={{ width: '14.28%', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}>
+      <TouchableOpacity
+        onPress={handlePress}
+        style={{
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 10,
+          backgroundColor: item.isSelected ? PRIMARY_GREEN : "transparent",
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 16,
+            color: item.isSelected ? "#FFFFFF" : "#1F2937",
+            fontWeight: item.isToday ? "700" : "600",
+            fontFamily: item.isToday ? 'Inter_700Bold' : 'Inter_600SemiBold',
+          }}
+        >
+          {item.day}
+        </Text>
+      </TouchableOpacity>
+      {item.hasEvent && (
+        <View
+          style={{ 
+            position: 'absolute',
+            bottom: 2,
+            width: 20,
+            height: 2,
+            borderRadius: 1,
+            backgroundColor: PRIMARY_GREEN 
+          }}
+        />
+      )}
+    </View>
+  );
 });
 
 interface CalendarGridProps {
-    currentMonth: number;
-    currentYear: number;
-    calendarDays: CalendarDay[];
-    onPrevMonth: () => void;
-    onNextMonth: () => void;
-    onDayPress: (day: number | "") => void;
+  currentMonth: number;
+  currentYear: number;
+  calendarDays: CalendarDay[];
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onDayPress: (day: number | "") => void;
 }
 
 const CalendarGrid = memo(({
-    currentMonth,
-    currentYear,
-    calendarDays,
-    onPrevMonth,
-    onNextMonth,
-    onDayPress,
+  currentMonth,
+  currentYear,
+  calendarDays,
+  onPrevMonth,
+  onNextMonth,
+  onDayPress,
 }: CalendarGridProps) => (
-    <View style={styles.calendarCard}>
-        {/* Month Navigation */}
-        <View style={styles.monthHeader}>
-            <TouchableOpacity onPress={onPrevMonth}>
-                <ChevronLeft color={CALENDAR_COLORS.textSecondary} size={24} />
-            </TouchableOpacity>
-            <Text style={styles.monthTitle}>
-                {MONTHS[currentMonth]} {currentYear}
-            </Text>
-            <TouchableOpacity onPress={onNextMonth}>
-                <ChevronRight color={CALENDAR_COLORS.textSecondary} size={24} />
-            </TouchableOpacity>
-        </View>
-
-        {/* Days of Week */}
-        <View style={styles.weekRow}>
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <View key={day} style={styles.weekDayCell}>
-                    <Text style={styles.weekDayText}>{day}</Text>
-                </View>
-            ))}
-        </View>
-
-        {/* Calendar Grid */}
-        <View style={styles.calendarGrid}>
-            {calendarDays.map((item) => (
-                <DayCell key={item.id} item={item} onPress={onDayPress} />
-            ))}
-        </View>
+  <View style={{ paddingHorizontal: 16, paddingVertical: 20, flex: 1, justifyContent: 'center' }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <TouchableOpacity onPress={onPrevMonth} style={{ padding: 8 }}>
+        <ChevronLeft size={24} color="#6B7280" />
+      </TouchableOpacity>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: '#1F2937', fontFamily: 'Inter_700Bold' }}>
+        {MONTHS[currentMonth]} {currentYear}
+      </Text>
+      <TouchableOpacity onPress={onNextMonth} style={{ padding: 8 }}>
+        <ChevronRight size={24} color="#6B7280" />
+      </TouchableOpacity>
     </View>
-));
 
-const styles = StyleSheet.create({
-    calendarCard: {
-        backgroundColor: CALENDAR_COLORS.white,
-        marginHorizontal: 20,
-        marginTop: 20,
-        borderRadius: 20,
-        padding: 16,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
-    },
-    monthHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-    },
-    monthTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-        color: CALENDAR_COLORS.text,
-    },
-    weekRow: {
-        flexDirection: "row",
-        marginBottom: 10,
-    },
-    weekDayCell: {
-        flex: 1,
-        alignItems: "center",
-    },
-    weekDayText: {
-        textAlign: "center",
-        color: CALENDAR_COLORS.textSecondary,
-        fontSize: 13,
-        fontWeight: "500",
-    },
-    calendarGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-    },
-    dayCell: {
-        width: "14.285%",
-        aspectRatio: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        marginBottom: 4,
-    },
-    dayCellInner: {
-        width: 36,
-        height: 36,
-        borderRadius: 12,
-        justifyContent: "center",
-        alignItems: "center",
-        position: "relative",
-    },
-    dayText: {
-        fontSize: 15,
-        color: CALENDAR_COLORS.text,
-        fontWeight: "500",
-    },
-    selectedDayBg: {
-        backgroundColor: CALENDAR_COLORS.primary,
-    },
-    selectedDayText: {
-        color: CALENDAR_COLORS.white,
-        fontWeight: "bold",
-    },
-    todayBg: {
-        borderWidth: 2,
-        borderColor: CALENDAR_COLORS.primary,
-    },
-    todayText: {
-        color: CALENDAR_COLORS.primary,
-        fontWeight: "bold",
-    },
-    eventDayBg: {
-        backgroundColor: CALENDAR_COLORS.grayCircle,
-        borderRadius: 18,
-    },
-    eventDot: {
-        position: "absolute",
-        bottom: 2,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: CALENDAR_COLORS.primary,
-    },
-});
+    <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+        <View key={day} style={{ width: '14.28%', alignItems: 'center' }}>
+          <Text style={{ fontSize: 13, fontWeight: '500', color: '#9CA3AF', fontFamily: 'Inter_500Medium' }}>{day}</Text>
+        </View>
+      ))}
+    </View>
+
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+      {calendarDays.map((item) => (
+        <DayCell key={item.id} item={item} onPress={onDayPress} />
+      ))}
+    </View>
+  </View>
+));
 
 export default CalendarGrid;

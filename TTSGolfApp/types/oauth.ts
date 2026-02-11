@@ -14,9 +14,9 @@ export type OAuthProvider = "google" | "apple";
 // ============================================================================
 
 /**
- * Standard OAuth response from backend
+ * OAuth response for existing users (fully authenticated)
  */
-export interface OAuthResponse {
+export interface OAuthAuthenticatedResponse {
   status: "authenticated";
   success: boolean;
   accessToken: string;
@@ -27,6 +27,56 @@ export interface OAuthResponse {
   missingFields: OAuthMissingField[];
   profileIncomplete?: boolean;
   message?: string;
+  providerData?: OAuthProviderData;
+}
+
+/**
+ * OAuth response for new users (pending phone verification)
+ */
+export interface OAuthPendingResponse {
+  status: "pending_phone_verification";
+  success: boolean;
+  needsPhoneVerification: true;
+  providerData: OAuthProviderData;
+  message?: string;
+}
+
+/**
+ * Union type for all OAuth responses
+ */
+export type OAuthResponse = OAuthAuthenticatedResponse | OAuthPendingResponse;
+
+/**
+ * Standard OAuth response from backend (legacy - for backward compatibility)
+ */
+export interface OAuthLegacyResponse {
+  status: "authenticated";
+  success: boolean;
+  accessToken: string;
+  refreshToken: string;
+  user: OAuthUser;
+  isNewUser: boolean;
+  needsOnboarding: boolean;
+  missingFields: OAuthMissingField[];
+  profileIncomplete?: boolean;
+  message?: string;
+  providerData?: OAuthProviderData; // OAuth metadata (picture, locale, etc)
+}
+
+/**
+ * OAuth provider metadata (Google, Apple, etc)
+ */
+export interface OAuthProviderData {
+  name?: string;
+  picture?: string | null;
+  email?: string | null;
+  email_verified?: boolean;
+  is_private_email?: boolean;
+  locale?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 /**
@@ -43,6 +93,7 @@ export interface OAuthUser {
   socialRate: number | null;
   location: string | null;
   homeCourse: string | null;
+  avatarUrl?: string | null; // Profile picture URL
 }
 
 /**
@@ -63,37 +114,40 @@ export type OAuthMissingField =
  * Data passed to OAuth success callback
  */
 export interface OAuthSuccessData {
+  status?: "pending_phone_verification" | "authenticated";
   isNewUser: boolean;
   needsOnboarding?: boolean;
+  needsPhoneVerification?: boolean;
   user?: OAuthUser;
   oauthData?: OAuthOnboardingData;
-  /** @deprecated Use oauthData instead */
-  partialData?: LegacyOAuthPartialData;
+  providerData?: OAuthProviderData;
 }
 
 /**
- * Data for OAuth onboarding flow
+ * Data for OAuth onboarding flow (authenticated users)
  */
-export interface OAuthOnboardingData {
+export interface OAuthAuthenticatedOnboardingData {
   accessToken: string;
   refreshToken: string;
   user: OAuthUser;
   needsOnboarding: boolean;
   missingFields: OAuthMissingField[];
+  providerData?: OAuthProviderData; // OAuth metadata for pre-filling forms
+  needsPhoneVerification?: false;
 }
 
 /**
- * @deprecated Legacy partial data format
+ * Data for OAuth onboarding flow (pending phone verification)
  */
-export interface LegacyOAuthPartialData {
-  tempToken?: string;
-  requiredFields?: string[];
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  picture?: string;
-  authProvider?: OAuthProvider;
+export interface OAuthPendingOnboardingData {
+  providerData: OAuthProviderData;
+  needsPhoneVerification: true;
 }
+
+/**
+ * Combined OAuth onboarding data type
+ */
+export type OAuthOnboardingData = OAuthAuthenticatedOnboardingData | OAuthPendingOnboardingData;
 
 // ============================================================================
 // OAuth Button Props
@@ -106,10 +160,6 @@ export interface OAuthButtonsProps {
   onSuccess: (data: OAuthSuccessData) => void;
   onError: (error: string) => void;
   disabled?: boolean;
-  /** "signup" shows "Continue with Apple/Google"; "signin" shows "Sign in with Apple/Google" */
-  variant?: "signin" | "signup";
-  /** @deprecated Use variant for label; layout no longer changes order (Apple then Google) */
-  layout?: "default" | "signup";
 }
 
 // ============================================================================
@@ -152,17 +202,6 @@ export interface ProfileCompletionResponse {
   needsOnboarding: boolean;
   missingFields: OAuthMissingField[];
   message: string;
-}
-
-// ============================================================================
-// Google OAuth Types
-// ============================================================================
-
-export interface GoogleOAuthConfig {
-  iosClientId: string;
-  webClientId: string;
-  scopes: string[];
-  redirectUri?: string; // Optional explicit redirect URI for OAuth 2.0 compliance
 }
 
 // ============================================================================

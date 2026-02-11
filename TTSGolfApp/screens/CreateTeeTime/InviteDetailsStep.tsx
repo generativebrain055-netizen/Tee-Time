@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
 } from "react-native";
@@ -52,31 +51,31 @@ export default function InviteDetailsStep({
 
     return (
         <ScrollView
-            style={styles.content}
+            className="flex-1 px-5 pt-2"
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={{ paddingBottom: 200 }}
         >
             {/* Date Picker */}
-            <Text style={styles.label}>Pick a date</Text>
-            <TouchableOpacity style={styles.inputBox} onPress={onOpenDatePicker}>
-                <Text style={[styles.inputText, !selectedDate && styles.placeholder]}>
+            <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Pick a date</Text>
+            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-md px-4 py-4" onPress={onOpenDatePicker}>
+                <Text className={selectedDate ? "text-base text-[#1F2937]" : "text-base text-[#9CA3AF]"}>
                     {formatDateDisplay(selectedDate)}
                 </Text>
                 <Calendar size={20} color={COLORS.textSub} strokeWidth={1.5} />
             </TouchableOpacity>
 
             {/* Time Picker */}
-            <Text style={styles.label}>Pick a time</Text>
-            <TouchableOpacity style={styles.inputBox} onPress={onOpenTimePicker}>
-                <Text style={[styles.inputText, !selectedTime && styles.placeholder]}>
+            <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Pick a time</Text>
+            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-md px-4 py-4" onPress={onOpenTimePicker}>
+                <Text className={selectedTime ? "text-base text-[#1F2937]" : "text-base text-[#9CA3AF]"}>
                     {selectedTime || "10:00 AM"}
                 </Text>
                 <Clock size={20} color={COLORS.textSub} strokeWidth={1.5} />
             </TouchableOpacity>
 
             {/* Location Input - Golf Course Autocomplete */}
-            <Text style={styles.label}>Pick a location</Text>
+            <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Pick a location</Text>
             <GolfCourseAutocomplete
                 value={location}
                 onSelect={handleCourseSelect}
@@ -85,33 +84,28 @@ export default function InviteDetailsStep({
             />
 
             {/* Group Size */}
-            <Text style={styles.label}>Group size</Text>
-            <View style={styles.groupSizeContainer}>
+            <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Group size</Text>
+            <View className="flex-row">
                 {[2, 3, 4].map((size, index) => (
                     <TouchableOpacity
                         key={size}
-                        style={[
-                            styles.groupSizeOption,
-                            index === 0 && styles.groupSizeFirst,
-                            index === 2 && styles.groupSizeLast,
-                            groupSize === size && styles.groupSizeSelected,
-                        ]}
+                        className={`flex-1 items-center py-4 border bg-white ${
+                            index === 0 ? "border-l rounded-tl-lg rounded-bl-lg" : "border-l-0"
+                        } ${
+                            index === 2 ? "rounded-tr-lg rounded-br-lg" : ""
+                        } ${
+                            groupSize === size ? "border-2 border-[#1F2937] border-l-2" : "border-border"
+                        }`}
                         onPress={() => onGroupSizeChange(size)}
                     >
-                        <Text
-                            style={[
-                                styles.groupSizeNumber,
-                                groupSize === size && styles.groupSizeNumberSelected,
-                            ]}
-                        >
+                        <Text className={`text-xl font-bold ${
+                            groupSize === size ? "text-[#1F2937]" : "text-[#1F2937]"
+                        }`}>
                             {size}
                         </Text>
-                        <Text
-                            style={[
-                                styles.groupSizeLabel,
-                                groupSize === size && styles.groupSizeLabelSelected,
-                            ]}
-                        >
+                        <Text className={`text-xs mt-0.5 ${
+                            groupSize === size ? "text-[#1F2937]" : "text-[#9CA3AF]"
+                        }`}>
                             Players
                         </Text>
                     </TouchableOpacity>
@@ -122,88 +116,3 @@ export default function InviteDetailsStep({
         </ScrollView>
     );
 }
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 8,
-    },
-    scrollContent: {
-        paddingBottom: 200, // Extra space for autocomplete dropdown
-    },
-    label: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 12,
-        marginTop: 24,
-    },
-    inputBox: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        backgroundColor: COLORS.white,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-    },
-    inputText: {
-        fontSize: 16,
-        color: COLORS.text,
-    },
-    placeholder: {
-        color: COLORS.textSub,
-    },
-    textInput: {
-        flex: 1,
-        fontSize: 16,
-        color: COLORS.text,
-        padding: 0,
-    },
-    groupSizeContainer: {
-        flexDirection: "row",
-    },
-    groupSizeOption: {
-        flex: 1,
-        alignItems: "center",
-        paddingVertical: 16,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        backgroundColor: COLORS.white,
-        borderLeftWidth: 0,
-    },
-    groupSizeFirst: {
-        borderLeftWidth: 1,
-        borderTopLeftRadius: 8,
-        borderBottomLeftRadius: 8,
-    },
-    groupSizeLast: {
-        borderTopRightRadius: 8,
-        borderBottomRightRadius: 8,
-    },
-    groupSizeSelected: {
-        borderColor: COLORS.text,
-        borderWidth: 2,
-        borderLeftWidth: 2,
-        backgroundColor: COLORS.white,
-    },
-    groupSizeNumber: {
-        fontSize: 20,
-        fontWeight: "700",
-        color: COLORS.text,
-    },
-    groupSizeNumberSelected: {
-        color: COLORS.text,
-    },
-    groupSizeLabel: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    groupSizeLabelSelected: {
-        color: COLORS.text,
-    },
-});

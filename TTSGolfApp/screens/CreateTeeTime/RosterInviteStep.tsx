@@ -2,13 +2,12 @@ import React, { useState, useCallback } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     Image,
     Modal,
 } from "react-native";
-import { Clock, ChevronDown, GripVertical, Check } from "lucide-react-native";
+import { Clock, ChevronDown, Check, SlidersHorizontal, X } from "lucide-react-native";
 import { COLORS } from "./constants";
 import { Friend } from "../../services/api";
 
@@ -32,6 +31,14 @@ const RESPONSE_WINDOWS = [
     { value: 24, label: "24 hours" },
 ];
 
+const SORT_OPTIONS = [
+    { value: "roster", label: "Roster order" },
+    { value: "handicap_high", label: "Handicap: High to low" },
+    { value: "handicap_low", label: "Handicap: Low to high" },
+    { value: "social_score", label: "Social Score: High to low" },
+    { value: "recently_played", label: "Recently Played" },
+];
+
 export default function RosterInviteStep({
     friends,
     responseWindow,
@@ -40,6 +47,69 @@ export default function RosterInviteStep({
     onReorderPlayers,
 }: RosterInviteStepProps) {
     const [showPicker, setShowPicker] = useState(false);
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const [showSortDropdown, setShowSortDropdown] = useState(false);
+    const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
+    const [selectedSort, setSelectedSort] = useState("roster");
+    const [indicatedAvailable, setIndicatedAvailable] = useState(false);
+
+    // Extract unique club names from friends
+    const availableClubs = React.useMemo(() => {
+        const clubSet = new Set<string>();
+        friends.forEach(friend => {
+            if (friend.clubs && Array.isArray(friend.clubs)) {
+                friend.clubs.forEach(club => {
+                    if (club && club.name) {
+                        clubSet.add(club.name);
+                    }
+                });
+            }
+        });
+        return Array.from(clubSet).sort();
+    }, [friends]);
+
+    // Filter and sort friends
+    const filteredAndSortedFriends = React.useMemo(() => {
+        let filtered = [...friends];
+
+        // Apply club filter
+        if (selectedClubs.length > 0) {
+            filtered = filtered.filter(friend => {
+                if (!friend.clubs || !Array.isArray(friend.clubs)) return false;
+                return friend.clubs.some(club => 
+                    club && club.name && selectedClubs.includes(club.name)
+                );
+            });
+        }
+
+        // Apply availability filter
+        if (indicatedAvailable) {
+            // TODO: Filter by friends who have indicated availability
+            // This would require availability data to be included in friends
+        }
+
+        // Apply sorting
+        switch (selectedSort) {
+            case 'handicap_high':
+                filtered.sort((a, b) => (b.handicap || 0) - (a.handicap || 0));
+                break;
+            case 'handicap_low':
+                filtered.sort((a, b) => (a.handicap || 0) - (b.handicap || 0));
+                break;
+            case 'social_score':
+                filtered.sort((a, b) => (b.socialRate || 0) - (a.socialRate || 0));
+                break;
+            case 'recently_played':
+                filtered.sort((a, b) => (b.roundsPlayed || 0) - (a.roundsPlayed || 0));
+                break;
+            case 'roster':
+            default:
+                // Keep original roster order
+                break;
+        }
+
+        return filtered;
+    }, [friends, selectedClubs, indicatedAvailable, selectedSort]);
 
     const getInitials = (firstName: string, lastName: string): string => {
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -50,291 +120,575 @@ export default function RosterInviteStep({
         return option?.label || "Select response time";
     };
 
-    // Get ordered friends list
+    // Get ordered friends list based on filters and sorting
     const getOrderedFriends = useCallback(() => {
-        if (orderedPlayers.length === 0) {
-            return friends;
+        // Use filtered and sorted friends as the base
+        const baseFriends = filteredAndSortedFriends;
+        
+        if (orderedPlayers.length === 0 || selectedClubs.length > 0 || selectedSort !== 'roster') {
+            // If filters/sorting active, ignore manual ordering
+            return baseFriends;
         }
+        
+        // Apply manual ordering (drag and drop)
         return orderedPlayers
-            .map((id) => friends.find((f) => f.id === id))
+            .map((id) => baseFriends.find((f) => f.id === id))
             .filter(Boolean) as Friend[];
-    }, [friends, orderedPlayers]);
-
-    const moveUp = (index: number) => {
-        if (index === 0) return;
-        const ordered = getOrderedFriends().map((f) => f.id);
-        [ordered[index - 1], ordered[index]] = [ordered[index], ordered[index - 1]];
-        onReorderPlayers(ordered);
-    };
-
-    const moveDown = (index: number) => {
-        const ordered = getOrderedFriends().map((f) => f.id);
-        if (index === ordered.length - 1) return;
-        [ordered[index], ordered[index + 1]] = [ordered[index + 1], ordered[index]];
-        onReorderPlayers(ordered);
-    };
+    }, [filteredAndSortedFriends, orderedPlayers, selectedClubs, selectedSort]);
 
     const orderedFriends = getOrderedFriends();
 
+    const toggleClub = (club: string) => {
+        setSelectedClubs(prev => 
+            prev.includes(club) 
+                ? prev.filter(c => c !== club)
+                : [...prev, club]
+        );
+    };
+
+    const applyFilters = () => {
+        // Update ordered players based on filtered results
+        // This ensures the parent component knows which players are selected
+        const filteredIds = filteredAndSortedFriends.map(f => f.id);
+        onReorderPlayers(filteredIds);
+        setShowFilterModal(false);
+    };
+
+    const saveSearch = () => {
+        // Save search logic here
+        setShowFilterModal(false);
+    };
+
     return (
-        <View style={styles.content}>
-            <Text style={styles.stepTitle}>Set Up Roster Invite</Text>
-
-            {/* Response Window Picker */}
-            <Text style={styles.sectionLabel}>Response window</Text>
-            <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowPicker(true)}
-                activeOpacity={0.7}
+        <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+            <ScrollView 
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
             >
-                <Clock size={20} color={COLORS.textSub} />
-                <Text style={styles.pickerText}>{getSelectedLabel()}</Text>
-                <ChevronDown size={20} color={COLORS.textSub} />
-            </TouchableOpacity>
+                {/* Response Window Section */}
+                <Text style={{
+                    fontFamily: 'Inter_700Bold',
+                    fontSize: 18,
+                    color: '#111827',
+                    marginBottom: 12,
+                }}>
+                    Response window
+                </Text>
+                <View style={{ marginBottom: 32, zIndex: 1000 }}>
+                    <TouchableOpacity
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 16,
+                            paddingHorizontal: 16,
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}
+                        onPress={() => setShowPicker(!showPicker)}
+                        activeOpacity={0.7}
+                    >
+                        <Clock size={20} color="#9CA3AF" strokeWidth={2} />
+                        <Text style={{
+                            flex: 1,
+                            fontFamily: 'Inter_400Regular',
+                            fontSize: 16,
+                            color: '#6B7280',
+                            marginLeft: 12,
+                        }}>
+                            {getSelectedLabel()}
+                        </Text>
+                        <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
+                    </TouchableOpacity>
 
-            {/* Player Order */}
-            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>
-                Invite order (drag to reorder)
-            </Text>
-            <Text style={styles.sectionHint}>
-                Players will be invited in this order. Each player has {getSelectedLabel()} to respond before the next is invited.
-            </Text>
+                    {/* Dropdown attached to field - absolute positioning */}
+                    {showPicker && (
+                        <View style={{
+                            position: 'absolute',
+                            top: 56,
+                            left: 0,
+                            right: 0,
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 8,
+                            elevation: 5,
+                            zIndex: 1001,
+                        }}>
+                            {RESPONSE_WINDOWS.map((option, index) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        paddingVertical: 14,
+                                        paddingHorizontal: 16,
+                                        borderBottomWidth: index < RESPONSE_WINDOWS.length - 1 ? 1 : 0,
+                                        borderBottomColor: '#F3F4F6',
+                                    }}
+                                    onPress={() => {
+                                        onResponseWindowChange(option.value);
+                                        setShowPicker(false);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_500Medium',
+                                        fontSize: 16,
+                                        color: '#111827',
+                                    }}>
+                                        {option.label}
+                                    </Text>
+                                    {responseWindow === option.value && (
+                                        <Check size={20} color="#22C55E" strokeWidth={2.5} />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
 
-            <ScrollView style={styles.playerList} showsVerticalScrollIndicator={false}>
-                {orderedFriends.map((friend, index) => (
-                    <View key={friend.id} style={styles.playerItem}>
-                        <TouchableOpacity
-                            style={styles.dragHandle}
-                            onPress={() => moveUp(index)}
-                            disabled={index === 0}
+                {/* Your Roster Section */}
+                <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 16,
+                }}>
+                    <Text style={{
+                        fontFamily: 'Inter_700Bold',
+                        fontSize: 20,
+                        color: '#111827',
+                    }}>
+                        Your roster
+                    </Text>
+                    <TouchableOpacity
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 8,
+                            paddingHorizontal: 16,
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 20,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                            gap: 6,
+                        }}
+                        onPress={() => setShowFilterModal(true)}
+                        activeOpacity={0.7}
+                    >
+                        <SlidersHorizontal size={16} color="#6B7280" strokeWidth={2} />
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 14,
+                            color: '#6B7280',
+                        }}>
+                            Filter
+                        </Text>
+                        {selectedClubs.length > 0 && (
+                            <View style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 10,
+                                backgroundColor: '#22C55E',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 11,
+                                    color: '#FFFFFF',
+                                }}>
+                                    {selectedClubs.length}
+                                </Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                {/* Roster List */}
+                <View style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: '#E5E7EB',
+                    overflow: 'hidden',
+                }}>
+                    {orderedFriends.map((friend, index) => (
+                        <View 
+                            key={friend.id} 
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 16,
+                                borderBottomWidth: index < orderedFriends.length - 1 ? 1 : 0,
+                                borderBottomColor: '#F3F4F6',
+                            }}
                         >
-                            <Text style={[styles.arrowText, index === 0 && styles.arrowDisabled]}>▲</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.dragHandle}
-                            onPress={() => moveDown(index)}
-                            disabled={index === orderedFriends.length - 1}
-                        >
-                            <Text style={[styles.arrowText, index === orderedFriends.length - 1 && styles.arrowDisabled]}>▼</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.rankNumber}>{index + 1}</Text>
-
-                        <View style={styles.avatarContainer}>
                             {friend.avatar ? (
-                                <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                                <Image 
+                                    source={{ uri: friend.avatar }} 
+                                    style={{
+                                        width: 48,
+                                        height: 48,
+                                        borderRadius: 24,
+                                    }}
+                                />
                             ) : (
-                                <View style={styles.avatarPlaceholder}>
-                                    <Text style={styles.avatarInitials}>
+                                <View style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 24,
+                                    backgroundColor: '#22C55E',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                }}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 16,
+                                        color: '#FFFFFF',
+                                    }}>
                                         {getInitials(friend.firstName, friend.lastName)}
                                     </Text>
                                 </View>
                             )}
-                        </View>
 
-                        <View style={styles.playerInfo}>
-                            <Text style={styles.playerName}>
-                                {friend.firstName} {friend.lastName}
-                            </Text>
-                            {friend.handicap !== undefined && (
-                                <Text style={styles.playerSub}>HCP {friend.handicap}</Text>
-                            )}
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 16,
+                                    color: '#111827',
+                                }}>
+                                    {friend.firstName} {friend.lastName}
+                                </Text>
+                            </View>
                         </View>
-                    </View>
-                ))}
-                {orderedFriends.length === 0 && (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyTitle}>No friends in roster</Text>
-                        <Text style={styles.emptyText}>
-                            Add friends from Availability to use roster invites
-                        </Text>
-                    </View>
-                )}
-                <View style={{ height: 100 }} />
+                    ))}
+                    {orderedFriends.length === 0 && (
+                        <View style={{
+                            alignItems: 'center',
+                            paddingVertical: 40,
+                            paddingHorizontal: 20,
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 16,
+                                color: '#111827',
+                                marginBottom: 8,
+                            }}>
+                                No friends in roster
+                            </Text>
+                            <Text style={{
+                                fontFamily: 'Inter_400Regular',
+                                fontSize: 14,
+                                color: '#6B7280',
+                                textAlign: 'center',
+                            }}>
+                                Add friends from Availability to use roster invites
+                            </Text>
+                        </View>
+                    )}
+                </View>
             </ScrollView>
 
-            {/* Response Window Modal */}
-            <Modal visible={showPicker} transparent animationType="fade">
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowPicker(false)}
-                >
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Select response time</Text>
-                        {RESPONSE_WINDOWS.map((option) => (
-                            <TouchableOpacity
-                                key={option.value}
-                                style={styles.modalOption}
-                                onPress={() => {
-                                    onResponseWindowChange(option.value);
-                                    setShowPicker(false);
-                                }}
-                            >
-                                <Text style={styles.modalOptionText}>{option.label}</Text>
-                                {responseWindow === option.value && (
-                                    <Check size={20} color={COLORS.primary} />
-                                )}
+            {/* Filter Modal */}
+            <Modal
+                visible={showFilterModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowFilterModal(false)}
+            >
+                <View style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    justifyContent: 'flex-end',
+                }}>
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
+                        paddingTop: 20,
+                        paddingBottom: 40,
+                        maxHeight: '90%',
+                    }}>
+                        {/* Header */}
+                        <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingHorizontal: 20,
+                            paddingBottom: 20,
+                            borderBottomWidth: 1,
+                            borderBottomColor: '#F3F4F6',
+                        }}>
+                            <TouchableOpacity onPress={() => setShowFilterModal(false)} activeOpacity={0.7}>
+                                <X size={24} color="#6B7280" strokeWidth={2} />
                             </TouchableOpacity>
-                        ))}
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: '#111827',
+                            }}>
+                                Sort & Filter
+                            </Text>
+                            <TouchableOpacity 
+                                onPress={() => setShowSortDropdown(!showSortDropdown)}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 14,
+                                    color: '#6B7280',
+                                }}>
+                                    Sort by
+                                </Text>
+                                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20 }}>
+                            {/* Sort Dropdown */}
+                            {showSortDropdown && (
+                                <View style={{
+                                    backgroundColor: '#F9FAFB',
+                                    borderRadius: 12,
+                                    padding: 12,
+                                    marginBottom: 20,
+                                }}>
+                                    <View style={{
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        marginBottom: 12,
+                                    }}>
+                                        <Text style={{
+                                            fontFamily: 'Inter_600SemiBold',
+                                            fontSize: 14,
+                                            color: '#6B7280',
+                                        }}>
+                                            Sort by
+                                        </Text>
+                                        <TouchableOpacity onPress={() => setShowSortDropdown(false)}>
+                                            <X size={18} color="#9CA3AF" strokeWidth={2} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    {SORT_OPTIONS.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.value}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                paddingVertical: 12,
+                                                gap: 12,
+                                            }}
+                                            onPress={() => {
+                                                setSelectedSort(option.value);
+                                                setShowSortDropdown(false);
+                                            }}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 10,
+                                                borderWidth: 2,
+                                                borderColor: selectedSort === option.value ? '#22C55E' : '#D1D5DB',
+                                                backgroundColor: selectedSort === option.value ? '#22C55E' : '#FFFFFF',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                            }}>
+                                                {selectedSort === option.value && (
+                                                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                                                )}
+                                            </View>
+                                            <Text style={{
+                                                fontFamily: 'Inter_500Medium',
+                                                fontSize: 15,
+                                                color: '#111827',
+                                            }}>
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+
+                            {/* Club Membership */}
+                            <View style={{ marginBottom: 24 }}>
+                                <View style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    marginBottom: 16,
+                                }}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_700Bold',
+                                        fontSize: 16,
+                                        color: '#111827',
+                                    }}>
+                                        Club Membership
+                                    </Text>
+                                    {selectedClubs.length > 0 && (
+                                        <View style={{
+                                            width: 24,
+                                            height: 24,
+                                            borderRadius: 12,
+                                            backgroundColor: '#22C55E',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                        }}>
+                                            <Text style={{
+                                                fontFamily: 'Inter_700Bold',
+                                                fontSize: 12,
+                                                color: '#FFFFFF',
+                                            }}>
+                                                {selectedClubs.length}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <View style={{
+                                    flexDirection: 'row',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                }}>
+                                    {availableClubs.length > 0 ? availableClubs.map((club) => (
+                                        <TouchableOpacity
+                                            key={club}
+                                            style={{
+                                                paddingVertical: 10,
+                                                paddingHorizontal: 16,
+                                                borderRadius: 20,
+                                                borderWidth: 1,
+                                                borderColor: selectedClubs.includes(club) ? '#22C55E' : '#E5E7EB',
+                                                backgroundColor: selectedClubs.includes(club) ? '#22C55E' : '#FFFFFF',
+                                            }}
+                                            onPress={() => toggleClub(club)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={{
+                                                fontFamily: 'Inter_600SemiBold',
+                                                fontSize: 14,
+                                                color: selectedClubs.includes(club) ? '#FFFFFF' : '#6B7280',
+                                            }}>
+                                                {club}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )) : (
+                                        <Text style={{
+                                            fontFamily: 'Inter_400Regular',
+                                            fontSize: 14,
+                                            color: '#9CA3AF',
+                                            textAlign: 'center',
+                                            paddingVertical: 20,
+                                        }}>
+                                            No club memberships found in roster
+                                        </Text>
+                                    )}
+                                </View>
+                            </View>
+
+                            {/* Indicated Available Toggle */}
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginBottom: 24,
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 16,
+                                    color: '#111827',
+                                }}>
+                                    Indicated available
+                                </Text>
+                                <TouchableOpacity
+                                    style={{
+                                        width: 51,
+                                        height: 31,
+                                        borderRadius: 16,
+                                        backgroundColor: indicatedAvailable ? '#22C55E' : '#D1D5DB',
+                                        justifyContent: 'center',
+                                        paddingHorizontal: 2,
+                                    }}
+                                    onPress={() => setIndicatedAvailable(!indicatedAvailable)}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={{
+                                        width: 27,
+                                        height: 27,
+                                        borderRadius: 14,
+                                        backgroundColor: '#FFFFFF',
+                                        alignSelf: indicatedAvailable ? 'flex-end' : 'flex-start',
+                                    }} />
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+
+                        {/* Action Buttons */}
+                        <View style={{
+                            flexDirection: 'row',
+                            gap: 12,
+                            paddingHorizontal: 20,
+                            paddingTop: 20,
+                        }}>
+                            <TouchableOpacity
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    borderWidth: 1,
+                                    borderColor: '#E5E7EB',
+                                    backgroundColor: '#FFFFFF',
+                                    alignItems: 'center',
+                                }}
+                                onPress={saveSearch}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 16,
+                                    color: '#6B7280',
+                                }}>
+                                    Save search
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    backgroundColor: '#22C55E',
+                                    alignItems: 'center',
+                                }}
+                                onPress={applyFilters}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 16,
+                                    color: '#FFFFFF',
+                                }}>
+                                    See results
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </TouchableOpacity>
+                </View>
             </Modal>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-    },
-    stepTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginBottom: 24,
-        textAlign: "center",
-    },
-    sectionLabel: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    sectionHint: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginBottom: 12,
-        lineHeight: 18,
-    },
-    pickerButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 14,
-        borderWidth: 2,
-        borderColor: COLORS.primary,
-        borderRadius: 12,
-        backgroundColor: COLORS.white,
-    },
-    pickerText: {
-        flex: 1,
-        fontSize: 15,
-        color: COLORS.text,
-        marginLeft: 10,
-    },
-    playerList: {
-        flex: 1,
-    },
-    playerItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-        backgroundColor: "#F9FAFB",
-        borderRadius: 10,
-        marginBottom: 8,
-    },
-    dragHandle: {
-        padding: 4,
-        marginRight: 2,
-    },
-    arrowText: {
-        fontSize: 12,
-        color: COLORS.primary,
-    },
-    arrowDisabled: {
-        color: "#D1D5DB",
-    },
-    rankNumber: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-        width: 24,
-        textAlign: "center",
-    },
-    avatarContainer: {
-        marginLeft: 8,
-        marginRight: 12,
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-    },
-    avatarPlaceholder: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    playerInfo: {
-        flex: 1,
-    },
-    playerName: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    playerSub: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    emptyState: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-    },
-    // Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.5)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    modalContent: {
-        width: "85%",
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        padding: 20,
-        maxHeight: "70%",
-    },
-    modalTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 16,
-        textAlign: "center",
-    },
-    modalOption: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    modalOptionText: {
-        fontSize: 16,
-        color: COLORS.text,
-    },
-});

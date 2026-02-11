@@ -103,21 +103,6 @@ export async function signInWithGoogle(
   return apiClient.post<OAuthResponse>("/auth/google", { idToken });
 }
 
-/**
- * Sign in with Google OAuth using authorization code (PKCE flow)
- * This is used when exchanging an auth code for tokens
- */
-export async function signInWithGoogleCode(
-  code: string,
-  codeVerifier?: string,
-  redirectUri?: string,
-): Promise<OAuthResponse> {
-  return apiClient.post<OAuthResponse>("/auth/google/code", {
-    code,
-    codeVerifier,
-    redirectUri: redirectUri || "https://auth.expo.io/@dawood90999/teetimesocial",
-  });
-}
 
 /**
  * Sign in with Apple OAuth
@@ -140,6 +125,20 @@ export async function completeOAuthProfile(
     payload,
     accessToken,
   );
+}
+
+/**
+ * Verify phone number and complete OAuth signup (new users)
+ */
+export async function verifyPhoneAndCompleteSignup(params: {
+  pendingToken: string;
+  phoneNumber: string;
+  verificationCode: string;
+  countryCode: string;
+  firstName: string;
+  lastName: string;
+}): Promise<OAuthResponse> {
+  return apiClient.post<OAuthResponse>("/auth/oauth/verify-phone", params);
 }
 
 // ============================================================================
@@ -178,6 +177,7 @@ export const oauthService = {
   signInWithGoogleCode,
   signInWithApple,
   completeOAuthProfile,
+  verifyPhoneAndCompleteSignup,
   isUserCancellation,
   formatOAuthError,
 };

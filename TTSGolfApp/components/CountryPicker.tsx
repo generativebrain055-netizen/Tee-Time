@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -6,13 +6,13 @@ import {
     Modal,
     FlatList,
     TextInput,
-    StyleSheet,
     Platform,
     KeyboardAvoidingView,
     Keyboard,
     TouchableWithoutFeedback,
+    Dimensions,
 } from 'react-native';
-import { ChevronDown, Search, X } from 'lucide-react-native';
+import { ChevronDown, Search, X, Check, Globe } from 'lucide-react-native';
 
 export interface Country {
     code: string;
@@ -128,16 +128,42 @@ interface CountryPickerProps {
     disabled?: boolean;
 }
 
+/**
+ * Strips leading zero from phone digits.
+ * Many countries use a leading 0 in domestic format (e.g. Pakistan 03001234567)
+ * that must be removed for international E.164 format.
+ */
+export const stripLeadingZero = (digits: string): string => {
+    return digits.startsWith('0') ? digits.slice(1) : digits;
+};
+
 export default function CountryPicker({ selectedCountry, onSelect, disabled }: CountryPickerProps) {
     const [modalVisible, setModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const filteredCountries = COUNTRIES.filter(
-        (country) =>
-            country.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            country.dialCode.includes(searchQuery) ||
-            country.code.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Group countries by region for section headers
+    const REGION_ORDER = [
+        { key: 'popular', label: 'Popular', codes: ['US', 'CA', 'GB', 'AU', 'IN', 'PK'] },
+    ];
+
+    const filteredCountries = useMemo(() => {
+        return COUNTRIES.filter(
+            (country) =>
+                country.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                country.dialCode.includes(searchQuery) ||
+                country.code.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [searchQuery]);
+
+    // Show popular countries at top when not searching
+    const displayCountries = useMemo(() => {
+        if (searchQuery.length > 0) return filteredCountries;
+        
+        const popularCodes = ['US', 'CA', 'GB', 'AU', 'IN', 'PK', 'AE', 'SA'];
+        const popular = COUNTRIES.filter(c => popularCodes.includes(c.code));
+        const rest = COUNTRIES.filter(c => !popularCodes.includes(c.code));
+        return [...popular, ...rest];
+    }, [searchQuery, filteredCountries]);
 
     const handleSelect = (country: Country) => {
         onSelect(country);
@@ -147,16 +173,33 @@ export default function CountryPicker({ selectedCountry, onSelect, disabled }: C
 
     return (
         <>
+            {/* Trigger Button - clean pill design */}
             <TouchableOpacity
-                style={[styles.trigger, disabled && styles.triggerDisabled]}
+                style={[
+                    {
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRightWidth: 1,
+                        borderRightColor: '#E5E7EB',
+                        marginRight: 12,
+                        gap: 6,
+                    },
+                    disabled && { opacity: 0.4 },
+                ]}
                 onPress={() => !disabled && setModalVisible(true)}
                 disabled={disabled}
+                activeOpacity={0.7}
             >
-                <Text style={styles.flag}>{selectedCountry.flag}</Text>
-                <Text style={styles.dialCode}>{selectedCountry.dialCode}</Text>
-                <ChevronDown size={16} color="#6B7280" />
+                <Text style={{ fontSize: 22, lineHeight: 26 }}>{selectedCountry.flag}</Text>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#1F2937', letterSpacing: -0.2 }}>
+                    {selectedCountry.dialCode}
+                </Text>
+                <ChevronDown size={14} color="#9CA3AF" />
             </TouchableOpacity>
 
+            {/* Modal */}
             <Modal
                 visible={modalVisible}
                 animationType="slide"
@@ -171,36 +214,83 @@ export default function CountryPicker({ selectedCountry, onSelect, disabled }: C
                     setModalVisible(false);
                     setSearchQuery('');
                 }}>
-                    <View style={styles.modalOverlay}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
                         <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
                             <KeyboardAvoidingView
                                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                                style={styles.modalContainer}
+                                style={{ maxHeight: '85%' }}
                             >
-                                <View style={styles.modalContent}>
+                                <View 
+                                    style={[
+                                        {
+                                            backgroundColor: '#FFFFFF',
+                                            borderTopLeftRadius: 24,
+                                            borderTopRightRadius: 24,
+                                            height: Dimensions.get('window').height * 0.7,
+                                        },
+                                        Platform.OS === 'ios' ? { paddingBottom: 34 } : { paddingBottom: 16 },
+                                        {
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: -8 },
+                                            shadowOpacity: 0.12,
+                                            shadowRadius: 16,
+                                            elevation: 12,
+                                        },
+                                    ]}
+                                >
                                     {/* Drag Handle */}
-                                    <View style={styles.dragHandle} />
+                                    <View style={{
+                                        width: 36, height: 4, backgroundColor: '#D1D5DB',
+                                        borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 6,
+                                    }} />
 
                                     {/* Header */}
-                                    <View style={styles.modalHeader}>
-                                        <Text style={styles.modalTitle}>Select Country</Text>
+                                    <View style={{
+                                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                        paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14,
+                                    }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                            <View style={{
+                                                width: 36, height: 36, borderRadius: 18,
+                                                backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center',
+                                            }}>
+                                                <Globe size={18} color="#3B82F6" />
+                                            </View>
+                                            <Text style={{
+                                                fontSize: 18, fontWeight: '700', color: '#111827', letterSpacing: -0.3,
+                                            }}>
+                                                Select Country
+                                            </Text>
+                                        </View>
                                         <TouchableOpacity
                                             onPress={() => {
                                                 setModalVisible(false);
                                                 setSearchQuery('');
                                             }}
-                                            style={styles.closeButton}
+                                            style={{
+                                                width: 32, height: 32, borderRadius: 16,
+                                                backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center',
+                                            }}
                                         >
-                                            <X size={24} color="#1F2937" />
+                                            <X size={18} color="#6B7280" />
                                         </TouchableOpacity>
                                     </View>
 
-                                    {/* Search */}
-                                    <View style={styles.searchContainer}>
-                                        <Search size={20} color="#6B7280" style={styles.searchIcon} />
+                                    {/* Search Input */}
+                                    <View style={{
+                                        flexDirection: 'row', alignItems: 'center',
+                                        backgroundColor: '#F9FAFB', borderRadius: 14,
+                                        paddingHorizontal: 14, height: 46,
+                                        marginHorizontal: 20, marginBottom: 12,
+                                        borderWidth: 1, borderColor: '#E5E7EB',
+                                    }}>
+                                        <Search size={18} color="#9CA3AF" />
                                         <TextInput
-                                            style={styles.searchInput}
-                                            placeholder="Search country or code..."
+                                            style={{
+                                                flex: 1, fontSize: 15, color: '#1F2937',
+                                                paddingVertical: 0, paddingHorizontal: 10,
+                                            }}
+                                            placeholder="Search country or dial code..."
                                             placeholderTextColor="#9CA3AF"
                                             value={searchQuery}
                                             onChangeText={setSearchQuery}
@@ -209,54 +299,112 @@ export default function CountryPicker({ selectedCountry, onSelect, disabled }: C
                                             returnKeyType="search"
                                         />
                                         {searchQuery.length > 0 && (
-                                            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                                                <X size={20} color="#6B7280" />
+                                            <TouchableOpacity
+                                                onPress={() => setSearchQuery('')}
+                                                style={{
+                                                    width: 24, height: 24, borderRadius: 12,
+                                                    backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center',
+                                                }}
+                                            >
+                                                <X size={12} color="#6B7280" />
                                             </TouchableOpacity>
                                         )}
                                     </View>
 
                                     {/* Results Count */}
                                     {searchQuery.length > 0 && (
-                                        <View style={styles.resultsCount}>
-                                            <Text style={styles.resultsCountText}>
-                                                {filteredCountries.length} {filteredCountries.length === 1 ? 'country' : 'countries'} found
+                                        <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+                                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                {filteredCountries.length} {filteredCountries.length === 1 ? 'result' : 'results'}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* Section label for popular */}
+                                    {searchQuery.length === 0 && (
+                                        <View style={{ paddingHorizontal: 20, paddingBottom: 6 }}>
+                                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                                                Popular
                                             </Text>
                                         </View>
                                     )}
 
                                     {/* Country List */}
                                     <FlatList
-                                        data={filteredCountries}
+                                        data={displayCountries}
                                         keyExtractor={(item) => item.code}
-                                        renderItem={({ item }) => (
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.countryItem,
-                                                    item.code === selectedCountry.code && styles.countryItemSelected,
-                                                ]}
-                                                onPress={() => handleSelect(item)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Text style={styles.countryFlag}>{item.flag}</Text>
-                                                <View style={styles.countryInfo}>
-                                                    <Text style={styles.countryName}>{item.name}</Text>
-                                                    <Text style={styles.countryDialCode}>{item.dialCode}</Text>
-                                                </View>
-                                                {item.code === selectedCountry.code && (
-                                                    <View style={styles.checkmark}>
-                                                        <Text style={styles.checkmarkText}>✓</Text>
-                                                    </View>
-                                                )}
-                                            </TouchableOpacity>
+                                        renderItem={({ item, index }) => {
+                                            const isSelected = item.code === selectedCountry.code;
+                                            const isPopular = searchQuery.length === 0 && index < 8;
+                                            const showAllHeader = searchQuery.length === 0 && index === 8;
+
+                                            return (
+                                                <>
+                                                    {showAllHeader && (
+                                                        <View style={{
+                                                            paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6,
+                                                            borderTopWidth: 1, borderTopColor: '#F3F4F6',
+                                                        }}>
+                                                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                                                                All Countries
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <TouchableOpacity
+                                                        style={[
+                                                            {
+                                                                flexDirection: 'row', alignItems: 'center',
+                                                                paddingHorizontal: 20, paddingVertical: 13,
+                                                                backgroundColor: isSelected ? '#EFF6FF' : '#FFFFFF',
+                                                            },
+                                                        ]}
+                                                        onPress={() => handleSelect(item)}
+                                                        activeOpacity={0.6}
+                                                    >
+                                                        <Text style={{ fontSize: 28, width: 38, textAlign: 'center' }}>
+                                                            {item.flag}
+                                                        </Text>
+                                                        <View style={{ flex: 1, marginLeft: 14 }}>
+                                                            <Text style={{
+                                                                fontSize: 15, fontWeight: isSelected ? '700' : '500',
+                                                                color: isSelected ? '#2563EB' : '#111827',
+                                                            }}>
+                                                                {item.name}
+                                                            </Text>
+                                                            <Text style={{
+                                                                fontSize: 13, color: isSelected ? '#60A5FA' : '#9CA3AF',
+                                                                marginTop: 1,
+                                                            }}>
+                                                                {item.dialCode}
+                                                            </Text>
+                                                        </View>
+                                                        {isSelected && (
+                                                            <View style={{
+                                                                width: 24, height: 24, borderRadius: 12,
+                                                                backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center',
+                                                            }}>
+                                                                <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                                                            </View>
+                                                        )}
+                                                    </TouchableOpacity>
+                                                </>
+                                            );
+                                        }}
+                                        ItemSeparatorComponent={() => (
+                                            <View style={{ height: 1, backgroundColor: '#F9FAFB', marginLeft: 72 }} />
                                         )}
-                                        ItemSeparatorComponent={() => <View style={styles.separator} />}
                                         showsVerticalScrollIndicator={false}
                                         keyboardShouldPersistTaps="handled"
-                                        contentContainerStyle={styles.listContent}
+                                        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
                                         ListEmptyComponent={
-                                            <View style={styles.emptyState}>
-                                                <Text style={styles.emptyStateText}>No countries found</Text>
-                                                <Text style={styles.emptyStateSubtext}>Try a different search term</Text>
+                                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 }}>
+                                                <Globe size={40} color="#D1D5DB" />
+                                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#6B7280', marginTop: 12 }}>
+                                                    No countries found
+                                                </Text>
+                                                <Text style={{ fontSize: 14, color: '#9CA3AF', marginTop: 4 }}>
+                                                    Try a different search term
+                                                </Text>
                                             </View>
                                         }
                                     />
@@ -269,181 +417,5 @@ export default function CountryPicker({ selectedCountry, onSelect, disabled }: C
         </>
     );
 }
-
-const styles = StyleSheet.create({
-    trigger: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRightWidth: 1,
-        borderRightColor: '#E5E7EB',
-        marginRight: 12,
-        gap: 6,
-    },
-    triggerDisabled: {
-        opacity: 0.5,
-    },
-    flag: {
-        fontSize: 24,
-        lineHeight: 24,
-    },
-    dialCode: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#1F2937',
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContainer: {
-        maxHeight: '85%',
-    },
-    modalContent: {
-        backgroundColor: '#FFFFFF',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        height: 600, // Fixed height
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    dragHandle: {
-        width: 40,
-        height: 4,
-        backgroundColor: '#D1D5DB',
-        borderRadius: 2,
-        alignSelf: 'center',
-        marginTop: 12,
-        marginBottom: 8,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingTop: 12,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1F2937',
-        letterSpacing: -0.5,
-    },
-    closeButton: {
-        padding: 4,
-        borderRadius: 8,
-        backgroundColor: '#F9FAFB',
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F9FAFB',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        marginHorizontal: 20,
-        marginTop: 16,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    searchIcon: {
-        marginRight: 8,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1F2937',
-        padding: 0,
-    },
-    clearButton: {
-        padding: 4,
-    },
-    resultsCount: {
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-    },
-    resultsCountText: {
-        fontSize: 13,
-        color: '#6B7280',
-        fontWeight: '500',
-    },
-    listContent: {
-        flexGrow: 1,
-    },
-    countryItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        backgroundColor: '#FFFFFF',
-    },
-    countryItemSelected: {
-        backgroundColor: '#EFF6FF',
-    },
-    countryFlag: {
-        fontSize: 28,
-        marginRight: 16,
-        width: 32,
-        textAlign: 'center',
-    },
-    countryInfo: {
-        flex: 1,
-    },
-    countryName: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#1F2937',
-        marginBottom: 3,
-    },
-    countryDialCode: {
-        fontSize: 14,
-        color: '#6B7280',
-        fontWeight: '400',
-    },
-    checkmark: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#3B82F6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    checkmarkText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '700',
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#F3F4F6',
-        marginLeft: 68,
-    },
-    emptyState: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 60,
-    },
-    emptyStateText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6B7280',
-        marginBottom: 8,
-    },
-    emptyStateSubtext: {
-        fontSize: 14,
-        color: '#9CA3AF',
-    },
-});
 
 export { COUNTRIES };

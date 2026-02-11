@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, ImageBackground, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, ImageBackground, TouchableOpacity } from "react-native";
 import { ArrowLeft, Settings } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 
@@ -15,19 +15,19 @@ interface Props {
 }
 
 const GroupBanner = memo(({ initials, color, topInset, isOwner, onBack, onSettings }: Props) => (
-    <View style={styles.container}>
+    <View className="relative mb-[50px]">
         <ImageBackground
             source={{ uri: DEFAULT_BANNER }}
-            style={styles.banner}
-            imageStyle={styles.bannerImage}
+            className="h-[180px] w-full"
+            imageStyle={{ resizeMode: "cover" }}
         >
-            <View style={[styles.overlay, { paddingTop: topInset }]}>
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
+            <View className="flex-1 bg-black/20" style={{ paddingTop: topInset }}>
+                <View className="flex-row justify-between px-4 pt-2">
+                    <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 justify-center items-center" onPress={onBack}>
                         <ArrowLeft size={22} color={COLORS.white} />
                     </TouchableOpacity>
                     {isOwner !== false && (
-                        <TouchableOpacity style={styles.iconBtn} onPress={onSettings}>
+                        <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 justify-center items-center" onPress={onSettings}>
                             <Settings size={22} color={COLORS.white} />
                         </TouchableOpacity>
                     )}
@@ -35,64 +35,14 @@ const GroupBanner = memo(({ initials, color, topInset, isOwner, onBack, onSettin
             </View>
         </ImageBackground>
 
-        <View style={styles.avatarContainer}>
-            <View style={[styles.avatar, { backgroundColor: (color || COLORS.primary) + "30" }]}>
-                <Text style={[styles.avatarText, { color: color || COLORS.primary }]}>
+        <View className="absolute -bottom-[45px] self-center">
+            <View className="w-[100px] h-[100px] rounded-full justify-center items-center border-4" style={{ backgroundColor: (color || COLORS.primary) + "30", borderColor: COLORS.white }}>
+                <Text className="text-[32px] font-bold" style={{ color: color || COLORS.primary }}>
                     {initials}
                 </Text>
             </View>
         </View>
     </View>
 ));
-
-const styles = StyleSheet.create({
-    container: {
-        position: "relative",
-        marginBottom: 50,
-    },
-    banner: {
-        height: 180,
-        width: "100%",
-    },
-    bannerImage: {
-        resizeMode: "cover",
-    },
-    overlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.2)",
-    },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingTop: 8,
-    },
-    iconBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "rgba(0,0,0,0.3)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarContainer: {
-        position: "absolute",
-        bottom: -45,
-        alignSelf: "center",
-    },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        justifyContent: "center",
-        alignItems: "center",
-        borderWidth: 4,
-        borderColor: COLORS.white,
-    },
-    avatarText: {
-        fontSize: 32,
-        fontWeight: "bold",
-    },
-});
 
 export default GroupBanner;

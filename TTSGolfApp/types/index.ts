@@ -55,11 +55,11 @@ export interface OnboardingData {
   firstName?: string;
   lastName?: string;
   email?: string;
-  profilePhotoUri?: string;
-  profilePhotoBase64?: string;
-  zipCode?: string;
+  avatar?: string;
+  picture?: string;
   location?: Location;
   club?: Club | null;
+  clubs?: Club[];  // New: array of all clubs
   handicap?: number | null;
   preferences?: PreferencesData | UserPreferences | null;
 }
@@ -85,10 +85,6 @@ export interface PhoneVerificationPageProps extends OnboardingPageProps {
   initialPhone?: string;
 }
 
-export interface SignUpOptionsPageProps extends OnboardingPageProps {
-  onOAuthSuccess: (data: OAuthSuccessData) => void;
-}
-
 export interface NamePageProps extends OnboardingPageProps {
   initialData?: { firstName?: string; lastName?: string };
 }
@@ -97,10 +93,8 @@ export interface EmailPageProps extends OnboardingPageProps {
   initialEmail?: string;
 }
 
-export interface PhotoZipPageProps extends OnboardingPageProps {
-  initialData?: { profilePhotoUri?: string; zipCode?: string };
-  initialProfilePhotoUri?: string;
-  initialZipCode?: string;
+export interface ProfileImagePageProps extends OnboardingPageProps {
+  initialData?: { picture?: string; avatar?: string; firstName?: string; lastName?: string };
 }
 
 export interface LocationPageProps extends OnboardingPageProps {

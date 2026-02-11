@@ -2,17 +2,12 @@ import React, { useRef, useEffect } from "react";
 import {
   View,
   Image,
-  StyleSheet,
   Dimensions,
   Animated,
   Easing,
-  ViewStyle,
-  ImageStyle,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme";
-import { base64DecodeJSON } from "../utils/base64";
 
 const { width, height } = Dimensions.get("window");
 
@@ -22,6 +17,7 @@ type ScreenName =
   | "Login"
   | "Signup"
   | "Onboarding"
+  | "AvailabilityOnboarding"
   | "HomePage"
   | "Home";
 
@@ -32,12 +28,6 @@ interface Navigation {
 
 interface SplashScreenProps {
   navigation: Navigation;
-}
-
-interface Styles {
-  container: ViewStyle;
-  logoContainer: ViewStyle;
-  logo: ImageStyle;
 }
 
 export default function SplashScreen({
@@ -81,6 +71,12 @@ export default function SplashScreen({
           AsyncStorage.getItem("user"),
         ]);
 
+        console.log("[SplashScreen] Session check:", {
+          hasAccessToken: !!accessToken,
+          hasUserStr: !!userStr,
+          accessTokenPreview: accessToken ? accessToken.substring(0, 30) + "..." : null,
+        });
+
         // Wait for animation to complete
         await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -90,34 +86,90 @@ export default function SplashScreen({
             // Decode JWT to check expiration (simple check without verification)
             const tokenParts = accessToken.split('.');
             if (tokenParts.length === 3) {
-              const payload = base64DecodeJSON(tokenParts[1]);
+              const payload = JSON.parse(atob(tokenParts[1]));
               const currentTime = Math.floor(Date.now() / 1000);
+
+              console.log("[SplashScreen] Token validation:", {
+                expiration: payload.exp,
+                currentTime,
+                isExpired: payload.exp && payload.exp < currentTime,
+              });
 
               // Check if token is expired
               if (payload.exp && payload.exp < currentTime) {
                 // Token expired, clear storage and go to Welcome
-                console.log("Token expired, clearing session");
+                console.log("[SplashScreen] Token expired, clearing session");
                 await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                 navigation.replace("Welcome");
                 return;
               }
             }
 
-            // Token is valid, go to Home
-            let user;
+            // Token is valid, check if user still exists in database
+            const user = JSON.parse(userStr);
+            console.log("[SplashScreen] Valid session found, verifying user exists:", {
+              userId: user.id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+            });
+            
+            // Verify user exists in database
             try {
-              user = JSON.parse(userStr);
-            } catch (parseError) {
-              console.error("Failed to parse user data:", parseError);
-              // Clear corrupted user data
-              await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-              navigation.replace("Welcome");
-              return;
+              const { profileApi } = await import("../services/api/profileApi");
+              const profileResponse = await profileApi.getCurrentUser();
+              
+              if (!profileResponse.success || !profileResponse.user) {
+                // User doesn't exist in database, clear session
+                console.log("[SplashScreen] User not found in database, clearing session");
+                await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                navigation.replace("Welcome");
+                return;
+              }
+              
+              console.log("[SplashScreen] User verified, checking availability");
+            } catch (userError: any) {
+              // If 401/404, user doesn't exist
+              if (userError.statusCode === 401 || userError.statusCode === 404) {
+                console.log("[SplashScreen] User not found (401/404), clearing session");
+                await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                navigation.replace("Welcome");
+                return;
+              }
+              // Other errors, log but continue
+              console.error("[SplashScreen] Error verifying user:", userError);
             }
-            navigation.replace("Home", { user });
+            
+            // Check availability
+            try {
+              const { availabilityApi } = await import("../services/api/availabilityApi");
+              
+              // Add timeout to prevent hanging
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Availability check timeout')), 3000)
+              );
+              
+              const availabilityPromise = availabilityApi.getUserAvailability();
+              
+              const response = await Promise.race([availabilityPromise, timeoutPromise]);
+              
+              // If no availability set, show availability onboarding
+              if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) {
+                console.log("[SplashScreen] No availability found, navigating to AvailabilityOnboarding");
+                navigation.replace("AvailabilityOnboarding", { user });
+              } else {
+                console.log("[SplashScreen] Availability exists, navigating to Home");
+                navigation.replace("Home", { user });
+              }
+            } catch (availError) {
+              console.error("[SplashScreen] Error checking availability:", availError);
+              // On error or timeout, just go to home (user can set availability later)
+              navigation.replace("Home", { user });
+            }
           } catch (tokenError) {
             // Invalid token format, clear and go to Welcome
-            console.error("Invalid token format:", tokenError);
+            console.error("[SplashScreen] Invalid token format:", tokenError);
             await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
             navigation.replace("Welcome");
           }
@@ -133,17 +185,7 @@ export default function SplashScreen({
       }
     };
 
-    // Critical: .catch() prevents unhandled promise rejection which crashes the app in production
-    checkSession().catch((err) => {
-      console.error("Splash checkSession unhandled error:", err);
-      try {
-        AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]).catch(() => {});
-        navigation.replace("Welcome");
-      } catch (e) {
-        // Last resort: navigation might throw
-        navigation.replace("Welcome");
-      }
-    });
+    checkSession();
   }, [navigation, fadeAnim, scaleAnim, rotateAnim]);
 
   const spin = rotateAnim.interpolate({
@@ -152,40 +194,21 @@ export default function SplashScreen({
   });
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-white justify-center items-center">
       <StatusBar style="dark" />
       <Animated.View
-        style={[
-          styles.logoContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }, { rotate: spin }],
-          },
-        ]}
+        className="items-center justify-center"
+        style={{
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }, { rotate: spin }],
+        }}
       >
         <Image
           source={require("../assets/compact-logo.png")}
-          style={styles.logo}
+          style={{ width: width * 0.9, height: height * 0.25 }}
           resizeMode="contain"
         />
       </Animated.View>
     </View>
   );
 }
-
-const styles = StyleSheet.create<Styles>({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: {
-    width: width * 0.9,
-    height: height * 0.25,
-  },
-});

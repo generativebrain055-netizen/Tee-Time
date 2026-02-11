@@ -1,7 +1,6 @@
 import React from "react";
 import {
   View,
-  StyleSheet,
   Animated,
   Image,
   ViewStyle,
@@ -12,9 +11,6 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   colors,
   gradients,
-  spacing,
-  borderRadius,
-  shadows,
   platform,
 } from "../theme";
 
@@ -53,14 +49,6 @@ interface LogoBoxProps {
   style?: ViewStyle;
 }
 
-interface Styles {
-  gradientContainer: ViewStyle;
-  headerGradient: ViewStyle;
-  card: ViewStyle;
-  iconContainer: ViewStyle;
-  logoBox: ViewStyle;
-}
-
 /**
  * Gradient Header Component
  * Used in Login/Signup screens
@@ -69,7 +57,14 @@ export const GradientHeader: React.FC<GradientHeaderProps> = ({
   children,
   style,
 }) => {
-  return <View style={[styles.headerGradient, style]}>{children}</View>;
+  return (
+    <View 
+      className="pb-20"
+      style={[{ paddingTop: platform.statusBarHeight }, style]}
+    >
+      {children}
+    </View>
+  );
 };
 
 /**
@@ -81,13 +76,28 @@ export const Card: React.FC<CardProps> = ({
   style,
   animated = false,
 }) => {
+  const cardClassName = "flex-1 bg-white rounded-md mx-5 mb-5 px-8 pt-12 pb-6";
+  const shadowStyle = {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 15,
+  };
+
   if (animated) {
     return (
-      <Animated.View style={[styles.card, style]}>{children}</Animated.View>
+      <Animated.View className={cardClassName} style={[shadowStyle, style]}>
+        {children}
+      </Animated.View>
     );
   }
 
-  return <View style={[styles.card, style]}>{children}</View>;
+  return (
+    <View className={cardClassName} style={[shadowStyle, style]}>
+      {children}
+    </View>
+  );
 };
 
 /**
@@ -101,7 +111,8 @@ export const GradientContainer: React.FC<GradientContainerProps> = ({
   return (
     <LinearGradient
       colors={gradients.primary as any}
-      style={[styles.gradientContainer, style]}
+      className="flex-1"
+      style={style}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
@@ -125,8 +136,8 @@ export const IconContainer: React.FC<IconContainerProps> = ({
 }) => {
   return (
     <View
+      className="justify-center items-center mb-6"
       style={[
-        styles.iconContainer,
         {
           width: size,
           height: size,
@@ -157,7 +168,20 @@ export const LogoBox: React.FC<LogoBoxProps> = ({
   style,
 }) => {
   return (
-    <View style={[styles.logoBox, { width, height }, style]}>
+    <View 
+      className="bg-white rounded-md justify-center items-center"
+      style={[
+        { width, height },
+        {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.1,
+          shadowRadius: 20,
+          elevation: 10,
+        },
+        style,
+      ]}
+    >
       {source && (
         <Image
           source={source}
@@ -168,39 +192,6 @@ export const LogoBox: React.FC<LogoBoxProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create<Styles>({
-  gradientContainer: {
-    flex: 1,
-  },
-  headerGradient: {
-    paddingTop: platform.statusBarHeight,
-    paddingBottom: spacing.massive,
-  },
-  card: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.xxxl,
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
-    paddingHorizontal: spacing.xxxl,
-    paddingTop: spacing.huge,
-    paddingBottom: spacing.xxl,
-    ...shadows.xl,
-  },
-  iconContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.xxl,
-  },
-  logoBox: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.xl,
-    justifyContent: "center",
-    alignItems: "center",
-    ...shadows.lg,
-  },
-});
 
 export default {
   GradientHeader,

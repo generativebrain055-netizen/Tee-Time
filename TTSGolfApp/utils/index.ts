@@ -9,8 +9,8 @@ export { sessionManager } from "./sessionManager";
 // Device Info
 export { getDeviceInfo } from "./deviceInfo";
 
-// Base64 Utilities
-export { base64Decode, base64DecodeJSON } from "./base64";
-
-// Logging
+// Logger
 export { logger } from "./logger";
+
+// Tailwind class merger
+export { cn } from "./cn";

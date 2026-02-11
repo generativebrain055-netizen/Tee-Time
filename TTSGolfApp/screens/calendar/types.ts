@@ -3,24 +3,34 @@
  */
 
 export interface CalendarDay {
-    day: number | "";
-    id: string;
-    hasEvent?: boolean;
-    isSelected?: boolean;
-    isToday?: boolean;
-    events?: TeeTime[];
+  day: number | "";
+  id: string;
+  hasEvent?: boolean;
+  isSelected?: boolean;
+  isToday?: boolean;
+  events?: CalendarTeeTime[];
 }
 
-export interface TeeTime {
-    id: string;
-    date: string;
-    time: string;
-    course: string;
-    location: string;
-    players: number;
-    status: "confirmed" | "pending" | "cancelled" | "completed";
-    creatorId?: string;
-    isOrganizer?: boolean;
+export interface CalendarParticipant {
+  id: string;
+  userId?: string;
+  name: string;
+  avatar?: string;
+  isCreator: boolean;
+  status?: "confirmed" | "pending";
 }
 
-export type TeeTimesMap = Map<string, TeeTime[]>;
+export interface CalendarTeeTime {
+  id: string;
+  date: string;
+  time: string;
+  course: string;
+  location: string;
+  players: number;
+  status: "confirmed" | "pending" | "cancelled" | "completed" | "in_progress";
+  creatorId?: string;
+  isOrganizer?: boolean;
+  participants?: CalendarParticipant[];
+}
+
+export type TeeTimesMap = Map<string, CalendarTeeTime[]>;

@@ -1,106 +1,87 @@
 import React, { memo } from "react";
-import { View, Text, Image, ImageBackground, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Image, TouchableOpacity, Text } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
-import { COLORS } from "../../../constants/colors";
-
-const DEFAULT_BANNER = "https://images.unsplash.com/photo-1587174486073-ae5e5cff23aa?w=800&q=80";
+import { cn } from "../../../utils/cn";
 
 interface Props {
-    avatar?: string;
-    initials: string;
-    topInset: number;
-    onBack: () => void;
+  avatar?: string;
+  initials: string;
+  headerImageUri?: string;
+  topInset: number;
+  onBack: () => void;
 }
 
-const ProfileBanner = memo(({ avatar, initials, topInset, onBack }: Props) => (
-    <View style={styles.container}>
-        <ImageBackground
-            source={{ uri: DEFAULT_BANNER }}
-            style={styles.banner}
-            imageStyle={styles.bannerImage}
+const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack }: Props) => (
+  <View style={{ position: 'relative', marginBottom: 0 }}>
+    {/* Cover Image */}
+    <View style={{ height: 140, width: '100%', overflow: 'hidden', backgroundColor: '#4CAF50' }}>
+      {headerImageUri ? (
+        <Image source={{ uri: headerImageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+      ) : (
+        <Image
+          source={{ uri: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800' }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+      )}
+      <View style={{ position: 'absolute', top: topInset + 8, left: 16 }}>
+        <TouchableOpacity
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          onPress={onBack}
         >
-            <View style={[styles.overlay, { paddingTop: topInset }]}>
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
-                        <ArrowLeft size={22} color={COLORS.white} />
-                    </TouchableOpacity>
-                    <View style={styles.spacer} />
-                </View>
-            </View>
-        </ImageBackground>
-
-        <View style={styles.avatarContainer}>
-            {avatar ? (
-                <Image source={{ uri: avatar }} style={styles.avatar} />
-            ) : (
-                <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitials}>{initials}</Text>
-                </View>
-            )}
-        </View>
+          <ArrowLeft size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
     </View>
+    {/* Profile Photo - Centered and overlapping both cover and card */}
+    <View style={{ 
+      position: 'absolute',
+      top: 80,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      zIndex: 10,
+    }}>
+      {avatar ? (
+        <Image
+          source={{ uri: avatar }}
+          style={{
+            width: 120,
+            height: 120,
+            borderRadius: 60,
+            borderWidth: 5,
+            borderColor: '#FFFFFF',
+          }}
+        />
+      ) : (
+        <View style={{
+          width: 120,
+          height: 120,
+          borderRadius: 60,
+          backgroundColor: '#22C55E',
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: 5,
+          borderColor: '#FFFFFF',
+        }}>
+          <Text style={{
+            fontFamily: 'Inter_700Bold',
+            fontSize: 36,
+            color: '#FFFFFF',
+          }}>
+            {initials}
+          </Text>
+        </View>
+      )}
+    </View>
+  </View>
 ));
-
-const styles = StyleSheet.create({
-    container: {
-        position: "relative",
-        marginBottom: 50,
-    },
-    banner: {
-        height: 180,
-        width: "100%",
-    },
-    bannerImage: {
-        resizeMode: "cover",
-    },
-    overlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.2)",
-    },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingTop: 8,
-    },
-    iconBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "rgba(0,0,0,0.3)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    spacer: {
-        width: 40,
-    },
-    avatarContainer: {
-        position: "absolute",
-        bottom: -45,
-        alignSelf: "center",
-    },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 4,
-        borderColor: COLORS.white,
-    },
-    avatarPlaceholder: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        borderWidth: 4,
-        borderColor: COLORS.white,
-    },
-    avatarInitials: {
-        fontSize: 36,
-        fontWeight: "bold",
-        color: COLORS.white,
-    },
-});
 
 export default ProfileBanner;

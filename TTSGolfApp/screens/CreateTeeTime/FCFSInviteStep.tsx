@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     Image,
@@ -145,18 +144,18 @@ export default function FCFSInviteStep({
                 onRequestClose={closePicker}
             >
                 <TouchableWithoutFeedback onPress={closePicker}>
-                    <View style={styles.modalOverlay}>
+                    <View className="flex-1 bg-black/50 justify-end">
                         <TouchableWithoutFeedback>
-                            <View style={styles.pickerModal}>
-                                <View style={styles.pickerHeader}>
+                            <View className="bg-white rounded-t-[20px] pb-[34px]">
+                                <View className="flex-row justify-between items-center px-4 py-3.5 border-b border-border">
                                     <TouchableOpacity onPress={closePicker}>
-                                        <Text style={styles.pickerCancelText}>Cancel</Text>
+                                        <Text className="text-base text-[#9CA3AF]">Cancel</Text>
                                     </TouchableOpacity>
-                                    <Text style={styles.pickerTitle}>
+                                    <Text className="text-base font-semibold text-[#1F2937]">
                                         {pickerMode === "date" ? "Select Date" : "Select Time"}
                                     </Text>
                                     <TouchableOpacity onPress={handleIOSConfirm}>
-                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                        <Text className="text-base font-semibold text-primary">Done</Text>
                                     </TouchableOpacity>
                                 </View>
                                 <DateTimePicker
@@ -165,7 +164,7 @@ export default function FCFSInviteStep({
                                     display="spinner"
                                     onChange={handleDateTimeChange}
                                     minimumDate={pickerMode === "date" ? new Date() : undefined}
-                                    style={styles.iosPicker}
+                                    style={{ height: 200 }}
                                 />
                             </View>
                         </TouchableWithoutFeedback>
@@ -176,494 +175,407 @@ export default function FCFSInviteStep({
     };
 
     return (
-        <View style={styles.content}>
-            <Text style={styles.stepTitle}>First Come First Serve</Text>
-            <Text style={styles.subtitle}>
-                All selected players will be notified. First to accept get the spots!
-            </Text>
-
-            {/* Target Type Selection */}
-            <View style={styles.targetTypeContainer}>
+        <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+            <ScrollView 
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Send to roster card */}
                 <TouchableOpacity
-                    style={[styles.targetTypeBtn, targetType === "roster" && styles.targetTypeBtnActive]}
+                    style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 12,
+                        padding: 20,
+                        marginBottom: 16,
+                        borderWidth: targetType === 'roster' ? 2 : 1,
+                        borderColor: targetType === 'roster' ? '#22C55E' : '#E5E7EB',
+                    }}
                     onPress={() => onTargetTypeChange("roster")}
+                    activeOpacity={0.7}
                 >
-                    <Users size={20} color={targetType === "roster" ? COLORS.white : COLORS.text} />
-                    <Text style={[styles.targetTypeText, targetType === "roster" && styles.targetTypeTextActive]}>
-                        Entire Roster
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.targetTypeBtn, targetType === "group" && styles.targetTypeBtnActive]}
-                    onPress={() => onTargetTypeChange("group")}
-                >
-                    <UserCheck size={20} color={targetType === "group" ? COLORS.white : COLORS.text} />
-                    <Text style={[styles.targetTypeText, targetType === "group" && styles.targetTypeTextActive]}>
-                        Select Group
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Group Selection */}
-            {targetType === "group" && (
-                <View style={styles.groupSection}>
-                    <Text style={styles.sectionLabel}>Select a group</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupScroll}>
-                        {groups.map((group) => (
-                            <TouchableOpacity
-                                key={group.id}
-                                style={[
-                                    styles.groupChip,
-                                    selectedGroupId === group.id && styles.groupChipSelected,
-                                    { borderColor: group.color },
-                                ]}
-                                onPress={() => onGroupSelect(group.id)}
-                            >
-                                <View style={[styles.groupDot, { backgroundColor: group.color }]} />
-                                <Text style={[
-                                    styles.groupChipText,
-                                    selectedGroupId === group.id && styles.groupChipTextSelected
-                                ]}>
-                                    {group.name}
-                                </Text>
-                                <Text style={styles.groupCount}>({group.memberCount})</Text>
-                            </TouchableOpacity>
-                        ))}
-                        {groups.length === 0 && (
-                            <Text style={styles.noGroupsText}>No groups created yet</Text>
-                        )}
-                    </ScrollView>
-                </View>
-            )}
-
-            {/* Response Deadline */}
-            <View style={styles.deadlineSection}>
-                <View style={styles.deadlineHeader}>
-                    <View style={styles.deadlineHeaderLeft}>
-                        <Clock size={20} color={COLORS.primary} />
-                        <Text style={styles.deadlineTitle}>Set Response Deadline</Text>
-                    </View>
-                    <Switch
-                        value={hasDeadline}
-                        onValueChange={handleToggleDeadline}
-                        trackColor={{ false: "#E5E7EB", true: "#86EFAC" }}
-                        thumbColor={hasDeadline ? COLORS.primary : "#9CA3AF"}
-                    />
-                </View>
-                {hasDeadline && (
-                    <View style={styles.deadlineContent}>
-                        <Text style={styles.deadlineHint}>
-                            Invites will expire at this time. Unresponded invites will be cancelled.
-                        </Text>
-
-                        {/* Quick Test Presets */}
-                        <View style={styles.quickPresets}>
-                            <TouchableOpacity
-                                style={styles.quickPresetBtn}
-                                onPress={() => {
-                                    const d = new Date();
-                                    d.setMinutes(d.getMinutes() + 2);
-                                    setTempDate(d);
-                                    onDeadlineChange(d);
-                                }}
-                            >
-                                <Text style={styles.quickPresetText}>2 min</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.quickPresetBtn}
-                                onPress={() => {
-                                    const d = new Date();
-                                    d.setMinutes(d.getMinutes() + 5);
-                                    setTempDate(d);
-                                    onDeadlineChange(d);
-                                }}
-                            >
-                                <Text style={styles.quickPresetText}>5 min</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.quickPresetBtn}
-                                onPress={() => {
-                                    const d = new Date();
-                                    d.setHours(d.getHours() + 1);
-                                    setTempDate(d);
-                                    onDeadlineChange(d);
-                                }}
-                            >
-                                <Text style={styles.quickPresetText}>1 hr</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.quickPresetBtn}
-                                onPress={() => {
-                                    const d = new Date();
-                                    d.setHours(d.getHours() + 24);
-                                    setTempDate(d);
-                                    onDeadlineChange(d);
-                                }}
-                            >
-                                <Text style={styles.quickPresetText}>24 hr</Text>
-                            </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                        <View style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 24,
+                            backgroundColor: '#DCFCE7',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 16,
+                        }}>
+                            <Users size={24} color="#22C55E" strokeWidth={2} />
                         </View>
-
-                        <View style={styles.deadlinePickers}>
-                            <TouchableOpacity
-                                style={[styles.deadlinePickerBtn, pickerMode === "date" && styles.deadlinePickerBtnActive]}
-                                onPress={openDatePicker}
-                            >
-                                <Calendar size={18} color={pickerMode === "date" ? COLORS.primary : COLORS.text} />
-                                <Text style={[styles.deadlinePickerText, pickerMode === "date" && styles.deadlinePickerTextActive]}>
-                                    {formatDeadlineDate(tempDate)}
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.deadlinePickerBtn, pickerMode === "time" && styles.deadlinePickerBtnActive]}
-                                onPress={openTimePicker}
-                            >
-                                <Clock size={18} color={pickerMode === "time" ? COLORS.primary : COLORS.text} />
-                                <Text style={[styles.deadlinePickerText, pickerMode === "time" && styles.deadlinePickerTextActive]}>
-                                    {formatDeadlineTime(tempDate)}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-            </View>
-
-            {/* Date/Time Picker */}
-            {renderPicker()}
-
-            {/* Preview of who will receive */}
-            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
-                {targetType === "roster" ? "Roster members" : "Group members"} ({friends.length})
-            </Text>
-            <Text style={styles.sectionHint}>
-                All players below will receive the invite simultaneously
-            </Text>
-
-            <ScrollView style={styles.playerList} showsVerticalScrollIndicator={false}>
-                {friends.map((friend) => (
-                    <View key={friend.id} style={styles.playerItem}>
-                        <View style={styles.avatarContainer}>
-                            {friend.avatar ? (
-                                <Image source={{ uri: friend.avatar }} style={styles.avatar} />
-                            ) : (
-                                <View style={styles.avatarPlaceholder}>
-                                    <Text style={styles.avatarInitials}>
-                                        {getInitials(friend.firstName, friend.lastName)}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                        <View style={styles.playerInfo}>
-                            <Text style={styles.playerName}>
-                                {friend.firstName} {friend.lastName}
+                        <View style={{ flex: 1 }}>
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 17,
+                                color: '#111827',
+                                marginBottom: 6,
+                            }}>
+                                Send to roster
                             </Text>
-                            {friend.handicap !== undefined && (
-                                <Text style={styles.playerSub}>HCP {friend.handicap}</Text>
-                            )}
-                        </View>
-                        <View style={styles.willReceive}>
-                            <Check size={16} color={COLORS.primary} />
+                            <Text style={{
+                                fontFamily: 'Inter_400Regular',
+                                fontSize: 14,
+                                color: '#6B7280',
+                                lineHeight: 20,
+                            }}>
+                                Invite your full roster. Everyone gets the alert.
+                            </Text>
                         </View>
                     </View>
-                ))}
-                {friends.length === 0 && (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyTitle}>
-                            {targetType === "roster" ? "No friends in roster" : "Select a group"}
-                        </Text>
-                        <Text style={styles.emptyText}>
-                            {targetType === "roster"
-                                ? "Add friends from Availability first"
-                                : "Choose a group above to see members"}
-                        </Text>
+                </TouchableOpacity>
+
+                {/* Send to a group card */}
+                <View style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    marginBottom: 24,
+                    borderWidth: targetType === 'group' ? 2 : 1,
+                    borderColor: targetType === 'group' ? '#22C55E' : '#E5E7EB',
+                    overflow: 'hidden',
+                }}>
+                    <TouchableOpacity
+                        style={{
+                            padding: 20,
+                        }}
+                        onPress={() => onTargetTypeChange("group")}
+                        activeOpacity={0.7}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                            <View style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 24,
+                                backgroundColor: '#DCFCE7',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginRight: 16,
+                            }}>
+                                <UserCheck size={24} color="#22C55E" strokeWidth={2} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 17,
+                                    color: '#111827',
+                                    marginBottom: 6,
+                                }}>
+                                    Send to a group
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 14,
+                                    color: '#6B7280',
+                                    lineHeight: 20,
+                                }}>
+                                    Invite members of one group. Everyone gets the alert.
+                                </Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                    {/* Group Selection - attached with separator */}
+                    {targetType === "group" && (
+                        <View>
+                            {/* Separator line */}
+                            <View style={{
+                                height: 1,
+                                backgroundColor: '#E5E7EB',
+                                marginHorizontal: 20,
+                            }} />
+                            
+                            <View style={{ padding: 20, paddingTop: 16 }}>
+                                {groups.map((group, index) => {
+                                    const isSelected = selectedGroupId === group.id;
+                                    return (
+                                        <TouchableOpacity
+                                            key={group.id}
+                                            style={{
+                                                paddingVertical: 12,
+                                                paddingHorizontal: 16,
+                                                marginBottom: index < groups.length - 1 ? 8 : 0,
+                                                borderRadius: 8,
+                                                backgroundColor: isSelected ? '#F0FDF4' : '#F9FAFB',
+                                                borderWidth: isSelected ? 2 : 1,
+                                                borderColor: isSelected ? '#22C55E' : '#E5E7EB',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                            }}
+                                            onPress={() => onGroupSelect(group.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            {isSelected ? (
+                                                <View style={{
+                                                    width: 20,
+                                                    height: 20,
+                                                    borderRadius: 10,
+                                                    backgroundColor: '#22C55E',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    marginRight: 12,
+                                                }}>
+                                                    <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                                                </View>
+                                            ) : (
+                                                <View style={{
+                                                    width: 20,
+                                                    height: 20,
+                                                    borderRadius: 10,
+                                                    borderWidth: 2,
+                                                    borderColor: '#D1D5DB',
+                                                    marginRight: 12,
+                                                }} />
+                                            )}
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{
+                                                    fontFamily: 'Inter_600SemiBold',
+                                                    fontSize: 16,
+                                                    color: '#111827',
+                                                    marginBottom: 2,
+                                                }}>
+                                                    {group.name}
+                                                </Text>
+                                                <Text style={{
+                                                    fontFamily: 'Inter_400Regular',
+                                                    fontSize: 13,
+                                                    color: '#9CA3AF',
+                                                }}>
+                                                    {group.memberCount} members
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                                {groups.length === 0 && (
+                                    <View style={{
+                                        paddingVertical: 20,
+                                        alignItems: 'center',
+                                    }}>
+                                        <Text style={{
+                                            fontFamily: 'Inter_600SemiBold',
+                                            fontSize: 15,
+                                            color: '#111827',
+                                            marginBottom: 6,
+                                        }}>
+                                            No groups created yet
+                                        </Text>
+                                        <Text style={{
+                                            fontFamily: 'Inter_400Regular',
+                                            fontSize: 13,
+                                            color: '#6B7280',
+                                            textAlign: 'center',
+                                        }}>
+                                            Create groups in the Roster section
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* Response Deadline */}
+                <View style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    padding: 20,
+                    marginBottom: 24,
+                }}>
+                    <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: hasDeadline ? 16 : 0,
+                    }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Clock size={20} color="#22C55E" strokeWidth={2} style={{ marginRight: 12 }} />
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 16,
+                                color: '#111827',
+                            }}>
+                                Set Response Deadline
+                            </Text>
+                        </View>
+                        <Switch
+                            value={hasDeadline}
+                            onValueChange={handleToggleDeadline}
+                            trackColor={{ false: "#E5E7EB", true: "#86EFAC" }}
+                            thumbColor={hasDeadline ? "#22C55E" : "#9CA3AF"}
+                        />
                     </View>
-                )}
-                <View style={{ height: 100 }} />
+                    {hasDeadline && (
+                        <View>
+                            <Text style={{
+                                fontFamily: 'Inter_400Regular',
+                                fontSize: 13,
+                                color: '#9CA3AF',
+                                marginBottom: 12,
+                            }}>
+                                Invites will expire at this time. Unresponded invites will be cancelled.
+                            </Text>
+
+                            {/* Quick Test Presets */}
+                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                                <TouchableOpacity
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        backgroundColor: '#E0F2FE',
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: '#7DD3FC',
+                                    }}
+                                    onPress={() => {
+                                        const d = new Date();
+                                        d.setMinutes(d.getMinutes() + 2);
+                                        setTempDate(d);
+                                        onDeadlineChange(d);
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 12,
+                                        color: '#0284C7',
+                                    }}>
+                                        2 min
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        backgroundColor: '#E0F2FE',
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: '#7DD3FC',
+                                    }}
+                                    onPress={() => {
+                                        const d = new Date();
+                                        d.setMinutes(d.getMinutes() + 5);
+                                        setTempDate(d);
+                                        onDeadlineChange(d);
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 12,
+                                        color: '#0284C7',
+                                    }}>
+                                        5 min
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        backgroundColor: '#E0F2FE',
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: '#7DD3FC',
+                                    }}
+                                    onPress={() => {
+                                        const d = new Date();
+                                        d.setHours(d.getHours() + 1);
+                                        setTempDate(d);
+                                        onDeadlineChange(d);
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 12,
+                                        color: '#0284C7',
+                                    }}>
+                                        1 hr
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        backgroundColor: '#E0F2FE',
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: '#7DD3FC',
+                                    }}
+                                    onPress={() => {
+                                        const d = new Date();
+                                        d.setHours(d.getHours() + 24);
+                                        setTempDate(d);
+                                        onDeadlineChange(d);
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 12,
+                                        color: '#0284C7',
+                                    }}>
+                                        24 hr
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <TouchableOpacity
+                                    style={{
+                                        flex: 1,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        backgroundColor: pickerMode === "date" ? '#F0FDF4' : '#FFFFFF',
+                                        paddingVertical: 12,
+                                        paddingHorizontal: 14,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: pickerMode === "date" ? '#22C55E' : '#E5E7EB',
+                                    }}
+                                    onPress={openDatePicker}
+                                >
+                                    <Calendar size={18} color={pickerMode === "date" ? "#22C55E" : "#6B7280"} strokeWidth={2} />
+                                    <Text style={{
+                                        fontFamily: 'Inter_500Medium',
+                                        fontSize: 14,
+                                        color: pickerMode === "date" ? '#22C55E' : '#111827',
+                                    }}>
+                                        {formatDeadlineDate(tempDate)}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        flex: 1,
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        backgroundColor: pickerMode === "time" ? '#F0FDF4' : '#FFFFFF',
+                                        paddingVertical: 12,
+                                        paddingHorizontal: 14,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: pickerMode === "time" ? '#22C55E' : '#E5E7EB',
+                                    }}
+                                    onPress={openTimePicker}
+                                >
+                                    <Clock size={18} color={pickerMode === "time" ? "#22C55E" : "#6B7280"} strokeWidth={2} />
+                                    <Text style={{
+                                        fontFamily: 'Inter_500Medium',
+                                        fontSize: 14,
+                                        color: pickerMode === "time" ? '#22C55E' : '#111827',
+                                    }}>
+                                        {formatDeadlineTime(tempDate)}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* Date/Time Picker */}
+                {renderPicker()}
             </ScrollView>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-    },
-    stepTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginBottom: 8,
-        textAlign: "center",
-    },
-    subtitle: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginBottom: 24,
-    },
-    targetTypeContainer: {
-        flexDirection: "row",
-        gap: 12,
-        marginBottom: 20,
-    },
-    targetTypeBtn: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: "#F3F4F6",
-        gap: 8,
-    },
-    targetTypeBtnActive: {
-        backgroundColor: COLORS.primary,
-    },
-    targetTypeText: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    targetTypeTextActive: {
-        color: COLORS.white,
-    },
-    groupSection: {
-        marginBottom: 8,
-    },
-    sectionLabel: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    sectionHint: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginBottom: 12,
-    },
-    groupScroll: {
-        flexGrow: 0,
-    },
-    groupChip: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 20,
-        borderWidth: 2,
-        marginRight: 10,
-        backgroundColor: COLORS.white,
-    },
-    groupChipSelected: {
-        backgroundColor: "#F0FDF4",
-    },
-    groupDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        marginRight: 8,
-    },
-    groupChipText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.text,
-    },
-    groupChipTextSelected: {
-        fontWeight: "600",
-    },
-    groupCount: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginLeft: 4,
-    },
-    noGroupsText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        fontStyle: "italic",
-    },
-    deadlineSection: {
-        backgroundColor: "#F9FAFB",
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 16,
-    },
-    deadlineHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-    },
-    deadlineHeaderLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-    },
-    deadlineTitle: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    deadlineContent: {
-        marginTop: 12,
-    },
-    deadlineHint: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginBottom: 12,
-    },
-    quickPresets: {
-        flexDirection: "row",
-        gap: 8,
-        marginBottom: 12,
-    },
-    quickPresetBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: "#E0F2FE",
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: "#7DD3FC",
-    },
-    quickPresetText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: "#0284C7",
-    },
-    deadlinePickers: {
-        flexDirection: "row",
-        gap: 10,
-    },
-    deadlinePickerBtn: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        backgroundColor: COLORS.white,
-        paddingVertical: 12,
-        paddingHorizontal: 14,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    deadlinePickerBtnActive: {
-        borderColor: COLORS.primary,
-        backgroundColor: "#F0FDF4",
-    },
-    deadlinePickerText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.text,
-    },
-    deadlinePickerTextActive: {
-        color: COLORS.primary,
-    },
-    // Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        justifyContent: "flex-end",
-    },
-    pickerModal: {
-        backgroundColor: COLORS.white,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        paddingBottom: 34,
-    },
-    pickerHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#E5E7EB",
-    },
-    pickerTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    pickerCancelText: {
-        fontSize: 16,
-        color: COLORS.textSub,
-    },
-    pickerDoneText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    iosPicker: {
-        height: 200,
-    },
-    playerList: {
-        flex: 1,
-    },
-    playerItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        backgroundColor: "#F9FAFB",
-        borderRadius: 10,
-        marginBottom: 8,
-    },
-    avatarContainer: {
-        marginRight: 12,
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-    },
-    avatarPlaceholder: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    playerInfo: {
-        flex: 1,
-    },
-    playerName: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    playerSub: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    willReceive: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: "#DCFCE7",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    emptyState: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-    },
-});

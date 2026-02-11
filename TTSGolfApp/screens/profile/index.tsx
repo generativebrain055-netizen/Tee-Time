@@ -1,125 +1,119 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
-    StyleSheet,
+    Text,
+    TouchableOpacity,
+    Image,
     ScrollView,
-    Alert,
     ActivityIndicator,
-    RefreshControl,
+    Modal,
+    TextInput,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { COLORS } from "../../constants/colors";
-import { BottomNav } from "../../components/common";
-import { profileApi, teeTimeApi, TeeTime } from "../../services/api";
+import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin } from "lucide-react-native";
+import { ScreenShell, ContentArea, AppHeader, AppBottomNav } from "../../ui";
+import { ConfirmModal } from "../../ui/feedback";
+import { Skeleton } from "../../ui/feedback/Skeleton";
+import { teeTimeApi, TeeTime, profileApi } from "../../services/api";
+import { useUser } from "../../contexts";
 
-// Modular components
-import {
-    ProfileBanner,
-    ProfileInfo,
-    ActionButtons,
-    PreferencesCard,
-    MembershipCard,
-    ProfileStats,
-    RecentRounds,
-    BlockedUsersCard,
-} from "./components";
+const getInitials = (firstName?: string, lastName?: string): string => {
+    return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+};
 
-// Utility functions
-import {
-    formatScore,
-    getPreferredTeeTimeDisplay,
-    getWalkOrRideDisplay,
-    getGroupSizeDisplay,
-    getInitials,
-    getFullName,
-} from "./utils";
+const getFullName = (firstName?: string, lastName?: string): string => {
+    return `${firstName || ""} ${lastName || ""}`.trim() || "User";
+};
 
-interface UserProfileData {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email?: string;
-    phone: string;
-    location?: string;
-    handicap?: number | string;
-    avatar?: string;
-    homeCourse?: string;
-    bio?: string;
-    socialRate?: number | string;
-    roundsPlayed?: number;
-    preferences?: {
-        preferredTeeTime?: string;
-        walkOrRide?: string;
-        playingPartnerPreference?: string;
+const formatScore = (score?: number | string): string => {
+    if (!score) return "—";
+    return String(score);
+};
+
+const getPreferredTeeTimeDisplay = (pref?: string): string => {
+    if (!pref) return "Not set";
+    const map: Record<string, string> = {
+        morning: "Morning",
+        afternoon: "Afternoon",
+        evening: "Evening",
     };
-}
+    return map[pref] || pref;
+};
+
+const getWalkOrRideDisplay = (pref?: string): string => {
+    if (!pref) return "Not set";
+    const map: Record<string, string> = {
+        walk: "Walk",
+        ride: "Ride",
+        either: "Either",
+    };
+    return map[pref] || pref;
+};
+
+const getGroupSizeDisplay = (pref?: string): string => {
+    if (!pref) return "Not set";
+    const map: Record<string, string> = {
+        twosome: "Twosome",
+        threesome: "Threesome",
+        foursome: "Foursome",
+        any: "Any",
+    };
+    return map[pref] || pref;
+};
 
 export default function ProfileScreen({ navigation }: any) {
-    const insets = useSafeAreaInsets();
-    const [profile, setProfile] = useState<UserProfileData | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { profile, loading: profileLoading, fetchProfile } = useUser();
     const [refreshing, setRefreshing] = useState(false);
     const [recentRounds, setRecentRounds] = useState<TeeTime[]>([]);
+    const [roundsLoading, setRoundsLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
 
-    // Fetch profile data
-    const fetchProfile = useCallback(async () => {
-        try {
-            const [profileRes, teeTimesRes] = await Promise.all([
-                profileApi.getCurrentUser(),
-                teeTimeApi.getTeeTimes("completed").catch(() => ({ success: false, teeTimes: [] })),
-            ]);
-
-            console.log("📱 [PROFILE] API Response:", JSON.stringify(profileRes, null, 2));
-
-            if (profileRes.success && profileRes.user) {
-                const u = profileRes.user;
-                console.log("📱 [PROFILE] User preferences from API:", u.preferences);
-
-                setProfile({
-                    id: u.id,
-                    firstName: u.firstName || "",
-                    lastName: u.lastName || "",
-                    email: u.email,
-                    phone: u.phoneNumber,
-                    location: u.location,
-                    handicap: u.handicap,
-                    avatar: u.avatarUrl,
-                    homeCourse: u.homeCourse,
-                    bio: u.bio,
-                    socialRate: u.socialRate,
-                    roundsPlayed: u.roundsPlayed,
-                    preferences: u.preferences,
-                });
-
-                console.log("📱 [PROFILE] Profile state set with preferences:", u.preferences);
-            }
-
-            if (teeTimesRes.success) {
-                setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
-            }
-        } catch (error: any) {
-            // Don't log session expired errors - they're handled by sessionManager
-            if (error?.message !== "Session expired") {
-                console.error("Error fetching profile:", error);
-            }
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
+    // Fetch profile on mount if not cached
     useEffect(() => {
         fetchProfile();
     }, [fetchProfile]);
 
+
+
+    // Fetch recent rounds
+    useEffect(() => {
+        const fetchRounds = async () => {
+            try {
+                const teeTimesRes = await teeTimeApi.getTeeTimes("completed");
+                if (teeTimesRes.success) {
+                    setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
+                }
+            } catch (error: any) {
+                if (error?.message !== "Session expired") {
+                    console.error("Error fetching rounds:", error);
+                }
+            } finally {
+                setRoundsLoading(false);
+            }
+        };
+
+        if (profile) {
+            fetchRounds();
+        }
+    }, [profile]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await fetchProfile();
+        await Promise.all([
+            fetchProfile(true), // Force refresh
+            (async () => {
+                try {
+                    const teeTimesRes = await teeTimeApi.getTeeTimes("completed");
+                    if (teeTimesRes.success) {
+                        setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
+                    }
+                } catch (error) {
+                    console.error("Error fetching rounds:", error);
+                }
+            })(),
+        ]);
         setRefreshing(false);
     }, [fetchProfile]);
 
-    // Action handlers
     const handleEditProfile = useCallback(() => {
         navigation?.navigate("EditProfile", { profile });
     }, [navigation, profile]);
@@ -128,115 +122,542 @@ export default function ProfileScreen({ navigation }: any) {
         navigation?.navigate("QRCode");
     }, [navigation]);
 
-    const handleSignOut = useCallback(() => {
-        Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Sign Out",
-                style: "destructive",
-                onPress: async () => {
-                    try {
-                        await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-                        navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
-                    } catch (error) {
-                        console.error("Error signing out:", error);
-                    }
-                },
-            },
-        ]);
+    const handleSettings = useCallback(() => {
+        navigation?.navigate("Settings");
     }, [navigation]);
 
-    const handleRoundPress = useCallback((teeTime: TeeTime) => {
-        navigation?.navigate("TeeTimeDetail", { teeTimeId: teeTime.id });
+    const handleEditAvailability = useCallback(() => {
+        navigation?.navigate("EditAvailability");
     }, [navigation]);
 
-    const handleSeeAllRounds = useCallback(() => {
-        navigation?.navigate("TeeTimeHistory");
-    }, [navigation]);
-
-    // Loading state
-    if (loading) {
-        return (
-            <View style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
-        );
-    }
-
-    // Derived values
     const fullName = getFullName(profile?.firstName, profile?.lastName);
     const initials = getInitials(profile?.firstName, profile?.lastName);
     const coursesPlayed = recentRounds.length > 0
         ? new Set(recentRounds.map(r => r.courseName)).size
         : 0;
 
+    // Show loading only if both are loading initially
+    const loading = profileLoading && roundsLoading;
+
+    if (loading) {
+        return (
+            <ScreenShell>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
+                    <ActivityIndicator size="large" color="#22C55E" />
+                </View>
+                <AppBottomNav activeTab="Profile" navigation={navigation} />
+            </ScreenShell>
+        );
+    }
+
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
+        <ScreenShell>
+            <AppHeader
+                title="Profile"
+                onBack={() => navigation?.goBack()}
+                rightComponent={
+                    <TouchableOpacity onPress={handleSettings} style={{ padding: 4 }}>
+                        <Settings size={24} color="#111827" strokeWidth={2} />
+                    </TouchableOpacity>
+                }
+            />
 
-            <ScrollView
-                style={styles.scrollView}
-                showsVerticalScrollIndicator={false}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            <ContentArea
+                style={{ backgroundColor: '#F3F4F6' }}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
             >
-                <ProfileBanner
-                    avatar={profile?.avatar}
-                    initials={initials}
-                    topInset={insets.top}
-                    onSignOut={handleSignOut}
-                />
+                {/* Cover Image */}
+                <View style={{ height: 140, backgroundColor: '#4CAF50' }}>
+                    <Image
+                        source={{ uri: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800' }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                    />
+                </View>
 
-                <ProfileInfo
-                    fullName={fullName}
-                    location={profile?.location}
-                    handicap={profile?.handicap}
-                />
+                {/* Profile Card - Starting right after background */}
+                <View style={{
+                    marginHorizontal: 16,
+                    marginTop: 0,
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 16,
+                    padding: 20,
+                    paddingTop: 70,
+                    borderWidth: 1,
+                    borderColor: '#E5E7EB',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.06,
+                    shadowRadius: 4,
+                    elevation: 2,
+                }}>
+                    {/* Profile Photo - Centered and overlapping */}
+                    <View style={{ 
+                        position: 'absolute',
+                        top: -60,
+                        left: 0,
+                        right: 0,
+                        alignItems: 'center',
+                    }}>
+                        {profile?.avatarUrl ? (
+                            <Image
+                                source={{ uri: profile.avatarUrl }}
+                                style={{
+                                    width: 120,
+                                    height: 120,
+                                    borderRadius: 60,
+                                    borderWidth: 5,
+                                    borderColor: '#FFFFFF',
+                                }}
+                            />
+                        ) : (
+                            <View style={{
+                                width: 120,
+                                height: 120,
+                                borderRadius: 60,
+                                backgroundColor: '#3B82F6',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                borderWidth: 5,
+                                borderColor: '#FFFFFF',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 36,
+                                    color: '#FFFFFF',
+                                }}>
+                                    {initials}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
 
-                <ActionButtons
-                    onDraftViaQR={handleDraftViaQR}
-                    onEditProfile={handleEditProfile}
-                />
+                    {/* User Info */}
+                    <Text style={{
+                        fontFamily: 'Inter_700Bold',
+                        fontSize: 20,
+                        color: '#000000',
+                        textAlign: 'center',
+                        marginBottom: 4,
+                    }}>
+                        {fullName}
+                    </Text>
+                    <Text style={{
+                        fontFamily: 'Inter_400Regular',
+                        fontSize: 13,
+                        color: '#6B7280',
+                        textAlign: 'center',
+                        marginBottom: 16,
+                    }}>
+                        {profile?.location || "San Francisco, CA"} | Handicap: {profile?.handicap || "24"}
+                    </Text>
 
-                <PreferencesCard
-                    teeTimePreference={getPreferredTeeTimeDisplay(profile?.preferences?.preferredTeeTime)}
-                    walkOrRide={getWalkOrRideDisplay(profile?.preferences?.walkOrRide)}
-                    groupSize={getGroupSizeDisplay(profile?.preferences?.playingPartnerPreference)}
-                />
+                    {/* Action Buttons */}
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <TouchableOpacity
+                            onPress={handleDraftViaQR}
+                            activeOpacity={0.7}
+                            style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8,
+                                paddingVertical: 14,
+                                backgroundColor: '#5EBC68',
+                                borderRadius: 12,
+                            }}
+                        >
+                            <QrCode size={20} color="#FFFFFF" strokeWidth={2.5} />
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 15,
+                                color: '#FFFFFF',
+                            }}>
+                                Draft via QR
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleEditProfile}
+                            activeOpacity={0.7}
+                            style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8,
+                                paddingVertical: 14,
+                                backgroundColor: '#FFFFFF',
+                                borderWidth: 1.5,
+                                borderColor: '#D1D5DB',
+                                borderRadius: 12,
+                            }}
+                        >
+                            <Edit3 size={20} color="#6B7280" strokeWidth={2.5} />
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 15,
+                                color: '#6B7280',
+                            }}>
+                                Edit Profile
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
 
-                <MembershipCard homeCourse={profile?.homeCourse} />
+                {/* Playing Preferences */}
+                <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                    }}>
+                        <View style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 20,
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: '#111827',
+                            }}>
+                                Playing preferences
+                            </Text>
+                            <TouchableOpacity
+                                onPress={handleEditAvailability}
+                                activeOpacity={0.7}
+                                style={{
+                                    paddingVertical: 6,
+                                    paddingHorizontal: 12,
+                                    backgroundColor: '#F3F4F6',
+                                    borderRadius: 8,
+                                }}
+                            >
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 13,
+                                    color: '#5EBC68',
+                                }}>
+                                    Edit Availability
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{
+                            flexDirection: 'row',
+                            flexWrap: 'wrap',
+                            gap: 20,
+                        }}>
+                            <View style={{ flex: 1, minWidth: '45%' }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 11,
+                                    color: '#9CA3AF',
+                                    textTransform: 'uppercase',
+                                    marginBottom: 6,
+                                    letterSpacing: 0.5,
+                                }}>
+                                    TEE TIME PREFERENCE
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 15,
+                                    color: '#111827',
+                                }}>
+                                    {getPreferredTeeTimeDisplay(profile?.preferences?.preferredTeeTime)}
+                                </Text>
+                            </View>
+                            <View style={{ flex: 1, minWidth: '45%' }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 11,
+                                    color: '#9CA3AF',
+                                    textTransform: 'uppercase',
+                                    marginBottom: 6,
+                                    letterSpacing: 0.5,
+                                }}>
+                                    RIDE OR WALK
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 15,
+                                    color: '#111827',
+                                }}>
+                                    {getWalkOrRideDisplay(profile?.preferences?.walkOrRide) || "Ride"}
+                                </Text>
+                            </View>
+                            <View style={{ flex: 1, minWidth: '45%' }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 11,
+                                    color: '#9CA3AF',
+                                    textTransform: 'uppercase',
+                                    marginBottom: 6,
+                                    letterSpacing: 0.5,
+                                }}>
+                                    GOLF VIBE
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 15,
+                                    color: '#111827',
+                                }}>
+                                    {profile?.preferences?.playingPartnerPreference || "Weekend Warrior"}
+                                </Text>
+                            </View>
+                            <View style={{ flex: 1, minWidth: '45%' }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 11,
+                                    color: '#9CA3AF',
+                                    textTransform: 'uppercase',
+                                    marginBottom: 6,
+                                    letterSpacing: 0.5,
+                                }}>
+                                    DRINK OF CHOICE
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 15,
+                                    color: '#111827',
+                                }}>
+                                    {profile?.preferences?.drinkOfChoice || "Transfusion"}
+                                </Text>
+                            </View>
+                        </View>
 
-                <ProfileStats
-                    roundsPlayed={profile?.roundsPlayed || 0}
-                    coursesPlayed={coursesPlayed}
-                    socialScore={formatScore(profile?.socialRate)}
-                />
+                        {/* Separator Line */}
+                        <View style={{
+                            height: 1,
+                            backgroundColor: '#E5E7EB',
+                            marginVertical: 20,
+                        }} />
 
-                <RecentRounds
-                    rounds={recentRounds}
-                    onRoundPress={handleRoundPress}
-                    onSeeAll={handleSeeAllRounds}
-                />
+                        {/* Active Memberships (Read-only) */}
+                        <Text style={{
+                            fontFamily: 'Inter_700Bold',
+                            fontSize: 18,
+                            color: '#111827',
+                            marginBottom: 12,
+                        }}>
+                            Active memberships
+                        </Text>
+                        {profile?.clubs && Array.isArray(profile.clubs) && profile.clubs.length > 0 ? (
+                            profile.clubs.map((club, index) => (
+                                <View key={club.id || index} style={{ marginBottom: index < profile.clubs.length - 1 ? 12 : 0 }}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_500Medium',
+                                        fontSize: 15,
+                                        color: '#111827',
+                                    }}>
+                                        {club.name}
+                                    </Text>
+                                    {club.location && (
+                                        <Text style={{
+                                            fontFamily: 'Inter_400Regular',
+                                            fontSize: 13,
+                                            color: '#6B7280',
+                                            marginTop: 2,
+                                        }}>
+                                            {club.location}
+                                        </Text>
+                                    )}
+                                </View>
+                            ))
+                        ) : (
+                            <Text style={{
+                                fontFamily: 'Inter_500Medium',
+                                fontSize: 15,
+                                color: '#6B7280',
+                            }}>
+                                No clubs added
+                            </Text>
+                        )}
+                    </View>
+                </View>
 
-                <BlockedUsersCard onRefresh={onRefresh} />
+                {/* Stats Cards */}
+                <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                    }}>
+                        <Text style={{
+                            fontFamily: 'Inter_700Bold',
+                            fontSize: 18,
+                            color: '#111827',
+                            marginBottom: 16,
+                        }}>
+                            Stats
+                        </Text>
+                        <View style={{
+                            flexDirection: 'row',
+                            gap: 12,
+                        }}>
+                            <View style={{
+                                flex: 1,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                alignItems: 'center',
+                                backgroundColor: '#EFF6FF',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 28,
+                                    color: '#3B82F6',
+                                    marginBottom: 4,
+                                }}>
+                                    {profile?.roundsPlayed || "24"}
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 13,
+                                    color: '#3B82F6',
+                                }}>
+                                    Rounds
+                                </Text>
+                            </View>
+                            <View style={{
+                                flex: 1,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                alignItems: 'center',
+                                backgroundColor: '#ECFDF5',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 28,
+                                    color: '#10B981',
+                                    marginBottom: 4,
+                                }}>
+                                    {coursesPlayed || "12"}
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 13,
+                                    color: '#10B981',
+                                }}>
+                                    Courses
+                                </Text>
+                            </View>
+                            <View style={{
+                                flex: 1,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                alignItems: 'center',
+                                backgroundColor: '#FAF5FF',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 28,
+                                    color: '#9333EA',
+                                    marginBottom: 4,
+                                }}>
+                                    {formatScore(profile?.socialRate) || "142"}
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 13,
+                                    color: '#9333EA',
+                                }}>
+                                    Social Score
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
 
-                <View style={{ height: 100 }} />
-            </ScrollView>
+                {/* Recent Rounds */}
+                <View style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 24 }}>
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                    }}>
+                        <Text style={{
+                            fontFamily: 'Inter_700Bold',
+                            fontSize: 18,
+                            color: '#111827',
+                            marginBottom: 16,
+                        }}>
+                            Recent rounds
+                        </Text>
+                        {roundsLoading ? (
+                            <View style={{
+                                padding: 16,
+                                alignItems: 'center',
+                            }}>
+                                <ActivityIndicator size="small" color="#22C55E" />
+                            </View>
+                        ) : recentRounds.length > 0 ? (
+                            recentRounds.map((round, index) => (
+                                <TouchableOpacity
+                                    key={round.id || index}
+                                    activeOpacity={0.7}
+                                    onPress={() => navigation?.navigate("TeeTimeDetail", { teeTimeId: round.id })}
+                                    style={{
+                                        backgroundColor: '#F9FAFB',
+                                        borderRadius: 12,
+                                        padding: 16,
+                                        marginBottom: index < recentRounds.length - 1 ? 12 : 0,
+                                        borderWidth: 1,
+                                        borderColor: '#E5E7EB',
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 15,
+                                        color: '#111827',
+                                        marginBottom: 4,
+                                    }}>
+                                        {round.courseName}
+                                    </Text>
+                                    <Text style={{
+                                        fontFamily: 'Inter_400Regular',
+                                        fontSize: 13,
+                                        color: '#6B7280',
+                                    }}>
+                                        {new Date(round.teeDate).toLocaleDateString('en-US', { 
+                                            month: 'long', 
+                                            day: 'numeric', 
+                                            year: 'numeric' 
+                                        })}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))
+                        ) : (
+                            <View style={{
+                                padding: 24,
+                                alignItems: 'center',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_500Medium',
+                                    fontSize: 14,
+                                    color: '#6B7280',
+                                    textAlign: 'center',
+                                }}>
+                                    No recent rounds yet
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
 
-            <BottomNav activeTab="Profile" navigation={navigation} />
-        </View>
+            </ContentArea>
+
+            <AppBottomNav activeTab="Profile" navigation={navigation} />
+        </ScreenShell>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    centered: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    scrollView: {
-        flex: 1,
-    },
-});

@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Check } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { Friend } from "../../../../services/api";
@@ -15,67 +15,18 @@ export const FriendItem = memo(({ friend, isSelected, onToggle }: FriendItemProp
     const initials = `${friend.firstName?.[0] || ""}${friend.lastName?.[0] || ""}`.toUpperCase();
 
     return (
-        <TouchableOpacity style={styles.friendItem} onPress={onToggle}>
+        <TouchableOpacity className="flex-row items-center py-3 border-b border-gray-100" onPress={onToggle}>
             {friend.avatar ? (
-                <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
+                <Image source={{ uri: friend.avatar }} className="w-11 h-11 rounded-full mr-3" />
             ) : (
-                <View style={styles.friendAvatarPlaceholder}>
-                    <Text style={styles.friendAvatarInitials}>{initials}</Text>
+                <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center mr-3">
+                    <Text className="text-sm font-semibold" style={{ color: COLORS.textSub }}>{initials}</Text>
                 </View>
             )}
-            <Text style={styles.friendName}>{name}</Text>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            <Text className="flex-1 text-[15px] font-medium" style={{ color: COLORS.textMain }}>{name}</Text>
+            <View className="w-6 h-6 rounded-full justify-center items-center border-2" style={isSelected ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : { borderColor: '#E5E7EB' }}>
                 {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
             </View>
         </TouchableOpacity>
     );
-});
-
-const styles = StyleSheet.create({
-    friendItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    friendAvatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        marginRight: 12,
-    },
-    friendAvatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    friendAvatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    friendName: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
 });

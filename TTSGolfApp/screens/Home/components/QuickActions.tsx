@@ -1,97 +1,86 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { CalendarPlus, UserPlus, Search, QrCode } from "lucide-react-native";
-import { COLORS } from "../constants";
+import { View, Text, TouchableOpacity } from "react-native";
+import { CalendarPlus, UserPlus, Search } from "lucide-react-native";
+import { MotiView } from "moti";
+import { transitions } from "../../../theme/animations";
 
 interface QuickActionsProps {
-    onCreateTeeTime: () => void;
-    onInvitePlayers: () => void;
-    onFindAvailability: () => void;
-    onScanQR: () => void;
+  onCreateTeeTime: () => void;
+  onInviteViaLink: () => void;
+  onFindPlayers: () => void;
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  onPress,
+  index,
+}: {
+  icon: typeof CalendarPlus;
+  label: string;
+  onPress: () => void;
+  index: number;
+}) {
+  return (
+    <MotiView
+      from={{ opacity: 0, translateY: 8 }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{ ...transitions.standard, delay: index * 50 }}
+      className="flex-1"
+    >
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={onPress}
+        className="bg-white rounded-2xl py-5 px-3 items-center justify-center aspect-square"
+        style={{
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          elevation: 4,
+        }}
+      >
+        <View className="mb-2">
+          <Icon size={32} color="#22C55E" strokeWidth={2} />
+        </View>
+        <Text className="font-sans-semibold text-sm text-gray-900 text-center leading-5" numberOfLines={2}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    </MotiView>
+  );
 }
 
 function QuickActions({
-    onCreateTeeTime,
-    onInvitePlayers,
-    onFindAvailability,
-    onScanQR,
+  onCreateTeeTime,
+  onInviteViaLink,
+  onFindPlayers,
 }: QuickActionsProps) {
-    return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Quick actions</Text>
-            <View style={styles.actionsRow}>
-                <TouchableOpacity style={styles.actionCard} onPress={onCreateTeeTime}>
-                    <View style={styles.iconContainer}>
-                        <CalendarPlus size={24} color={COLORS.primary} strokeWidth={1.5} />
-                    </View>
-                    <Text style={styles.actionLabel}>Create</Text>
-                    <Text style={styles.actionLabel}>tee time</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionCard} onPress={onInvitePlayers}>
-                    <View style={styles.iconContainer}>
-                        <UserPlus size={24} color={COLORS.primary} strokeWidth={1.5} />
-                    </View>
-                    <Text style={styles.actionLabel}>Invite</Text>
-                    <Text style={styles.actionLabel}>Players</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionCard} onPress={onScanQR}>
-                    <View style={styles.iconContainer}>
-                        <QrCode size={24} color={COLORS.primary} strokeWidth={1.5} />
-                    </View>
-                    <Text style={styles.actionLabel}>Scan</Text>
-                    <Text style={styles.actionLabel}>QR Code</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionCard} onPress={onFindAvailability}>
-                    <View style={styles.iconContainer}>
-                        <Search size={24} color={COLORS.primary} strokeWidth={1.5} />
-                    </View>
-                    <Text style={styles.actionLabel}>Find</Text>
-                    <Text style={styles.actionLabel}>availability</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+  return (
+    <View className="px-5 py-5 bg-gray-50">
+      <Text className="font-sans-bold text-lg text-gray-900 mb-4">Quick actions</Text>
+      <View className="flex-row gap-3">
+        <ActionButton
+          icon={CalendarPlus}
+          label={"Create\ntee time"}
+          onPress={onCreateTeeTime}
+          index={0}
+        />
+        <ActionButton
+          icon={UserPlus}
+          label={"Invite\nvia link"}
+          onPress={onInviteViaLink}
+          index={1}
+        />
+        <ActionButton
+          icon={Search}
+          label={"Find\nPlayers"}
+          onPress={onFindPlayers}
+          index={2}
+        />
+      </View>
+    </View>
+  );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: COLORS.cardBg,
-    },
-    title: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 16,
-    },
-    actionsRow: {
-        flexDirection: "row",
-        gap: 12,
-    },
-    actionCard: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 8,
-        alignItems: "center",
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    iconContainer: {
-        marginBottom: 8,
-    },
-    actionLabel: {
-        fontSize: 11,
-        fontWeight: "500",
-        color: COLORS.text,
-        textAlign: "center",
-        lineHeight: 14,
-    },
-});
 
 export default memo(QuickActions);

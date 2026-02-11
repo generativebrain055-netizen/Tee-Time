@@ -86,20 +86,14 @@ function ensureGoogleSignInConfigured(): void {
 // Component
 // ============================================================================
 
-const LABELS = {
-  signin: { apple: "Continue with Apple", google: "Continue with Google" },
-  signup: { apple: "Continue with Apple", google: "Continue with Google" },
-} as const;
-
 export function OAuthButtons({
   onSuccess,
   onError,
   disabled = false,
-  variant = "signin",
-  layout = "default",
 }: OAuthButtonsProps): React.ReactElement {
+  const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
+  const [isAppleLoading, setIsAppleLoading] = React.useState(false);
   const googleConfigured = useMemo(() => isGoogleConfigured(), []);
-  const labels = LABELS[variant];
 
   /**
    * Process Firebase user and send to backend
@@ -115,36 +109,64 @@ export function OAuthButtons({
 
         logger.debug("[Firebase] Backend response:", JSON.stringify(data, null, 2));
 
-        // Save session
-        await sessionManager.saveSession({
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-          user: data.user,
-        });
+        // Handle pending verification (new users need phone verification)
+        if (data.status === "pending_phone_verification") {
+          logger.info("[Firebase] OAuth pending phone verification");
+          const successData: OAuthSuccessData = {
+            status: "pending_phone_verification",
+            isNewUser: true,
+            needsPhoneVerification: true,
+            providerData: data.providerData,
+          };
+          onSuccess(successData);
+          return;
+        }
 
-        // Prepare success callback data
-        const successData: OAuthSuccessData = {
-          isNewUser: data.isNewUser,
-          user: data.user,
-        };
+        // Handle authenticated response (existing users)
+        if (data.status === "authenticated") {
+          logger.debug("[Firebase] Authenticated OAuth user data", {
+            userId: data.user?.id,
+            user: data.user ? {
+              id: data.user.id,
+              firstName: data.user.firstName,
+              lastName: data.user.lastName,
+              email: data.user.email,
+              phoneNumber: data.user.phoneNumber,
+            } : null,
+          });
 
-        // Check if onboarding is needed
-        if (data.needsOnboarding && data.missingFields?.length > 0) {
-          logger.debug("[Firebase] Onboarding needed. Missing fields:", data.missingFields);
-          successData.needsOnboarding = true;
-          successData.oauthData = {
+          // Save session
+          await sessionManager.saveSession({
             accessToken: data.accessToken,
             refreshToken: data.refreshToken,
             user: data.user,
-            needsOnboarding: data.needsOnboarding,
-            missingFields: data.missingFields,
-          };
-        } else {
-          logger.debug("[Firebase] No onboarding needed. User is complete.");
-        }
+          });
 
-        logger.debug("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
-        onSuccess(successData);
+          // Prepare success callback data
+          const successData: OAuthSuccessData = {
+            isNewUser: data.isNewUser,
+            user: data.user,
+          };
+
+          // Check if onboarding is needed
+          if (data.needsOnboarding && data.missingFields?.length > 0) {
+            logger.info("[Firebase] Onboarding needed. Missing fields:", data.missingFields);
+            successData.needsOnboarding = true;
+            successData.oauthData = {
+              accessToken: data.accessToken,
+              refreshToken: data.refreshToken,
+              user: data.user,
+              needsOnboarding: data.needsOnboarding,
+              missingFields: data.missingFields,
+              providerData: data.providerData,
+            };
+          } else {
+            logger.info("[Firebase] No onboarding needed. User is complete.");
+          }
+
+          logger.debug("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
+          onSuccess(successData);
+        }
       } catch (error) {
         logger.error("[Firebase] Backend verification error:", error);
         onError(formatOAuthError(error));
@@ -166,7 +188,14 @@ export function OAuthButtons({
       return;
     }
 
+    // Prevent duplicate sign-in attempts
+    if (isGoogleLoading) {
+      logger.debug("[Firebase] Sign-in already in progress, ignoring duplicate call");
+      return;
+    }
+
     try {
+      setIsGoogleLoading(true);
       ensureGoogleSignInConfigured();
       logger.debug("[Firebase] Starting Google Sign-In...");
 
@@ -214,7 +243,7 @@ export function OAuthButtons({
         return;
       }
 
-      if (error.code === "IN_PROGRESS") {
+      if (error.code === "IN_PROGRESS" || error.message?.includes("in progress")) {
         logger.debug("[Firebase] Sign-in already in progress");
         return;
       }
@@ -225,14 +254,23 @@ export function OAuthButtons({
       }
 
       onError(formatOAuthError(error));
+    } finally {
+      setIsGoogleLoading(false);
     }
-  }, [googleConfigured, handleFirebaseUser, onError]);
+  }, [googleConfigured, handleFirebaseUser, onError, isGoogleLoading]);
 
   /**
    * Initiate Apple Sign-In flow
    */
   const handleAppleSignIn = useCallback(async () => {
+    // Prevent duplicate sign-in attempts
+    if (isAppleLoading) {
+      logger.debug("[Firebase] Apple sign-in already in progress, ignoring duplicate call");
+      return;
+    }
+
     try {
+      setIsAppleLoading(true);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -252,68 +290,91 @@ export function OAuthButtons({
           : null,
       });
 
-      // Save session
-      await sessionManager.saveSession({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        user: data.user,
-      });
+      // Handle pending verification (new users need phone verification)
+      if (data.status === "pending_verification") {
+        logger.info("[Firebase] Apple OAuth pending phone verification");
+        const successData: OAuthSuccessData = {
+          status: "pending_phone_verification",
+          isNewUser: true,
+          needsPhoneVerification: true,
+          providerData: data.providerData,
+        };
+        onSuccess(successData);
+        return;
+      }
 
-      // Prepare success callback data
-      const successData: OAuthSuccessData = {
-        isNewUser: data.isNewUser,
-        user: data.user,
-      };
-
-      // Check if onboarding is needed
-      if (data.needsOnboarding && data.missingFields?.length > 0) {
-        successData.needsOnboarding = true;
-        successData.oauthData = {
+      // Handle authenticated response (existing users)
+      if (data.status === "authenticated") {
+        // Save session
+        await sessionManager.saveSession({
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           user: data.user,
-          needsOnboarding: data.needsOnboarding,
-          missingFields: data.missingFields,
-        };
-      }
+        });
 
-      onSuccess(successData);
+        // Prepare success callback data
+        const successData: OAuthSuccessData = {
+          isNewUser: data.isNewUser,
+          user: data.user,
+        };
+
+        // Check if onboarding is needed
+        if (data.needsOnboarding && data.missingFields?.length > 0) {
+          successData.needsOnboarding = true;
+          successData.oauthData = {
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken,
+            user: data.user,
+            needsOnboarding: data.needsOnboarding,
+            missingFields: data.missingFields,
+            providerData: data.providerData,
+          };
+        }
+
+        onSuccess(successData);
+      }
     } catch (error) {
       if (isUserCancellation(error)) {
         return;
       }
       logger.error("[Firebase] Apple Sign-In Error:", error);
       onError(formatOAuthError(error));
+    } finally {
+      setIsAppleLoading(false);
     }
-  }, [onSuccess, onError]);
+  }, [onSuccess, onError, isAppleLoading]);
 
   const renderAppleButton = () =>
     Platform.OS === "ios" && (
       <TouchableOpacity
-        style={[styles.figmaButton, disabled && styles.buttonDisabled]}
-        onPress={() => void (!disabled && handleAppleSignIn())}
+        style={[styles.figmaButton, (disabled || isAppleLoading) && styles.buttonDisabled]}
+        onPress={() => void (!disabled && !isAppleLoading && handleAppleSignIn())}
         activeOpacity={0.8}
-        disabled={disabled}
+        disabled={disabled || isAppleLoading}
       >
         <View style={styles.iconLeft}>
           <AppleLogo size={ICON_SIZE} />
         </View>
-        <Text style={styles.figmaButtonText}>{labels.apple}</Text>
+        <Text style={styles.figmaButtonText}>
+          {isAppleLoading ? "Signing in..." : "Continue with Apple"}
+        </Text>
       </TouchableOpacity>
     );
 
   const renderGoogleButton = () =>
     googleConfigured && (
       <TouchableOpacity
-        style={[styles.figmaButton, styles.figmaGoogleButton, disabled && styles.buttonDisabled]}
+        style={[styles.figmaButton, styles.figmaGoogleButton, (disabled || isGoogleLoading) && styles.buttonDisabled]}
         onPress={handleGoogleSignIn}
         activeOpacity={0.8}
-        disabled={disabled}
+        disabled={disabled || isGoogleLoading}
       >
         <View style={styles.iconLeft}>
           <GoogleLogo size={ICON_SIZE} />
         </View>
-        <Text style={styles.figmaButtonText}>{labels.google}</Text>
+        <Text style={styles.figmaButtonText}>
+          {isGoogleLoading ? "Signing in..." : "Continue with Google"}
+        </Text>
       </TouchableOpacity>
     );
 

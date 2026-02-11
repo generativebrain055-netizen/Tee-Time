@@ -2,7 +2,6 @@ import React from "react";
 import {
   TouchableOpacity,
   Text,
-  StyleSheet,
   ActivityIndicator,
   Animated,
   View,
@@ -10,7 +9,7 @@ import {
   TextStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, borderRadius, fontSize, fontWeight } from "../theme";
+import { colors } from "../theme";
 import { usePressAnimation } from "../hooks/useAnimations";
 
 type IconPosition = "left" | "right";
@@ -35,21 +34,6 @@ interface TextButtonProps {
   textStyle?: TextStyle;
 }
 
-interface Styles {
-  primaryButton: ViewStyle;
-  buttonDisabled: ViewStyle;
-  primaryButtonText: TextStyle;
-  secondaryButton: ViewStyle;
-  secondaryButtonDisabled: ViewStyle;
-  secondaryButtonText: TextStyle;
-  textButton: ViewStyle;
-  textButtonText: TextStyle;
-  textDisabled: TextStyle;
-  buttonContent: ViewStyle;
-  iconLeft: ViewStyle;
-  iconRight: ViewStyle;
-}
-
 /**
  * Primary Button Component
  * Green filled button with optional icon and loading state
@@ -69,7 +53,17 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, style]}>
       <TouchableOpacity
-        style={[styles.primaryButton, disabled && styles.buttonDisabled]}
+        className="w-full h-[54px] bg-primary rounded-md justify-center items-center"
+        style={[
+          disabled && { backgroundColor: colors.disabled, shadowOpacity: 0.1 },
+          {
+            shadowColor: colors.buttonShadow,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6,
+          },
+        ]}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -79,22 +73,22 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
         {loading ? (
           <ActivityIndicator color={colors.white} size="small" />
         ) : (
-          <View style={styles.buttonContent}>
+          <View className="flex-row items-center justify-center gap-2">
             {icon && iconPosition === "left" && (
               <Ionicons
                 name={icon as any}
                 size={18}
                 color={colors.white}
-                style={styles.iconLeft}
+                className="mr-1"
               />
             )}
-            <Text style={[styles.primaryButtonText, textStyle]}>{title}</Text>
+            <Text className="text-white text-lg font-bold" style={textStyle}>{title}</Text>
             {icon && iconPosition === "right" && (
               <Ionicons
                 name={icon as any}
                 size={18}
                 color={colors.white}
-                style={styles.iconRight}
+                className="ml-1"
               />
             )}
           </View>
@@ -123,10 +117,8 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, style]}>
       <TouchableOpacity
-        style={[
-          styles.secondaryButton,
-          disabled && styles.secondaryButtonDisabled,
-        ]}
+        className="w-full h-[54px] bg-surface-secondary rounded-md justify-center items-center"
+        style={disabled && { opacity: 0.5 }}
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -136,22 +128,22 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
         {loading ? (
           <ActivityIndicator color={colors.textPrimary} size="small" />
         ) : (
-          <View style={styles.buttonContent}>
+          <View className="flex-row items-center justify-center gap-2">
             {icon && iconPosition === "left" && (
               <Ionicons
                 name={icon as any}
                 size={18}
                 color={colors.textPrimary}
-                style={styles.iconLeft}
+                className="mr-1"
               />
             )}
-            <Text style={[styles.secondaryButtonText, textStyle]}>{title}</Text>
+            <Text className="text-text-primary text-lg font-bold" style={textStyle}>{title}</Text>
             {icon && iconPosition === "right" && (
               <Ionicons
                 name={icon as any}
                 size={18}
                 color={colors.textPrimary}
-                style={styles.iconRight}
+                className="ml-1"
               />
             )}
           </View>
@@ -175,16 +167,17 @@ export const TextButton: React.FC<TextButtonProps> = ({
 }) => {
   return (
     <TouchableOpacity
-      style={[styles.textButton, style]}
+      className="py-2 px-4"
+      style={style}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.6}
     >
       <Text
+        className="text-base font-semibold"
         style={[
-          styles.textButtonText,
           { color },
-          disabled && styles.textDisabled,
+          disabled && { opacity: 0.5 },
           textStyle,
         ]}
       >
@@ -193,76 +186,5 @@ export const TextButton: React.FC<TextButtonProps> = ({
     </TouchableOpacity>
   );
 };
-
-const styles = StyleSheet.create<Styles>({
-  // Primary Button
-  primaryButton: {
-    width: "100%",
-    height: 54,
-    backgroundColor: colors.buttonPrimary,
-    borderRadius: borderRadius.lg,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: colors.buttonShadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  buttonDisabled: {
-    backgroundColor: colors.disabled,
-    shadowOpacity: 0.1,
-  },
-  primaryButtonText: {
-    color: colors.white,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold as TextStyle["fontWeight"],
-  },
-
-  // Secondary Button
-  secondaryButton: {
-    width: "100%",
-    height: 54,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  secondaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  secondaryButtonText: {
-    color: colors.textPrimary,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold as TextStyle["fontWeight"],
-  },
-
-  // Text Button
-  textButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  textButtonText: {
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold as TextStyle["fontWeight"],
-  },
-  textDisabled: {
-    opacity: 0.5,
-  },
-
-  // Shared
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  iconLeft: {
-    marginRight: spacing.xs,
-  },
-  iconRight: {
-    marginLeft: spacing.xs,
-  },
-});
 
 export default { PrimaryButton, SecondaryButton, TextButton };

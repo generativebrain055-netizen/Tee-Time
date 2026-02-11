@@ -14,12 +14,17 @@ export const getDigitsOnly = (phone: string): string => {
     return phone.replace(/\D/g, "");
 };
 
-export const toE164 = (phone: string): string => {
-    return `+1${getDigitsOnly(phone)}`;
+export const toE164 = (phone: string, dialCode: string = '+1'): string => {
+    const digits = getDigitsOnly(phone);
+    // Strip leading zero for international format
+    const normalized = digits.startsWith('0') ? digits.slice(1) : digits;
+    return `${dialCode}${normalized}`;
 };
 
-export const isValidPhone = (phone: string): boolean => {
-    return getDigitsOnly(phone).length >= 10;
+export const isValidPhone = (phone: string, minLength: number = 10, maxLength: number = 10): boolean => {
+    const digits = getDigitsOnly(phone);
+    const normalized = digits.startsWith('0') ? digits.slice(1) : digits;
+    return normalized.length >= minLength && normalized.length <= maxLength;
 };
 
 export const isValidOtp = (otp: string): boolean => {

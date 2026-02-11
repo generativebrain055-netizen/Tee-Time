@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import { COLORS } from "../../../constants/colors";
 
 interface Props {
@@ -10,57 +10,18 @@ const HomeCourseCard = memo(({ homeCourse }: Props) => {
     if (!homeCourse) return null;
 
     return (
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Home course</Text>
-            <View style={styles.card}>
-                <View style={styles.row}>
-                    <View style={styles.icon}>
-                        <Text style={styles.iconText}>⛳</Text>
+        <View className="px-5 mb-6">
+            <Text className="text-base font-bold mb-3" style={{ color: COLORS.textMain }}>Home course</Text>
+            <View className="rounded-md p-4" style={{ backgroundColor: COLORS.white }}>
+                <View className="flex-row items-center gap-3">
+                    <View className="w-10 h-10 rounded-full bg-primary-light justify-center items-center">
+                        <Text className="text-lg">⛳</Text>
                     </View>
-                    <Text style={styles.text}>{homeCourse}</Text>
+                    <Text className="text-[15px] font-medium" style={{ color: COLORS.textMain }}>{homeCourse}</Text>
                 </View>
             </View>
         </View>
     );
-});
-
-const styles = StyleSheet.create({
-    section: {
-        paddingHorizontal: 20,
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 12,
-    },
-    card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
-    },
-    row: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    icon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "#D1FAE5",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    iconText: {
-        fontSize: 18,
-    },
-    text: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
 });
 
 export default HomeCourseCard;

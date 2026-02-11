@@ -77,6 +77,7 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   homeCourse?: string;
+  clubs?: Array<{ id?: string; name: string; location?: string }>;
   equipment?: {
     driver?: string;
     irons?: string;
@@ -122,6 +123,15 @@ export interface DiscoveredUser {
   walkOrRide?: string;
   socialRate?: number;
   friendshipStatus: FriendshipStatus;
+  // Extended profile fields
+  roundsPlayed?: number;
+  roundsCount?: number;
+  coursesCount?: number;
+  golfVibe?: string;
+  drinkOfChoice?: string;
+  playingPartnerPreference?: string;
+  recentRounds?: Array<{ courseName: string; date: string }>;
+  clubs?: Array<{ id?: string; name: string; location?: string; type?: string }>;
 }
 
 export type FriendshipStatus = "none" | "friend" | "requested" | "pending";
@@ -220,6 +230,7 @@ export interface AppNotification {
   title: string;
   body: string;
   data: NotificationData;
+  status?: string;
   isRead: boolean;
   readAt?: string;
   createdAt: string;
@@ -230,6 +241,10 @@ export interface NotificationData {
   senderId?: string;
   senderName?: string;
   senderAvatar?: string;
+  firstName?: string;
+  lastName?: string;
+  avatar?: string;
+  location?: string;
   userId?: string;
   userName?: string;
   userAvatar?: string;
@@ -238,6 +253,7 @@ export interface NotificationData {
   teeTimeId?: string;
   inviterId?: string;
   inviterName?: string;
+  inviterAvatar?: string;
   courseName?: string;
   date?: string;
   time?: string;

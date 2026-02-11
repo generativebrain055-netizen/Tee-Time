@@ -4,7 +4,8 @@
  */
 
 // Get API URL from environment variable or use default
-const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "https://api.teetimesocial.app";
+// Android emulator: use 10.0.2.2 to access host machine's localhost
+const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:3000";
 
 /**
  * Get the API base URL

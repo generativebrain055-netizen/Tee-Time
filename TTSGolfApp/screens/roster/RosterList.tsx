@@ -4,12 +4,13 @@ import {
     Text,
     TouchableOpacity,
     Image,
-    StyleSheet,
     RefreshControl,
     ActivityIndicator,
+    Alert,
+    Modal,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Calendar, MessageCircle, Menu } from "lucide-react-native";
+import { Calendar, MessageCircle, Menu, X, UserMinus, ArrowDown } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { friendApi, Friend } from "../../services/api";
 
@@ -44,50 +45,110 @@ interface RosterItemProps {
     index: number;
     onInvite: (friend: Friend) => void;
     onMessage: (friend: Friend) => void;
+    onRemove: (friend: Friend) => void;
 }
 
-const RosterItem = memo(({ friend, index, onInvite, onMessage }: RosterItemProps) => {
+const RosterItem = memo(({ friend, index, onInvite, onMessage, onRemove }: RosterItemProps) => {
+    const [showMenu, setShowMenu] = useState(false);
     const handleInvite = useCallback(() => onInvite(friend), [friend, onInvite]);
     const handleMessage = useCallback(() => onMessage(friend), [friend, onMessage]);
+    const handleMenuPress = useCallback(() => setShowMenu(true), []);
+    const handleCloseMenu = useCallback(() => setShowMenu(false), []);
+    const handleRemove = useCallback(() => {
+        setShowMenu(false);
+        onRemove(friend);
+    }, [friend, onRemove]);
 
     return (
-        <View style={styles.rosterItem}>
-            <View style={styles.dragHandle}>
-                <Menu size={20} color={COLORS.textSub} />
-            </View>
-
-            <Text style={styles.rankNumber}>{index + 1}</Text>
-
-            <View style={styles.avatarContainer}>
-                {friend.avatar ? (
-                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
-                ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitials}>
-                            {getInitials(friend.firstName, friend.lastName)}
-                        </Text>
-                    </View>
-                )}
-            </View>
-
-            <View style={styles.infoContainer}>
-                <Text style={styles.name}>
-                    {friend.firstName} {friend.lastName}
-                </Text>
-                <Text style={styles.lastPlayed}>
-                    {formatLastPlayed(friend.friendsSince)}
-                </Text>
-            </View>
-
-            <View style={styles.actions}>
-                <TouchableOpacity style={styles.actionButton} onPress={handleInvite}>
-                    <Calendar size={18} color={COLORS.primary} strokeWidth={1.5} />
+        <>
+            <View className="flex-row items-center py-4 px-3 bg-white border-b border-gray-100">
+                <TouchableOpacity className="p-2 mr-1" onPress={handleMenuPress}>
+                    <Menu size={20} color={COLORS.textSub} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={handleMessage}>
-                    <MessageCircle size={18} color={COLORS.primary} strokeWidth={1.5} />
-                </TouchableOpacity>
+
+                <Text className="text-base font-semibold text-gray-900 w-6">{index + 1}</Text>
+
+                <View className="ml-2">
+                    {friend.avatar ? (
+                        <Image source={{ uri: friend.avatar }} className="w-12 h-12 rounded-full" />
+                    ) : (
+                        <View className="w-12 h-12 rounded-full bg-gray-200 justify-center items-center">
+                            <Text className="text-base font-semibold text-gray-500">
+                                {getInitials(friend.firstName, friend.lastName)}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+
+                <View className="flex-1 ml-3">
+                    <Text className="text-[15px] font-semibold text-gray-900">
+                        {friend.firstName} {friend.lastName}
+                    </Text>
+                    <Text className="text-[13px] text-gray-500 mt-0.5">
+                        {formatLastPlayed(friend.friendsSince)}
+                    </Text>
+                </View>
+
+                <View className="flex-row gap-2">
+                    <TouchableOpacity className="w-10 h-10 rounded-md bg-green-50 justify-center items-center" onPress={handleInvite}>
+                        <Calendar size={18} color={COLORS.primary} strokeWidth={1.5} />
+                    </TouchableOpacity>
+                    <TouchableOpacity className="w-10 h-10 rounded-md bg-green-50 justify-center items-center" onPress={handleMessage}>
+                        <MessageCircle size={18} color={COLORS.primary} strokeWidth={1.5} />
+                    </TouchableOpacity>
+                </View>
             </View>
-        </View>
+
+            {/* Action Menu Modal */}
+            <Modal
+                visible={showMenu}
+                transparent
+                animationType="fade"
+                onRequestClose={handleCloseMenu}
+            >
+                <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+                    activeOpacity={1}
+                    onPress={handleCloseMenu}
+                >
+                    <TouchableOpacity
+                        style={{
+                            width: '80%', maxWidth: 320, backgroundColor: 'white',
+                            borderRadius: 16, overflow: 'hidden',
+                        }}
+                        activeOpacity={1}
+                    >
+                        {/* Header */}
+                        <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+                                    {friend.firstName} {friend.lastName}
+                                </Text>
+                                <TouchableOpacity onPress={handleCloseMenu}>
+                                    <X size={20} color="#9CA3AF" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Actions */}
+                        <View style={{ padding: 8 }}>
+                            <TouchableOpacity
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', gap: 12,
+                                    padding: 14, borderRadius: 10,
+                                }}
+                                onPress={handleRemove}
+                            >
+                                <UserMinus size={20} color="#EF4444" />
+                                <Text style={{ fontSize: 15, fontWeight: '600', color: '#EF4444', flex: 1 }}>
+                                    Remove Friend
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
+        </>
     );
 });
 
@@ -95,13 +156,36 @@ RosterItem.displayName = 'RosterItem';
 
 // Empty state component
 const EmptyState = memo(({ onFindPlayers }: { onFindPlayers: () => void }) => (
-    <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>No friends in roster</Text>
-        <Text style={styles.emptySubtext}>
-            Add friends from Availability to build your roster
+    <View className="flex-1 justify-center items-center px-8">
+        <View style={{
+            width: 80, height: 80, borderRadius: 40,
+            backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center',
+            marginBottom: 20,
+        }}>
+            <Menu size={36} color="#9CA3AF" strokeWidth={1.5} />
+        </View>
+        <Text style={{
+            fontSize: 22, fontWeight: '700', color: '#111827',
+            marginBottom: 8, textAlign: 'center',
+        }}>
+            Build your roster
         </Text>
-        <TouchableOpacity style={styles.addButton} onPress={onFindPlayers}>
-            <Text style={styles.addButtonText}>Find Players</Text>
+        <Text style={{
+            fontSize: 15, color: '#6B7280', textAlign: 'center',
+            lineHeight: 22, marginBottom: 24, paddingHorizontal: 16,
+        }}>
+            Your go-to golf buddies. Prioritize, Manage your players in one place, set their invite order, and quickly fill tee times without combing through each time.
+        </Text>
+        <TouchableOpacity
+            style={{
+                backgroundColor: COLORS.primary, paddingHorizontal: 32,
+                paddingVertical: 14, borderRadius: 10,
+            }}
+            onPress={onFindPlayers}
+        >
+            <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>
+                Find players
+            </Text>
         </TouchableOpacity>
     </View>
 ));
@@ -156,6 +240,29 @@ function RosterList({ navigation }: RosterListProps) {
         navigation?.navigate("Availability");
     }, [navigation]);
 
+    const handleRemoveFriend = useCallback(async (friend: Friend) => {
+        Alert.alert(
+            "Remove Friend",
+            `Are you sure you want to remove ${friend.firstName} ${friend.lastName} from your roster?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await friendApi.removeFriend(friend.id);
+                            setFriends(prev => prev.filter(f => f.id !== friend.id));
+                        } catch (error: any) {
+                            console.error("Remove friend error:", error);
+                            Alert.alert("Error", error.message || "Failed to remove friend");
+                        }
+                    },
+                },
+            ]
+        );
+    }, []);
+
     // Optimized render function
     const renderItem = useCallback(({ item, index }: { item: Friend; index: number }) => (
         <RosterItem
@@ -163,14 +270,15 @@ function RosterList({ navigation }: RosterListProps) {
             index={index}
             onInvite={handleInvite}
             onMessage={handleMessage}
+            onRemove={handleRemoveFriend}
         />
-    ), [handleInvite, handleMessage]);
+    ), [handleInvite, handleMessage, handleRemoveFriend]);
 
     const keyExtractor = useCallback((item: Friend) => item.id, []);
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View className="flex-1 justify-center items-center">
                 <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
@@ -185,8 +293,9 @@ function RosterList({ navigation }: RosterListProps) {
             data={friends}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
+            // @ts-expect-error - FlashList types mismatch
             estimatedItemSize={80}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={{ paddingBottom: 100 }}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
@@ -199,110 +308,3 @@ function RosterList({ navigation }: RosterListProps) {
 }
 
 export default memo(RosterList);
-
-const styles = StyleSheet.create({
-    listContent: {
-        paddingBottom: 100,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        paddingHorizontal: 40,
-        paddingVertical: 60,
-    },
-    emptyTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: COLORS.textMain,
-        marginBottom: 8,
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginBottom: 24,
-    },
-    addButton: {
-        backgroundColor: COLORS.primary,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 8,
-    },
-    addButtonText: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    rosterItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 16,
-        paddingHorizontal: 12,
-        backgroundColor: COLORS.white,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    dragHandle: {
-        padding: 8,
-        marginRight: 4,
-    },
-    rankNumber: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textMain,
-        width: 24,
-    },
-    avatarContainer: {
-        marginLeft: 8,
-    },
-    avatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-    },
-    avatarPlaceholder: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    infoContainer: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    name: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    lastPlayed: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    actions: {
-        flexDirection: "row",
-        gap: 8,
-    },
-    actionButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 8,
-        backgroundColor: "#E8F5E9",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-});

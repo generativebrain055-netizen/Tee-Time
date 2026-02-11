@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions } from "react-native";
+import { View, Text, TouchableOpacity, Modal, Dimensions } from "react-native";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import { COLORS, MONTHS } from "./constants";
 
@@ -38,8 +38,19 @@ export default function DatePickerModal({
         const days: (number | null)[] = [];
         const firstDay = getFirstDayOfMonth(calendarYear, calendarMonth);
         const daysInMonth = getDaysInMonth(calendarYear, calendarMonth);
+        
+        // Add empty cells for days before the first day of the month
         for (let i = 0; i < firstDay; i++) days.push(null);
+        
+        // Add all days of the month
         for (let i = 1; i <= daysInMonth; i++) days.push(i);
+        
+        // Pad to exactly 6 rows (42 cells total: 6 rows × 7 days)
+        const totalCells = 42;
+        while (days.length < totalCells) {
+            days.push(null);
+        }
+        
         return days;
     };
 
@@ -71,32 +82,61 @@ export default function DatePickerModal({
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <View style={styles.modalOverlay}>
-                <View style={styles.calendarModal}>
-                    <View style={styles.calendarHeader}>
-                        <TouchableOpacity onPress={onClose}>
-                            <X size={24} color={COLORS.text} />
+            <View className="flex-1 bg-black/50 justify-end">
+                <View className="bg-white rounded-t-[24px] px-6 pt-6 pb-8">
+                    {/* Header with X, Month/Year, and Done */}
+                    <View className="flex-row items-center justify-between mb-6">
+                        <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+                            <X size={24} color={COLORS.text} strokeWidth={2} />
                         </TouchableOpacity>
-                        <View style={styles.calendarNav}>
-                            <TouchableOpacity onPress={onPrevMonth}>
-                                <ChevronLeft size={24} color={COLORS.text} />
+                        
+                        <View className="flex-row items-center gap-3">
+                            <TouchableOpacity onPress={onPrevMonth} style={{ padding: 4 }}>
+                                <ChevronLeft size={24} color={COLORS.text} strokeWidth={2} />
                             </TouchableOpacity>
-                            <Text style={styles.calendarTitle}>
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 17,
+                                color: '#1F2937',
+                                minWidth: 120,
+                                textAlign: 'center',
+                            }}>
                                 {MONTHS[calendarMonth]} {calendarYear}
                             </Text>
-                            <TouchableOpacity onPress={onNextMonth}>
-                                <ChevronRight size={24} color={COLORS.text} />
+                            <TouchableOpacity onPress={onNextMonth} style={{ padding: 4 }}>
+                                <ChevronRight size={24} color={COLORS.text} strokeWidth={2} />
                             </TouchableOpacity>
                         </View>
+
+                        <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 16,
+                                color: '#3B82F6',
+                            }}>
+                                Done
+                            </Text>
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.calendarDaysHeader}>
+                    {/* Day headers */}
+                    <View className="flex-row mb-4">
                         {DAYS_US.map((d, i) => (
-                            <Text key={i} style={styles.calendarDayLabel}>{d}</Text>
+                            <View key={i} style={{ width: (SCREEN_WIDTH - 48) / 7 }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 13,
+                                    color: '#6B7280',
+                                    textAlign: 'center',
+                                }}>
+                                    {d[0]}
+                                </Text>
+                            </View>
                         ))}
                     </View>
 
-                    <View style={styles.calendarGrid}>
+                    {/* Calendar grid */}
+                    <View className="flex-row flex-wrap">
                         {generateCalendarDays().map((day, i) => {
                             const isPast = day !== null && isPastDate(day);
                             const isTodayDate = day !== null && isToday(day);
@@ -105,24 +145,32 @@ export default function DatePickerModal({
                             return (
                                 <TouchableOpacity
                                     key={i}
-                                    style={[
-                                        styles.calendarDay,
-                                        isTodayDate && styles.calendarDayToday,
-                                        isSelectedDate && styles.calendarDaySelected,
-                                    ]}
+                                    style={{
+                                        width: (SCREEN_WIDTH - 48) / 7,
+                                        height: 48,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        marginBottom: 8,
+                                    }}
                                     onPress={() => day !== null && handleSelectDate(day)}
                                     disabled={day === null || isPast}
                                 >
-                                    <Text
-                                        style={[
-                                            styles.calendarDayText,
-                                            isPast && styles.calendarDayPastText,
-                                            isTodayDate && styles.calendarDayTodayText,
-                                            isSelectedDate && styles.calendarDaySelectedText,
-                                        ]}
-                                    >
-                                        {day !== null ? day : ""}
-                                    </Text>
+                                    <View style={{
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: 20,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        backgroundColor: isSelectedDate ? '#22C55E' : isTodayDate ? '#F3F4F6' : 'transparent',
+                                    }}>
+                                        <Text style={{
+                                            fontFamily: isSelectedDate || isTodayDate ? 'Inter_600SemiBold' : 'Inter_400Regular',
+                                            fontSize: 16,
+                                            color: isPast ? '#D1D5DB' : isSelectedDate ? '#FFFFFF' : '#1F2937',
+                                        }}>
+                                            {day !== null ? day : ""}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
                             );
                         })}
@@ -132,33 +180,3 @@ export default function DatePickerModal({
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-    calendarModal: {
-        backgroundColor: COLORS.white,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 40,
-    },
-    calendarHeader: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-    calendarNav: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16 },
-    calendarTitle: { fontSize: 16, fontWeight: "600", color: COLORS.text, minWidth: 100, textAlign: "center" },
-    calendarDaysHeader: { flexDirection: "row", marginBottom: 10 },
-    calendarDayLabel: { flex: 1, textAlign: "center", fontSize: 14, fontWeight: "500", color: COLORS.textSub },
-    calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-    calendarDay: {
-        width: (SCREEN_WIDTH - 40) / 7,
-        height: 44,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    calendarDayToday: { backgroundColor: "#F3F4F6", borderRadius: 22 },
-    calendarDaySelected: { backgroundColor: COLORS.primary, borderRadius: 22 },
-    calendarDayText: { fontSize: 15, color: COLORS.text },
-    calendarDayPastText: { color: "#D1D5DB" },
-    calendarDayTodayText: { fontWeight: "600" },
-    calendarDaySelectedText: { color: COLORS.white, fontWeight: "600" },
-});

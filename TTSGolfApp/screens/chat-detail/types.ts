@@ -11,10 +11,12 @@ export interface ChatMessage {
 export interface ChatInfo {
   id: string;
   recipientId?: string;
+  groupId?: string;
   name: string;
   subtitle: string;
   img?: string;
   isGroup?: boolean;
+  onHeaderPress?: () => void;
 }
 
 export interface CurrentUser {

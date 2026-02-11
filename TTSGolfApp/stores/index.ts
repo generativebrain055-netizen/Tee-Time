@@ -4,3 +4,4 @@
  */
 
 export { useAuthStore } from "./authStore";
+export { useTeeTimeStore } from "./teeTimeStore";

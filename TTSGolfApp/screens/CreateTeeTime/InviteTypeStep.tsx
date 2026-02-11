@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { Clock, Zap, List } from "lucide-react-native";
 import { COLORS } from "./constants";
 
@@ -39,24 +39,54 @@ const OPTIONS = [
 
 export default function InviteTypeStep({ inviteType, onSelectType }: InviteTypeStepProps) {
     return (
-        <View style={styles.content}>
-            <Text style={styles.stepTitle}>Select Invite Type</Text>
+        <View style={{ flex: 1, backgroundColor: '#F3F4F6', paddingHorizontal: 20, paddingTop: 24 }}>
             {OPTIONS.map((opt) => {
                 const Icon = opt.icon;
                 const isSelected = inviteType === opt.type;
                 return (
                     <TouchableOpacity
                         key={opt.type}
-                        style={[styles.typeOption, isSelected && styles.typeOptionSelected]}
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 24,
+                            borderRadius: 12,
+                            marginBottom: 16,
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: isSelected ? 2 : 1,
+                            borderColor: isSelected ? '#22C55E' : '#E5E7EB',
+                        }}
                         onPress={() => onSelectType(opt.type)}
-                        activeOpacity={0.7}
+                        activeOpacity={0.6}
                     >
-                        <View style={[styles.iconContainer, { backgroundColor: opt.iconBg }]}>
-                            <Icon size={20} color={opt.iconColor} />
+                        <View style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 12,
+                            backgroundColor: opt.iconBg,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 16,
+                        }}>
+                            <Icon size={24} color={opt.iconColor} strokeWidth={2} />
                         </View>
-                        <View style={styles.typeOptionContent}>
-                            <Text style={styles.typeOptionTitle}>{opt.title}</Text>
-                            <Text style={styles.typeOptionDesc}>{opt.desc}</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: '#111827',
+                                marginBottom: 6,
+                            }}>
+                                {opt.title}
+                            </Text>
+                            <Text style={{
+                                fontFamily: 'Inter_400Regular',
+                                fontSize: 14,
+                                color: '#6B7280',
+                                lineHeight: 20,
+                            }}>
+                                {opt.desc}
+                            </Text>
                         </View>
                     </TouchableOpacity>
                 );
@@ -64,55 +94,3 @@ export default function InviteTypeStep({ inviteType, onSelectType }: InviteTypeS
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-    },
-    stepTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginBottom: 20,
-        textAlign: "center",
-    },
-    typeOption: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        padding: 16,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        borderRadius: 12,
-        marginBottom: 12,
-        backgroundColor: COLORS.white,
-    },
-    typeOptionSelected: {
-        borderColor: COLORS.primary,
-        borderWidth: 2,
-        backgroundColor: "#F0FDF4",
-    },
-    iconContainer: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 14,
-    },
-    typeOptionContent: {
-        flex: 1,
-    },
-    typeOptionTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 4,
-    },
-    typeOptionDesc: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        lineHeight: 18,
-    },
-});

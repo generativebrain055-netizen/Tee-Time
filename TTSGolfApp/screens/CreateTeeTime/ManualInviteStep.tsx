@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, memo } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     TouchableOpacity,
     Image,
     ActivityIndicator,
@@ -43,37 +42,39 @@ const PlayerItem = memo(({
 
     return (
         <TouchableOpacity
-            style={[
-                styles.playerItem,
-                isSelected && styles.playerItemSelected,
-                !canSelect && styles.playerItemDisabled,
-            ]}
+            className={`flex-row items-center p-3 rounded-md mb-2 ${
+                isSelected ? "bg-primary-100" : "bg-bg-muted"
+            } ${
+                !canSelect ? "opacity-50" : ""
+            }`}
             onPress={onToggle}
             disabled={!canSelect}
             activeOpacity={0.7}
         >
-            <View style={styles.avatarContainer}>
+            <View className="mr-3">
                 {player.avatar ? (
-                    <Image source={{ uri: player.avatar }} style={styles.avatar} />
+                    <Image source={{ uri: player.avatar }} className="w-11 h-11 rounded-full" />
                 ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitials}>
+                    <View className="w-11 h-11 rounded-full bg-primary justify-center items-center">
+                        <Text className="text-[15px] font-semibold text-white">
                             {getInitials(player.firstName, player.lastName)}
                         </Text>
                     </View>
                 )}
             </View>
-            <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>
+            <View className="flex-1">
+                <Text className="text-[15px] font-semibold text-[#1F2937]">
                     {player.firstName} {player.lastName}
                 </Text>
-                <Text style={styles.playerSub}>
+                <Text className="text-[13px] text-[#9CA3AF] mt-0.5">
                     {player.handicap !== undefined
                         ? `HCP ${player.handicap}`
                         : player.homeCourse || "Golf buddy"}
                 </Text>
             </View>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            <View className={`w-6 h-6 rounded-full justify-center items-center ${
+                isSelected ? "bg-primary border-primary" : "border-2 border-border"
+            }`}>
                 {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
             </View>
         </TouchableOpacity>
@@ -100,26 +101,30 @@ const GroupItem = memo(({
 
     return (
         <TouchableOpacity
-            style={styles.groupCard}
+            className="flex-row items-center p-3.5 bg-bg-muted rounded-md mb-2"
             onPress={onViewMembers}
             activeOpacity={0.7}
         >
-            <View style={[styles.groupIcon, { backgroundColor: group.color + "20" }]}>
-                <Text style={[styles.groupInitials, { color: group.color }]}>
+            <View className="w-11 h-11 rounded-full justify-center items-center mr-3" style={{ backgroundColor: group.color + "20" }}>
+                <Text className="text-sm font-bold" style={{ color: group.color }}>
                     {group.name.substring(0, 2).toUpperCase()}
                 </Text>
             </View>
-            <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupMemberCount}>
+            <View className="flex-1">
+                <Text className="text-[15px] font-semibold text-[#1F2937]">{group.name}</Text>
+                <Text className="text-[13px] text-[#9CA3AF] mt-0.5">
                     {selectedCount > 0 ? `${selectedCount}/` : ""}{group.memberCount} members
                 </Text>
             </View>
             <TouchableOpacity
-                style={[styles.selectAllBtn, allSelected && styles.selectAllBtnActive]}
+                className={`px-3 py-1.5 rounded-md ${
+                    allSelected ? "bg-[#E5E7EB]" : "bg-primary"
+                }`}
                 onPress={onSelectAll}
             >
-                <Text style={[styles.selectAllText, allSelected && styles.selectAllTextActive]}>
+                <Text className={`text-xs font-semibold ${
+                    allSelected ? "text-[#1F2937]" : "text-white"
+                }`}>
                     {allSelected ? "Deselect" : "Select All"}
                 </Text>
             </TouchableOpacity>
@@ -224,59 +229,196 @@ export default function ManualInviteStep({
         }
     }, [selectedPlayers, spotsLeft, onTogglePlayer]);
 
-    const renderPlayer = useCallback(({ item }: { item: Friend }) => {
+    const getInitials = (firstName: string, lastName: string): string => {
+        return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+    };
+
+    const renderPlayer = useCallback((item: Friend) => {
         const isSelected = selectedPlayers.includes(item.id);
         const canSelect = isSelected || spotsLeft > 0;
+        
         return (
-            <PlayerItem
-                player={item}
-                isSelected={isSelected}
-                canSelect={canSelect}
-                onToggle={() => handleToggle(item.id)}
-            />
+            <TouchableOpacity
+                key={item.id}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 14,
+                    paddingHorizontal: 16,
+                    backgroundColor: '#FFFFFF',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F3F4F6',
+                    opacity: canSelect ? 1 : 0.5,
+                }}
+                onPress={() => handleToggle(item.id)}
+                disabled={!canSelect}
+                activeOpacity={0.7}
+            >
+                {/* Avatar */}
+                {item.avatar ? (
+                    <Image 
+                        source={{ uri: item.avatar }} 
+                        style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                        }}
+                    />
+                ) : (
+                    <View style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: '#22C55E',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                    }}>
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 15,
+                            color: '#FFFFFF',
+                        }}>
+                            {getInitials(item.firstName, item.lastName)}
+                        </Text>
+                    </View>
+                )}
+
+                {/* Name */}
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={{
+                        fontFamily: 'Inter_600SemiBold',
+                        fontSize: 16,
+                        color: '#111827',
+                    }}>
+                        {item.firstName} {item.lastName}
+                    </Text>
+                </View>
+
+                {/* Checkbox */}
+                <View style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    borderWidth: 2,
+                    borderColor: isSelected ? '#22C55E' : '#D1D5DB',
+                    backgroundColor: isSelected ? '#22C55E' : 'transparent',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                }}>
+                    {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                </View>
+            </TouchableOpacity>
         );
     }, [selectedPlayers, spotsLeft, handleToggle]);
 
-    const renderGroup = useCallback(({ item }: { item: RosterGroup }) => {
+    const renderGroup = useCallback((item: RosterGroup) => {
         const isExpanded = expandedGroupId === item.id;
         const members = groupMembersMap[item.id] || [];
         const selectedCount = getGroupSelectedCount(item.id);
 
         return (
-            <View>
-                <GroupItem
-                    group={item}
-                    selectedCount={selectedCount}
-                    totalCount={item.memberCount}
-                    onSelectAll={() => handleSelectAllGroup(item.id)}
-                    onViewMembers={() => loadGroupMembers(item.id)}
-                    isExpanded={isExpanded}
-                />
+            <View key={item.id} style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 12,
+                marginBottom: 12,
+                borderWidth: 1,
+                borderColor: '#E5E7EB',
+                overflow: 'hidden',
+            }}>
+                <TouchableOpacity
+                    style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                    }}
+                    onPress={() => loadGroupMembers(item.id)}
+                    activeOpacity={0.7}
+                >
+                    {/* Group Icon */}
+                    <View style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: item.color + '20',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                    }}>
+                        <Text style={{
+                            fontFamily: 'Inter_700Bold',
+                            fontSize: 14,
+                            color: item.color,
+                        }}>
+                            {item.name.substring(0, 2).toUpperCase()}
+                        </Text>
+                    </View>
+
+                    {/* Group Name */}
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 16,
+                            color: '#111827',
+                        }}>
+                            {item.name}
+                        </Text>
+                        <Text style={{
+                            fontFamily: 'Inter_400Regular',
+                            fontSize: 13,
+                            color: '#9CA3AF',
+                            marginTop: 2,
+                        }}>
+                            {selectedCount > 0 ? `${selectedCount}/` : ""}{item.memberCount} members
+                        </Text>
+                    </View>
+
+                    {/* Select All Button */}
+                    <TouchableOpacity
+                        style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            backgroundColor: selectedCount === item.memberCount && item.memberCount > 0 ? '#E5E7EB' : '#22C55E',
+                        }}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            handleSelectAllGroup(item.id);
+                        }}
+                    >
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 12,
+                            color: selectedCount === item.memberCount && item.memberCount > 0 ? '#111827' : '#FFFFFF',
+                        }}>
+                            {selectedCount === item.memberCount && item.memberCount > 0 ? "Deselect" : "Select All"}
+                        </Text>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+
+                {/* Loading indicator */}
                 {loadingGroup === item.id && (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
+                    <View style={{
+                        paddingVertical: 12,
+                        alignItems: 'center',
+                        borderTopWidth: 1,
+                        borderTopColor: '#E5E7EB',
+                    }}>
+                        <ActivityIndicator size="small" color="#22C55E" />
                     </View>
                 )}
+
+                {/* Expanded members list */}
                 {isExpanded && members.length > 0 && (
-                    <View style={styles.groupMembersList}>
-                        {members.map(member => {
-                            const isSelected = selectedPlayers.includes(member.id);
-                            const canSelect = isSelected || spotsLeft > 0;
-                            return (
-                                <PlayerItem
-                                    key={member.id}
-                                    player={member}
-                                    isSelected={isSelected}
-                                    canSelect={canSelect}
-                                    onToggle={() => handleToggle(member.id)}
-                                />
-                            );
-                        })}
+                    <View style={{
+                        borderTopWidth: 1,
+                        borderTopColor: '#E5E7EB',
+                    }}>
+                        {members.map(member => renderPlayer(member))}
                     </View>
                 )}
             </View>
         );
-    }, [expandedGroupId, groupMembersMap, loadingGroup, selectedPlayers, spotsLeft, handleToggle, handleSelectAllGroup, loadGroupMembers, getGroupSelectedCount]);
+    }, [expandedGroupId, groupMembersMap, loadingGroup, selectedPlayers, spotsLeft, handleToggle, handleSelectAllGroup, loadGroupMembers, getGroupSelectedCount, renderPlayer]);
 
     const getDisplayList = () => {
         switch (activeTab) {
@@ -292,276 +434,136 @@ export default function ManualInviteStep({
     const displayList = getDisplayList();
 
     return (
-        <View style={styles.content}>
-            <Text style={styles.stepTitle}>Select Players</Text>
-            <Text style={styles.subtitle}>
-                {selectedPlayers.length}/{groupSize - 1} selected • {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} left
-            </Text>
-
-            {/* Source Tabs */}
-            <View style={styles.tabContainer}>
+        <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+            {/* Tabs */}
+            <View style={{
+                flexDirection: 'row',
+                paddingHorizontal: 20,
+                paddingTop: 20,
+                paddingBottom: 12,
+                backgroundColor: '#F3F4F6',
+                gap: 8,
+            }}>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === "roster" && styles.tabActive]}
+                    style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        backgroundColor: activeTab === "roster" ? '#22C55E' : '#FFFFFF',
+                        alignItems: 'center',
+                    }}
                     onPress={() => setActiveTab("roster")}
+                    activeOpacity={0.7}
                 >
-                    <Users size={16} color={activeTab === "roster" ? COLORS.primary : COLORS.textSub} />
-                    <Text style={[styles.tabText, activeTab === "roster" && styles.tabTextActive]}>
-                        Roster ({friends.length})
+                    <Text style={{
+                        fontFamily: 'Inter_600SemiBold',
+                        fontSize: 14,
+                        color: activeTab === "roster" ? '#FFFFFF' : '#6B7280',
+                    }}>
+                        ROSTER
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === "ondeck" && styles.tabActive]}
+                    style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        backgroundColor: activeTab === "ondeck" ? '#22C55E' : '#FFFFFF',
+                        alignItems: 'center',
+                    }}
                     onPress={() => setActiveTab("ondeck")}
+                    activeOpacity={0.7}
                 >
-                    <Clock size={16} color={activeTab === "ondeck" ? COLORS.primary : COLORS.textSub} />
-                    <Text style={[styles.tabText, activeTab === "ondeck" && styles.tabTextActive]}>
-                        On Deck ({onDeckFriends.length})
+                    <Text style={{
+                        fontFamily: 'Inter_600SemiBold',
+                        fontSize: 14,
+                        color: activeTab === "ondeck" ? '#FFFFFF' : '#6B7280',
+                    }}>
+                        ON-DECK
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === "groups" && styles.tabActive]}
+                    style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        backgroundColor: activeTab === "groups" ? '#22C55E' : '#FFFFFF',
+                        alignItems: 'center',
+                    }}
                     onPress={() => setActiveTab("groups")}
+                    activeOpacity={0.7}
                 >
-                    <UserPlus size={16} color={activeTab === "groups" ? COLORS.primary : COLORS.textSub} />
-                    <Text style={[styles.tabText, activeTab === "groups" && styles.tabTextActive]}>
-                        Groups ({groups.length})
+                    <Text style={{
+                        fontFamily: 'Inter_600SemiBold',
+                        fontSize: 14,
+                        color: activeTab === "groups" ? '#FFFFFF' : '#6B7280',
+                    }}>
+                        GROUPS
                     </Text>
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.listContainer}>
+            {/* Player count and filter */}
+            <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingHorizontal: 20,
+                paddingVertical: 12,
+                backgroundColor: '#F3F4F6',
+            }}>
+                <Text style={{
+                    fontFamily: 'Inter_400Regular',
+                    fontSize: 14,
+                    color: '#6B7280',
+                }}>
+                    {activeTab === "roster" ? friends.length : activeTab === "ondeck" ? onDeckFriends.length : groups.length} {activeTab === "groups" ? "groups" : "roster players"}
+                </Text>
+                {selectedPlayers.length > 0 && (
+                    <View style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        backgroundColor: '#22C55E',
+                    }}>
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 12,
+                            color: '#FFFFFF',
+                        }}>
+                            {selectedPlayers.length}
+                        </Text>
+                    </View>
+                )}
+            </View>
+
+            {/* List */}
+            <View style={{ flex: 1 }}>
                 {activeTab === "groups" ? (
-                    groups.length > 0 ? (
+                    <FlashList
+                        data={groups}
+                        renderItem={({ item }) => renderGroup(item)}
+                        estimatedItemSize={70}
+                        keyExtractor={(item) => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100 }}
+                    />
+                ) : (
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        flex: 1,
+                    }}>
                         <FlashList
-                            data={groups}
-                            renderItem={renderGroup}
-                            estimatedItemSize={70}
+                            data={displayList}
+                            renderItem={({ item }) => renderPlayer(item)}
+                            estimatedItemSize={72}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={{ paddingBottom: 100 }}
                         />
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyTitle}>No groups yet</Text>
-                            <Text style={styles.emptyText}>Create groups in the Roster tab</Text>
-                        </View>
-                    )
-                ) : displayList.length > 0 ? (
-                    <FlashList
-                        data={displayList}
-                        renderItem={renderPlayer}
-                        estimatedItemSize={72}
-                        keyExtractor={(item) => item.id}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={{ paddingBottom: 100 }}
-                    />
-                ) : (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyTitle}>
-                            {activeTab === "roster" ? "No friends in roster" : "No players on deck"}
-                        </Text>
-                        <Text style={styles.emptyText}>
-                            Add friends from the Availability screen
-                        </Text>
                     </View>
                 )}
             </View>
         </View>
     );
 }
-
-
-const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 24,
-    },
-    stepTitle: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: COLORS.text,
-        marginBottom: 4,
-        textAlign: "center",
-    },
-    subtitle: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        marginBottom: 20,
-    },
-    tabContainer: {
-        flexDirection: "row",
-        backgroundColor: "#F3F4F6",
-        borderRadius: 10,
-        padding: 4,
-        marginBottom: 16,
-    },
-    tab: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 10,
-        borderRadius: 8,
-        gap: 4,
-    },
-    tabActive: {
-        backgroundColor: COLORS.white,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-    },
-    tabText: {
-        fontSize: 12,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-    tabTextActive: {
-        color: COLORS.primary,
-        fontWeight: "600",
-    },
-    listContainer: {
-        flex: 1,
-    },
-    playerItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 8,
-        backgroundColor: "#F9FAFB",
-    },
-    playerItemSelected: {
-        backgroundColor: "#DCFCE7",
-    },
-    playerItemDisabled: {
-        opacity: 0.5,
-    },
-    avatarContainer: {
-        marginRight: 12,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-    },
-    avatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    avatarInitials: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    playerInfo: {
-        flex: 1,
-    },
-    playerName: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    playerSub: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: COLORS.border,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    groupCard: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 14,
-        backgroundColor: "#F9FAFB",
-        borderRadius: 12,
-        marginBottom: 8,
-    },
-    groupIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    groupInitials: {
-        fontSize: 14,
-        fontWeight: "bold",
-    },
-    groupInfo: {
-        flex: 1,
-    },
-    groupName: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-    },
-    groupMemberCount: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 2,
-    },
-    selectAllBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: COLORS.primary,
-        borderRadius: 8,
-    },
-    selectAllBtnActive: {
-        backgroundColor: "#E5E7EB",
-    },
-    selectAllText: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-    selectAllTextActive: {
-        color: COLORS.text,
-    },
-    loadingContainer: {
-        padding: 12,
-        alignItems: "center",
-    },
-    groupMembersList: {
-        marginLeft: 20,
-        marginBottom: 8,
-        borderLeftWidth: 2,
-        borderLeftColor: "#E5E7EB",
-        paddingLeft: 12,
-    },
-    emptyState: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: COLORS.textSub,
-        textAlign: "center",
-        paddingHorizontal: 20,
-    },
-});

@@ -12,6 +12,7 @@ export interface UserProfile {
   preferences: Preferences;
   username?: string;
   homeCourse?: string;
+  clubs?: Array<{id: string; name: string; location: string; type: string}>;  // New: clubs array
   bio?: string;
 }
 

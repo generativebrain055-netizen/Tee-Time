@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import { COLORS } from "../../../constants/colors";
 
 interface MembershipCardProps {
@@ -7,65 +7,21 @@ interface MembershipCardProps {
 }
 
 const MembershipCard = memo(({ homeCourse }: MembershipCardProps) => (
-    <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Active memberships</Text>
-        <View style={styles.membershipCard}>
+    <View className="px-5 mb-6">
+        <Text className="text-base font-bold text-gray-900 mb-3">Active memberships</Text>
+        <View className="bg-white rounded-md p-4">
             {homeCourse ? (
-                <View style={styles.membershipRow}>
-                    <View style={styles.membershipIcon}>
-                        <Text style={styles.membershipIconText}>⛳</Text>
+                <View className="flex-row items-center gap-3">
+                    <View className="w-10 h-10 rounded-full bg-blue-100 justify-center items-center">
+                        <Text className="text-lg">⛳</Text>
                     </View>
-                    <Text style={styles.membershipText}>{homeCourse}</Text>
+                    <Text className="text-[15px] font-medium text-gray-900">{homeCourse}</Text>
                 </View>
             ) : (
-                <Text style={styles.emptyText}>No active memberships</Text>
+                <Text className="text-sm font-medium text-gray-500">No active memberships</Text>
             )}
         </View>
     </View>
 ));
-
-const styles = StyleSheet.create({
-    section: {
-        paddingHorizontal: 20,
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 12,
-    },
-    membershipCard: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
-    },
-    membershipRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    membershipIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.primaryLight,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    membershipIconText: {
-        fontSize: 18,
-    },
-    membershipText: {
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    emptyText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-});
 
 export default MembershipCard;

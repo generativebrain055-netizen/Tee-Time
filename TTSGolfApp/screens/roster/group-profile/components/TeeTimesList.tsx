@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { Calendar, ChevronRight } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { TeeTime } from "../../../../services/api";
@@ -10,13 +10,13 @@ interface TeeTimeCardProps {
 }
 
 const TeeTimeCard = memo(({ teeTime }: TeeTimeCardProps) => (
-    <View style={styles.card}>
-        <View style={styles.icon}>
+    <View className="flex-row items-center rounded-md p-3 mb-2" style={{ backgroundColor: COLORS.white }}>
+        <View className="w-11 h-11 rounded-full justify-center items-center mr-3" style={{ backgroundColor: COLORS.primaryLight }}>
             <Calendar size={20} color={COLORS.primary} />
         </View>
-        <View style={styles.info}>
-            <Text style={styles.title}>{teeTime.courseName}</Text>
-            <Text style={styles.date}>{formatTeeTimeDate(teeTime.teeDate)} • {teeTime.teeTime}</Text>
+        <View className="flex-1">
+            <Text className="text-[15px] font-semibold mb-0.5" style={{ color: COLORS.textMain }}>{teeTime.courseName}</Text>
+            <Text className="text-[13px]" style={{ color: COLORS.textSub }}>{formatTeeTimeDate(teeTime.teeDate)} • {teeTime.teeTime}</Text>
         </View>
         <ChevronRight size={20} color={COLORS.textSub} />
     </View>
@@ -28,11 +28,11 @@ interface Props {
 }
 
 const TeeTimesList = memo(({ teeTimes, onAddTeeTime }: Props) => (
-    <View style={styles.section}>
-        <View style={styles.header}>
-            <Text style={styles.sectionTitle}>Upcoming tee times</Text>
+    <View className="px-5 mb-6">
+        <View className="flex-row justify-between items-center mb-3">
+            <Text className="text-base font-bold" style={{ color: COLORS.textMain }}>Upcoming tee times</Text>
             <TouchableOpacity>
-                <Text style={styles.seeAll}>See all</Text>
+                <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>See all</Text>
             </TouchableOpacity>
         </View>
 
@@ -41,90 +41,14 @@ const TeeTimesList = memo(({ teeTimes, onAddTeeTime }: Props) => (
                 <TeeTimeCard key={teeTime.id} teeTime={teeTime} />
             ))
         ) : (
-            <View style={styles.empty}>
-                <Text style={styles.emptyText}>No upcoming tee times</Text>
-                <TouchableOpacity style={styles.createButton} onPress={onAddTeeTime}>
-                    <Text style={styles.createButtonText}>Create one now</Text>
+            <View className="rounded-md p-6 items-center" style={{ backgroundColor: COLORS.white }}>
+                <Text className="text-sm font-medium" style={{ color: COLORS.textSub }}>No upcoming tee times</Text>
+                <TouchableOpacity className="mt-3 px-4 py-2 rounded-md" style={{ backgroundColor: COLORS.primary }} onPress={onAddTeeTime}>
+                    <Text className="text-sm font-semibold" style={{ color: COLORS.white }}>Create one now</Text>
                 </TouchableOpacity>
             </View>
         )}
     </View>
 ));
-
-const styles = StyleSheet.create({
-    section: {
-        paddingHorizontal: 20,
-        marginBottom: 24,
-    },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 12,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-    },
-    seeAll: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.primary,
-    },
-    card: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 8,
-    },
-    icon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: COLORS.primaryLight,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    info: {
-        flex: 1,
-    },
-    title: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.textMain,
-        marginBottom: 2,
-    },
-    date: {
-        fontSize: 13,
-        color: COLORS.textSub,
-    },
-    empty: {
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 24,
-        alignItems: "center",
-    },
-    emptyText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-    createButton: {
-        marginTop: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        backgroundColor: COLORS.primary,
-        borderRadius: 8,
-    },
-    createButtonText: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.white,
-    },
-});
 
 export default TeeTimesList;

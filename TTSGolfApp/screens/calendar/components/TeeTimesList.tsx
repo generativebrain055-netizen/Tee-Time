@@ -1,23 +1,23 @@
 import React, { memo } from "react";
-import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, ActivityIndicator, ScrollView } from "react-native";
 import { Calendar } from "lucide-react-native";
-import { TeeTime } from "../types";
+import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatSelectedDate } from "../utils";
 import TeeTimeCard from "./TeeTimeCard";
 
 interface TeeTimesListProps {
     selectedDate: Date | null;
-    teeTimes: TeeTime[];
+    teeTimes: CalendarTeeTime[];
     loading: boolean;
     onTeeTimePress?: (teeTimeId: string) => void;
     onCancelSuccess?: () => void;
 }
 
 const EmptyState = memo(() => (
-    <View style={styles.empty}>
+    <View className="items-center py-10">
         <Calendar size={48} color={CALENDAR_COLORS.textSecondary} />
-        <Text style={styles.emptyText}>No tee times scheduled</Text>
+        <Text className="text-base text-[#8A8A8E] mt-3" style={{ fontFamily: 'Inter_500Medium' }}>No tee times scheduled</Text>
     </View>
 ));
 
@@ -25,11 +25,13 @@ const TeeTimesList = memo(({ selectedDate, teeTimes, loading, onTeeTimePress, on
     if (!selectedDate) return null;
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>{formatSelectedDate(selectedDate)}</Text>
-
+        <ScrollView 
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 12 }}
+          showsVerticalScrollIndicator={true}
+        >
             {loading ? (
-                <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={styles.loader} />
+                <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} className="mt-5" />
             ) : teeTimes.length > 0 ? (
                 teeTimes.map((teeTime) => (
                     <TeeTimeCard
@@ -42,34 +44,8 @@ const TeeTimesList = memo(({ selectedDate, teeTimes, loading, onTeeTimePress, on
             ) : (
                 <EmptyState />
             )}
-        </View>
+        </ScrollView>
     );
-});
-
-const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 20,
-        paddingTop: 24,
-        paddingBottom: 40,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: CALENDAR_COLORS.text,
-        marginBottom: 16,
-    },
-    loader: {
-        marginTop: 20,
-    },
-    empty: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: CALENDAR_COLORS.textSecondary,
-        marginTop: 12,
-    },
 });
 
 export default TeeTimesList;

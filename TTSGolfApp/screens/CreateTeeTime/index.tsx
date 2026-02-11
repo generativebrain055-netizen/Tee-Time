@@ -2,13 +2,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import {
   teeTimeApi,
   inviteApi,
@@ -17,15 +15,19 @@ import {
   Friend,
   RosterGroup,
 } from "../../services/api";
-import { Header } from "../../components/common";
+import { ScreenShell, AppHeader } from "../../ui";
 import { COLORS } from "./constants";
 import DatePickerModal from "./DatePickerModal";
 import TimePickerModal from "./TimePickerModal";
 import InviteDetailsStep from "./InviteDetailsStep";
 import InviteTypeStep, { InviteType } from "./InviteTypeStep";
 import RosterInviteStep from "./RosterInviteStep";
+import ReviewInviteOrderStep from "./ReviewInviteOrderStep";
 import FCFSInviteStep from "./FCFSInviteStep";
+import ReviewFCFSInviteStep from "./ReviewFCFSInviteStep";
 import ManualInviteStep from "./ManualInviteStep";
+import ReviewManualInviteStep from "./ReviewManualInviteStep";
+import logger from "../../utils/logger";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -36,9 +38,14 @@ interface ExtendedFriend extends Friend {
 }
 
 export default function CreateTeeTimeScreen({ navigation }: any) {
+  console.log('🎯 CreateTeeTimeScreen RENDER');
+  
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  
+  console.log('  Current step:', step);
+  console.log('  Current loading:', loading);
 
   // Form state - Step 1
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -70,6 +77,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<ExtendedFriend[]>([]);
   const [fcfsDeadline, setFcfsDeadline] = useState<Date | null>(null);
+  const [fcfsSelectedPlayers, setFcfsSelectedPlayers] = useState<string[]>([]);
 
   // Manual Invite state
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
@@ -100,22 +108,25 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
 
       if (onDeckRes.success && onDeckRes.onDeck) {
         // Convert on-deck roster contacts to Friend format
-        onDeck = onDeckRes.onDeck.map((m) => ({
-          id: m.contact.userId || m.id,
-          rosterId: m.id,
-          firstName: m.contact.name?.split(" ")[0] || "",
-          lastName: m.contact.name?.split(" ").slice(1).join(" ") || "",
-          username: m.contact.username,
-          handicap: m.contact.handicap,
-          avatar: m.contact.avatar,
-          phone: m.contact.phone,
-          friendshipStatus: "friend" as const,
-          friendsSince: "",
-        }));
+        onDeck = onDeckRes.onDeck.map((m) => {
+          const nameParts = (m.contact?.name ?? "").split(" ");
+          return {
+            id: m.contact?.userId || m.id,
+            rosterId: m.id,
+            firstName: nameParts[0] || "",
+            lastName: nameParts.slice(1).join(" ") || "",
+            username: m.contact?.username,
+            handicap: m.contact?.handicap,
+            avatar: m.contact?.avatar,
+            phone: m.contact?.phone,
+            friendshipStatus: "friend" as const,
+            friendsSince: "",
+          };
+        });
 
         // Track on-deck user IDs
         onDeckRes.onDeck.forEach((m) => {
-          if (m.contact.userId) {
+          if (m.contact?.userId) {
             onDeckUserIds.add(m.contact.userId);
           }
         });
@@ -131,6 +142,8 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         setFriends(rosterFriends);
         // Initialize ordered players with roster friend IDs only
         setOrderedPlayers(rosterFriends.map((f) => f.id));
+        // Initialize FCFS selected players with all roster friends
+        setFcfsSelectedPlayers(rosterFriends.map((f) => f.id));
         // Add to all loaded players - friends have valid user UUIDs
         setAllLoadedPlayers((prev) => {
           const existingIds = new Set(prev.map((p) => p.id));
@@ -157,7 +170,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         });
       }
     } catch (e) {
-      console.log("Failed to load data:", e);
+      logger.error("Failed to load tee time data", e);
     }
   };
 
@@ -167,19 +180,24 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
       const response = await rosterApi.getGroupMembers(groupId);
       if (response.success) {
         // Convert roster contacts to Friend format for display
-        const members: ExtendedFriend[] = response.members.map((m) => ({
-          id: m.contact.userId || m.id,
-          rosterId: m.id,
-          firstName: m.contact.name?.split(" ")[0] || "",
-          lastName: m.contact.name?.split(" ").slice(1).join(" ") || "",
-          username: m.contact.username,
-          handicap: m.contact.handicap,
-          avatar: m.contact.avatar,
-          phone: m.contact.phone,
+        const members: ExtendedFriend[] = response.members.map((m) => {
+          const nameParts = (m.contact?.name ?? "").split(" ");
+          return {
+            id: m.contact?.userId || m.id,
+            rosterId: m.id,
+            firstName: nameParts[0] || "",
+            lastName: nameParts.slice(1).join(" ") || "",
+          username: m.contact?.username,
+          handicap: m.contact?.handicap,
+          avatar: m.contact?.avatar,
+          phone: m.contact?.phone,
           friendshipStatus: "friend" as const,
           friendsSince: "",
-        }));
+        };
+        });
         setGroupMembers(members);
+        // Initialize FCFS selected players with all group members
+        setFcfsSelectedPlayers(members.map((m) => m.id));
         // Add to all loaded players for manual invite lookup
         setAllLoadedPlayers((prev) => {
           const existingIds = new Set(prev.map((p) => p.id));
@@ -190,7 +208,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         });
       }
     } catch (e) {
-      console.log("Failed to load group members:", e);
+      logger.error("Failed to load group members", e);
       setGroupMembers([]);
     }
   }, []);
@@ -260,6 +278,13 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
     } else if (step === 2) {
       setStep(3);
     } else if (step === 3) {
+      // For all invite types, go to review step
+      if (inviteType === "roster" || inviteType === "fcfs" || inviteType === "manual") {
+        setStep(4);
+      } else {
+        await handleCreate();
+      }
+    } else if (step === 4) {
       await handleCreate();
     }
   };
@@ -267,44 +292,48 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
   const handleCreate = async () => {
     setLoading(true);
     try {
-      console.log("Creating tee time with data:", {
-        courseName: location.split(",")[0].trim(),
-        courseLocation: location,
-        teeDate: formatDateForApi(selectedDate),
-        teeTime: formatTimeForApi(selectedTime),
-        maxPlayers: groupSize,
-        inviteType: inviteType,
+      const locationStr = location ?? "";
+      const courseName = locationStr.split(",")[0]?.trim() ?? "";
+      if (!courseName || !selectedDate) {
+        setLoading(false);
+        Alert.alert("Missing Info", "Please fill in date and location.");
+        return;
+      }
+
+      logger.info("Creating tee time", {
+        course: courseName,
+        date: formatDateForApi(selectedDate),
+        time: formatTimeForApi(selectedTime),
+        inviteType,
       });
 
       // Create tee time
       const response = await teeTimeApi.createTeeTime({
-        courseName: location.split(",")[0].trim(),
-        courseLocation: location,
+        courseName,
+        courseLocation: locationStr,
         teeDate: formatDateForApi(selectedDate),
         teeTime: formatTimeForApi(selectedTime),
         maxPlayers: groupSize,
         inviteType: inviteType,
       });
 
-      console.log("Tee time creation response:", response);
-
-      if (!response.success) {
-        throw new Error(response.message || "Failed to create tee time");
-      }
+      logger.debug("Tee time creation response", { success: response.success });
 
       const teeTimeId = response.teeTime.id;
-      console.log("Tee time created with ID:", teeTimeId);
+      logger.debug("Tee time created", { teeTimeId });
 
       // Send invites based on type
-      console.log("Sending invites for type:", inviteType);
-      console.log("Selected players:", selectedPlayers);
-      console.log("All loaded players:", allLoadedPlayers.length);
+      logger.debug("Sending invites", {
+        inviteType,
+        selectedCount: selectedPlayers.length,
+        loadedCount: allLoadedPlayers.length,
+      });
 
       if (inviteType === "roster") {
         // Roster invite - sequential with response window
-        console.log("Roster invite - orderedPlayers:", orderedPlayers);
+        logger.debug("Roster invite", { orderedCount: orderedPlayers.length });
         if (orderedPlayers.length === 0) {
-          console.log("No ordered players to invite");
+          logger.debug("No ordered players to invite");
         } else {
           const invitees = orderedPlayers.map((id, index) => {
             const friend = friends.find((f) => f.id === id);
@@ -316,14 +345,14 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
               order: index + 1,
             };
           });
-          console.log("Roster invitees:", JSON.stringify(invitees, null, 2));
+          logger.debug("Roster invitees prepared", { count: invitees.length });
           const inviteResponse = await inviteApi.createInvites(
             teeTimeId,
             invitees,
             "roster",
             responseWindow
           );
-          console.log("Invite response:", inviteResponse);
+          logger.debug("Roster invite response", { success: inviteResponse.success });
         }
       } else if (inviteType === "fcfs") {
         // FCFS - send to all at once
@@ -334,13 +363,17 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         }> = [];
 
         if (fcfsTargetType === "roster") {
-          invitees = friends.map((f) => ({
-            userId: f.id,
-            name: `${f.firstName} ${f.lastName}`,
-          }));
+          // Use fcfsSelectedPlayers instead of all friends
+          invitees = friends
+            .filter(f => fcfsSelectedPlayers.includes(f.id))
+            .map((f) => ({
+              userId: f.id,
+              name: `${f.firstName} ${f.lastName}`,
+            }));
         } else if (selectedGroupId && groupMembers.length > 0) {
-          // Use already loaded group members - handle both app users and phone contacts
+          // Use fcfsSelectedPlayers to filter group members
           invitees = groupMembers
+            .filter(m => fcfsSelectedPlayers.includes(m.id))
             .map((m) => {
               const isValidUuid =
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -365,8 +398,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         }
 
         if (invitees.length > 0) {
-          console.log("FCFS invitees:", JSON.stringify(invitees, null, 2));
-          console.log("FCFS deadline:", fcfsDeadline);
+          logger.debug("FCFS invitees prepared", { count: invitees.length, deadline: fcfsDeadline });
           // Pass deadline directly when creating invites (no separate setFCFSDeadline call needed)
           const inviteResponse = await inviteApi.createInvites(
             teeTimeId,
@@ -375,26 +407,25 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
             undefined, // no responseWindow for FCFS
             fcfsDeadline ? fcfsDeadline.toISOString() : undefined
           );
-          console.log("FCFS invite response:", inviteResponse);
+          logger.debug("FCFS invite response", { success: inviteResponse.success });
         } else {
-          console.log("No FCFS invitees to send");
+          logger.debug("No FCFS invitees to send");
         }
       } else if (inviteType === "manual") {
         // Manual - send to selected players only
         // Use ref for immediate access to avoid stale state
         const currentLoadedPlayers = allLoadedPlayersRef.current;
-        console.log("Manual invite - selectedPlayers:", selectedPlayers);
-        console.log(
-          "Manual invite - loaded players count:",
-          currentLoadedPlayers.length
-        );
+        logger.debug("Manual invite", {
+          selectedCount: selectedPlayers.length,
+          loadedCount: currentLoadedPlayers.length,
+        });
 
         // Look in all loaded players (friends, onDeck, and group members)
         const invitees = selectedPlayers
           .map((id) => {
             const player = currentLoadedPlayers.find((p) => p.id === id);
             if (!player) {
-              console.log(`Player ${id} NOT FOUND in loaded players`);
+              logger.warn("Player not found in loaded players", { id });
             }
 
             const name = player
@@ -430,7 +461,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
           })
           .filter((inv) => inv.userId || inv.phone); // Only include invitees with valid identifier
 
-        console.log("Manual invitees to send:", invitees.length);
+        logger.debug("Manual invitees prepared", { count: invitees.length });
 
         if (invitees.length > 0) {
           const inviteResponse = await inviteApi.createInvites(
@@ -438,11 +469,9 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
             invitees,
             "manual"
           );
-          console.log("Manual invite response:", inviteResponse);
+          logger.debug("Manual invite response", { success: inviteResponse.success });
         } else {
-          console.log(
-            "No manual invitees - players may not have userId or phone"
-          );
+          logger.debug("No manual invitees - players may not have userId or phone");
         }
       }
 
@@ -450,7 +479,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         { text: "OK", onPress: () => navigation?.goBack() },
       ]);
     } catch (error: any) {
-      console.error("Create tee time error:", error);
+      logger.error("Create tee time error", error);
       // Try to get more detailed error info
       let errorMessage = "Failed to create tee time";
       if (error?.message) {
@@ -534,11 +563,15 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
       if (inviteType === "fcfs") return "First Come First Serve";
       return "Select Players";
     }
+    if (step === 4 && inviteType === "roster") return "Review Invite Order";
+    if (step === 4 && inviteType === "fcfs") return "Review Invite List";
+    if (step === 4 && inviteType === "manual") return "Review Invite Order";
     return "Create Tee Time";
   };
 
   const getButtonText = () => {
-    if (step === 3) return "Create Invite";
+    if (step === 3) return "Next";
+    if (step === 4) return "Send Invites";
     return "Continue";
   };
 
@@ -553,15 +586,19 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
       }
       if (inviteType === "manual") return selectedPlayers.length > 0;
     }
+    if (step === 4) {
+      if (inviteType === "roster") return orderedPlayers.length > 0;
+      if (inviteType === "fcfs") return fcfsSelectedPlayers.length > 0;
+      if (inviteType === "manual") return selectedPlayers.length > 0;
+    }
     return true;
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
+    <ScreenShell>
 
       {/* Header */}
-      <Header title={getHeaderTitle()} onBack={handleBack} />
+      <AppHeader title={getHeaderTitle()} onBack={handleBack} />
 
       {/* Content */}
       {step === 1 && (
@@ -632,6 +669,53 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
         />
       )}
 
+      {step === 4 && inviteType === "roster" && (
+        <>
+          {console.log('📍 RENDERING ReviewInviteOrderStep', {
+            orderedPlayers: orderedPlayers.length,
+            friends: friends.length,
+            step,
+            inviteType,
+          })}
+          <ReviewInviteOrderStep
+            friends={friends}
+            orderedPlayers={orderedPlayers}
+            onReorderPlayers={setOrderedPlayers}
+            teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+            teeTime={selectedTime}
+            courseName={location.split(',')[0]?.trim() || ''}
+          />
+        </>
+      )}
+
+      {step === 4 && inviteType === "fcfs" && (
+        <ReviewFCFSInviteStep
+          friends={fcfsTargetType === "roster" ? friends : groupMembers}
+          selectedPlayers={fcfsSelectedPlayers}
+          onRemovePlayer={(playerId) => {
+            setFcfsSelectedPlayers(prev => prev.filter(id => id !== playerId));
+          }}
+          teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+          teeTime={selectedTime}
+          courseName={location.split(',')[0]?.trim() || ''}
+          groupName={selectedGroupId ? groups.find(g => g.id === selectedGroupId)?.name : undefined}
+        />
+      )}
+
+      {step === 4 && inviteType === "manual" && (
+        <ReviewManualInviteStep
+          friends={allLoadedPlayers}
+          orderedPlayers={selectedPlayers}
+          onReorderPlayers={setSelectedPlayers}
+          onRemovePlayer={(playerId) => {
+            setSelectedPlayers(prev => prev.filter(id => id !== playerId));
+          }}
+          teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+          teeTime={selectedTime}
+          courseName={location.split(',')[0]?.trim() || ''}
+        />
+      )}
+
       {/* Modals */}
       <DatePickerModal
         visible={showDatePicker}
@@ -652,49 +736,21 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
       />
 
       {/* Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View className="p-5 bg-white border-t border-gray-200" style={{ paddingBottom: insets.bottom + 16 }}>
         <TouchableOpacity
-          style={[
-            styles.continueBtn,
-            (loading || !canContinue()) && styles.continueBtnDisabled,
-          ]}
+          className={`bg-primary rounded-md py-4 items-center ${
+            (loading || !canContinue()) ? "opacity-50" : ""
+          }`}
           onPress={handleContinue}
           disabled={loading || !canContinue()}
         >
           {loading ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
-            <Text style={styles.continueBtnText}>{getButtonText()}</Text>
+            <Text className="text-white text-base font-semibold">{getButtonText()}</Text>
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </ScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  footer: {
-    padding: 20,
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  continueBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  continueBtnDisabled: {
-    opacity: 0.5,
-  },
-  continueBtnText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});

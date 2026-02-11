@@ -1,16 +1,31 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 5.2
--- Last Updated: January 2026
+-- Version: 5.6 (Multi-Club Support)
+-- Last Updated: February 7, 2026
 -- 
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables
 -- 2. Creates all tables fresh
 -- 3. Includes all migrations (social rate, attendance, profile, QR draft, 
---    blocked users, deadline notifications, OAuth providers, etc.)
+--    blocked users, deadline notifications, OAuth providers with multi-strategy
+--    lookup and idempotent operations, user availability preferences, 
+--    onboarding tracking with backend state management, multi-club memberships)
 -- 
 -- Run this in Supabase SQL Editor for a clean setup
+-- 
+-- CHANGES IN v5.6:
+-- - Added clubs JSONB column to user_profiles for multiple club memberships
+-- - Added GIN index on clubs for efficient array searches
+-- - home_course field maintained for backward compatibility
+-- 
+-- CHANGES IN v5.5:
+-- - Added onboarding tracking fields to users table (onboarding_completed, 
+--   availability_completed, profile_completed with timestamps)
+-- - Added onboarding_steps table for granular step tracking
+-- - Added helper functions for onboarding completion checks
+-- - Added trigger to auto-update onboarding_completed flag
+-- - Backend is source of truth for onboarding state (not local storage)
 -- ============================================================================
 
 -- ============================================================================
@@ -34,6 +49,8 @@ DROP TABLE IF EXISTS handicap_logs CASCADE;
 DROP TABLE IF EXISTS roster_notifications CASCADE;
 DROP TABLE IF EXISTS social_rate_logs CASCADE;
 DROP TABLE IF EXISTS tee_time_attendance CASCADE;
+DROP TABLE IF EXISTS user_availability CASCADE;
+DROP TABLE IF EXISTS onboarding_steps CASCADE;
 DROP TABLE IF EXISTS message_read_receipts CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS conversation_participants CASCADE;
@@ -72,6 +89,8 @@ DROP FUNCTION IF EXISTS hours_between(TIMESTAMPTZ, TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS is_within_24_hours(TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS get_tee_datetime(DATE, TIME) CASCADE;
 DROP FUNCTION IF EXISTS accept_invite_atomic(UUID, UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS check_onboarding_complete(UUID) CASCADE;
+DROP FUNCTION IF EXISTS update_onboarding_completed() CASCADE;
 
 -- Re-enable triggers
 SET session_replication_role = 'origin';
@@ -129,6 +148,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- IDENTITY NOTE: User identity is the `id` (UUID).
 -- Phone and email are PROFILE DATA, not identity fields.
 -- OAuth users may have NULL phone_number.
+-- ONBOARDING TRACKING: Backend is source of truth for onboarding completion
 -- ============================================================================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -147,6 +167,13 @@ CREATE TABLE users (
     last_login_at TIMESTAMPTZ,
     last_login_ip INET,
     last_login_device_id UUID,
+    -- Onboarding tracking fields
+    onboarding_completed BOOLEAN DEFAULT FALSE,
+    onboarding_completed_at TIMESTAMPTZ,
+    availability_completed BOOLEAN DEFAULT FALSE,
+    availability_completed_at TIMESTAMPTZ,
+    profile_completed BOOLEAN DEFAULT FALSE,
+    profile_completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
@@ -155,6 +182,11 @@ CREATE TABLE users (
 CREATE INDEX idx_users_phone_number ON users(phone_number) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_username ON users(username) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_onboarding_status ON users(onboarding_completed, availability_completed) WHERE deleted_at IS NULL;
+
+COMMENT ON COLUMN users.onboarding_completed IS 'True when ALL required onboarding steps are completed';
+COMMENT ON COLUMN users.availability_completed IS 'True when user has set their availability preferences';
+COMMENT ON COLUMN users.profile_completed IS 'True when user has completed basic profile setup';
 
 -- ============================================================================
 -- 2. USER_PROFILES TABLE (with integer social_rate 0-100)
@@ -168,6 +200,7 @@ CREATE TABLE user_profiles (
     bio TEXT,
     location VARCHAR(255),
     home_course VARCHAR(255),
+    clubs JSONB DEFAULT '[]'::jsonb,
     driver VARCHAR(100),
     irons VARCHAR(100),
     putter VARCHAR(100),
@@ -176,6 +209,7 @@ CREATE TABLE user_profiles (
     walk_or_ride VARCHAR(20) DEFAULT 'ride',
     playing_partner_preference VARCHAR(100),
     zip_code VARCHAR(20),
+    drink_of_choice VARCHAR(100),
     timezone VARCHAR(50) DEFAULT 'UTC',
     language VARCHAR(10) DEFAULT 'en',
     notification_preferences JSONB DEFAULT '{"email": true, "sms": true, "push": true}'::jsonb,
@@ -189,6 +223,10 @@ CREATE TABLE user_profiles (
 
 CREATE INDEX idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX idx_user_profiles_handicap ON user_profiles(handicap);
+CREATE INDEX idx_user_profiles_clubs ON user_profiles USING GIN (clubs);
+
+COMMENT ON COLUMN user_profiles.clubs IS 'Array of club memberships: [{"id": "...", "name": "...", "location": "...", "type": "..."}]';
+COMMENT ON COLUMN user_profiles.zip_code IS 'User zip/postal code from onboarding';
 
 -- ============================================================================
 -- 3. DEVICES TABLE
@@ -249,29 +287,64 @@ CREATE INDEX idx_sessions_access_token_hash ON sessions(access_token_hash);
 CREATE INDEX idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
 
 -- ============================================================================
--- 4b. AUTH_PROVIDERS TABLE (OAuth)
+-- 4b. AUTH_PROVIDERS TABLE (OAuth) - Industrial Grade
+-- ============================================================================
+-- OAuth provider links for Google, Apple, etc.
+-- CRITICAL CONSTRAINTS:
+--   - UNIQUE (provider, provider_user_id) prevents duplicate OAuth accounts
+--   - CASCADE DELETE prevents orphaned links when user deleted
+--   - Multiple indexes for multi-strategy user lookup (primary + email fallback)
 -- ============================================================================
 CREATE TABLE auth_providers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    provider VARCHAR(20) NOT NULL,
-    provider_user_id VARCHAR(255) NOT NULL,
-    provider_email VARCHAR(255),
-    provider_data JSONB DEFAULT '{}'::jsonb,
+    provider VARCHAR(50) NOT NULL,  -- OAuth provider name (lowercase: 'google', 'apple')
+    provider_user_id TEXT NOT NULL, -- Provider's unique user ID (Firebase UID, Apple ID, etc.)
+    provider_email VARCHAR(255),    -- Email from OAuth provider (may differ from users.email)
+    provider_data JSONB DEFAULT '{}'::jsonb, -- OAuth metadata (name, picture, locale, etc.)
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    last_used_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT valid_provider CHECK (provider IN ('google', 'apple', 'facebook', 'twitter')),
-    CONSTRAINT unique_provider_user UNIQUE (provider, provider_user_id)
+    last_used_at TIMESTAMPTZ DEFAULT NOW(), -- Track OAuth usage
+    
+    -- CRITICAL: Prevents duplicate OAuth accounts (PRIMARY strategy)
+    CONSTRAINT unique_provider_user UNIQUE (provider, provider_user_id),
+    
+    -- Validate provider name format
+    CONSTRAINT valid_provider CHECK (provider IN ('google', 'apple', 'facebook', 'twitter'))
 );
 
+-- Index for fast user lookup (used in findByUserId)
 CREATE INDEX idx_auth_providers_user_id ON auth_providers(user_id);
+
+-- Index for provider lookup (used in auth flow)
 CREATE INDEX idx_auth_providers_provider ON auth_providers(provider);
+
+-- Composite index for primary OAuth user lookup
 CREATE INDEX idx_auth_providers_provider_user_id ON auth_providers(provider, provider_user_id);
 
-COMMENT ON TABLE auth_providers IS 'Links users to external OAuth providers (Google, Apple, etc.)';
-COMMENT ON COLUMN auth_providers.provider_user_id IS 'The "sub" or unique ID from the OAuth provider';
-COMMENT ON COLUMN auth_providers.provider_data IS 'Additional provider-specific data (name, picture, etc.)';
+-- FALLBACK STRATEGY: Email-based unique index for provider ID changes
+-- Allows multiple NULL emails but enforces uniqueness for non-NULL
+CREATE UNIQUE INDEX idx_auth_providers_email_unique 
+ON auth_providers(provider, provider_email) 
+WHERE provider_email IS NOT NULL;
+
+-- Index for email fallback lookup (fast query when provider_user_id changes)
+CREATE INDEX idx_auth_providers_email 
+ON auth_providers(provider_email) 
+WHERE provider_email IS NOT NULL;
+
+-- Index for analytics on OAuth usage
+CREATE INDEX idx_auth_providers_last_used 
+ON auth_providers(last_used_at DESC);
+
+COMMENT ON TABLE auth_providers IS 'Links users to external OAuth providers with multi-strategy lookup support';
+COMMENT ON COLUMN auth_providers.provider IS 'OAuth provider name (lowercase): google, apple, etc.';
+COMMENT ON COLUMN auth_providers.provider_user_id IS 'Stable unique ID from OAuth provider (Firebase UID, Apple ID)';
+COMMENT ON COLUMN auth_providers.provider_email IS 'Email from OAuth provider (for fallback strategy)';
+COMMENT ON COLUMN auth_providers.provider_data IS 'OAuth metadata: {name, picture, locale, email_verified, is_private_email}';
+COMMENT ON COLUMN auth_providers.last_used_at IS 'Last OAuth sign-in timestamp (for analytics & cleanup)';
+COMMENT ON CONSTRAINT unique_provider_user ON auth_providers IS 'CRITICAL: Prevents duplicate OAuth accounts';
+COMMENT ON INDEX idx_auth_providers_email_unique IS 'Email fallback strategy: handles provider ID format changes';
 
 -- ============================================================================
 -- 5. OTP_REQUESTS TABLE
@@ -934,6 +1007,59 @@ CREATE INDEX idx_game_scores_tee_time ON game_scores(tee_time_id);
 CREATE INDEX idx_game_scores_created ON game_scores(created_at DESC);
 
 -- ============================================================================
+-- 33. USER_AVAILABILITY TABLE
+-- ============================================================================
+-- Stores user's weekly availability preferences for scheduling tee times
+CREATE TABLE user_availability (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day_of_week VARCHAR(10) NOT NULL CHECK (day_of_week IN ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')),
+    time_slot VARCHAR(20) NOT NULL CHECK (time_slot IN ('morning', 'late_morning', 'afternoon', 'late_afternoon', 'evening')),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_user_day_time UNIQUE (user_id, day_of_week, time_slot)
+);
+
+-- Indexes for performance
+CREATE INDEX idx_user_availability_user ON user_availability(user_id);
+CREATE INDEX idx_user_availability_day ON user_availability(day_of_week);
+CREATE INDEX idx_user_availability_active ON user_availability(is_active) WHERE is_active = true;
+CREATE INDEX idx_user_availability_user_active ON user_availability(user_id, is_active) WHERE is_active = true;
+
+-- Comments
+COMMENT ON TABLE user_availability IS 'User weekly availability preferences for tee time scheduling';
+COMMENT ON COLUMN user_availability.day_of_week IS 'Day of week: Mon, Tue, Wed, Thu, Fri, Sat, Sun';
+COMMENT ON COLUMN user_availability.time_slot IS 'Time slot: morning (7-9), late_morning (9-12), afternoon (12-3), late_afternoon (3-5), evening (5-8)';
+COMMENT ON COLUMN user_availability.is_active IS 'Soft delete flag - allows historical tracking';
+
+-- ============================================================================
+-- 34. ONBOARDING_STEPS TABLE
+-- ============================================================================
+-- Tracks individual onboarding step completion for granular control
+CREATE TABLE onboarding_steps (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    step_name VARCHAR(50) NOT NULL, -- 'profile', 'availability', 'preferences', etc.
+    completed BOOLEAN DEFAULT FALSE,
+    completed_at TIMESTAMPTZ,
+    skipped BOOLEAN DEFAULT FALSE,
+    skipped_at TIMESTAMPTZ,
+    data JSONB DEFAULT '{}', -- Store step-specific data
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_user_step UNIQUE (user_id, step_name)
+);
+
+-- Indexes for fast lookups
+CREATE INDEX idx_onboarding_steps_user_id ON onboarding_steps(user_id);
+CREATE INDEX idx_onboarding_steps_completed ON onboarding_steps(user_id, completed);
+
+COMMENT ON TABLE onboarding_steps IS 'Tracks individual onboarding step completion for granular control';
+COMMENT ON COLUMN onboarding_steps.step_name IS 'Step identifier: profile, availability, preferences, etc.';
+COMMENT ON COLUMN onboarding_steps.data IS 'Step-specific data stored as JSON';
+
+-- ============================================================================
 -- STEP 5: CREATE TRIGGERS
 -- ============================================================================
 
@@ -972,6 +1098,62 @@ CREATE TRIGGER update_rate_limits_updated_at BEFORE UPDATE ON rate_limits
 
 CREATE TRIGGER update_attendance_updated_at BEFORE UPDATE ON tee_time_attendance
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_availability_updated_at BEFORE UPDATE ON user_availability
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_onboarding_steps_updated_at BEFORE UPDATE ON onboarding_steps
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ONBOARDING HELPER FUNCTIONS
+-- ============================================================================
+
+-- Function to check if user has completed all required onboarding
+CREATE OR REPLACE FUNCTION check_onboarding_complete(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_availability_complete BOOLEAN;
+    v_profile_complete BOOLEAN;
+BEGIN
+    SELECT 
+        availability_completed,
+        profile_completed
+    INTO 
+        v_availability_complete,
+        v_profile_complete
+    FROM users
+    WHERE id = p_user_id;
+    
+    -- All required steps must be completed
+    RETURN v_availability_complete AND v_profile_complete;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-update onboarding_completed when steps are completed
+CREATE OR REPLACE FUNCTION update_onboarding_completed()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update the main onboarding_completed flag
+    UPDATE users
+    SET 
+        onboarding_completed = check_onboarding_complete(NEW.id),
+        onboarding_completed_at = CASE 
+            WHEN check_onboarding_complete(NEW.id) AND onboarding_completed_at IS NULL 
+            THEN NOW() 
+            ELSE onboarding_completed_at 
+        END
+    WHERE id = NEW.id;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger on users table
+CREATE TRIGGER trigger_update_onboarding_completed
+    AFTER UPDATE OF availability_completed, profile_completed ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_onboarding_completed();
 
 -- ============================================================================
 -- STEP 6: CREATE VIEWS
@@ -1137,21 +1319,23 @@ ALTER TABLE user_club_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE draft_qr_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE qr_scan_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_availability ENABLE ROW LEVEL SECURITY;
+ALTER TABLE onboarding_steps ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- SCHEMA COMPLETE
 -- ============================================================================
 -- 
--- Version: 5.2
--- Last Updated: January 2026
--- Total Tables: 33
+-- Version: 5.5 (Onboarding Tracking)
+-- Last Updated: February 6, 2026
+-- Total Tables: 34
 -- 
 -- Core Tables:
---   1. users - User accounts
+--   1. users - User accounts (with onboarding tracking fields)
 --   2. user_profiles - Extended user info (handicap, social_rate, preferences)
 --   3. devices - User devices for push notifications
 --   4. sessions - Active login sessions
---   4b. auth_providers - OAuth provider links (Google, Apple, etc.) [NEW]
+--   4b. auth_providers - OAuth provider links (Google, Apple, etc.)
 --   5. otp_requests - OTP verification codes
 --   6. magic_links - Passwordless login links
 --
@@ -1188,11 +1372,15 @@ ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 --   30. user_club_memberships - User club memberships
 --   31. draft_qr_codes - QR codes for "Get Drafted" feature
 --   32. game_scores - Past game scores linked to tee times
+--   33. user_availability - Weekly availability preferences
+--   34. onboarding_steps - Granular onboarding step tracking
 --
 -- Migrations Included:
 --   - blocked_users table (user blocking)
 --   - cancellation_confirmed reason in social_rate_logs
 --   - check_in_reminder_sent column in tee_times
 --   - deadline_notification_sent column in invites
+--   - user_availability table (weekly scheduling preferences)
+--   - onboarding tracking (backend state management)
 --
 -- ============================================================================

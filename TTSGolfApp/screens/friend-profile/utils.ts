@@ -18,6 +18,7 @@ export const getWalkOrRideDisplay = (pref?: string): string => {
     const map: Record<string, string> = {
         walk: "Walk",
         ride: "Ride",
+        cart: "Cart",
         either: "Either",
     };
     return map[pref] || pref;

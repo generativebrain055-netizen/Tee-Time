@@ -1,22 +1,33 @@
-import React, { useState, useCallback, memo } from "react";
+import React, { useState, useCallback, memo, useEffect } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Alert,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
+    Alert,
+    Modal,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ChevronDown } from "lucide-react-native";
-import { COLORS } from "../../constants/colors";
-import { Avatar, Header } from "../../components/common";
+import { ChevronDown, Trash2, Camera, X, MapPin } from "lucide-react-native";
+import { Avatar } from "../../components/common";
+import { ScreenShell, AppHeader } from "../../ui";
+import { useColors } from "../../ui/theme/ThemeContext";
+import { ConfirmModal } from "../../ui/feedback";
 import { profileApi } from "../../services/api";
+import { useUser } from "../../contexts";
+
+const COLORS = {
+    primary: "#5EBC68",
+    placeholder: "#9CA3AF",
+    textSub: "#6B7280",
+    border: "#E5E7EB",
+    gray50: "#F9FAFB",
+    lightGray: "#EEEEEE",
+    gray900: "#111827",
+};
 
 interface Props {
     navigation: any;
@@ -24,10 +35,9 @@ interface Props {
 }
 
 const TEE_TIME_OPTIONS = [
-    { label: "Morning (6-9 AM)", value: "morning" },
-    { label: "Midday (9 AM-12 PM)", value: "midday" },
-    { label: "Afternoon (12-4 PM)", value: "afternoon" },
-    { label: "Evening (4-7 PM)", value: "evening" },
+    { label: "Morning", value: "morning" },
+    { label: "Afternoon", value: "afternoon" },
+    { label: "Evening", value: "evening" },
     { label: "Any time", value: "any" },
 ];
 
@@ -37,47 +47,15 @@ const WALK_RIDE_OPTIONS = [
     { label: "Either", value: "either" },
 ];
 
-const GROUP_SIZE_OPTIONS = [
-    { label: "Solo (1 player)", value: "solo" },
-    { label: "Twosome (2 players)", value: "twosome" },
-    { label: "Threesome (3 players)", value: "threesome" },
-    { label: "Foursome (4 players)", value: "foursome" },
-    { label: "Any group size", value: "any" },
+const GOLF_VIBE_OPTIONS = [
+    { label: "Weekend warrior", value: "weekend_warrior" },
+    { label: "Competitive player", value: "competitive" },
+    { label: "Casual golfer", value: "casual" },
+    { label: "Scratch golfer", value: "scratch" },
 ];
 
-// Memoized input field
-const InputField = memo(({
-    label,
-    value,
-    onChangeText,
-    placeholder,
-    keyboardType = "default",
-    multiline = false,
-}: {
-    label: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    placeholder?: string;
-    keyboardType?: "default" | "email-address" | "phone-pad" | "numeric";
-    multiline?: boolean;
-}) => (
-    <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <TextInput
-            style={[styles.input, multiline && styles.inputMultiline]}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.placeholder}
-            keyboardType={keyboardType}
-            multiline={multiline}
-            numberOfLines={multiline ? 3 : 1}
-        />
-    </View>
-));
-
-// Memoized dropdown field
-const DropdownField = memo(({
+// Dropdown Select Component
+const DropdownSelect = memo(({
     label,
     value,
     options,
@@ -92,352 +70,727 @@ const DropdownField = memo(({
     const selectedOption = options.find(o => o.value === value);
 
     return (
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>{label}</Text>
-            <TouchableOpacity
-                style={styles.dropdown}
-                onPress={() => setShowOptions(!showOptions)}
-            >
-                <Text style={styles.dropdownText}>
-                    {selectedOption?.label || "Select..."}
-                </Text>
-                <ChevronDown size={20} color={COLORS.textSub} />
-            </TouchableOpacity>
-            {showOptions && (
-                <View style={styles.optionsList}>
-                    {options.map((option) => (
-                        <TouchableOpacity
-                            key={option.value}
-                            style={[
-                                styles.optionItem,
-                                value === option.value && styles.optionItemSelected,
-                            ]}
-                            onPress={() => {
-                                onSelect(option.value);
-                                setShowOptions(false);
-                            }}
-                        >
-                            <Text
-                                style={[
-                                    styles.optionText,
-                                    value === option.value && styles.optionTextSelected,
-                                ]}
+        <View style={{ marginBottom: 16, zIndex: showOptions ? 1000 : 1 }}>
+            <Text style={{
+                fontFamily: 'Inter_400Regular',
+                fontSize: 14,
+                color: COLORS.gray900,
+                marginBottom: 8,
+            }}>
+                {label}
+            </Text>
+            <View style={{ position: 'relative' }}>
+                <TouchableOpacity
+                    style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: COLORS.gray50,
+                        borderRadius: 10,
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                        borderWidth: 1,
+                        borderColor: COLORS.border,
+                    }}
+                    onPress={() => setShowOptions(!showOptions)}
+                    activeOpacity={0.7}
+                >
+                    <Text style={{
+                        fontFamily: 'Inter_400Regular',
+                        fontSize: 15,
+                        color: COLORS.gray900,
+                    }}>
+                        {selectedOption?.label || "Select..."}
+                    </Text>
+                    <ChevronDown 
+                        size={20} 
+                        color={COLORS.textSub}
+                        style={{ 
+                            transform: [{ rotate: showOptions ? '180deg' : '0deg' }] 
+                        }}
+                    />
+                </TouchableOpacity>
+                {showOptions && (
+                    <View style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: 4,
+                        backgroundColor: '#EEEEEE',
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: COLORS.border,
+                        overflow: 'hidden',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 8,
+                        elevation: 5,
+                        zIndex: 2000,
+                    }}>
+                        {options.map((option, index) => (
+                            <TouchableOpacity
+                                key={option.value}
+                                style={{
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 14,
+                                    borderBottomWidth: index < options.length - 1 ? 1 : 0,
+                                    borderBottomColor: COLORS.border,
+                                }}
+                                onPress={() => {
+                                    onSelect(option.value);
+                                    setShowOptions(false);
+                                }}
+                                activeOpacity={0.7}
                             >
-                                {option.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 15,
+                                    color: COLORS.gray900,
+                                }}>
+                                    {option.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+            </View>
         </View>
     );
 });
 
+// Text Input Component
+const FormInput = memo(({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    keyboardType = "default",
+}: {
+    label: string;
+    value: string;
+    onChangeText: (text: string) => void;
+    placeholder?: string;
+    keyboardType?: "default" | "email-address" | "phone-pad" | "numeric";
+}) => (
+    <View style={{ marginBottom: 16 }}>
+        <Text style={{
+            fontFamily: 'Inter_400Regular',
+            fontSize: 14,
+            color: COLORS.gray900,
+            marginBottom: 8,
+        }}>
+            {label}
+        </Text>
+        <TextInput
+            style={{
+                backgroundColor: COLORS.gray50,
+                borderRadius: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                fontFamily: 'Inter_400Regular',
+                fontSize: 15,
+                color: COLORS.gray900,
+            }}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor={COLORS.placeholder}
+            keyboardType={keyboardType}
+        />
+    </View>
+));
+
 export default function EditProfileScreen({ navigation, route }: Props) {
-    const initialProfile = route.params?.profile || {};
+    const { profile: contextProfile, updateProfile: updateContextProfile } = useUser();
+    const initialProfile = route.params?.profile || contextProfile || {};
 
     const [saving, setSaving] = useState(false);
-    const [firstName, setFirstName] = useState(initialProfile.firstName || "");
-    const [lastName, setLastName] = useState(initialProfile.lastName || "");
-    const [email, setEmail] = useState(initialProfile.email || "");
-    const [location, setLocation] = useState(initialProfile.location || "");
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
+    const [showPhotoModal, setShowPhotoModal] = useState(false);
+    const [showAddClubModal, setShowAddClubModal] = useState(false);
+    const [clubSearch, setClubSearch] = useState("");
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [selectedClub, setSelectedClub] = useState<any>(null);
     const [handicap, setHandicap] = useState(initialProfile.handicap?.toString() || "");
-    const [homeCourse, setHomeCourse] = useState(initialProfile.homeCourse || "");
-    const [bio, setBio] = useState(initialProfile.bio || "");
     const [preferredTeeTime, setPreferredTeeTime] = useState(
-        initialProfile.preferences?.preferredTeeTime || "any"
+        initialProfile.preferences?.preferredTeeTime || "afternoon"
     );
     const [walkOrRide, setWalkOrRide] = useState(
-        initialProfile.preferences?.walkOrRide || "either"
+        initialProfile.preferences?.walkOrRide || "ride"
     );
-    const [groupSize, setGroupSize] = useState(
-        initialProfile.preferences?.playingPartnerPreference || "any"
+    const [golfVibe, setGolfVibe] = useState(
+        initialProfile.preferences?.playingPartnerPreference || "weekend_warrior"
+    );
+    const [drinkOfChoice, setDrinkOfChoice] = useState(
+        initialProfile.preferences?.drinkOfChoice || ""
+    );
+    const [clubs, setClubs] = useState<{ id: string; name: string; location?: string }[]>(
+        Array.isArray(initialProfile.clubs) 
+            ? initialProfile.clubs.filter((club: any) => club && club.id && club.name)
+            : []
     );
 
-    // Debug log initial values
-    console.log("[EDIT_PROFILE] Initial profile:", JSON.stringify(initialProfile, null, 2));
-    console.log("[EDIT_PROFILE] Initial preferences:", initialProfile.preferences);
+    // Sync clubs with context profile when it updates
+    useEffect(() => {
+        if (contextProfile?.clubs && Array.isArray(contextProfile.clubs)) {
+            // Filter out any invalid club entries
+            const validClubs = contextProfile.clubs.filter(club => club && club.id && club.name);
+            setClubs(validClubs);
+        }
+    }, [contextProfile?.clubs]);
 
     const handleSave = useCallback(async () => {
-        if (!firstName.trim()) {
-            Alert.alert("Error", "First name is required");
-            return;
-        }
-
         setSaving(true);
         try {
             const updateData = {
-                firstName: firstName.trim(),
-                lastName: lastName.trim(),
-                email: email.trim(),
-                location: location.trim(),
                 handicap: handicap ? parseInt(handicap) : undefined,
-                homeCourse: homeCourse.trim(),
-                bio: bio.trim(),
                 preferences: {
                     preferredTeeTime,
-                    walkOrRide: walkOrRide as "walk" | "ride" | "either",
-                    playingPartnerPreference: groupSize,
+                    walkOrRide,
+                    playingPartnerPreference: golfVibe,
+                    drinkOfChoice,
                 },
+                clubs: Array.isArray(clubs) ? clubs.map(c => ({ id: c.id, name: c.name, location: c.location || '' })) : [],
             };
 
-            console.log("[EDIT_PROFILE] Sending update data:", JSON.stringify(updateData, null, 2));
+            console.log('[EDIT_PROFILE] Saving profile with data:', JSON.stringify(updateData, null, 2));
+            console.log('[EDIT_PROFILE] Clubs being saved:', JSON.stringify(clubs, null, 2));
 
             const response = await profileApi.updateProfile(updateData);
 
-            console.log("[EDIT_PROFILE] Response:", JSON.stringify(response, null, 2));
+            console.log('[EDIT_PROFILE] Update response:', JSON.stringify(response, null, 2));
 
             if (response.success) {
-                // Update stored user
-                const storedUser = await AsyncStorage.getItem("user");
-                if (storedUser) {
-                    const user = JSON.parse(storedUser);
-                    await AsyncStorage.setItem("user", JSON.stringify({
-                        ...user,
-                        firstName: firstName.trim(),
-                        lastName: lastName.trim(),
-                    }));
-                }
-                Alert.alert("Success", "Profile updated successfully!", [
-                    { text: "OK", onPress: () => navigation.goBack() }
-                ]);
+                console.log('[EDIT_PROFILE] Update successful, updating context');
+                updateContextProfile({
+                    handicap: handicap ? parseInt(handicap) : undefined,
+                    preferences: {
+                        preferredTeeTime,
+                        walkOrRide,
+                        playingPartnerPreference: golfVibe,
+                        drinkOfChoice,
+                    },
+                    clubs: Array.isArray(clubs) ? clubs.map(c => ({ id: c.id, name: c.name, location: c.location || '' })) : [],
+                });
+
+                setShowSuccessModal(true);
             }
         } catch (error: any) {
             console.error("[EDIT_PROFILE] Error:", error);
-            Alert.alert("Error", error.message || "Failed to save profile");
+            setErrorMessage(error.message || "Failed to save profile");
+            setShowErrorModal(true);
         } finally {
             setSaving(false);
         }
-    }, [firstName, lastName, email, location, handicap, homeCourse, bio, preferredTeeTime, walkOrRide, groupSize, navigation]);
+    }, [handicap, preferredTeeTime, walkOrRide, golfVibe, drinkOfChoice, clubs, navigation, updateContextProfile]);
 
     const handleChangePhoto = useCallback(() => {
-        Alert.alert("Change Photo", "Choose an option", [
-            { text: "Take Photo", onPress: () => console.log("Camera") },
-            { text: "Choose from Library", onPress: () => console.log("Library") },
-            { text: "Cancel", style: "cancel" },
-        ]);
+        setShowPhotoModal(true);
     }, []);
 
-    const initials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "U";
+    const handleRemoveClub = useCallback((index: number) => {
+        setClubs(prev => prev.filter((_, i) => i !== index));
+    }, []);
+
+    const handleAddClub = useCallback(() => {
+        setShowAddClubModal(true);
+        setClubSearch("");
+        setSearchResults([]);
+        setSelectedClub(null);
+    }, []);
+
+    const handleSearchClubs = useCallback(async (query: string) => {
+        setClubSearch(query);
+        if (query.length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        setSearching(true);
+        try {
+            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+            const response = await fetch(`${API_URL}/api/courses/clubs/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                setSearchResults(data.clubs || []);
+            }
+        } catch (error) {
+            console.error("Error searching clubs:", error);
+            setSearchResults([]);
+        } finally {
+            setSearching(false);
+        }
+    }, []);
+
+    const handleSelectClub = useCallback((club: any) => {
+        setSelectedClub(club);
+        setClubSearch(club.name);
+        setSearchResults([]);
+    }, []);
+
+    const handleConfirmAddClub = useCallback(() => {
+        if (selectedClub) {
+            const newClub = {
+                id: selectedClub.id,
+                name: selectedClub.name,
+                location: `${selectedClub.city}, ${selectedClub.state}`,
+            };
+            setClubs(prev => [...prev, newClub]);
+            setShowAddClubModal(false);
+            setSelectedClub(null);
+            setClubSearch("");
+        }
+    }, [selectedClub]);
+
+    const initials = `${initialProfile.firstName?.[0] || ""}${initialProfile.lastName?.[0] || ""}`.toUpperCase() || "JS";
+    const colors = useColors();
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-
-            {/* Header */}
-            <Header
+        <ScreenShell>
+            <AppHeader
                 title="Edit Profile"
                 onBack={() => navigation.goBack()}
-                rightComponent={
-                    <TouchableOpacity onPress={handleSave} disabled={saving}>
-                        {saving ? (
-                            <ActivityIndicator size="small" color={COLORS.primary} />
-                        ) : (
-                            <Text style={styles.saveText}>Save</Text>
-                        )}
-                    </TouchableOpacity>
-                }
             />
-
             <KeyboardAvoidingView
-                style={styles.content}
+                style={{ flex: 1 }}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
                 <ScrollView
+                    style={{ backgroundColor: '#F3F4F6' }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingBottom: 100 }}
                 >
-                    {/* Avatar Section */}
-                    <View style={styles.avatarSection}>
-                        <Avatar
-                            uri={initialProfile.avatar}
-                            size={100}
-                            showCameraButton
-                            onCameraPress={handleChangePhoto}
-                        />
-                        <TouchableOpacity onPress={handleChangePhoto}>
-                            <Text style={styles.changePhotoText}>Change Photo</Text>
+                    {/* Profile Photo Section */}
+                    <View style={{
+                        backgroundColor: '#F3F4F6',
+                        paddingHorizontal: 16,
+                        paddingTop: 24,
+                    }}>
+                        <View style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 16,
+                            padding: 20,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: COLORS.gray900,
+                                marginBottom: 16,
+                            }}>
+                                Profile Photo
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Avatar
+                                    uri={initialProfile.avatarUrl}
+                                    size={64}
+                                    showCameraButton={false}
+                                />
+                                <TouchableOpacity onPress={handleChangePhoto} style={{ marginLeft: 16 }}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 15,
+                                        color: '#3B82F6',
+                                    }}>
+                                        Change Photo
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Playing Preferences Section */}
+                    <View style={{
+                        backgroundColor: '#F3F4F6',
+                        paddingHorizontal: 16,
+                        paddingTop: 16,
+                    }}>
+                        <View style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 16,
+                            padding: 20,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: COLORS.gray900,
+                                marginBottom: 16,
+                            }}>
+                                Playing Preferences
+                            </Text>
+                            <FormInput
+                                label="Handicap"
+                                value={handicap}
+                                onChangeText={setHandicap}
+                                placeholder="24"
+                                keyboardType="numeric"
+                            />
+                            <DropdownSelect
+                                label="Tee time preference"
+                                value={preferredTeeTime}
+                                options={TEE_TIME_OPTIONS}
+                                onSelect={setPreferredTeeTime}
+                            />
+                            <DropdownSelect
+                                label="Ride or walk"
+                                value={walkOrRide}
+                                options={WALK_RIDE_OPTIONS}
+                                onSelect={setWalkOrRide}
+                            />
+                            <DropdownSelect
+                                label="Golf vibe"
+                                value={golfVibe}
+                                options={GOLF_VIBE_OPTIONS}
+                                onSelect={setGolfVibe}
+                            />
+                            <FormInput
+                                label="Drink of choice"
+                                value={drinkOfChoice}
+                                onChangeText={setDrinkOfChoice}
+                                placeholder="Transfusion"
+                            />
+                        </View>
+                    </View>
+
+                    {/* Active Memberships Section */}
+                    <View style={{
+                        backgroundColor: '#F3F4F6',
+                        paddingHorizontal: 16,
+                        paddingTop: 16,
+                    }}>
+                        <View style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 16,
+                            padding: 20,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}>
+                            <View style={{
+                                flexDirection: 'row',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: 16,
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_700Bold',
+                                    fontSize: 18,
+                                    color: COLORS.gray900,
+                                }}>
+                                    Active memberships
+                                </Text>
+                                <TouchableOpacity onPress={handleAddClub}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 15,
+                                        color: '#3B82F6',
+                                    }}>
+                                        + Add
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {Array.isArray(clubs) && clubs.length > 0 ? (
+                                clubs.map((club, index) => (
+                                    <View
+                                        key={club.id || index}
+                                        style={{
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: 16,
+                                            backgroundColor: COLORS.gray50,
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: COLORS.border,
+                                            marginBottom: 12,
+                                        }}
+                                    >
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{
+                                                fontFamily: 'Inter_600SemiBold',
+                                                fontSize: 15,
+                                                color: COLORS.gray900,
+                                            }}>
+                                                {club.name}
+                                            </Text>
+                                            {club.location && (
+                                                <Text style={{
+                                                    fontFamily: 'Inter_400Regular',
+                                                    fontSize: 13,
+                                                    color: COLORS.textSub,
+                                                    marginTop: 4,
+                                                }}>
+                                                    {club.location}
+                                                </Text>
+                                            )}
+                                        </View>
+                                        <TouchableOpacity onPress={() => handleRemoveClub(index)}>
+                                            <Trash2 size={20} color="#EF4444" strokeWidth={2} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))
+                            ) : (
+                                <View style={{
+                                    padding: 32,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}>
+                                    <Text style={{
+                                        fontFamily: 'Inter_400Regular',
+                                        fontSize: 14,
+                                        color: COLORS.textSub,
+                                        textAlign: 'center',
+                                    }}>
+                                        No memberships added yet
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+
+                    {/* Action Buttons */}
+                    <View style={{
+                        flexDirection: 'row',
+                        gap: 12,
+                        paddingHorizontal: 16,
+                        paddingTop: 24,
+                        backgroundColor: '#F3F4F6',
+                    }}>
+                        <TouchableOpacity
+                            style={{
+                                flex: 1,
+                                paddingVertical: 14,
+                                borderRadius: 12,
+                                backgroundColor: '#FFFFFF',
+                                borderWidth: 1,
+                                borderColor: '#D1D5DB',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                            onPress={() => navigation.goBack()}
+                        >
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 15,
+                                color: '#6B7280',
+                            }}>
+                                Cancel
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={{
+                                flex: 1,
+                                paddingVertical: 14,
+                                borderRadius: 12,
+                                backgroundColor: COLORS.primary,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                            onPress={handleSave}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <ActivityIndicator size="small" color="white" />
+                            ) : (
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 15,
+                                    color: 'white',
+                                }}>
+                                    Save changes
+                                </Text>
+                            )}
                         </TouchableOpacity>
                     </View>
-
-                    {/* Basic Info */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Basic Information</Text>
-                        <InputField
-                            label="First Name"
-                            value={firstName}
-                            onChangeText={setFirstName}
-                            placeholder="Enter first name"
-                        />
-                        <InputField
-                            label="Last Name"
-                            value={lastName}
-                            onChangeText={setLastName}
-                            placeholder="Enter last name"
-                        />
-                        <InputField
-                            label="Email"
-                            value={email}
-                            onChangeText={setEmail}
-                            placeholder="Enter email"
-                            keyboardType="email-address"
-                        />
-                        <InputField
-                            label="Location"
-                            value={location}
-                            onChangeText={setLocation}
-                            placeholder="City, State"
-                        />
-                        <InputField
-                            label="Handicap"
-                            value={handicap}
-                            onChangeText={setHandicap}
-                            placeholder="Enter handicap"
-                            keyboardType="numeric"
-                        />
-                    </View>
-
-                    {/* Golf Info */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Golf Information</Text>
-                        <InputField
-                            label="Home Course"
-                            value={homeCourse}
-                            onChangeText={setHomeCourse}
-                            placeholder="Enter home course"
-                        />
-                        <InputField
-                            label="Bio"
-                            value={bio}
-                            onChangeText={setBio}
-                            placeholder="Tell us about yourself..."
-                            multiline
-                        />
-                    </View>
-
-                    {/* Preferences */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Playing Preferences</Text>
-                        <DropdownField
-                            label="Preferred Tee Time"
-                            value={preferredTeeTime}
-                            options={TEE_TIME_OPTIONS}
-                            onSelect={setPreferredTeeTime}
-                        />
-                        <DropdownField
-                            label="Walk or Ride"
-                            value={walkOrRide}
-                            options={WALK_RIDE_OPTIONS}
-                            onSelect={setWalkOrRide}
-                        />
-                        <DropdownField
-                            label="Preferred Group Size"
-                            value={groupSize}
-                            options={GROUP_SIZE_OPTIONS}
-                            onSelect={setGroupSize}
-                        />
-                    </View>
-
-                    <View style={{ height: 40 }} />
                 </ScrollView>
             </KeyboardAvoidingView>
-        </View>
+
+            <ConfirmModal
+                visible={showSuccessModal}
+                title="Success"
+                message="Profile updated successfully!"
+                onConfirm={() => {
+                    setShowSuccessModal(false);
+                    navigation.goBack();
+                }}
+                onCancel={() => {
+                    setShowSuccessModal(false);
+                    navigation.goBack();
+                }}
+                confirmText="OK"
+            />
+
+            <ConfirmModal
+                visible={showErrorModal}
+                title="Error"
+                message={errorMessage}
+                onConfirm={() => setShowErrorModal(false)}
+                onCancel={() => setShowErrorModal(false)}
+                confirmText="OK"
+            />
+
+            <ConfirmModal
+                visible={showPhotoModal}
+                title="Change Photo"
+                message="Choose an option"
+                onConfirm={() => {
+                    setShowPhotoModal(false);
+                    console.log("Camera");
+                }}
+                onCancel={() => {
+                    setShowPhotoModal(false);
+                    console.log("Library");
+                }}
+                confirmText="Take Photo"
+                cancelText="Choose from Library"
+            />
+
+            {/* Add Club Modal */}
+            <Modal
+                visible={showAddClubModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowAddClubModal(false)}
+            >
+                <View style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    justifyContent: 'flex-end',
+                }}>
+                    <View style={{
+                        backgroundColor: '#FFFFFF',
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
+                        padding: 24,
+                        maxHeight: '80%',
+                    }}>
+                        <View style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 20,
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 20,
+                                color: '#111827',
+                            }}>
+                                Add club membership
+                            </Text>
+                            <TouchableOpacity onPress={() => setShowAddClubModal(false)}>
+                                <X size={24} color="#6B7280" strokeWidth={2} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{
+                            backgroundColor: '#F9FAFB',
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            marginBottom: 16,
+                        }}>
+                            <TextInput
+                                style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 15,
+                                    color: '#111827',
+                                }}
+                                placeholder="Club search"
+                                placeholderTextColor="#9CA3AF"
+                                value={clubSearch}
+                                onChangeText={handleSearchClubs}
+                            />
+                        </View>
+
+                        <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
+                            {searching ? (
+                                <ActivityIndicator size="small" color="#5EBC68" />
+                            ) : Array.isArray(searchResults) && searchResults.length > 0 ? (
+                                searchResults.map((club, index) => (
+                                    <TouchableOpacity
+                                        key={club.id || index}
+                                        onPress={() => handleSelectClub(club)}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            padding: 16,
+                                            backgroundColor: selectedClub?.id === club.id ? '#F0FDF4' : '#FFFFFF',
+                                            borderRadius: 12,
+                                            marginBottom: 8,
+                                            borderWidth: 1,
+                                            borderColor: selectedClub?.id === club.id ? '#5EBC68' : '#E5E7EB',
+                                        }}
+                                    >
+                                        <MapPin size={20} color="#6B7280" strokeWidth={2} style={{ marginRight: 12 }} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{
+                                                fontFamily: 'Inter_600SemiBold',
+                                                fontSize: 15,
+                                                color: '#111827',
+                                                marginBottom: 2,
+                                            }}>
+                                                {club.name}
+                                            </Text>
+                                            {club.city && club.state && (
+                                                <Text style={{
+                                                    fontFamily: 'Inter_400Regular',
+                                                    fontSize: 13,
+                                                    color: '#6B7280',
+                                                }}>
+                                                    {club.city}, {club.state}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                ))
+                            ) : clubSearch.length >= 2 ? (
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 14,
+                                    color: '#6B7280',
+                                    textAlign: 'center',
+                                    paddingVertical: 20,
+                                }}>
+                                    No clubs found
+                                </Text>
+                            ) : null}
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            onPress={handleConfirmAddClub}
+                            disabled={!selectedClub}
+                            style={{
+                                backgroundColor: selectedClub ? '#5EBC68' : '#E5E7EB',
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                alignItems: 'center',
+                            }}
+                        >
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 16,
+                                color: selectedClub ? '#FFFFFF' : '#9CA3AF',
+                            }}>
+                                Add club
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </ScreenShell>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.bg,
-    },
-    saveText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    content: {
-        flex: 1,
-    },
-    avatarSection: {
-        alignItems: "center",
-        paddingVertical: 24,
-        backgroundColor: COLORS.white,
-    },
-    changePhotoText: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.primary,
-        marginTop: 12,
-    },
-    section: {
-        backgroundColor: COLORS.white,
-        marginTop: 16,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 16,
-    },
-    inputGroup: {
-        marginBottom: 16,
-    },
-    inputLabel: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: COLORS.textSub,
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: COLORS.bg,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-    inputMultiline: {
-        minHeight: 80,
-        textAlignVertical: "top",
-    },
-    dropdown: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        backgroundColor: COLORS.bg,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-    },
-    dropdownText: {
-        fontSize: 16,
-        color: COLORS.textMain,
-    },
-    optionsList: {
-        marginTop: 8,
-        backgroundColor: COLORS.white,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.divider,
-        overflow: "hidden",
-    },
-    optionItem: {
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.divider,
-    },
-    optionItemSelected: {
-        backgroundColor: COLORS.primaryLight,
-    },
-    optionText: {
-        fontSize: 15,
-        color: COLORS.textMain,
-    },
-    optionTextSelected: {
-        color: COLORS.primary,
-        fontWeight: "600",
-    },
-});

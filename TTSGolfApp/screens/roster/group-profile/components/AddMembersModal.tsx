@@ -1,5 +1,5 @@
 import React, { memo, useCallback } from "react";
-import { View, Text, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator } from "react-native";
 import { X, Check } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { Friend } from "../../../../services/api";
@@ -16,16 +16,16 @@ const FriendItem = memo(({ friend, isSelected, onToggle }: FriendItemProps) => {
     const initials = getFriendInitials(friend.firstName, friend.lastName);
 
     return (
-        <TouchableOpacity style={styles.friendItem} onPress={onToggle}>
+        <TouchableOpacity className="flex-row items-center py-3 border-b border-gray-100" onPress={onToggle}>
             {friend.avatar ? (
-                <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                <Image source={{ uri: friend.avatar }} className="w-11 h-11 rounded-full mr-3" />
             ) : (
-                <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitials}>{initials}</Text>
+                <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center mr-3">
+                    <Text className="text-sm font-semibold" style={{ color: COLORS.textSub }}>{initials}</Text>
                 </View>
             )}
-            <Text style={styles.friendName}>{name}</Text>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            <Text className="flex-1 text-[15px] font-medium" style={{ color: COLORS.textMain }}>{name}</Text>
+            <View className="w-6 h-6 rounded-full justify-center items-center border-2" style={isSelected ? { backgroundColor: COLORS.primary, borderColor: COLORS.primary } : { borderColor: '#E5E7EB' }}>
                 {isSelected && <Check size={14} color={COLORS.white} strokeWidth={3} />}
             </View>
         </TouchableOpacity>
@@ -66,28 +66,28 @@ const AddMembersModal = memo(({
 
     return (
         <Modal visible={visible} animationType="slide">
-            <View style={[styles.container, { paddingTop: topInset }]}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
+            <View className="flex-1" style={{ backgroundColor: COLORS.white, paddingTop: topInset }}>
+                <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <TouchableOpacity className="w-20 items-center" onPress={onClose}>
                         <X size={24} color={COLORS.textMain} />
                     </TouchableOpacity>
-                    <Text style={styles.title}>Add People</Text>
+                    <Text className="text-[17px] font-semibold" style={{ color: COLORS.textMain }}>Add People</Text>
                     <TouchableOpacity
+                        className="w-20 items-center"
                         onPress={onAdd}
-                        style={styles.headerBtn}
                         disabled={selectedFriends.length === 0 || loading}
                     >
                         {loading ? (
                             <ActivityIndicator size="small" color={COLORS.primary} />
                         ) : (
-                            <Text style={[styles.addText, selectedFriends.length === 0 && styles.addTextDisabled]}>
+                            <Text className="text-base font-semibold" style={{ color: selectedFriends.length === 0 ? COLORS.textSub : COLORS.primary }}>
                                 Add ({selectedFriends.length})
                             </Text>
                         )}
                     </TouchableOpacity>
                 </View>
 
-                <View style={styles.list}>
+                <View className="flex-1 px-4">
                     {friends.length > 0 ? (
                         <FlatList
                             data={friends}
@@ -95,9 +95,9 @@ const AddMembersModal = memo(({
                             keyExtractor={(item) => item.id}
                         />
                     ) : (
-                        <View style={styles.empty}>
-                            <Text style={styles.emptyText}>No friends available to add</Text>
-                            <Text style={styles.emptySubtext}>
+                        <View className="items-center py-10">
+                            <Text className="text-sm font-medium" style={{ color: COLORS.textSub }}>No friends available to add</Text>
+                            <Text className="text-[13px] mt-1" style={{ color: COLORS.textSub }}>
                                 All your friends are already in this group
                             </Text>
                         </View>
@@ -106,103 +106,6 @@ const AddMembersModal = memo(({
             </View>
         </Modal>
     );
-});
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.white,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    headerBtn: {
-        width: 80,
-        alignItems: "center",
-    },
-    title: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: COLORS.textMain,
-    },
-    addText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: COLORS.primary,
-    },
-    addTextDisabled: {
-        color: COLORS.textSub,
-    },
-    list: {
-        flex: 1,
-        paddingHorizontal: 16,
-    },
-    friendItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F3F4F6",
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        marginRight: 12,
-    },
-    avatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    avatarInitials: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: COLORS.textSub,
-    },
-    friendName: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: "500",
-        color: COLORS.textMain,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: "#E5E7EB",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxSelected: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
-    },
-    empty: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    emptyText: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: COLORS.textSub,
-    },
-    emptySubtext: {
-        fontSize: 13,
-        color: COLORS.textSub,
-        marginTop: 4,
-    },
 });
 
 export default AddMembersModal;

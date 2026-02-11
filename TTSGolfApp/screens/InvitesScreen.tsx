@@ -2,14 +2,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     RefreshControl,
     Alert,
     ActivityIndicator,
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
 import {
     Calendar,
     MapPin,
@@ -20,9 +18,28 @@ import {
     AlertTriangle,
     Timer,
 } from "lucide-react-native";
-import { Header } from "../components/common";
+import { ScreenShell, AppHeader } from "../ui";
+import { useColors } from "../ui/theme/ThemeContext";
 import { inviteApi, Invite } from "../services/api";
-import { COLORS } from "../constants/colors";
+
+const COLORS = {
+    primary: "#5EBC68",
+    white: "#FFFFFF",
+    red: "#EF4444",
+    textSub: "#6B7280",
+};
+
+// Helper for status badge colors
+const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+        case "pending": return "bg-amber-100";
+        case "accepted": return "bg-emerald-100";
+        case "declined": return "bg-red-100";
+        case "expired": return "bg-gray-100";
+        case "waitlist": return "bg-indigo-100";
+        default: return "bg-gray-100";
+    }
+};
 
 export default function InvitesScreen({ navigation }: any) {
     const [activeTab, setActiveTab] = useState<"pending" | "sent">("pending");
@@ -87,20 +104,20 @@ export default function InvitesScreen({ navigation }: any) {
     };
 
     const TabBar = () => (
-        <View style={styles.tabBar}>
+        <View className="flex-row bg-white px-4 pb-3 gap-3">
             <TouchableOpacity
-                style={[styles.tab, activeTab === "pending" && styles.tabActive]}
+                className={`flex-1 py-2.5 rounded-md items-center ${activeTab === "pending" ? "bg-green-600" : "bg-gray-100"}`}
                 onPress={() => setActiveTab("pending")}
             >
-                <Text style={[styles.tabText, activeTab === "pending" && styles.tabTextActive]}>
+                <Text className={`text-sm font-semibold ${activeTab === "pending" ? "text-white" : "text-gray-500"}`}>
                     Received ({pendingInvites.length})
                 </Text>
             </TouchableOpacity>
             <TouchableOpacity
-                style={[styles.tab, activeTab === "sent" && styles.tabActive]}
+                className={`flex-1 py-2.5 rounded-md items-center ${activeTab === "sent" ? "bg-green-600" : "bg-gray-100"}`}
                 onPress={() => setActiveTab("sent")}
             >
-                <Text style={[styles.tabText, activeTab === "sent" && styles.tabTextActive]}>
+                <Text className={`text-sm font-semibold ${activeTab === "sent" ? "text-white" : "text-gray-500"}`}>
                     Sent ({sentInvites.length})
                 </Text>
             </TouchableOpacity>
@@ -149,122 +166,151 @@ export default function InvitesScreen({ navigation }: any) {
         const padZero = (num: number) => num.toString().padStart(2, '0');
 
         return (
-            <View style={[styles.card, isUrgent && styles.cardUrgent]}>
+            <View 
+                className={`bg-white rounded-md p-4 mb-3.5 shadow-sm ${isUrgent ? "border border-red-200" : ""}`}
+                style={{ elevation: 3 }}
+            >
                 {/* Header */}
-                <View style={styles.cardHeader}>
-                    <View style={styles.inviterInfo}>
-                        <View style={[styles.inviterAvatar, isUrgent && styles.inviterAvatarUrgent]}>
+                <View className="flex-row justify-between items-center mb-3.5">
+                    <View className="flex-row items-center">
+                        <View className={`w-10 h-10 rounded-full justify-center items-center mr-3 ${isUrgent ? "bg-red-600" : "bg-green-600"}`}>
                             <Users size={18} color={COLORS.white} />
                         </View>
                         <View>
-                            <Text style={styles.inviterName}>
+                            <Text className="text-base font-semibold text-gray-900">
                                 {invite.inviter?.firstName} {invite.inviter?.lastName}
                             </Text>
-                            <Text style={styles.inviteSubtext}>invited you to play</Text>
+                            <Text className="text-[13px] text-gray-500 mt-px">invited you to play</Text>
                         </View>
                     </View>
                 </View>
 
                 {/* Details Section */}
-                <View style={styles.detailsSection}>
-                    <View style={styles.detailItem}>
-                        <View style={styles.detailIconBox}>
+                <View className="bg-gray-50 rounded-md p-3.5 mb-3.5">
+                    <View className="flex-row items-center">
+                        <View className="w-8 h-8 rounded-md bg-green-100 justify-center items-center mr-3">
                             <MapPin size={16} color={COLORS.primary} />
                         </View>
-                        <View style={styles.detailTextBox}>
-                            <Text style={styles.detailLabel}>Course</Text>
-                            <Text style={styles.detailValue}>{invite.courseName}</Text>
+                        <View className="flex-1">
+                            <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Course</Text>
+                            <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{invite.courseName}</Text>
                         </View>
                     </View>
 
-                    <View style={styles.detailsDivider} />
+                    <View className="h-px bg-gray-200 my-3" />
 
-                    <View style={styles.detailsRow}>
-                        <View style={styles.detailItemHalf}>
-                            <View style={styles.detailIconBox}>
+                    <View className="flex-row">
+                        <View className="flex-1 flex-row items-center">
+                            <View className="w-8 h-8 rounded-md bg-green-100 justify-center items-center mr-3">
                                 <Calendar size={16} color={COLORS.primary} />
                             </View>
-                            <View style={styles.detailTextBox}>
-                                <Text style={styles.detailLabel}>Date</Text>
-                                <Text style={styles.detailValue}>{formatDate(invite.teeDate)}</Text>
+                            <View className="flex-1">
+                                <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Date</Text>
+                                <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{formatDate(invite.teeDate)}</Text>
                             </View>
                         </View>
-                        <View style={styles.detailItemHalf}>
-                            <View style={styles.detailIconBox}>
+                        <View className="flex-1 flex-row items-center">
+                            <View className="w-8 h-8 rounded-md bg-green-100 justify-center items-center mr-3">
                                 <Clock size={16} color={COLORS.primary} />
                             </View>
-                            <View style={styles.detailTextBox}>
-                                <Text style={styles.detailLabel}>Time</Text>
-                                <Text style={styles.detailValue}>{invite.teeTime}</Text>
+                            <View className="flex-1">
+                                <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Time</Text>
+                                <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{invite.teeTime}</Text>
                             </View>
                         </View>
                     </View>
                 </View>
 
                 {/* Countdown Timer - Always show response window info */}
-                <View style={[styles.countdownSection, isUrgent && styles.countdownSectionUrgent, !invite.expiresAt && styles.countdownSectionNoDeadline]}>
-                    <View style={styles.countdownTitleRow}>
+                <View className={`rounded-md p-3.5 mb-3.5 border ${
+                    !invite.expiresAt 
+                        ? "bg-gray-100 border-gray-200" 
+                        : isUrgent 
+                            ? "bg-red-50 border-red-200" 
+                            : "bg-amber-50 border-amber-200"
+                }`}>
+                    <View className="flex-row items-center justify-center gap-2 mb-3">
                         <Timer size={16} color={invite.expiresAt ? (isUrgent ? "#DC2626" : "#D97706") : "#6B7280"} />
-                        <Text style={[styles.countdownTitle, isUrgent && styles.countdownTitleUrgent, !invite.expiresAt && styles.countdownTitleNoDeadline]}>
+                        <Text className={`text-[13px] font-semibold uppercase tracking-wide ${
+                            !invite.expiresAt 
+                                ? "text-gray-500" 
+                                : isUrgent 
+                                    ? "text-red-600" 
+                                    : "text-amber-600"
+                        }`}>
                             {!invite.expiresAt ? "Response Window" : isExpired ? "Invite Expired" : "Time Remaining"}
                         </Text>
                     </View>
 
                     {invite.expiresAt && !isExpired && countdown && (
-                        <View style={styles.countdownBoxes}>
+                        <View className="flex-row items-center justify-center">
                             {countdown.days > 0 && (
                                 <>
-                                    <View style={[styles.countdownBox, isUrgent && styles.countdownBoxUrgent]}>
-                                        <Text style={[styles.countdownNum, isUrgent && styles.countdownNumUrgent]}>
+                                    <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
+                                        <Text 
+                                            className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
+                                            style={{ fontVariant: ["tabular-nums"] }}
+                                        >
                                             {countdown.days}
                                         </Text>
-                                        <Text style={[styles.countdownUnit, isUrgent && styles.countdownUnitUrgent]}>
+                                        <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>
                                             DAY{countdown.days > 1 ? 'S' : ''}
                                         </Text>
                                     </View>
-                                    <Text style={[styles.countdownColon, isUrgent && styles.countdownColonUrgent]}>:</Text>
+                                    <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
                                 </>
                             )}
-                            <View style={[styles.countdownBox, isUrgent && styles.countdownBoxUrgent]}>
-                                <Text style={[styles.countdownNum, isUrgent && styles.countdownNumUrgent]}>
+                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
+                                <Text 
+                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
+                                    style={{ fontVariant: ["tabular-nums"] }}
+                                >
                                     {padZero(countdown.hours)}
                                 </Text>
-                                <Text style={[styles.countdownUnit, isUrgent && styles.countdownUnitUrgent]}>HRS</Text>
+                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>HRS</Text>
                             </View>
-                            <Text style={[styles.countdownColon, isUrgent && styles.countdownColonUrgent]}>:</Text>
-                            <View style={[styles.countdownBox, isUrgent && styles.countdownBoxUrgent]}>
-                                <Text style={[styles.countdownNum, isUrgent && styles.countdownNumUrgent]}>
+                            <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
+                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
+                                <Text 
+                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
+                                    style={{ fontVariant: ["tabular-nums"] }}
+                                >
                                     {padZero(countdown.mins)}
                                 </Text>
-                                <Text style={[styles.countdownUnit, isUrgent && styles.countdownUnitUrgent]}>MIN</Text>
+                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>MIN</Text>
                             </View>
-                            <Text style={[styles.countdownColon, isUrgent && styles.countdownColonUrgent]}>:</Text>
-                            <View style={[styles.countdownBox, isUrgent && styles.countdownBoxUrgent]}>
-                                <Text style={[styles.countdownNum, isUrgent && styles.countdownNumUrgent]}>
+                            <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
+                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
+                                <Text 
+                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
+                                    style={{ fontVariant: ["tabular-nums"] }}
+                                >
                                     {padZero(countdown.secs)}
                                 </Text>
-                                <Text style={[styles.countdownUnit, isUrgent && styles.countdownUnitUrgent]}>SEC</Text>
+                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>SEC</Text>
                             </View>
                         </View>
                     )}
 
                     {invite.expiresAt && isExpired && (
-                        <Text style={styles.expiredMessage}>
+                        <Text className="text-[13px] text-red-800 text-center leading-[18px]">
                             This invite has expired. The spot may have been offered to someone else.
                         </Text>
                     )}
 
                     {!invite.expiresAt && (
-                        <Text style={styles.noDeadlineMessage}>
+                        <Text className="text-[13px] text-gray-500 text-center leading-[18px]">
                             No deadline set — respond at your convenience
                         </Text>
                     )}
                 </View>
 
                 {/* Action Buttons */}
-                <View style={styles.cardActions}>
+                <View className="flex-row gap-3">
                     <TouchableOpacity
-                        style={[styles.actionBtn, styles.declineBtn, isExpired && styles.actionBtnDisabled]}
+                        className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
+                            isExpired ? "bg-gray-200 opacity-70" : "bg-red-100"
+                        }`}
                         onPress={() => handleRespond(invite.id, "declined")}
                         disabled={responding === invite.id || isExpired}
                     >
@@ -273,12 +319,14 @@ export default function InvitesScreen({ navigation }: any) {
                         ) : (
                             <>
                                 <X size={18} color={isExpired ? "#9CA3AF" : COLORS.red} />
-                                <Text style={[styles.declineBtnText, isExpired && styles.btnTextDisabled]}>Decline</Text>
+                                <Text className={`text-[15px] font-semibold ${isExpired ? "text-gray-400" : "text-red-500"}`}>Decline</Text>
                             </>
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.actionBtn, styles.acceptBtn, isExpired && styles.actionBtnDisabled]}
+                        className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
+                            isExpired ? "bg-gray-200 opacity-70" : "bg-green-600"
+                        }`}
                         onPress={() => handleRespond(invite.id, "accepted")}
                         disabled={responding === invite.id || isExpired}
                     >
@@ -287,7 +335,7 @@ export default function InvitesScreen({ navigation }: any) {
                         ) : (
                             <>
                                 <Check size={18} color={COLORS.white} />
-                                <Text style={styles.acceptBtnText}>Accept</Text>
+                                <Text className="text-[15px] font-semibold text-white">Accept</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -297,21 +345,21 @@ export default function InvitesScreen({ navigation }: any) {
     };
 
     const SentInviteCard = ({ invite }: { invite: Invite }) => (
-        <View style={styles.card}>
-            <View style={styles.cardHeader}>
-                <Text style={styles.courseName}>{invite.courseName}</Text>
-                <View style={[styles.statusBadge, styles[`status_${invite.status}` as keyof typeof styles]]}>
-                    <Text style={styles.statusText}>{invite.status}</Text>
+        <View className="bg-white rounded-md p-4 mb-3.5 shadow-sm" style={{ elevation: 3 }}>
+            <View className="flex-row justify-between items-center mb-3.5">
+                <Text className="text-base font-bold text-gray-900 flex-1">{invite.courseName}</Text>
+                <View className={`px-2.5 py-1 rounded-md ${getStatusBadgeClass(invite.status)}`}>
+                    <Text className="text-xs font-semibold text-gray-900 capitalize">{invite.status}</Text>
                 </View>
             </View>
-            <View style={styles.sentCardBody}>
-                <View style={styles.sentDetailRow}>
+            <View className="mt-1">
+                <View className="flex-row items-center mb-2">
                     <Calendar size={16} color={COLORS.textSub} />
-                    <Text style={styles.sentDetailText}>{formatDate(invite.teeDate)}</Text>
+                    <Text className="text-sm text-gray-900 ml-2">{formatDate(invite.teeDate)}</Text>
                 </View>
-                <View style={styles.sentDetailRow}>
+                <View className="flex-row items-center mb-2">
                     <Users size={16} color={COLORS.textSub} />
-                    <Text style={styles.sentDetailText}>
+                    <Text className="text-sm text-gray-900 ml-2">
                         To: {invite.invitee?.name || invite.invitee?.phone}
                     </Text>
                 </View>
@@ -320,13 +368,12 @@ export default function InvitesScreen({ navigation }: any) {
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
-            <Header title="Invites" onBack={() => navigation?.goBack()} />
+        <ScreenShell>
+            <AppHeader title="Invites" onBack={() => navigation?.goBack()} />
             <TabBar />
 
             <ScrollView
-                style={styles.content}
+                className="flex-1 p-4"
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
             >
@@ -338,10 +385,10 @@ export default function InvitesScreen({ navigation }: any) {
                             <PendingInviteCard key={invite.id} invite={invite} />
                         ))
                     ) : (
-                        <View style={styles.emptyState}>
+                        <View className="items-center py-16">
                             <Calendar size={48} color="#D1D5DB" />
-                            <Text style={styles.emptyTitle}>No Pending Invites</Text>
-                            <Text style={styles.emptyText}>
+                            <Text className="text-lg font-bold text-gray-900 mt-4">No Pending Invites</Text>
+                            <Text className="text-sm text-gray-500 text-center mt-2 px-8">
                                 When someone invites you to a tee time, it will appear here
                             </Text>
                         </View>
@@ -349,259 +396,16 @@ export default function InvitesScreen({ navigation }: any) {
                 ) : sentInvites.length > 0 ? (
                     sentInvites.map((invite) => <SentInviteCard key={invite.id} invite={invite} />)
                 ) : (
-                    <View style={styles.emptyState}>
+                    <View className="items-center py-16">
                         <Users size={48} color="#D1D5DB" />
-                        <Text style={styles.emptyTitle}>No Sent Invites</Text>
-                        <Text style={styles.emptyText}>
+                        <Text className="text-lg font-bold text-gray-900 mt-4">No Sent Invites</Text>
+                        <Text className="text-sm text-gray-500 text-center mt-2 px-8">
                             Create a tee time and invite your golf buddies!
                         </Text>
                     </View>
                 )}
-                <View style={{ height: 20 }} />
+                <View className="h-5" />
             </ScrollView>
-        </View>
+        </ScreenShell>
     );
 }
-
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.bg },
-    tabBar: {
-        flexDirection: "row",
-        backgroundColor: COLORS.white,
-        paddingHorizontal: 16,
-        paddingBottom: 12,
-        gap: 12,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
-        backgroundColor: "#F3F4F6",
-        alignItems: "center",
-    },
-    tabActive: { backgroundColor: COLORS.primary },
-    tabText: { fontSize: 14, fontWeight: "600", color: COLORS.textSub },
-    tabTextActive: { color: COLORS.white },
-    content: { flex: 1, padding: 16 },
-
-    // Card Styles
-    card: {
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 14,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 3,
-    },
-    cardUrgent: {
-        borderWidth: 1,
-        borderColor: "#FECACA",
-    },
-    cardHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 14,
-    },
-    inviterInfo: { flexDirection: "row", alignItems: "center" },
-    inviterAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    inviterAvatarUrgent: {
-        backgroundColor: "#DC2626",
-    },
-    inviterName: { fontSize: 16, fontWeight: "600", color: COLORS.text },
-    inviteSubtext: { fontSize: 13, color: COLORS.textSub, marginTop: 1 },
-
-    // Details Section
-    detailsSection: {
-        backgroundColor: "#F9FAFB",
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 14,
-    },
-    detailItem: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    detailIconBox: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        backgroundColor: "#E8F5E9",
-        justifyContent: "center",
-        alignItems: "center",
-        marginRight: 12,
-    },
-    detailTextBox: {
-        flex: 1,
-    },
-    detailLabel: {
-        fontSize: 11,
-        color: COLORS.textSub,
-        textTransform: "uppercase",
-        letterSpacing: 0.5,
-    },
-    detailValue: {
-        fontSize: 15,
-        fontWeight: "600",
-        color: COLORS.text,
-        marginTop: 2,
-    },
-    detailsDivider: {
-        height: 1,
-        backgroundColor: "#E5E7EB",
-        marginVertical: 12,
-    },
-    detailsRow: {
-        flexDirection: "row",
-    },
-    detailItemHalf: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-    },
-
-    // Countdown Section
-    countdownSection: {
-        backgroundColor: "#FFFBEB",
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: "#FDE68A",
-    },
-    countdownSectionUrgent: {
-        backgroundColor: "#FEF2F2",
-        borderColor: "#FECACA",
-    },
-    countdownSectionNoDeadline: {
-        backgroundColor: "#F3F4F6",
-        borderColor: "#E5E7EB",
-    },
-    countdownTitleRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        marginBottom: 12,
-    },
-    countdownTitle: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: "#D97706",
-        textTransform: "uppercase",
-        letterSpacing: 0.5,
-    },
-    countdownTitleUrgent: {
-        color: "#DC2626",
-    },
-    countdownTitleNoDeadline: {
-        color: "#6B7280",
-    },
-    countdownBoxes: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    countdownBox: {
-        backgroundColor: "#FEF3C7",
-        borderRadius: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        minWidth: 52,
-        alignItems: "center",
-    },
-    countdownBoxUrgent: {
-        backgroundColor: "#FEE2E2",
-    },
-    countdownNum: {
-        fontSize: 26,
-        fontWeight: "700",
-        color: "#92400E",
-        fontVariant: ["tabular-nums"],
-    },
-    countdownNumUrgent: {
-        color: "#DC2626",
-    },
-    countdownUnit: {
-        fontSize: 9,
-        fontWeight: "600",
-        color: "#B45309",
-        marginTop: 2,
-        letterSpacing: 0.5,
-    },
-    countdownUnitUrgent: {
-        color: "#991B1B",
-    },
-    countdownColon: {
-        fontSize: 26,
-        fontWeight: "700",
-        color: "#92400E",
-        marginHorizontal: 4,
-        marginBottom: 16,
-    },
-    countdownColonUrgent: {
-        color: "#DC2626",
-    },
-    expiredMessage: {
-        fontSize: 13,
-        color: "#991B1B",
-        textAlign: "center",
-        lineHeight: 18,
-    },
-    noDeadlineMessage: {
-        fontSize: 13,
-        color: "#6B7280",
-        textAlign: "center",
-        lineHeight: 18,
-    },
-
-    // Action Buttons
-    cardActions: { flexDirection: "row", gap: 12 },
-    actionBtn: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-    },
-    declineBtn: { backgroundColor: "#FEE2E2" },
-    acceptBtn: { backgroundColor: COLORS.primary },
-    actionBtnDisabled: { backgroundColor: "#E5E7EB", opacity: 0.7 },
-    declineBtnText: { fontSize: 15, fontWeight: "600", color: COLORS.red },
-    acceptBtnText: { fontSize: 15, fontWeight: "600", color: COLORS.white },
-    btnTextDisabled: { color: "#9CA3AF" },
-
-    // Sent Card
-    courseName: { fontSize: 16, fontWeight: "bold", color: COLORS.text, flex: 1 },
-    sentCardBody: { marginTop: 4 },
-    sentDetailRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-    sentDetailText: { fontSize: 14, color: COLORS.text, marginLeft: 8 },
-
-    // Status Badge
-    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-    status_pending: { backgroundColor: "#FEF3C7" },
-    status_accepted: { backgroundColor: "#D1FAE5" },
-    status_declined: { backgroundColor: "#FEE2E2" },
-    status_expired: { backgroundColor: "#F3F4F6" },
-    status_waitlist: { backgroundColor: "#E0E7FF" },
-    statusText: { fontSize: 12, fontWeight: "600", color: COLORS.text, textTransform: "capitalize" },
-
-    // Empty State
-    emptyState: { alignItems: "center", paddingVertical: 60 },
-    emptyTitle: { fontSize: 18, fontWeight: "bold", color: COLORS.text, marginTop: 16 },
-    emptyText: { fontSize: 14, color: COLORS.textSub, textAlign: "center", marginTop: 8, paddingHorizontal: 32 },
-});

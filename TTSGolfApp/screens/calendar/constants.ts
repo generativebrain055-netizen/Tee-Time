@@ -17,7 +17,7 @@ export const MONTHS = [
 ];
 
 export const CALENDAR_COLORS = {
-    primary: "#5DB075",
+    primary: "#5EBC68",
     bg: "#F6F6F6",
     white: "#FFFFFF",
     text: "#1C1C1E",

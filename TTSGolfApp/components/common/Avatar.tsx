@@ -1,9 +1,9 @@
 import React from "react";
-import { View, Image, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Image, TouchableOpacity } from "react-native";
 import { User, Camera } from "lucide-react-native";
 
 const COLORS = {
-    primary: "#5DB075",
+    primary: "#5EBC68",
     divider: "#E5E7EB",
     white: "#FFFFFF",
     textSub: "#6B7280",
@@ -26,31 +26,37 @@ export default function Avatar({
     const cameraSize = Math.max(32, size * 0.33);
 
     return (
-        <View style={[styles.container, { width: size, height: size }]}>
+        <View className="relative" style={{ width: size, height: size }}>
             {hasImage ? (
                 <Image
                     source={{ uri }}
-                    style={[
-                        styles.image,
-                        { width: size, height: size, borderRadius: size / 2 },
-                    ]}
+                    className="bg-gray-200"
+                    style={{
+                        width: size,
+                        height: size,
+                        borderRadius: size / 2,
+                    }}
                 />
             ) : (
                 <View
-                    style={[
-                        styles.placeholder,
-                        { width: size, height: size, borderRadius: size / 2 },
-                    ]}
+                    className="bg-gray-200 justify-center items-center"
+                    style={{
+                        width: size,
+                        height: size,
+                        borderRadius: size / 2,
+                    }}
                 >
                     <User size={size * 0.5} color={COLORS.textSub} />
                 </View>
             )}
             {showCameraButton && (
                 <TouchableOpacity
-                    style={[
-                        styles.cameraButton,
-                        { width: cameraSize, height: cameraSize, borderRadius: cameraSize / 2 },
-                    ]}
+                    className="absolute bottom-0 right-0 bg-primary justify-center items-center border-[3px] border-white"
+                    style={{
+                        width: cameraSize,
+                        height: cameraSize,
+                        borderRadius: cameraSize / 2,
+                    }}
                     onPress={onCameraPress}
                 >
                     <Camera size={cameraSize * 0.5} color={COLORS.white} />
@@ -59,27 +65,3 @@ export default function Avatar({
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        position: "relative",
-    },
-    image: {
-        backgroundColor: COLORS.divider,
-    },
-    placeholder: {
-        backgroundColor: COLORS.divider,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    cameraButton: {
-        position: "absolute",
-        bottom: 0,
-        right: 0,
-        backgroundColor: COLORS.primary,
-        justifyContent: "center",
-        alignItems: "center",
-        borderWidth: 3,
-        borderColor: COLORS.white,
-    },
-});

@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import {
     Home,
     Clock,
@@ -8,9 +8,10 @@ import {
     User,
     LucideIcon,
 } from "lucide-react-native";
+import { fontFamilies } from "../../theme/fonts";
 
 const COLORS = {
-    primary: "#5DB075",
+    primary: "#5EBC68",
     textSub: "#6B7280",
     white: "#FFFFFF",
 };
@@ -47,17 +48,19 @@ const TabItem = memo(({ tab, isActive, onPress }: TabItemProps) => {
     const handlePress = useCallback(() => onPress(tab), [tab, onPress]);
 
     return (
-        <TouchableOpacity style={styles.bottomNavItem} onPress={handlePress}>
+        <TouchableOpacity className="items-center" onPress={handlePress}>
             <IconComponent
                 size={24}
                 color={isActive ? COLORS.primary : COLORS.textSub}
                 strokeWidth={isActive ? 2.5 : 2}
             />
             <Text
-                style={[
-                    styles.bottomNavLabel,
-                    { color: isActive ? COLORS.primary : COLORS.textSub },
-                ]}
+                style={{
+                    fontFamily: isActive ? fontFamilies.semiBold : fontFamilies.medium,
+                    fontSize: 10,
+                    marginTop: 3,
+                    color: isActive ? COLORS.primary : COLORS.textSub,
+                }}
             >
                 {tab.name}
             </Text>
@@ -76,7 +79,7 @@ function BottomNav({ activeTab, navigation, onTabChange }: BottomNavProps) {
     }, [navigation, onTabChange]);
 
     return (
-        <View style={styles.bottomNav}>
+        <View className="absolute bottom-0 left-0 right-0 flex-row justify-around py-3 pb-[25px] bg-white border-t border-[#F0F0F0]" style={{ elevation: 10 }}>
             {TABS.map((tab) => (
                 <TabItem
                     key={tab.name}
@@ -90,28 +93,3 @@ function BottomNav({ activeTab, navigation, onTabChange }: BottomNavProps) {
 }
 
 export default memo(BottomNav);
-
-const styles = StyleSheet.create({
-    bottomNav: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: "row",
-        justifyContent: "space-around",
-        paddingVertical: 12,
-        paddingBottom: 25,
-        backgroundColor: COLORS.white,
-        borderTopWidth: 1,
-        borderTopColor: "#F0F0F0",
-        elevation: 10,
-    },
-    bottomNavItem: {
-        alignItems: "center",
-    },
-    bottomNavLabel: {
-        fontSize: 10,
-        marginTop: 4,
-        fontWeight: "500",
-    },
-});

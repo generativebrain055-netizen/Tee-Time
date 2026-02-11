@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { base64DecodeJSON } from "./base64";
 
 type SessionExpiredCallback = () => void;
 
@@ -42,7 +41,7 @@ class SessionManager {
       const tokenParts = token.split(".");
       if (tokenParts.length !== 3) return false;
 
-      const payload = base64DecodeJSON(tokenParts[1]);
+      const payload = JSON.parse(atob(tokenParts[1]));
       const currentTime = Math.floor(Date.now() / 1000);
 
       // Check if token is expired
@@ -69,7 +68,7 @@ class SessionManager {
       const tokenParts = token.split(".");
       if (tokenParts.length !== 3) return false;
 
-      const payload = base64DecodeJSON(tokenParts[1]);
+      const payload = JSON.parse(atob(tokenParts[1]));
       const currentTime = Math.floor(Date.now() / 1000);
 
       return !payload.exp || payload.exp >= currentTime;
@@ -101,11 +100,29 @@ class SessionManager {
         throw new Error("user data is required to save session");
       }
 
+      console.log("[SessionManager] Saving session:", {
+        hasAccessToken: !!data.accessToken,
+        hasRefreshToken: !!data.refreshToken,
+        user: {
+          id: data.user.id,
+          firstName: data.user.firstName,
+          lastName: data.user.lastName,
+          email: data.user.email,
+          phoneNumber: data.user.phoneNumber,
+        },
+      });
+
       await AsyncStorage.setItem("accessToken", data.accessToken);
       await AsyncStorage.setItem("refreshToken", data.refreshToken);
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+      // Verify the save worked
+      const savedUser = await AsyncStorage.getItem("user");
+      console.log("[SessionManager] Session saved, verification:", {
+        savedUserStr: savedUser ? savedUser.substring(0, 100) + "..." : null,
+      });
     } catch (error) {
-      console.error("Error saving session:", error);
+      console.error("[SessionManager] Error saving session:", error);
       throw error;
     }
   }

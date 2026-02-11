@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import { COLORS } from "../../../constants/colors";
 
 interface StatBoxProps {
@@ -9,9 +9,9 @@ interface StatBoxProps {
 }
 
 export const StatBox = memo(({ value, label, color }: StatBoxProps) => (
-    <View style={[styles.statBox, { backgroundColor: color }]}>
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
+    <View className="flex-1 rounded-md p-4 items-center" style={{ backgroundColor: color }}>
+        <Text className="text-2xl font-bold text-gray-900 mb-1">{value}</Text>
+        <Text className="text-xs text-gray-500 font-medium">{label}</Text>
     </View>
 ));
 
@@ -22,37 +22,11 @@ interface ProfileStatsProps {
 }
 
 const ProfileStats = memo(({ roundsPlayed, coursesPlayed, socialScore }: ProfileStatsProps) => (
-    <View style={styles.statsRow}>
+    <View className="flex-row px-5 gap-3 mb-6">
         <StatBox value={roundsPlayed} label="Rounds" color="#E3F2FD" />
         <StatBox value={coursesPlayed} label="Courses" color="#E8F5E9" />
         <StatBox value={socialScore} label="Social Score" color="#F3E5F5" />
     </View>
 ));
-
-const styles = StyleSheet.create({
-    statsRow: {
-        flexDirection: "row",
-        paddingHorizontal: 20,
-        gap: 12,
-        marginBottom: 24,
-    },
-    statBox: {
-        flex: 1,
-        borderRadius: 12,
-        padding: 16,
-        alignItems: "center",
-    },
-    statValue: {
-        fontSize: 24,
-        fontWeight: "bold",
-        color: COLORS.textMain,
-        marginBottom: 4,
-    },
-    statLabel: {
-        fontSize: 12,
-        color: COLORS.textSub,
-        fontWeight: "500",
-    },
-});
 
 export default ProfileStats;

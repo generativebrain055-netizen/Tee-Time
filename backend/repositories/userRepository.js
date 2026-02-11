@@ -324,7 +324,7 @@ const toSnakeCase = (str) => {
  * @returns {Promise<Object>}
  */
 const updateProfile = async (userId, updates) => {
-  const userFields = ["first_name", "last_name", "email"];
+  const userFields = ["first_name", "last_name", "email", "phone_number"];
   const profileFields = [
     "handicap",
     "location",
@@ -333,10 +333,12 @@ const updateProfile = async (userId, updates) => {
     "preferred_tee_time",
     "walk_or_ride",
     "playing_partner_preference",
+    "drink_of_choice",
     "avatar_url",
     "zip_code",
     "timezone",
     "language",
+    "clubs",
   ];
 
   console.log("[UPDATE_PROFILE] Input updates:", updates);
@@ -373,6 +375,9 @@ const updateProfile = async (userId, updates) => {
             updates[key] !== null && updates[key] !== ""
               ? parseFloat(updates[key])
               : null;
+        } else if (snakeKey === "clubs") {
+          // Handle clubs as JSONB array
+          profileUpdates[snakeKey] = Array.isArray(updates[key]) ? updates[key] : [];
         } else {
           profileUpdates[snakeKey] = updates[key];
         }

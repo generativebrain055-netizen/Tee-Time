@@ -60,7 +60,7 @@ export default function LoginScreen({ navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ArrowLeft size={24} color={LOGIN_COLORS.backArrow} strokeWidth={2} />
+            <ArrowLeft size={24} color="#111827" strokeWidth={1.5} />
           </TouchableOpacity>
         </View>
 
@@ -112,12 +112,66 @@ export default function LoginScreen({ navigation }: Props) {
                   <View style={styles.dividerLine} />
                 </View>
                 <OAuthButtons
-                  onSuccess={() => {
-                    // Sign in with Google/Apple: always go to main screen (do not go to sign-up form)
-                    navigation.replace("Home");
+                  onSuccess={async (data) => {
+                    console.log("[LoginScreen] OAuth onSuccess received:", JSON.stringify(data, null, 2));
+                    
+                    // Check if user needs phone verification (new user)
+                    if (data.status === "pending_phone_verification" && data.needsPhoneVerification) {
+                      console.log("[LoginScreen] New user - navigating to phone entry for SMS verification");
+                      navigation.navigate("OAuthPhoneEntry", {
+                        providerData: data.providerData,
+                      });
+                      return;
+                    }
+                    
+                    // Check if user needs to complete profile (missing required fields)
+                    if (data.needsOnboarding && data.oauthData && !data.oauthData.needsPhoneVerification) {
+                      const missingFields = data.oauthData.missingFields || [];
+                      console.log("[LoginScreen] User missing fields:", missingFields);
+                      
+                      // Only show onboarding if missing critical fields (name or phone)
+                      const hasCriticalMissing = missingFields.some(field => 
+                        field === "firstName" || field === "lastName" || field === "phoneNumber"
+                      );
+                      
+                      if (hasCriticalMissing) {
+                        console.log("[LoginScreen] Missing critical fields - navigating to OAuthOnboarding");
+                        navigation.navigate("OAuthOnboarding", {
+                          oauthData: data.oauthData,
+                        });
+                        return;
+                      }
+                    }
+                    
+                    // User has all required fields - check availability
+                    if (data.user) {
+                      console.log("[LoginScreen] User has required fields, checking availability");
+                      
+                      try {
+                        const { availabilityApi } = await import("../../services/api/availabilityApi");
+                        const response = await availabilityApi.getUserAvailability();
+                        
+                        // If no availability set, show availability onboarding
+                        if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) {
+                          console.log("[LoginScreen] No availability found, navigating to AvailabilityOnboarding");
+                          navigation.replace("AvailabilityOnboarding", { user: data.user });
+                        } else {
+                          console.log("[LoginScreen] Availability exists, navigating to Home");
+                          navigation.replace("Home");
+                        }
+                      } catch (error) {
+                        console.error("[LoginScreen] Error checking availability:", error);
+                        // On error, just go to home
+                        navigation.replace("Home");
+                      }
+                    } else {
+                      // Fallback - go to home
+                      console.log("[LoginScreen] No user data, navigating to Home");
+                      navigation.replace("Home");
+                    }
                   }}
                   onError={(error) => {
-                    console.error("OAuth error:", error);
+                    console.error("[LoginScreen] OAuth error:", error);
                   }}
                 />
               </View>
@@ -127,7 +181,7 @@ export default function LoginScreen({ navigation }: Props) {
                   Tap the link in your SMS to sign in.
                 </Text>
                 {error ? (
-                  <Text style={[styles.subtitle, { color: LOGIN_COLORS.error, marginBottom: 16 }]}>
+                  <Text style={[styles.subtitle, { color: "#EF4444", marginBottom: 16 }]}>
                     {error}
                   </Text>
                 ) : null}
@@ -140,7 +194,7 @@ export default function LoginScreen({ navigation }: Props) {
                     style={[
                       styles.subtitle,
                       {
-                        color: resendTimer > 0 ? LOGIN_COLORS.textSub : LOGIN_COLORS.primary,
+                        color: resendTimer > 0 ? "#9CA3AF" : "#16A34A",
                         fontWeight: "600",
                       },
                     ]}
@@ -180,7 +234,7 @@ export default function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: LOGIN_COLORS.white,
+    backgroundColor: "#FFFFFF",
   },
   header: {
     height: 56,
@@ -209,12 +263,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: LOGIN_COLORS.textMain,
+    color: "#111827",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
-    color: LOGIN_COLORS.textSub,
+    color: "#6B7280",
     lineHeight: 22,
     marginBottom: 32,
   },
@@ -222,18 +276,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     gap: 16,
-    backgroundColor: LOGIN_COLORS.white,
+    backgroundColor: "#FFFFFF",
   },
   nextButton: {
     height: 54,
-    backgroundColor: LOGIN_COLORS.primary,
+    backgroundColor: "#16A34A",
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   nextButtonDisabled: {
-    backgroundColor: LOGIN_COLORS.primary,
-    opacity: 0.6,
+    backgroundColor: "#16A34A",
+    opacity: 0.5,
   },
   dividerWrap: {
     flexDirection: "row",
@@ -246,18 +305,18 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: LOGIN_COLORS.dividerLine,
+    backgroundColor: "#E5E7EB",
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: LOGIN_COLORS.dividerText,
+    color: "#9CA3AF",
     fontWeight: "500",
   },
   nextButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: LOGIN_COLORS.white,
+    color: "#FFFFFF",
   },
   signupContainer: {
     flexDirection: "row",
@@ -267,11 +326,11 @@ const styles = StyleSheet.create({
   },
   signupText: {
     fontSize: 14,
-    color: LOGIN_COLORS.textSub,
+    color: "#6B7280",
   },
   signupLink: {
     fontSize: 14,
     fontWeight: "600",
-    color: LOGIN_COLORS.primary,
+    color: "#16A34A",
   },
 });

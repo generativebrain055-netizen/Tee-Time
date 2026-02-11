@@ -21,7 +21,7 @@ export interface GroupsListState {
 }
 
 export const GROUP_COLORS = [
-  "#5DB075",
+  "#5EBC68",
   "#3B82F6",
   "#F59E0B",
   "#EF4444",

@@ -118,27 +118,42 @@ export function useNotificationActions({
   const handleAcceptFriend = useCallback(
     async (item: AppNotification) => {
       const requestId = item.data?.requestId;
-      if (!requestId) return;
+      if (!requestId) {
+        console.warn("[Notifications] No requestId in notification data:", item.data);
+        return;
+      }
       try {
+        console.log("[Notifications] Accepting friend request:", requestId);
         const response = await friendApi.respondToRequest(
           requestId,
           "accepted",
         );
+        console.log("[Notifications] Accept response:", JSON.stringify(response));
         if (response.success) {
           await notificationApi.markAsResponded(item.id);
-          setNotifications((prev) =>
-            prev.map((n) =>
-              n.id === item.id
-                ? { ...n, data: { ...n.data, responded: true }, isRead: true }
-                : n,
-            ),
-          );
+          
+          // Remove notification from list after accepting
+          setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+
+          // Navigate to the friend's profile after accepting
+          const senderId = item.data?.senderId;
+          if (senderId) {
+            Alert.alert(
+              "Friend Added!",
+              `You and ${item.data?.senderName || "your new friend"} are now connected.`,
+              [
+                { text: "View Profile", onPress: () => navigation?.navigate("FriendProfile", { userId: senderId }) },
+                { text: "OK", style: "cancel" },
+              ]
+            );
+          }
         }
-      } catch (error) {
-        console.error(error);
+      } catch (error: any) {
+        console.error("[Notifications] Accept friend error:", error);
+        Alert.alert("Error", error.message || "Failed to accept friend request");
       }
     },
-    [setNotifications],
+    [setNotifications, navigation],
   );
 
   /**
@@ -147,24 +162,26 @@ export function useNotificationActions({
   const handleDeclineFriend = useCallback(
     async (item: AppNotification) => {
       const requestId = item.data?.requestId;
-      if (!requestId) return;
+      if (!requestId) {
+        console.warn("[Notifications] No requestId in notification data:", item.data);
+        return;
+      }
       try {
+        console.log("[Notifications] Declining friend request:", requestId);
         const response = await friendApi.respondToRequest(
           requestId,
           "declined",
         );
+        console.log("[Notifications] Decline response:", JSON.stringify(response));
         if (response.success) {
           await notificationApi.markAsResponded(item.id);
-          setNotifications((prev) =>
-            prev.map((n) =>
-              n.id === item.id
-                ? { ...n, data: { ...n.data, responded: true }, isRead: true }
-                : n,
-            ),
-          );
+          
+          // Remove notification from list after declining
+          setNotifications((prev) => prev.filter((n) => n.id !== item.id));
         }
-      } catch (error) {
-        console.error(error);
+      } catch (error: any) {
+        console.error("[Notifications] Decline friend error:", error);
+        Alert.alert("Error", error.message || "Failed to decline friend request");
       }
     },
     [setNotifications],

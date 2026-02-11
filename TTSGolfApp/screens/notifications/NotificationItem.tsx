@@ -150,7 +150,7 @@ export const NotificationItem = memo(
 
     // Card base classes
     const cardClasses = `
-      bg-white rounded-2xl p-4 border
+      bg-white rounded-md p-4 border
       ${!item.isRead ? "border-green-200 border-[1.5px]" : "border-black/[0.03]"}
       ${Platform.OS === "ios" ? "shadow-sm" : "elevation-3"}
     `;
@@ -226,7 +226,7 @@ export const NotificationItem = memo(
             {isFriendRequestActionable && (
               <>
                 <TouchableOpacity
-                  className="flex-row items-center justify-center py-2 px-3.5 rounded-lg bg-green-600 shadow-sm"
+                  className="flex-row items-center justify-center py-2 px-3.5 rounded-md bg-green-600 shadow-sm"
                   onPress={() => onAcceptFriend(item)}
                 >
                   <UserPlus size={14} color="#FFF" />
@@ -235,7 +235,7 @@ export const NotificationItem = memo(
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="flex-row items-center justify-center py-2 px-3.5 rounded-lg bg-gray-100 border border-gray-200"
+                  className="flex-row items-center justify-center py-2 px-3.5 rounded-md bg-gray-100 border border-gray-200"
                   onPress={() => onDeclineFriend(item)}
                 >
                   <X size={14} color={COLORS.textSecondary} />
@@ -248,7 +248,7 @@ export const NotificationItem = memo(
 
             {isSpotOpenedActionable && (
               <TouchableOpacity
-                className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-lg bg-green-600 shadow-sm"
+                className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md bg-green-600 shadow-sm"
                 onPress={() => onAcceptSpot(item)}
               >
                 <Calendar size={14} color="#FFF" />
@@ -260,7 +260,7 @@ export const NotificationItem = memo(
 
             {isRosterExhaustedActionable && (
               <TouchableOpacity
-                className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-lg bg-red-500"
+                className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md bg-red-500"
                 onPress={() => onSelectOnDeck(item)}
               >
                 <Users size={14} color="#FFF" />
