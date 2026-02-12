@@ -28,6 +28,7 @@ import ReviewFCFSInviteStep from "./ReviewFCFSInviteStep";
 import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
 import logger from "../../utils/logger";
+import { useAuthStore } from "../../stores";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -37,15 +38,23 @@ interface ExtendedFriend extends Friend {
   rosterId?: string; // Original roster entry ID
 }
 
-export default function CreateTeeTimeScreen({ navigation }: any) {
-  console.log('🎯 CreateTeeTimeScreen RENDER');
-  
+// Helper function to convert time slot to time string
+const timeSlotToTime = (timeSlot: string): string => {
+  const slotMap: Record<string, string> = {
+    morning: "08:00 AM",
+    late_morning: "10:00 AM",
+    afternoon: "01:00 PM",
+    late_afternoon: "03:00 PM",
+    evening: "06:00 PM",
+  };
+  return slotMap[timeSlot] || "10:00 AM";
+};
+
+export default function CreateTeeTimeScreen({ navigation, route }: any) {
+  const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  
-  console.log('  Current step:', step);
-  console.log('  Current loading:', loading);
 
   // Form state - Step 1
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -86,6 +95,35 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
   );
   // Keep a ref for immediate access in handleCreate
   const allLoadedPlayersRef = React.useRef<ExtendedFriend[]>([]);
+
+  // Handle prefilled data from Availability screen
+  useEffect(() => {
+    const params = route?.params;
+    if (params) {
+      if (params.prefilledDate) {
+        // Handle both Date objects and date strings
+        const date = params.prefilledDate instanceof Date 
+          ? params.prefilledDate 
+          : new Date(params.prefilledDate);
+        if (!isNaN(date.getTime())) {
+          setSelectedDate(date);
+        }
+      }
+      if (params.prefilledTimeSlot) {
+        const time = timeSlotToTime(params.prefilledTimeSlot);
+        setSelectedTime(time);
+      }
+      if (params.availableFriends && Array.isArray(params.availableFriends)) {
+        // Pre-select available friends for manual invite
+        const friendIds = params.availableFriends.map((f: any) => f.id).filter(Boolean);
+        if (friendIds.length > 0) {
+          setSelectedPlayers(friendIds);
+          // Also set as FCFS selected players as fallback
+          setFcfsSelectedPlayers(friendIds);
+        }
+      }
+    }
+  }, [route?.params]);
 
   // Load data when moving to step 2
   useEffect(() => {
@@ -219,8 +257,10 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
       setSelectedGroupId(groupId);
       if (groupId) {
         loadGroupMembers(groupId);
+        // Selected players will be initialized in loadGroupMembers
       } else {
         setGroupMembers([]);
+        setFcfsSelectedPlayers([]);
       }
     },
     [loadGroupMembers]
@@ -420,9 +460,9 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
           loadedCount: currentLoadedPlayers.length,
         });
 
-        // Look in all loaded players (friends, onDeck, and group members)
+        // Look in all loaded players (friends, onDeck, and group members); preserve review order
         const invitees = selectedPlayers
-          .map((id) => {
+          .map((id, index) => {
             const player = currentLoadedPlayers.find((p) => p.id === id);
             if (!player) {
               logger.warn("Player not found in loaded players", { id });
@@ -439,7 +479,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
               );
 
             // Build invitee object - only include fields that have values
-            const invitee: { userId?: string; phone?: string; name?: string } =
+            const invitee: { userId?: string; phone?: string; name?: string; order?: number } =
               {};
 
             // If the ID is a valid UUID and it's not just a roster entry ID, use it as userId
@@ -456,6 +496,9 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
             if (name) {
               invitee.name = name;
             }
+
+            // Preserve manual invite order for backend (1-based position)
+            invitee.order = index + 1;
 
             return invitee;
           })
@@ -571,6 +614,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
 
   const getButtonText = () => {
     if (step === 3) return "Next";
+    if (step === 4 && inviteType === "roster") return "Review Invite Order";
     if (step === 4) return "Send Invites";
     return "Continue";
   };
@@ -581,8 +625,8 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
     if (step === 3) {
       if (inviteType === "roster") return orderedPlayers.length > 0;
       if (inviteType === "fcfs") {
-        if (fcfsTargetType === "roster") return friends.length > 0;
-        return selectedGroupId !== null;
+        // FCFS requires at least one selected player
+        return fcfsSelectedPlayers.length > 0;
       }
       if (inviteType === "manual") return selectedPlayers.length > 0;
     }
@@ -625,19 +669,48 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
           orderedPlayers={orderedPlayers}
           onResponseWindowChange={setResponseWindow}
           onReorderPlayers={setOrderedPlayers}
+          creatorName={user ? `${user.firstName} ${user.lastName}`.trim() : undefined}
+          creatorAvatarUrl={user?.avatar ?? user?.avatarUrl ?? undefined}
         />
       )}
 
       {step === 3 && inviteType === "fcfs" && (
         <FCFSInviteStep
-          friends={fcfsTargetType === "roster" ? friends : groupMembers}
+          friends={friends}
           groups={groups}
           targetType={fcfsTargetType}
           selectedGroupId={selectedGroupId}
-          onTargetTypeChange={setFcfsTargetType}
+          onTargetTypeChange={(type) => {
+            setFcfsTargetType(type);
+            // Reset selected players when switching target type
+            if (type === "roster") {
+              setFcfsSelectedPlayers(friends.map((f) => f.id));
+            } else {
+              setFcfsSelectedPlayers([]);
+              setSelectedGroupId(null);
+            }
+          }}
           onGroupSelect={handleGroupSelect}
           deadline={fcfsDeadline}
           onDeadlineChange={setFcfsDeadline}
+          selectedPlayers={fcfsSelectedPlayers}
+          onTogglePlayer={(id) => {
+            setFcfsSelectedPlayers((prev) =>
+              prev.includes(id)
+                ? prev.filter((p) => p !== id)
+                : [...prev, id]
+            );
+          }}
+          onSelectAllPlayers={() => {
+            const currentList = fcfsTargetType === "roster" 
+              ? friends 
+              : (selectedGroupId && groupMembers.length > 0 ? groupMembers : []);
+            setFcfsSelectedPlayers(currentList.map((p) => p.id));
+          }}
+          onDeselectAllPlayers={() => {
+            setFcfsSelectedPlayers([]);
+          }}
+          groupMembers={groupMembers}
         />
       )}
 
@@ -671,12 +744,6 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
 
       {step === 4 && inviteType === "roster" && (
         <>
-          {console.log('📍 RENDERING ReviewInviteOrderStep', {
-            orderedPlayers: orderedPlayers.length,
-            friends: friends.length,
-            step,
-            inviteType,
-          })}
           <ReviewInviteOrderStep
             friends={friends}
             orderedPlayers={orderedPlayers}
@@ -684,6 +751,7 @@ export default function CreateTeeTimeScreen({ navigation }: any) {
             teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
             teeTime={selectedTime}
             courseName={location.split(',')[0]?.trim() || ''}
+            groupSize={groupSize}
           />
         </>
       )}

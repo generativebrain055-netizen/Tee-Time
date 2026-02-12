@@ -1,3 +1,9 @@
+/**
+ * Auth routes.
+ * Phone number verification for sign-up/sign-in is performed via magic link (SMS link),
+ * not OTP/code. Use POST /auth/sms-magic-link, /auth/sms-magic-link-login, and
+ * GET /auth/verify-sms-magic-link for phone verification.
+ */
 const { Router } = require("express");
 const { body } = require("express-validator");
 // Use modular auth controllers (backward compatible)
@@ -12,7 +18,7 @@ const router = Router();
 
 /**
  * @route   POST /api/auth/request-otp
- * @desc    Request OTP for phone number
+ * @desc    Request OTP for phone number (not used for sign-up/sign-in; app uses magic link)
  * @access  Public
  */
 router.post(
@@ -33,7 +39,7 @@ router.post(
 
 /**
  * @route   POST /api/auth/verify-otp
- * @desc    Verify OTP and create session
+ * @desc    Verify OTP and create session (not used for sign-up/sign-in; app uses magic link)
  * @access  Public
  */
 router.post(

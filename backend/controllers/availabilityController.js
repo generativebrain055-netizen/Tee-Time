@@ -154,10 +154,11 @@ class AvailabilityController {
                 data: savedAvailability
             });
         } catch (error) {
-            logger.error('Error saving user availability:', error);
-            res.status(500).json({
+            logger.error('Error saving user availability:', { error: error.message, stack: error.stack });
+            const status = error.message?.includes('Invalid') ? 400 : 500;
+            res.status(status).json({
                 success: false,
-                message: 'Failed to save availability',
+                message: error.message || 'Failed to save availability',
                 error: error.message
             });
         }

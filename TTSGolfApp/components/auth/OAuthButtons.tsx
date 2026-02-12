@@ -26,6 +26,7 @@ import {
 import type {
   OAuthButtonsProps,
   OAuthSuccessData,
+  OAuthProviderData,
 } from "../../types/oauth";
 import Svg, { Path } from "react-native-svg";
 import GoogleLogo from "../GoogleLogo";
@@ -291,13 +292,15 @@ export function OAuthButtons({
       });
 
       // Handle pending verification (new users need phone verification)
-      if (data.status === "pending_verification") {
+      // Backend may return "pending_verification" or "pending_phone_verification"
+      const status = (data as { status?: string }).status;
+      if (status === "pending_verification" || status === "pending_phone_verification") {
         logger.info("[Firebase] Apple OAuth pending phone verification");
         const successData: OAuthSuccessData = {
           status: "pending_phone_verification",
           isNewUser: true,
           needsPhoneVerification: true,
-          providerData: data.providerData,
+          providerData: (data as { providerData?: OAuthProviderData }).providerData,
         };
         onSuccess(successData);
         return;

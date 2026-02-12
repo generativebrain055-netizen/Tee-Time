@@ -94,6 +94,7 @@ const login = async (req, res, next) => {
         lastName: user.last_name,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
       },
     });
   } catch (error) {

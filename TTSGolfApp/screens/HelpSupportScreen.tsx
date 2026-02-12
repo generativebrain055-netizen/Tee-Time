@@ -1,3 +1,7 @@
+/**
+ * Help & Support Screen (Figma 1269-* Support & FAQs)
+ * Provides FAQs and contact support options
+ */
 import React, { useState } from "react";
 import {
     View,
@@ -5,50 +9,71 @@ import {
     TouchableOpacity,
     ScrollView,
     Linking,
+    StyleSheet,
 } from "react-native";
-import { Mail, ChevronDown, ChevronUp } from "lucide-react-native";
-import { ScreenShell, ContentArea, AppHeader } from "../ui";
+import { Mail, ChevronDown, ChevronUp, HelpCircle } from "lucide-react-native";
+import { ScreenShell, AppHeader } from "../ui";
+import { useColors, useTheme } from "../ui/theme";
+import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 
 const FAQ_DATA = [
     {
-        question: "What is tee time social?",
-        answer: "Tee Time Social is a golf app that helps you organize tee times with friends, manage your roster, and coordinate golf outings easily."
+        question: "What is Tee Time Social?",
+        answer: "Tee Time Social is a golf app that helps you organize tee times with friends, manage your roster, and coordinate golf outings easily. Connect with fellow golfers, schedule games, and track your golfing activity all in one place."
     },
     {
         question: "Do I need to be a member of a golf club to use the app?",
-        answer: "No, you don't need to be a member of a golf club. You can use the app to organize tee times at any course."
+        answer: "No, you don't need to be a member of a golf club. You can use the app to organize tee times at any course. Whether you're playing at a public course or a private club, Tee Time Social helps you coordinate with your golfing partners."
     },
     {
         question: "How do tee time invites work?",
-        answer: "You can create a tee time and invite friends from your roster. They'll receive a notification and can accept or decline the invite."
+        answer: "You can create a tee time and invite friends from your roster. They'll receive a notification and can accept or decline the invite. Once accepted, they'll be added to the tee time and can see all the details."
     },
     {
         question: "Can I cancel a tee time I created?",
-        answer: "Yes, you can cancel a tee time you created at any time. All invited players will be notified of the cancellation."
+        answer: "Yes, you can cancel a tee time you created at any time. All invited players will be notified of the cancellation. If you're a participant in someone else's tee time, you can leave the tee time, but only the organizer can cancel it."
+    },
+    {
+        question: "What is Social Rate?",
+        answer: "Social Rate is a score that reflects your reliability as a golf partner. It increases when you show up on time and decreases when you no-show or cancel late. A higher Social Rate makes you more attractive to other players."
     },
     {
         question: "Why do some players have numbers next to their name?",
-        answer: "The numbers represent their handicap, which helps organize fair and competitive games."
+        answer: "The numbers represent their handicap, which helps organize fair and competitive games. Handicaps allow players of different skill levels to compete on equal footing."
     },
     {
         question: "What is the difference between the Roster & On-Deck?",
-        answer: "Your Roster is your main list of golf friends. On-Deck is a temporary list of players available for a specific tee time."
+        answer: "Your Roster is your main list of golf friends that you frequently play with. On-Deck is a temporary list of players available for a specific tee time. You can add players from your Roster to On-Deck when creating a tee time."
     },
     {
         question: "What is the difference between groups and tee time chats?",
-        answer: "Groups are permanent collections of players you frequently play with. Tee time chats are temporary and specific to each tee time."
+        answer: "Groups are permanent collections of players you frequently play with. You can create groups for your regular foursome or golf buddies. Tee time chats are temporary and specific to each tee time - they're created automatically when a tee time is created and include all participants."
     },
     {
         question: "How does the availability tab work?",
-        answer: "The availability tab shows when you and your friends are available to play. Update your availability weekly to help coordinate games."
+        answer: "The availability tab shows when you and your friends are available to play. Update your availability weekly to help coordinate games. This makes it easier for organizers to find players who are free at specific times."
+    },
+    {
+        question: "How do I add friends to my roster?",
+        answer: "You can add friends by searching for their username, scanning their QR code, or accepting friend requests. Once added, they'll appear in your Roster and you can easily invite them to tee times."
+    },
+    {
+        question: "What happens if I no-show to a tee time?",
+        answer: "If you no-show to a tee time, your Social Rate will be penalized (-10 points). This helps maintain accountability and ensures reliable participation. The organizer can mark you as a no-show during check-in."
+    },
+    {
+        question: "Can I change my profile information?",
+        answer: "Yes, you can update your profile information including your name, handicap, location, and preferences at any time from the Settings screen. Your profile photo can also be updated."
     },
 ];
 
 export default function HelpSupportScreen({ navigation }: any) {
+    const colors = useColors();
+    const theme = useTheme();
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
     const handleSendEmail = () => {
-        Linking.openURL("mailto:support@teetimesocial.com");
+        Linking.openURL("mailto:support@teetimesocial.com?subject=Support Request");
     };
 
     const toggleFAQ = (index: number) => {
@@ -62,79 +87,44 @@ export default function HelpSupportScreen({ navigation }: any) {
                 onBack={() => navigation?.goBack()}
             />
 
-            <ContentArea
-                style={{ backgroundColor: '#F3F4F6' }}
-                contentContainerStyle={{ padding: 16 }}
+            <ScrollView
+                style={styles.container}
+                contentContainerStyle={styles.contentContainer}
             >
+                {/* Header Section */}
+                <View style={[styles.headerSection, { backgroundColor: colors.surface }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: colors.primaryContainer }]}>
+                        <HelpCircle size={32} color={colors.primary} strokeWidth={2} />
+                    </View>
+                    <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+                        We're Here to Help
+                    </Text>
+                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+                        Find answers to common questions or contact our support team
+                    </Text>
+                </View>
+
                 {/* Contact Us Section */}
-                <View style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 16,
-                    padding: 20,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: '#E5E7EB',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.06,
-                    shadowRadius: 4,
-                    elevation: 2,
-                }}>
-                    <Text style={{
-                        fontFamily: 'Inter_700Bold',
-                        fontSize: 18,
-                        color: '#111827',
-                        marginBottom: 16,
-                    }}>
+                <View style={[styles.contactCard, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                         Contact Us
                     </Text>
 
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        backgroundColor: '#F9FAFB',
-                        borderRadius: 12,
-                        padding: 16,
-                    }}>
-                        <View style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            flex: 1,
-                        }}>
-                            <View style={{
-                                width: 48,
-                                height: 48,
-                                backgroundColor: '#D1FAE5',
-                                borderRadius: 12,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginRight: 12,
-                            }}>
-                                <Mail size={24} color="#10B981" strokeWidth={2} />
+                    <View style={[styles.contactRow, { backgroundColor: colors.surfaceSecondary }]}>
+                        <View style={styles.contactContent}>
+                            <View style={[styles.contactIcon, { backgroundColor: colors.primaryContainer }]}>
+                                <Mail size={24} color={colors.primary} strokeWidth={2} />
                             </View>
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 16,
-                                color: '#111827',
-                            }}>
+                            <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
                                 Email Support
                             </Text>
                         </View>
                         <TouchableOpacity
                             onPress={handleSendEmail}
-                            style={{
-                                backgroundColor: '#5EBC68',
-                                borderRadius: 10,
-                                paddingHorizontal: 20,
-                                paddingVertical: 10,
-                            }}
+                            style={[styles.emailButton, { backgroundColor: colors.primary }]}
+                            activeOpacity={0.8}
                         >
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 14,
-                                color: '#FFFFFF',
-                            }}>
+                            <Text style={[styles.emailButtonText, { color: colors.surface }]}>
                                 Send Email
                             </Text>
                         </TouchableOpacity>
@@ -142,24 +132,8 @@ export default function HelpSupportScreen({ navigation }: any) {
                 </View>
 
                 {/* FAQ Section */}
-                <View style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: 16,
-                    padding: 20,
-                    borderWidth: 1,
-                    borderColor: '#E5E7EB',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.06,
-                    shadowRadius: 4,
-                    elevation: 2,
-                }}>
-                    <Text style={{
-                        fontFamily: 'Inter_700Bold',
-                        fontSize: 18,
-                        color: '#111827',
-                        marginBottom: 16,
-                    }}>
+                <View style={[styles.faqCard, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                         Frequently Asked Questions
                     </Text>
 
@@ -167,43 +141,33 @@ export default function HelpSupportScreen({ navigation }: any) {
                         <View key={index}>
                             <TouchableOpacity
                                 onPress={() => toggleFAQ(index)}
-                                style={{
-                                    flexDirection: 'row',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    paddingVertical: 16,
-                                    borderBottomWidth: index < FAQ_DATA.length - 1 || expandedIndex === index ? 1 : 0,
-                                    borderBottomColor: '#F3F4F6',
-                                }}
+                                style={[
+                                    styles.faqQuestion,
+                                    (index < FAQ_DATA.length - 1 || expandedIndex === index) && { 
+                                        borderBottomColor: colors.border, 
+                                        borderBottomWidth: 1 
+                                    },
+                                ]}
+                                activeOpacity={0.7}
                             >
-                                <Text style={{
-                                    fontFamily: 'Inter_500Medium',
-                                    fontSize: 15,
-                                    color: '#111827',
-                                    flex: 1,
-                                    paddingRight: 12,
-                                }}>
+                                <Text style={[styles.faqQuestionText, { color: colors.textPrimary }]}>
                                     {faq.question}
                                 </Text>
                                 {expandedIndex === index ? (
-                                    <ChevronUp size={20} color="#6B7280" strokeWidth={2} />
+                                    <ChevronUp size={20} color={colors.textMuted} strokeWidth={2} />
                                 ) : (
-                                    <ChevronDown size={20} color="#6B7280" strokeWidth={2} />
+                                    <ChevronDown size={20} color={colors.textMuted} strokeWidth={2} />
                                 )}
                             </TouchableOpacity>
                             {expandedIndex === index && (
-                                <View style={{
-                                    paddingVertical: 12,
-                                    paddingBottom: 16,
-                                    borderBottomWidth: index < FAQ_DATA.length - 1 ? 1 : 0,
-                                    borderBottomColor: '#F3F4F6',
-                                }}>
-                                    <Text style={{
-                                        fontFamily: 'Inter_400Regular',
-                                        fontSize: 14,
-                                        color: '#6B7280',
-                                        lineHeight: 20,
-                                    }}>
+                                <View style={[
+                                    styles.faqAnswer,
+                                    index < FAQ_DATA.length - 1 && { 
+                                        borderBottomColor: colors.border, 
+                                        borderBottomWidth: 1 
+                                    },
+                                ]}>
+                                    <Text style={[styles.faqAnswerText, { color: colors.textSecondary }]}>
                                         {faq.answer}
                                     </Text>
                                 </View>
@@ -211,7 +175,111 @@ export default function HelpSupportScreen({ navigation }: any) {
                         </View>
                     ))}
                 </View>
-            </ContentArea>
+            </ScrollView>
         </ScreenShell>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#F3F4F6',
+    },
+    contentContainer: {
+        padding: spacing.lg,
+        paddingBottom: spacing['4xl'],
+    },
+    headerSection: {
+        alignItems: 'center',
+        paddingVertical: spacing['2xl'],
+        paddingHorizontal: spacing.lg,
+        borderRadius: radii.lg,
+        marginBottom: spacing.lg,
+    },
+    iconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: radii.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.md,
+    },
+    headerTitle: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize['2xl'],
+        marginBottom: spacing.xs,
+    },
+    headerSubtitle: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.base,
+        textAlign: 'center',
+    },
+    contactCard: {
+        borderRadius: radii.lg,
+        padding: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    sectionTitle: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.lg,
+        marginBottom: spacing.md,
+    },
+    contactRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: radii.md,
+        padding: spacing.md,
+    },
+    contactContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    contactIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+    },
+    contactLabel: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.base,
+    },
+    emailButton: {
+        borderRadius: radii.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+    },
+    emailButtonText: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.sm,
+    },
+    faqCard: {
+        borderRadius: radii.lg,
+        padding: spacing.lg,
+    },
+    faqQuestion: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+    },
+    faqQuestionText: {
+        fontFamily: fontFamily.medium,
+        fontSize: fontSize.base,
+        flex: 1,
+        paddingRight: spacing.md,
+    },
+    faqAnswer: {
+        paddingVertical: spacing.md,
+        paddingBottom: spacing.lg,
+    },
+    faqAnswerText: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+        lineHeight: fontSize.base * 1.5,
+    },
+});

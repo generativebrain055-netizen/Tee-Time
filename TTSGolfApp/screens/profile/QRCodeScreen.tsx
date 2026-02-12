@@ -13,6 +13,7 @@ import QRCode from "react-native-qrcode-svg";
 import { ScreenShell, AppHeader } from "../../ui";
 import { useColors } from "../../ui/theme/ThemeContext";
 import { draftApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const QR_SIZE = Math.min(SCREEN_WIDTH * 0.65, 260);
@@ -85,7 +86,7 @@ export default function QRCodeScreen({ navigation }: Props) {
                 title: "My TeeTime QR Code",
             });
         } catch (error) {
-            console.error("Share error:", error);
+            logger.error("[QRCodeScreen] Share error", error);
         }
     }, [qrData]);
 

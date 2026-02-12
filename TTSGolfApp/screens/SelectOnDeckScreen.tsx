@@ -13,6 +13,7 @@ import { Check, Users, Clock } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme/ThemeContext";
 import { rosterApi, teeTimeApi } from "../services/api";
+import { logger } from "../utils/logger";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -42,6 +43,9 @@ interface SelectOnDeckScreenProps {
             teeTimeId: string;
             spotsRemaining: number;
             courseName?: string;
+            teeDate?: string;
+            teeTime?: string;
+            unfilledSlotAlert?: boolean;
         };
     };
 }
@@ -100,7 +104,7 @@ const PlayerItem = memo(({
 
 export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckScreenProps) {
     const insets = useSafeAreaInsets();
-    const { teeTimeId, spotsRemaining, courseName } = route.params;
+    const { teeTimeId, spotsRemaining, courseName, teeDate, teeTime, unfilledSlotAlert } = route.params;
 
     const [onDeckPlayers, setOnDeckPlayers] = useState<OnDeckPlayer[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -118,7 +122,7 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
                 setOnDeckPlayers(response.onDeck as any);
             }
         } catch (error) {
-            console.error("Error loading on-deck players:", error);
+            logger.error("[SelectOnDeckScreen] Error loading on-deck players", error);
             Alert.alert("Error", "Failed to load On-Deck players");
         } finally {
             setLoading(false);
@@ -157,7 +161,7 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
                 throw new Error(response.message || "Failed to send invites");
             }
         } catch (error: any) {
-            console.error("Error sending on-deck invites:", error);
+            logger.error("[SelectOnDeckScreen] Error sending on-deck invites", error);
             Alert.alert("Error", error.message || "Failed to send invites");
         } finally {
             setSubmitting(false);
@@ -186,7 +190,10 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
     if (loading) {
         return (
             <ScreenShell>
-                <AppHeader title="Select On-Deck Players" onBack={() => navigation.goBack()} />
+                <AppHeader
+                    title={unfilledSlotAlert ? "Unfilled Slot Alert" : "Select On-Deck Players"}
+                    onBack={() => navigation.goBack()}
+                />
                 <View className="flex-1 justify-center items-center">
                     <ActivityIndicator size="large" color={COLORS.primary} />
                 </View>
@@ -194,12 +201,22 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
         );
     }
 
+    const dateTimeLine = [teeDate, teeTime].filter(Boolean).join(" • ") || null;
+
     return (
         <ScreenShell>
             <AppHeader
-                title="Select On-Deck Players"
+                title={unfilledSlotAlert ? "Unfilled Slot Alert" : "Select On-Deck Players"}
                 onBack={() => navigation.goBack()}
             />
+
+            {unfilledSlotAlert && (
+                <View className="px-4 pt-1 pb-2">
+                    <Text className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Fill your open spots from On-Deck
+                    </Text>
+                </View>
+            )}
 
             {/* Info Banner */}
             <View className="flex-row items-center bg-amber-100 px-4 py-3 gap-3">
@@ -209,7 +226,7 @@ export default function SelectOnDeckScreen({ navigation, route }: SelectOnDeckSc
                         {spotsRemaining} spot{spotsRemaining > 1 ? 's' : ''} remaining
                     </Text>
                     <Text className="text-sm text-gray-500 mt-0.5">
-                        {courseName || 'Your tee time'} • First Come First Served
+                        {[courseName || "Your tee time", dateTimeLine].filter(Boolean).join(" • ") || "Your tee time"} • First Come First Served
                     </Text>
                 </View>
             </View>

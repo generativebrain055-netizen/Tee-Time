@@ -62,17 +62,20 @@ export default function ReviewManualInviteStep({
     }, [onRemovePlayer]);
 
     const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<OrderedPlayer>) => {
+        const isTopThree = item.order <= 3;
         return (
             <ScaleDecorator>
                 <View
                     style={{
                         backgroundColor: '#FFFFFF',
-                        borderRadius: 12,
+                        borderRadius: 8,
                         marginBottom: 12,
                         paddingVertical: 16,
                         paddingHorizontal: 16,
                         flexDirection: 'row',
                         alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
                         shadowColor: isActive ? '#000' : 'transparent',
                         shadowOffset: { width: 0, height: 2 },
                         shadowOpacity: isActive ? 0.15 : 0,
@@ -93,12 +96,12 @@ export default function ReviewManualInviteStep({
                         <GripVertical size={20} color="#9CA3AF" strokeWidth={2} />
                     </TouchableOpacity>
 
-                    {/* Order Number */}
+                    {/* Order Number – Figma 430-2158: 1–3 Primary Green/white, 4+ gray/dark text */}
                     <View style={{
                         width: 32,
                         height: 32,
                         borderRadius: 16,
-                        backgroundColor: '#D1D5DB',
+                        backgroundColor: isTopThree ? '#22C55E' : '#D1D5DB',
                         justifyContent: 'center',
                         alignItems: 'center',
                         marginLeft: 4,
@@ -106,28 +109,28 @@ export default function ReviewManualInviteStep({
                         <Text style={{
                             fontFamily: 'Inter_600SemiBold',
                             fontSize: 14,
-                            color: '#FFFFFF',
+                            color: isTopThree ? '#FFFFFF' : '#374151',
                         }}>
                             {item.order}
                         </Text>
                     </View>
 
-                    {/* Avatar */}
+                    {/* Avatar – Figma 430-2158: 49px */}
                     {item.avatar ? (
                         <Image 
                             source={{ uri: item.avatar }} 
                             style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 24,
+                                width: 49,
+                                height: 49,
+                                borderRadius: 25,
                                 marginLeft: 12,
                             }}
                         />
                     ) : (
                         <View style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 24,
+                            width: 49,
+                            height: 49,
+                            borderRadius: 25,
                             backgroundColor: '#22C55E',
                             justifyContent: 'center',
                             alignItems: 'center',
@@ -204,7 +207,7 @@ export default function ReviewManualInviteStep({
                 </Text>
             </View>
 
-            {/* Instructions */}
+            {/* Instructions – Figma 430-2158: Manual Invite Confirm subtitle */}
             <View style={{
                 paddingHorizontal: 20,
                 paddingTop: 20,
@@ -216,7 +219,7 @@ export default function ReviewManualInviteStep({
                     color: '#6B7280',
                     textAlign: 'center',
                 }}>
-                    Review and customize your invite order
+                    Remove any players before sending out invite
                 </Text>
             </View>
 

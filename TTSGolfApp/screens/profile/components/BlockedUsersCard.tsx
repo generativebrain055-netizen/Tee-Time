@@ -10,6 +10,7 @@ import {
 import { ShieldOff, ChevronRight, UserX, Unlock } from "lucide-react-native";
 import { COLORS } from "../../../constants/colors";
 import { friendApi } from "../../../services/api";
+import { logger } from "../../../utils/logger";
 
 interface BlockedUser {
     id: string;
@@ -77,7 +78,7 @@ export const BlockedUsersCard = memo(({ onRefresh }: BlockedUsersCardProps) => {
                 setBlockedUsers((response.blockedUsers || []) as BlockedUser[]);
             }
         } catch (error) {
-            console.error("Failed to load blocked users:", error);
+            logger.error("[BlockedUsersCard] Failed to load blocked users", error);
         } finally {
             setLoading(false);
         }

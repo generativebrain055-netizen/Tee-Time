@@ -10,12 +10,17 @@ export interface ChatMessage {
 
 export interface ChatInfo {
   id: string;
+  conversationId?: string;
   recipientId?: string;
+  teeTimeId?: string;
   groupId?: string;
   name: string;
   subtitle: string;
   img?: string;
   isGroup?: boolean;
+  /** Figma 1379-5818: group header expanded – "N players" and avatar stack */
+  participantCount?: number;
+  participantAvatars?: string[];
   onHeaderPress?: () => void;
 }
 

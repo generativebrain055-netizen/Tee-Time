@@ -664,6 +664,52 @@ class TeeTimeRepository {
     }
   }
 
+  /**
+   * Search user's tee times by course name (for global search, Figma 795-*)
+   */
+  async searchTeeTimes(userId, query, limit = 10) {
+    try {
+      if (!query || query.trim().length < 2) return [];
+      const today = new Date().toISOString().split("T")[0];
+      const pattern = `%${query.trim()}%`;
+
+      const { data: asCreator } = await supabaseAdmin
+        .from("tee_times")
+        .select("id, course_name, course_location, tee_date, tee_time, status, max_players")
+        .eq("creator_id", userId)
+        .ilike("course_name", pattern)
+        .gte("tee_date", today)
+        .in("status", ["pending", "confirmed"])
+        .order("tee_date", { ascending: true })
+        .limit(limit);
+
+      const { data: asParticipant } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("tee_times!inner(id, course_name, course_location, tee_date, tee_time, status, max_players)")
+        .eq("user_id", userId)
+        .or("status.is.null,status.neq.cancelled")
+        .limit(limit * 2);
+
+      const participantTeeTimes = (asParticipant || [])
+        .map((p) => (Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times))
+        .filter((tt) => tt && tt.tee_date >= today && ["pending", "confirmed"].includes(tt.status));
+
+      const seen = new Set((asCreator || []).map((t) => t.id));
+      const merged = [...(asCreator || [])];
+      for (const tt of participantTeeTimes) {
+        if (!seen.has(tt.id)) {
+          seen.add(tt.id);
+          merged.push(tt);
+        }
+      }
+      merged.sort((a, b) => (a.tee_date || "").localeCompare(b.tee_date || "") || (a.tee_time || "").localeCompare(b.tee_time || ""));
+      return merged.slice(0, limit);
+    } catch (error) {
+      handleError(error, "searchTeeTimes");
+      return [];
+    }
+  }
+
   async markPastTeeTimesCompleted() {
     try {
       const today = new Date().toISOString().split("T")[0];

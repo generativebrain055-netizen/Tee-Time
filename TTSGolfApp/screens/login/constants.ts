@@ -8,4 +8,5 @@ import { colors } from '../../ui/theme/tokens';
 
 export const LOGIN_COLORS = colors.light;
 
-export type LoginStep = "phone" | "otp";
+/** Phone sign-in uses magic link (SMS link), not OTP/code */
+export type LoginStep = "phone" | "magicLinkSent";

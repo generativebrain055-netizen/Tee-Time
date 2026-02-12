@@ -19,6 +19,7 @@ interface ReviewInviteOrderStepProps {
     teeDate: string;
     teeTime: string;
     courseName: string;
+    groupSize: number; // maxPlayers - used to determine initial vs backup invites
 }
 
 interface OrderedPlayer extends Friend {
@@ -32,11 +33,8 @@ export default function ReviewInviteOrderStep({
     teeDate,
     teeTime,
     courseName,
+    groupSize,
 }: ReviewInviteOrderStepProps) {
-    console.log('🔍 ReviewInviteOrderStep RENDER');
-    console.log('  orderedPlayers:', JSON.stringify(orderedPlayers));
-    console.log('  friends length:', friends.length);
-
     const getInitials = (firstName: string, lastName: string): string => {
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
     };
@@ -51,7 +49,6 @@ export default function ReviewInviteOrderStep({
             })
             .filter(Boolean) as OrderedPlayer[];
         
-        console.log('  orderedFriends computed:', result.length, 'items');
         return result;
     }, [orderedPlayers, friends]);
 
@@ -68,17 +65,23 @@ export default function ReviewInviteOrderStep({
     }, [orderedPlayers, onReorderPlayers]);
 
     const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<OrderedPlayer>) => {
+        // Initial invites: first (groupSize - 1) players (since creator is already counted)
+        // Backup invites: remaining players
+        const initialInviteCount = Math.max(0, groupSize - 1);
+        const isInitialInvite = item.order <= initialInviteCount;
         return (
             <ScaleDecorator>
                 <View
                     style={{
                         backgroundColor: '#FFFFFF',
-                        borderRadius: 12,
+                        borderRadius: 8,
                         marginBottom: 12,
                         paddingVertical: 16,
                         paddingHorizontal: 16,
                         flexDirection: 'row',
                         alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
                         shadowColor: isActive ? '#000' : 'transparent',
                         shadowOffset: { width: 0, height: 2 },
                         shadowOpacity: isActive ? 0.15 : 0,
@@ -99,12 +102,12 @@ export default function ReviewInviteOrderStep({
                         <GripVertical size={20} color="#9CA3AF" strokeWidth={2} />
                     </TouchableOpacity>
 
-                    {/* Order Number */}
+                    {/* Order Number – Initial invites (green), Backup invites (grey) */}
                     <View style={{
                         width: 32,
                         height: 32,
                         borderRadius: 16,
-                        backgroundColor: item.order <= 3 ? '#22C55E' : '#D1D5DB',
+                        backgroundColor: isInitialInvite ? '#22C55E' : '#D1D5DB',
                         justifyContent: 'center',
                         alignItems: 'center',
                         marginLeft: 4,
@@ -112,7 +115,7 @@ export default function ReviewInviteOrderStep({
                         <Text style={{
                             fontFamily: 'Inter_600SemiBold',
                             fontSize: 14,
-                            color: '#FFFFFF',
+                            color: isInitialInvite ? '#FFFFFF' : '#374151',
                         }}>
                             {item.order}
                         </Text>
@@ -178,7 +181,7 @@ export default function ReviewInviteOrderStep({
                 </View>
             </ScaleDecorator>
         );
-    }, [handleRemove]);
+    }, [handleRemove, groupSize]);
 
     return (
         <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>

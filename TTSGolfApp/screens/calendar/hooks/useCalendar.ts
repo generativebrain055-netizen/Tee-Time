@@ -7,6 +7,7 @@ import { useAuthStore } from "../../../stores";
 import type { TeeTime as ApiTeeTime } from "../../../services/api";
 import { CalendarTeeTime, TeeTimesMap } from "../types";
 import { createTeeTimesMap, generateCalendarDays, getDateKey } from "../utils";
+import { logger } from "../../../utils/logger";
 
 export type StatusFilter = "all" | "pending" | "confirmed" | "completed" | "in_progress";
 export type RoleFilter = "all" | "hosting" | "invited";
@@ -71,24 +72,17 @@ export const useCalendar = () => {
       const start = startDate.toISOString().split("T")[0];
       const end = endDate.toISOString().split("T")[0];
       const response = await teeTimeApi.getCalendar(start, end);
-      console.log('Calendar API response:', JSON.stringify(response, null, 2));
       if (response.success && response.calendar) {
         const all: CalendarTeeTime[] = [];
         Object.entries(response.calendar).forEach(([dateKey, times]) => {
-          console.log(`Date ${dateKey} has ${times.length} tee times`);
           (times as (ApiTeeTime & { date?: string })[]).forEach((t) => {
-            console.log(`  Tee time ${t.id}:`, {
-              courseName: t.courseName,
-              participants: t.participants?.length || 0,
-              participantDetails: t.participants
-            });
             all.push(mapApiToCalendar(t, currentUserId, dateKey));
           });
         });
         setTeeTimes(all);
       }
     } catch (error) {
-      console.error("Failed to load calendar:", error);
+      logger.error("[useCalendar] Failed to load calendar", error);
     } finally {
       setLoading(false);
       setRefreshing(false);

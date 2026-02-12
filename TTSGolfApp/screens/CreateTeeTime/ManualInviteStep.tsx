@@ -1,15 +1,18 @@
-import React, { useState, useCallback, useEffect, memo } from "react";
+import React, { useState, useCallback, useEffect, memo, useMemo } from "react";
 import {
     View,
     Text,
     TouchableOpacity,
     Image,
     ActivityIndicator,
+    TextInput,
+    StyleSheet,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Check, Users, Clock, UserPlus } from "lucide-react-native";
-import { COLORS } from "./constants";
+import { Check, Search } from "lucide-react-native";
+import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend, RosterGroup, RosterContact, rosterApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 type SourceTab = "roster" | "ondeck" | "groups";
 
@@ -146,6 +149,7 @@ export default function ManualInviteStep({
     const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
     const [groupMembersMap, setGroupMembersMap] = useState<Record<string, Friend[]>>({});
     const [loadingGroup, setLoadingGroup] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const spotsLeft = groupSize - 1 - selectedPlayers.length;
 
@@ -178,7 +182,7 @@ export default function ManualInviteStep({
                 onGroupMembersLoaded?.(members);
             }
         } catch (e) {
-            console.log("Failed to load group members:", e);
+            logger.error("[ManualInviteStep] Failed to load group members", e);
         } finally {
             setLoadingGroup(null);
         }
@@ -240,71 +244,34 @@ export default function ManualInviteStep({
         return (
             <TouchableOpacity
                 key={item.id}
-                style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: 14,
-                    paddingHorizontal: 16,
-                    backgroundColor: '#FFFFFF',
-                    borderBottomWidth: 1,
-                    borderBottomColor: '#F3F4F6',
-                    opacity: canSelect ? 1 : 0.5,
-                }}
+                style={[styles.playerRow, { opacity: canSelect ? 1 : 0.5 }]}
                 onPress={() => handleToggle(item.id)}
                 disabled={!canSelect}
                 activeOpacity={0.7}
             >
-                {/* Avatar */}
+                {/* Avatar – Figma 1269-3055 49px */}
                 {item.avatar ? (
-                    <Image 
-                        source={{ uri: item.avatar }} 
-                        style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: 22,
-                        }}
-                    />
+                    <Image source={{ uri: item.avatar }} style={styles.avatar} />
                 ) : (
-                    <View style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 22,
-                        backgroundColor: '#22C55E',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                    }}>
-                        <Text style={{
-                            fontFamily: 'Inter_600SemiBold',
-                            fontSize: 15,
-                            color: '#FFFFFF',
-                        }}>
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                        <Text style={styles.avatarInitials}>
                             {getInitials(item.firstName, item.lastName)}
                         </Text>
                     </View>
                 )}
 
-                {/* Name */}
+                {/* Name – Figma 1269-3055 style_OMZ48P */}
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={{
-                        fontFamily: 'Inter_600SemiBold',
-                        fontSize: 16,
-                        color: '#111827',
-                    }}>
+                    <Text style={[styles.playerName, { fontFamily: 'Inter_500Medium' }]}>
                         {item.firstName} {item.lastName}
                     </Text>
                 </View>
 
-                {/* Checkbox */}
-                <View style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 12,
-                    borderWidth: 2,
-                    borderColor: isSelected ? '#22C55E' : '#D1D5DB',
-                    backgroundColor: isSelected ? '#22C55E' : 'transparent',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                }}>
+                {/* Check – Figma Primary Green circle */}
+                <View style={[
+                    styles.checkCircle,
+                    { backgroundColor: isSelected ? COLORS.primary : 'transparent', borderColor: isSelected ? COLORS.primary : '#D1D5DB' }
+                ]}>
                     {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
                 </View>
             </TouchableOpacity>
@@ -319,7 +286,7 @@ export default function ManualInviteStep({
         return (
             <View key={item.id} style={{
                 backgroundColor: '#FFFFFF',
-                borderRadius: 12,
+                borderRadius: 8,
                 marginBottom: 12,
                 borderWidth: 1,
                 borderColor: '#E5E7EB',
@@ -431,7 +398,18 @@ export default function ManualInviteStep({
         }
     };
 
-    const displayList = getDisplayList();
+    const displayList = useMemo(() => {
+        const list = activeTab === "roster" ? friends : activeTab === "ondeck" ? onDeckFriends : [];
+        if (!searchQuery.trim()) return list;
+        const q = searchQuery.trim().toLowerCase();
+        return list.filter(
+            (f) =>
+                `${f.firstName} ${f.lastName}`.toLowerCase().includes(q) ||
+                (f.username || "").toLowerCase().includes(q)
+        );
+    }, [friends, onDeckFriends, activeTab, searchQuery]);
+
+    const showSearch = activeTab !== "groups";
 
     return (
         <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
@@ -444,11 +422,12 @@ export default function ManualInviteStep({
                 backgroundColor: '#F3F4F6',
                 gap: 8,
             }}>
+                {/* Figma 430-766, 430-2240: tab pill borderRadius 6px */}
                 <TouchableOpacity
                     style={{
                         flex: 1,
                         paddingVertical: 10,
-                        borderRadius: 8,
+                        borderRadius: 6,
                         backgroundColor: activeTab === "roster" ? '#22C55E' : '#FFFFFF',
                         alignItems: 'center',
                     }}
@@ -467,7 +446,7 @@ export default function ManualInviteStep({
                     style={{
                         flex: 1,
                         paddingVertical: 10,
-                        borderRadius: 8,
+                        borderRadius: 6,
                         backgroundColor: activeTab === "ondeck" ? '#22C55E' : '#FFFFFF',
                         alignItems: 'center',
                     }}
@@ -486,7 +465,7 @@ export default function ManualInviteStep({
                     style={{
                         flex: 1,
                         paddingVertical: 10,
-                        borderRadius: 8,
+                        borderRadius: 6,
                         backgroundColor: activeTab === "groups" ? '#22C55E' : '#FFFFFF',
                         alignItems: 'center',
                     }}
@@ -503,39 +482,27 @@ export default function ManualInviteStep({
                 </TouchableOpacity>
             </View>
 
-            {/* Player count and filter */}
-            <View style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                paddingHorizontal: 20,
-                paddingVertical: 12,
-                backgroundColor: '#F3F4F6',
-            }}>
-                <Text style={{
-                    fontFamily: 'Inter_400Regular',
-                    fontSize: 14,
-                    color: '#6B7280',
-                }}>
-                    {activeTab === "roster" ? friends.length : activeTab === "ondeck" ? onDeckFriends.length : groups.length} {activeTab === "groups" ? "groups" : "roster players"}
-                </Text>
+            {/* Figma 1269-3370, 1269-3456: Your players + Search players */}
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{FIGMA_YOUR_PLAYERS.title}</Text>
                 {selectedPlayers.length > 0 && (
-                    <View style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                        borderRadius: 12,
-                        backgroundColor: '#22C55E',
-                    }}>
-                        <Text style={{
-                            fontFamily: 'Inter_600SemiBold',
-                            fontSize: 12,
-                            color: '#FFFFFF',
-                        }}>
-                            {selectedPlayers.length}
-                        </Text>
+                    <View style={styles.selectedBadge}>
+                        <Text style={styles.selectedBadgeText}>{selectedPlayers.length}</Text>
                     </View>
                 )}
             </View>
+            {showSearch && (
+                <View style={styles.searchWrap}>
+                    <Search size={18} color="#9CA3AF" strokeWidth={2} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder={FIGMA_YOUR_PLAYERS.searchPlaceholder}
+                        placeholderTextColor="#9CA3AF"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+            )}
 
             {/* List */}
             <View style={{ flex: 1 }}>
@@ -543,6 +510,7 @@ export default function ManualInviteStep({
                     <FlashList
                         data={groups}
                         renderItem={({ item }) => renderGroup(item)}
+                        // @ts-expect-error - FlashList runtime prop, types mismatch
                         estimatedItemSize={70}
                         keyExtractor={(item) => item.id}
                         showsVerticalScrollIndicator={false}
@@ -556,6 +524,7 @@ export default function ManualInviteStep({
                         <FlashList
                             data={displayList}
                             renderItem={({ item }) => renderPlayer(item)}
+                            // @ts-expect-error - FlashList runtime prop, types mismatch
                             estimatedItemSize={72}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
@@ -567,3 +536,86 @@ export default function ManualInviteStep({
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    playerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: FIGMA_YOUR_PLAYERS.rowPaddingVertical,
+        paddingHorizontal: FIGMA_YOUR_PLAYERS.rowPaddingHorizontal,
+        backgroundColor: "#FFFFFF",
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+    },
+    sectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        backgroundColor: "#F3F4F6",
+    },
+    sectionTitle: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 15,
+        color: FIGMA_YOUR_PLAYERS.nameColor,
+    },
+    selectedBadge: {
+        marginLeft: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: COLORS.primary,
+    },
+    selectedBadgeText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 12,
+        color: "#FFFFFF",
+    },
+    searchWrap: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginHorizontal: 20,
+        marginBottom: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        backgroundColor: "#FFFFFF",
+        borderRadius: FIGMA_YOUR_PLAYERS.inputBorderRadius,
+        borderWidth: 1,
+        borderColor: FIGMA_YOUR_PLAYERS.inputBorderColor,
+        gap: 10,
+    },
+    searchInput: {
+        flex: 1,
+        fontFamily: "Inter_400Regular",
+        fontSize: 16,
+        color: "#111827",
+        padding: 0,
+    },
+    avatar: {
+        width: FIGMA_YOUR_PLAYERS.avatarSize,
+        height: FIGMA_YOUR_PLAYERS.avatarSize,
+        borderRadius: FIGMA_YOUR_PLAYERS.avatarSize / 2,
+    },
+    avatarPlaceholder: {
+        backgroundColor: COLORS.primary,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    avatarInitials: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 15,
+        color: "#FFFFFF",
+    },
+    playerName: {
+        fontSize: FIGMA_YOUR_PLAYERS.nameFontSize,
+        color: FIGMA_YOUR_PLAYERS.nameColor,
+    },
+    checkCircle: {
+        width: FIGMA_YOUR_PLAYERS.checkSize,
+        height: FIGMA_YOUR_PLAYERS.checkSize,
+        borderRadius: FIGMA_YOUR_PLAYERS.checkSize / 2,
+        borderWidth: 2,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+});

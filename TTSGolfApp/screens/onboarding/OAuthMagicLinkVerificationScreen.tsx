@@ -26,6 +26,7 @@ import * as Linking from "expo-linking";
 import { verifySmsMagicLink, requestSmsMagicLink, maskPhoneDisplay } from "../../utils/smsMagicLink";
 import { sessionManager } from "../../utils/sessionManager";
 import { ONBOARDING_COLORS as COLORS } from "./constants";
+import { logger } from "../../utils/logger";
 
 interface OAuthMagicLinkVerificationProps {
   navigation: {
@@ -77,7 +78,7 @@ export function OAuthMagicLinkVerificationScreen({
         
         if (!token || typeof token !== "string") return;
 
-        console.log("[OAuthMagicLinkVerification] Received magic link token");
+        logger.debug("[OAuthMagicLinkVerification] Received magic link token");
         setIsVerifying(true);
         setError(null);
 
@@ -85,20 +86,27 @@ export function OAuthMagicLinkVerificationScreen({
         setIsVerifying(false);
 
         if (result.success) {
-          console.log("[OAuthMagicLinkVerification] Phone verified successfully");
+          logger.info("[OAuthMagicLinkVerification] Phone verified successfully");
           
-          // Save session if tokens are returned (login flow)
+          // Save session if tokens are returned (OAuth user phone linked)
           if (result.accessToken && result.refreshToken && result.user) {
             await sessionManager.saveSession({
               accessToken: result.accessToken,
               refreshToken: result.refreshToken,
               user: result.user,
             });
+            
+            // OAuth user phone linked - navigate directly to availability onboarding
+            setIsAuthenticated(true);
+            setTimeout(() => {
+              navigation.replace("AvailabilityOnboarding", { user: result.user });
+            }, 1500);
+            return;
           }
 
           setIsAuthenticated(true);
 
-          // Navigate to profile completion with OAuth data
+          // Navigate to profile completion with OAuth data (regular signup flow)
           setTimeout(() => {
             navigation.replace("OAuthProfileCompletion", {
               phoneNumber,
@@ -111,7 +119,7 @@ export function OAuthMagicLinkVerificationScreen({
           Alert.alert("Verification Failed", result.error || "Please try again.");
         }
       } catch (err) {
-        console.error("[OAuthMagicLinkVerification] Error:", err);
+        logger.error("[OAuthMagicLinkVerification] Error verifying magic link", err);
         setIsVerifying(false);
         setError("Verification failed");
         Alert.alert("Verification Failed", "Please try again.");

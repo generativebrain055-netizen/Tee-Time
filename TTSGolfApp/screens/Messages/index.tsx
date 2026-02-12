@@ -7,18 +7,14 @@ import {
   Image,
   RefreshControl,
   ListRenderItem,
+  StyleSheet,
 } from "react-native";
 import { Edit3, MessageCircle } from "lucide-react-native";
-import { MotiView } from "moti";
-import { Card } from "react-native-paper";
-import { friendApi, rosterApi } from "../../services/api";
-import { useTeeTimeStore } from "../../stores";
+import { messagesApi } from "../../services/api";
+import type { ConversationListItem } from "../../services/api/messagesApi";
 import { ScreenShell, AppHeader, AppBottomNav } from "../../ui";
 import { useColors } from "../../ui/theme/ThemeContext";
-import { transitions } from "../../ui/motion/presets";
-import type { Friend } from "../../services/api";
-import type { RosterGroup } from "../../services/api";
-import type { TeeTime } from "../../services/api";
+import { spacing, fontSize, palette, radii } from "../../ui/theme/tokens";
 import type {
   MessageTab,
   AllConversationItem,
@@ -26,263 +22,398 @@ import type {
   GroupConversationItem,
   ConversationItem,
 } from "./types";
-import { getInitials } from "./utils";
-import { formatTime } from "../../utils/formatting";
-import { cn } from "../../utils/cn";
+import { getInitials, formatRelativeTime } from "./utils";
+import { getAvatarColor } from "../../utils/formatting";
+import { logger } from "../../utils/logger";
 
 const TABS: MessageTab[] = ["All", "Tee Times", "Groups"];
 
-function buildAllItems(friends: Friend[]): AllConversationItem[] {
-  return friends.map((f) => ({
-    id: f.id,
-    type: "all" as const,
-    recipientId: f.id,
-    name: `${f.firstName ?? ""} ${f.lastName ?? ""}`.trim() || "Unknown",
-    avatar: f.avatar,
-    lastMessage: "Start a conversation",
-    lastMessageTime: "",
+function mapToAllItem(c: ConversationListItem): AllConversationItem {
+  return {
+    id: c.id,
+    type: "all",
+    recipientId: c.otherUserId ?? c.id,
+    name: c.title,
+    avatar: c.avatarUrl ?? undefined,
+    lastMessage: c.lastMessage?.body ?? "Start a conversation",
+    lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
     unread: 0,
-  }));
+  };
 }
 
-function buildTeeTimeItems(teeTimes: TeeTime[]): TeeTimeConversationItem[] {
-  return teeTimes.map((tt) => {
-    const d = new Date(tt.teeDate);
-    const month = d.toLocaleDateString("en-US", { month: "short" });
-    const day = d.getDate();
-    const time = formatTime(tt.teeTime);
-    const title = `${month} ${day} @ ${tt.courseName} - ${time}`;
-    const participants = tt.participants ?? [];
-    const initials =
-      participants.length >= 2
-        ? participants
-            .slice(0, 2)
-            .map((p) => (p.name || "?")[0])
-            .join("")
-            .toUpperCase()
-        : "TR";
-    return {
-      id: tt.id,
-      type: "teeTime" as const,
-      teeTimeId: tt.id,
-      title,
-      courseName: tt.courseName,
-      courseLocation: tt.courseLocation,
-      teeDate: tt.teeDate,
-      teeTime: tt.teeTime,
-      participantCount: participants.length || tt.maxPlayers,
-      participantInitials: initials,
-      participantAvatars: participants.slice(0, 3).map((p) => p.avatar).filter(Boolean) as string[],
-      lastMessage: participants[0]
-        ? `${participants[0].name?.split(" ")[0] ?? "Someone"}: Looking forward to it!`
-        : "No messages yet",
-      lastMessageTime: "2m ago",
-    };
-  });
+function mapToTeeTimeItem(c: ConversationListItem): TeeTimeConversationItem {
+  const avatars = c.participantAvatars ?? [];
+  const count = c.participantCount ?? Math.max(avatars.length + 1, 2);
+  return {
+    id: c.id,
+    type: "teeTime",
+    teeTimeId: c.tee_time_id ?? c.id,
+    title: c.title,
+    courseName: c.subtitle,
+    courseLocation: undefined,
+    teeDate: "",
+    teeTime: "",
+    participantCount: count,
+    participantInitials: c.participantInitials ?? "TT",
+    participantAvatars: avatars,
+    lastMessage: c.lastMessage?.body ?? "No messages yet",
+    lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
+  };
 }
 
-function buildGroupItems(groups: RosterGroup[]): GroupConversationItem[] {
-  return groups.map((g) => ({
-    id: g.id,
-    type: "group" as const,
-    groupId: g.id,
-    name: g.name,
-    initials: getInitials(g.name),
-    color: g.color ?? "#3B82F6",
-    lastMessage: "You: Maybe next week?",
-    lastMessageTime: "1w ago",
+function mapToGroupItem(c: ConversationListItem): GroupConversationItem {
+  const avatars = c.participantAvatars ?? [];
+  const count = c.participantCount ?? (avatars.length > 0 ? avatars.length + 1 : undefined);
+  return {
+    id: c.id,
+    type: "group",
+    groupId: c.roster_group_id ?? c.id,
+    name: c.title,
+    initials: c.participantInitials ?? getInitials(c.title),
+    color: getAvatarColor(c.id),
+    lastMessage: c.lastMessage?.body ?? "No messages yet",
+    lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
     unread: 0,
-  }));
+    participantCount: count ?? undefined,
+    participantAvatars: avatars.length > 0 ? avatars : undefined,
+  };
 }
+
+/** Figma 503-1008, 785-352, 503-1393; 914-343 (Messages All mixed instance) */
+const FIGMA_ROW_HEIGHT = 88;
+const FIGMA_AVATAR_SIZE = 54;
+const FIGMA_ROW_PADDING_LEFT = 19;
+const FIGMA_AVATAR_TO_TEXT_GAP = 13;
+const FIGMA_SEPARATOR_MARGIN_LEFT = FIGMA_ROW_PADDING_LEFT + FIGMA_AVATAR_SIZE + FIGMA_AVATAR_TO_TEXT_GAP; // 86
+const FIGMA_TAB_BAR_BG = "#F8F8F8";
+const FIGMA_TAB_PILL_RADIUS = 26.5; // 53/2
+const FIGMA_GROUP_AVATAR_BLUE = "#2563EB";
+const FIGMA_TEE_TIME_AVATAR_SIZE = 36;
 
 const AllRow = memo(
   ({ item, onPress }: { item: AllConversationItem; onPress: () => void }) => (
     <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: "#FFFFFF",
-      }}
+      style={[styles.row, styles.rowBg]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={{ marginRight: 14 }}>
+      <View style={styles.avatarWrap}>
         {item.avatar ? (
-          <Image
-            source={{ uri: item.avatar }}
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-            }}
-          />
+          <Image source={{ uri: item.avatar }} style={styles.avatar} />
         ) : (
-          <View style={{
-            width: 64,
-            height: 64,
-            borderRadius: 32,
-            backgroundColor: "#E5E7EB",
-            alignItems: "center",
-            justifyContent: "center",
-          }}>
-            <Text style={{ fontSize: 18, fontWeight: "600", color: "#6B7280" }}>
-              {getInitials(item.name)}
-            </Text>
+          <View style={[styles.avatar, styles.avatarPlaceholder]}>
+            <Text style={styles.avatarInitials}>{getInitials(item.name)}</Text>
           </View>
         )}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 17, fontWeight: "600", color: "#111827", flex: 1, marginRight: 8 }} numberOfLines={1}>
-            {item.name}
-          </Text>
+      <View style={styles.rowContent}>
+        <View style={styles.rowTitleRow}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
           {item.lastMessageTime ? (
-            <Text style={{ fontSize: 13, color: "#9CA3AF" }}>{item.lastMessageTime}</Text>
+            <Text style={[styles.rowTime, item.unread != null && item.unread > 0 ? styles.rowTimeUnread : null]}>{item.lastMessageTime}</Text>
+          ) : null}
+          {item.unread != null && item.unread > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread}</Text>
+            </View>
           ) : null}
         </View>
-        <Text style={{ fontSize: 15, color: "#6B7280", marginTop: 4 }} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
+        <Text style={styles.rowPreview} numberOfLines={1}>{item.lastMessage}</Text>
       </View>
     </TouchableOpacity>
   )
 );
 
 const TeeTimeRow = memo(
-  ({ item, onPress }: { item: TeeTimeConversationItem; onPress: () => void }) => (
-    <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: "#FFFFFF",
-      }}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={{ marginRight: 14 }}>
-        {item.participantAvatars && item.participantAvatars.length > 0 ? (
-          <Image
-            source={{ uri: item.participantAvatars[0] }}
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-            }}
-          />
-        ) : (
-          <View style={{
-            width: 64,
-            height: 64,
-            borderRadius: 32,
-            backgroundColor: "#22C55E",
-            alignItems: "center",
-            justifyContent: "center",
-          }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: "#FFFFFF" }}>
-              {item.participantInitials}
-            </Text>
-          </View>
-        )}
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 17, fontWeight: "600", color: "#111827", flex: 1, marginRight: 8 }} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={{ fontSize: 13, color: "#9CA3AF" }}>{item.lastMessageTime}</Text>
+  ({ item, onPress }: { item: TeeTimeConversationItem; onPress: () => void }) => {
+    const avatars = item.participantAvatars ?? [];
+    const showStack = avatars.length > 0;
+    return (
+      <TouchableOpacity
+        style={[styles.row, styles.rowBg]}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarWrap}>
+          {showStack ? (
+            <View style={styles.teeTimeStack}>
+              <Image source={{ uri: avatars[0] }} style={styles.teeTimeCircle} />
+              {avatars.length >= 2 ? (
+                <Image source={{ uri: avatars[1] }} style={[styles.teeTimeCircle, styles.teeTimeCircleSecond]} />
+              ) : (
+                <View style={[styles.teeTimeCircle, styles.teeTimeCircleSecond, styles.avatarTeeTime]}>
+                  <Text style={styles.avatarInitialsTeeTime}>{item.participantInitials ?? "TT"}</Text>
+                </View>
+              )}
+              <View style={styles.teeTimeBadge}>
+                <Text style={styles.teeTimeBadgeText}>{String(item.participantCount || avatars.length + 1 || 2)}</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={[styles.avatar, styles.avatarTeeTime]}>
+              <Text style={styles.avatarInitialsTeeTime}>{item.participantInitials ?? "TT"}</Text>
+            </View>
+          )}
         </View>
-        <Text style={{ fontSize: 15, color: "#6B7280", marginTop: 4 }} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  )
+        <View style={styles.rowContent}>
+          <View style={styles.rowTitleRow}>
+            <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+            <Text style={styles.rowTime}>{item.lastMessageTime}</Text>
+          </View>
+          <Text style={styles.rowPreview} numberOfLines={1}>{item.lastMessage}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 );
 
 const GroupRow = memo(
   ({ item, onPress }: { item: GroupConversationItem; onPress: () => void }) => (
     <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: "#FFFFFF",
-      }}
+      style={[styles.row, styles.rowBg]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={{ marginRight: 14 }}>
+      <View style={styles.avatarWrap}>
         {item.avatar ? (
-          <Image
-            source={{ uri: item.avatar }}
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-            }}
-          />
+          <Image source={{ uri: item.avatar }} style={styles.avatar} />
         ) : (
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-              backgroundColor: item.color ?? "#3B82F6",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: "600", color: "#FFFFFF" }}>{item.initials}</Text>
+          <View style={[styles.avatar, styles.avatarGroup, { backgroundColor: item.color ?? FIGMA_GROUP_AVATAR_BLUE }]}>
+            <Text style={styles.avatarGroupInitials}>{item.initials}</Text>
           </View>
         )}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 17, fontWeight: "600", color: "#111827", flex: 1, marginRight: 8 }} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={{ fontSize: 13, color: "#9CA3AF" }}>{item.lastMessageTime}</Text>
+      <View style={styles.rowContent}>
+        <View style={styles.rowTitleRow}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{item.name}</Text>
+          {item.lastMessageTime ? (
+            <Text style={[styles.rowTime, item.unread != null && item.unread > 0 ? styles.rowTimeUnread : null]}>{item.lastMessageTime}</Text>
+          ) : null}
+          {item.unread != null && item.unread > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread}</Text>
+            </View>
+          ) : null}
         </View>
-        <Text style={{ fontSize: 15, color: "#6B7280", marginTop: 4 }} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
+        <Text style={styles.rowPreview} numberOfLines={1}>{item.lastMessage}</Text>
       </View>
     </TouchableOpacity>
   )
 );
 
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: FIGMA_ROW_HEIGHT,
+    paddingLeft: FIGMA_ROW_PADDING_LEFT,
+    paddingRight: FIGMA_ROW_PADDING_LEFT,
+    paddingVertical: (FIGMA_ROW_HEIGHT - FIGMA_AVATAR_SIZE) / 2,
+  },
+  rowBg: {
+    backgroundColor: palette.white,
+  },
+  avatarWrap: {
+    marginRight: FIGMA_AVATAR_TO_TEXT_GAP,
+  },
+  avatar: {
+    width: FIGMA_AVATAR_SIZE,
+    height: FIGMA_AVATAR_SIZE,
+    borderRadius: FIGMA_AVATAR_SIZE / 2,
+  },
+  avatarPlaceholder: {
+    backgroundColor: "#9D9D9D",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarTeeTime: {
+    backgroundColor: palette.green500,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarGroup: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitials: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: palette.gray500,
+  },
+  avatarInitialsTeeTime: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: palette.white,
+  },
+  avatarInitialsWhite: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: palette.white,
+  },
+  avatarGroupInitials: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: palette.white,
+  },
+  teeTimeStack: {
+    width: 52,
+    height: 52,
+    position: "relative",
+  },
+  teeTimeCircle: {
+    position: "absolute",
+    left: 16,
+    top: 0,
+    width: FIGMA_TEE_TIME_AVATAR_SIZE,
+    height: FIGMA_TEE_TIME_AVATAR_SIZE,
+    borderRadius: FIGMA_TEE_TIME_AVATAR_SIZE / 2,
+    borderWidth: 1.5,
+    borderColor: palette.white,
+  },
+  teeTimeCircleSecond: {
+    left: 0,
+    top: 15,
+  },
+  teeTimeBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#DFDFDF",
+    borderWidth: 0.7,
+    borderColor: palette.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  teeTimeBadgeText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#545454",
+  },
+  unreadBadge: {
+    minWidth: 18,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: palette.green500,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+    paddingHorizontal: 4,
+  },
+  unreadBadgeText: {
+    fontSize: 10.2,
+    fontWeight: "700",
+    color: palette.white,
+  },
+  rowContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  rowTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 24,
+    color: "#1F2937",
+    flex: 1,
+    marginRight: 8,
+  },
+  rowTime: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#6B7280",
+  },
+  /** Figma 914-343: unread row time uses fontWeight 600 */
+  rowTimeUnread: {
+    fontWeight: "600",
+  },
+  rowPreview: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#1F2937",
+    marginTop: 4,
+  },
+  tabRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: FIGMA_TAB_BAR_BG,
+    gap: 10,
+  },
+  tabPill: {
+    paddingVertical: 3,
+    paddingHorizontal: 14,
+    borderRadius: FIGMA_TAB_PILL_RADIUS,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabPillActive: {
+    backgroundColor: palette.green500,
+  },
+  tabPillInactive: {
+    backgroundColor: palette.white,
+    borderWidth: 1,
+    borderColor: "#DDDDDD",
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  tabLabelInactive: {
+    fontWeight: "400",
+    color: "#000000",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#F1F1F1",
+    marginLeft: FIGMA_SEPARATOR_MARGIN_LEFT,
+  },
+  emptyWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacing["4xl"],
+    paddingVertical: spacing["7xl"],
+  },
+  emptyIcon: { marginBottom: spacing.lg },
+  emptyTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: "600",
+    color: palette.gray900,
+    marginTop: spacing.lg,
+  },
+  emptySub: {
+    fontSize: fontSize.sm,
+    color: palette.gray500,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
+});
+
 function MessagesScreen({ navigation }: any) {
   const [activeTab, setActiveTab] = useState<MessageTab>("All");
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [groups, setGroups] = useState<RosterGroup[]>([]);
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const colors = useColors();
 
-  const upcomingTeeTimes = useTeeTimeStore((s) => s.upcomingTeeTimes);
-  const fetchUpcoming = useTeeTimeStore((s) => s.fetchUpcoming);
-
   const loadData = useCallback(async () => {
     try {
-      const [friendsRes, groupsRes] = await Promise.all([
-        friendApi.getFriends(),
-        rosterApi.getGroups(),
-      ]);
-      if (friendsRes.success && friendsRes.friends) setFriends(friendsRes.friends);
-      if (groupsRes.success && groupsRes.groups) setGroups(groupsRes.groups);
-      await fetchUpcoming(20);
+      const res = await messagesApi.listConversations();
+      if (res.success && res.conversations) setConversations(res.conversations);
     } catch (e) {
-      console.warn("Messages load error:", e);
+      logger.warn("[MessagesScreen] Messages load error", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchUpcoming]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -293,9 +424,18 @@ function MessagesScreen({ navigation }: any) {
     loadData();
   }, [loadData]);
 
-  const allItems = useMemo(() => buildAllItems(friends), [friends]);
-  const teeTimeItems = useMemo(() => buildTeeTimeItems(upcomingTeeTimes), [upcomingTeeTimes]);
-  const groupItems = useMemo(() => buildGroupItems(groups), [groups]);
+  const allItems = useMemo(
+    () => conversations.filter((c) => c.type === "direct").map(mapToAllItem),
+    [conversations]
+  );
+  const teeTimeItems = useMemo(
+    () => conversations.filter((c) => c.type === "tee_time").map(mapToTeeTimeItem),
+    [conversations]
+  );
+  const groupItems = useMemo(
+    () => conversations.filter((c) => c.type === "group").map(mapToGroupItem),
+    [conversations]
+  );
 
   const currentList = useMemo(() => {
     if (activeTab === "All") return allItems;
@@ -304,17 +444,18 @@ function MessagesScreen({ navigation }: any) {
   }, [activeTab, allItems, teeTimeItems, groupItems]);
 
   const handleCompose = useCallback(() => {
-    // Navigate to compose / friend picker when you add that screen
-  }, []);
+    navigation?.navigate("ComposeMessage");
+  }, [navigation]);
 
   const handleAllPress = useCallback(
     (item: AllConversationItem) => {
       navigation?.navigate("ChatDetail", {
         chatInfo: {
-          id: item.id,
+          conversationId: item.id,
           recipientId: item.recipientId,
+          id: item.id,
           name: item.name,
-          subtitle: "Active now",
+          subtitle: "Direct message",
           img: item.avatar,
           isGroup: false,
         },
@@ -327,11 +468,15 @@ function MessagesScreen({ navigation }: any) {
     (item: TeeTimeConversationItem) => {
       navigation?.navigate("ChatDetail", {
         chatInfo: {
-          id: item.teeTimeId,
+          conversationId: item.id,
           teeTimeId: item.teeTimeId,
+          id: item.teeTimeId,
           name: item.title,
           subtitle: item.courseName,
           isGroup: true,
+          /** Figma 1269-2492 Tee Time Chat - Detailed: header shows "N players" + avatar stack */
+          participantCount: item.participantCount,
+          participantAvatars: item.participantAvatars,
         },
       });
     },
@@ -342,12 +487,15 @@ function MessagesScreen({ navigation }: any) {
     (item: GroupConversationItem) => {
       navigation?.navigate("ChatDetail", {
         chatInfo: {
-          id: item.groupId,
+          conversationId: item.id,
           groupId: item.groupId,
+          id: item.groupId,
           name: item.name,
           subtitle: "Group",
           img: item.avatar,
           isGroup: true,
+          participantCount: item.participantCount,
+          participantAvatars: item.participantAvatars,
         },
       });
     },
@@ -370,12 +518,10 @@ function MessagesScreen({ navigation }: any) {
   const listEmpty = useMemo(() => {
     if (loading) return null;
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, paddingVertical: 80 }}>
-        <MessageCircle size={48} color="#9CA3AF" />
-        <Text style={{ fontSize: 18, fontWeight: "600", color: "#111827", marginTop: 16 }}>
-          No conversations yet
-        </Text>
-        <Text style={{ fontSize: 14, color: "#6B7280", textAlign: "center", marginTop: 8 }}>
+      <View style={styles.emptyWrap}>
+        <MessageCircle size={48} color={palette.gray400} style={styles.emptyIcon} />
+        <Text style={styles.emptyTitle}>No conversations yet</Text>
+        <Text style={styles.emptySub}>
           Add friends from the Availability tab to start messaging
         </Text>
       </View>
@@ -392,44 +538,25 @@ function MessagesScreen({ navigation }: any) {
         title="Messages"
         showBack={false}
         rightComponent={
-          <TouchableOpacity onPress={handleCompose} style={{ padding: 4 }}>
+          <TouchableOpacity onPress={handleCompose} style={{ padding: spacing.xs }}>
             <Edit3 size={24} color={colors.primary} strokeWidth={2} />
           </TouchableOpacity>
         }
       />
 
-      <View style={{
-        flexDirection: "row",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: "#FFFFFF",
-        gap: 10,
-      }}>
+      <View style={styles.tabRow}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab;
           const label = tabLabel(tab);
           return (
             <TouchableOpacity
               key={tab}
-              style={{
-                paddingHorizontal: 20,
-                paddingVertical: 10,
-                borderRadius: 20,
-                backgroundColor: isActive ? "#22C55E" : "#FFFFFF",
-                borderWidth: isActive ? 0 : 1,
-                borderColor: "#E5E7EB",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+              style={[styles.tabPill, isActive ? styles.tabPillActive : styles.tabPillInactive]}
               onPress={() => setActiveTab(tab)}
               activeOpacity={0.7}
             >
               <Text
-                style={{
-                  fontSize: 15,
-                  fontWeight: "600",
-                  color: isActive ? "#FFFFFF" : "#6B7280",
-                }}
+                style={[styles.tabLabel, isActive ? { color: palette.white } : styles.tabLabelInactive]}
                 numberOfLines={1}
               >
                 {label}
@@ -440,8 +567,8 @@ function MessagesScreen({ navigation }: any) {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FFFFFF" }}>
-          <Text style={{ color: "#9CA3AF" }}>Loading...</Text>
+        <View style={[styles.emptyWrap, { backgroundColor: palette.white }]}>
+          <Text style={{ color: palette.gray400 }}>Loading...</Text>
         </View>
       ) : (
         <FlatList
@@ -452,16 +579,14 @@ function MessagesScreen({ navigation }: any) {
           contentContainerStyle={
             currentList.length === 0 ? { flex: 1 } : { paddingBottom: 100 }
           }
-          style={{ backgroundColor: "#FFFFFF" }}
+          style={{ backgroundColor: palette.white }}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => (
-            <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 94 }} />
-          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#5EBC68"
+              tintColor={palette.green500}
             />
           }
         />

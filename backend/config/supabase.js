@@ -45,10 +45,10 @@ const testConnection = async () => {
       .limit(1);
     
     if (error) throw error;
-    console.log("[SUPABASE] Connection successful");
+    logger.info("[SUPABASE] Connection successful");
     return true;
   } catch (error) {
-    console.error("[SUPABASE] Connection failed:", error.message);
+    logger.error("[SUPABASE] Connection failed", error.message);
     return false;
   }
 };
@@ -58,8 +58,9 @@ const testConnection = async () => {
  * @param {Object} error - Supabase error object
  * @param {string} operation - Description of the operation
  */
+const logger = require("./logger");
 const handleError = (error, operation) => {
-  console.error(`Supabase error during ${operation}:`, error);
+  logger.error(`Supabase error during ${operation}`, error);
   const err = new Error(error.message || `Database error during ${operation}`);
   err.code = error.code;
   err.details = error.details;

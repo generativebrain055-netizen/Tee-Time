@@ -1,4 +1,5 @@
 const userRepository = require("../../repositories/userRepository");
+const profileRepository = require("../../repositories/profileRepository");
 const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const logger = require("../../config/logger");
 
@@ -71,6 +72,17 @@ const getCurrentUser = async (req, res, next) => {
           playingPartnerPreference: user.playing_partner_preference,
           drinkOfChoice: user.drink_of_choice,
         },
+        // Include notification preferences and privacy settings
+        notificationPreferences: user.notification_preferences || {
+          email: true,
+          sms: true,
+          push: true,
+        },
+        privacySettings: user.privacy_settings || {
+          showHandicap: true,
+          showLocation: true,
+          showPhone: false,
+        },
       },
     });
   } catch (error) {
@@ -98,6 +110,8 @@ const updateProfile = async (req, res, next) => {
       profilePhotoBase64,
       preferences,
       clubs,
+      notificationPreferences,
+      privacySettings,
     } = req.body;
 
     logger.info("📝 [PROFILE] Update request:", {
@@ -166,36 +180,74 @@ const updateProfile = async (req, res, next) => {
       });
     }
 
+    // Handle notification preferences and privacy settings separately (they're in user_profiles table)
+    if (notificationPreferences !== undefined) {
+      try {
+        await profileRepository.updateNotificationPreferences(userId, notificationPreferences);
+        logger.info("📝 [PROFILE] Updated notification preferences:", notificationPreferences);
+      } catch (err) {
+        logger.error("Error updating notification preferences:", err);
+        // Don't fail the entire request, just log the error
+      }
+    }
+
+    if (privacySettings !== undefined) {
+      try {
+        await profileRepository.updatePrivacySettings(userId, privacySettings);
+        logger.info("📝 [PROFILE] Updated privacy settings:", privacySettings);
+      } catch (err) {
+        logger.error("Error updating privacy settings:", err);
+        // Don't fail the entire request, just log the error
+      }
+    }
+
+    // Refresh user data to get updated preferences and settings
+    const updatedUser = await userRepository.findById(userId);
+
     logger.info("✅ [PROFILE] Updated user:", {
-      playing_partner_preference: user.playing_partner_preference,
-      preferred_tee_time: user.preferred_tee_time,
-      walk_or_ride: user.walk_or_ride,
+      playing_partner_preference: updatedUser?.playing_partner_preference,
+      preferred_tee_time: updatedUser?.preferred_tee_time,
+      walk_or_ride: updatedUser?.walk_or_ride,
     });
+
+    // Use updatedUser if available, otherwise fall back to user
+    const finalUser = updatedUser || user;
 
     return res.json({
       success: true,
       message: "Profile updated successfully.",
       user: {
-        id: user.id,
-        phoneNumber: user.phone_number,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        username: user.username,
-        handicap: user.handicap,
-        socialRate: user.social_rate,
-        avatarUrl: user.avatar_url || null,
-        zipCode: user.zip_code || null,
-        location: user.location,
-        homeCourse: user.home_course,
-        bio: user.bio,
-        clubs: user.clubs || [],
+        id: finalUser.id,
+        phoneNumber: finalUser.phone_number,
+        email: finalUser.email,
+        firstName: finalUser.first_name,
+        lastName: finalUser.last_name,
+        username: finalUser.username,
+        handicap: finalUser.handicap,
+        socialRate: finalUser.social_rate,
+        avatarUrl: finalUser.avatar_url || null,
+        zipCode: finalUser.zip_code || null,
+        location: finalUser.location,
+        homeCourse: finalUser.home_course,
+        bio: finalUser.bio,
+        clubs: finalUser.clubs || [],
         // Include preferences as nested object for frontend compatibility
         preferences: {
-          preferredTeeTime: user.preferred_tee_time,
-          walkOrRide: user.walk_or_ride,
-          playingPartnerPreference: user.playing_partner_preference,
-          drinkOfChoice: user.drink_of_choice,
+          preferredTeeTime: finalUser.preferred_tee_time,
+          walkOrRide: finalUser.walk_or_ride,
+          playingPartnerPreference: finalUser.playing_partner_preference,
+          drinkOfChoice: finalUser.drink_of_choice,
+        },
+        // Include notification preferences and privacy settings
+        notificationPreferences: finalUser.notification_preferences || {
+          email: true,
+          sms: true,
+          push: true,
+        },
+        privacySettings: finalUser.privacy_settings || {
+          showHandicap: true,
+          showLocation: true,
+          showPhone: false,
         },
       },
     });

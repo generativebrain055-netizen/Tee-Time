@@ -35,7 +35,7 @@ class InviteRepository {
         invitee_user_id: inv.userId || null,
         invitee_phone: inv.phone || null,
         invitee_name: inv.name || null,
-        position: i,
+        position: inv.order != null ? inv.order : i,
       }));
 
       const { data, error } = await supabaseAdmin
@@ -57,7 +57,7 @@ class InviteRepository {
         .select(
           `
           *,
-          tee_times (course_name, course_location, tee_date, tee_time, invite_type),
+          tee_times (course_name, course_location, tee_date, tee_time, invite_type, max_players),
           users!invites_inviter_id_fkey (first_name, last_name)
         `
         )
@@ -79,6 +79,7 @@ class InviteRepository {
         tee_date: teeTime.tee_date,
         tee_time: teeTime.tee_time,
         invite_type: teeTime.invite_type,
+        max_players: teeTime.max_players,
         inviter_first_name: user.first_name,
         inviter_last_name: user.last_name,
       };
@@ -444,7 +445,9 @@ class InviteRepository {
             max_players,
             status,
             invite_type,
-            organizer_fill_warning_sent
+            organizer_fill_warning_sent,
+            tee_date,
+            tee_time
           )
         `
         )

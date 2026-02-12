@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { profileApi } from '../services/api';
+import { logger } from '../utils/logger';
 
 interface UserPreferences {
   preferredTeeTime?: string;
@@ -66,17 +67,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Check if cache is still valid
         if (now - timestamp < CACHE_DURATION) {
-          console.log('[UserContext] Loading profile from cache');
+          logger.debug('[UserContext] Loading profile from cache');
           setProfile(cachedProfile);
           setIsProfileCached(true);
           return;
         } else {
-          console.log('[UserContext] Cache expired, will fetch fresh data');
+          logger.debug('[UserContext] Cache expired, will fetch fresh data');
           await AsyncStorage.removeItem(CACHE_KEY);
         }
       }
     } catch (error) {
-      console.error('[UserContext] Error loading cached profile:', error);
+      logger.error('[UserContext] Error loading cached profile', error);
     }
   };
 
@@ -87,23 +88,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: Date.now(),
       };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-      console.log('[UserContext] Profile saved to cache');
+      logger.debug('[UserContext] Profile saved to cache');
     } catch (error) {
-      console.error('[UserContext] Error saving to cache:', error);
+      logger.error('[UserContext] Error saving to cache', error);
     }
   };
 
   const fetchProfile = useCallback(async (forceRefresh = false) => {
     // If we have cached data and not forcing refresh, skip fetch
     if (profile && !forceRefresh && isProfileCached) {
-      console.log('[UserContext] Using cached profile, skipping fetch');
+      logger.debug('[UserContext] Using cached profile, skipping fetch');
       return;
     }
 
     // Check if user has a token before attempting to fetch
     const token = await AsyncStorage.getItem('accessToken');
     if (!token) {
-      console.log('[UserContext] No token found, skipping profile fetch');
+      logger.debug('[UserContext] No token found, skipping profile fetch');
       return;
     }
 
@@ -111,25 +112,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
 
     try {
-      console.log('[UserContext] Fetching profile from API');
+      logger.debug('[UserContext] Fetching profile from API');
       const response = await profileApi.getCurrentUser();
       
-      console.log('[UserContext] API Response:', {
+      logger.debug('[UserContext] API Response', {
         success: response.success,
         hasUser: !!response.user,
         userId: response.user?.id,
-        user: response.user ? {
-          id: response.user.id,
-          firstName: response.user.firstName,
-          lastName: response.user.lastName,
-          email: response.user.email,
-          phoneNumber: response.user.phoneNumber,
-          location: response.user.location,
-        } : null,
       });
       
       if (response.success && response.user) {
-        console.log('[UserContext] User clubs from API:', response.user.clubs);
+        logger.debug('[UserContext] User clubs from API', response.user.clubs);
         
         const userProfile: UserProfile = {
           id: response.user.id,
@@ -148,7 +141,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           preferences: response.user.preferences,
         };
 
-        console.log('[UserContext] Setting profile with clubs:', userProfile.clubs);
+        logger.debug('[UserContext] Setting profile with clubs', userProfile.clubs);
         setProfile(userProfile);
         setIsProfileCached(true);
         await saveToCache(userProfile);
@@ -156,11 +149,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError('Failed to load profile');
       }
     } catch (err: any) {
-      console.error('[UserContext] Error fetching profile:', err);
+      logger.error('[UserContext] Error fetching profile', err);
       
       // If user doesn't exist (401/404) or session expired, clear everything
       if (err.statusCode === 401 || err.statusCode === 404 || err.code === 'SESSION_EXPIRED') {
-        console.log('[UserContext] User not found or session expired, clearing session');
+        logger.info('[UserContext] User not found or session expired, clearing session');
         await clearProfile();
         await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'user']);
         // Trigger session expired handler
@@ -185,14 +178,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearProfile = useCallback(async () => {
-    console.log('[UserContext] Clearing profile and cache');
+    logger.info('[UserContext] Clearing profile and cache');
     setProfile(null);
     setIsProfileCached(false);
     setError(null);
     try {
       await AsyncStorage.removeItem(CACHE_KEY);
     } catch (error) {
-      console.error('[UserContext] Error clearing cache:', error);
+      logger.error('[UserContext] Error clearing cache', error);
     }
   }, []);
 

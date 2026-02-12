@@ -12,8 +12,10 @@ const friendsRoutes = require("./friends");
 const invitesRoutes = require("./invites");
 const notificationsRoutes = require("./notifications");
 const rosterRoutes = require("./roster");
+const searchRoutes = require("./search");
 const socialRateRoutes = require("./socialRate");
 const teeTimesRoutes = require("./teeTimes");
+const messagesRoutes = require("./messages");
 
 module.exports = {
   attendanceRoutes,
@@ -25,6 +27,8 @@ module.exports = {
   invitesRoutes,
   notificationsRoutes,
   rosterRoutes,
+  searchRoutes,
   socialRateRoutes,
   teeTimesRoutes,
+  messagesRoutes,
 };

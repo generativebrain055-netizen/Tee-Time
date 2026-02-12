@@ -57,10 +57,13 @@ export interface OnboardingData {
   email?: string;
   avatar?: string;
   picture?: string;
+  zipCode?: string | null;
+  profilePhotoBase64?: string | null;
+  profilePhotoUri?: string;
   location?: Location;
   club?: Club | null;
   clubs?: Club[];  // New: array of all clubs
-  handicap?: number | null;
+  handicap?: number | string | null;
   preferences?: PreferencesData | UserPreferences | null;
 }
 
@@ -111,6 +114,12 @@ export interface HandicapPageProps extends OnboardingPageProps {
 
 export interface PreferencesPageProps extends OnboardingPageProps {
   initialPreferences?: Partial<UserPreferences>;
+}
+
+export interface PhotoZipPageProps extends OnboardingPageProps {
+  initialData?: { profilePhotoUri?: string; zipCode?: string };
+  initialProfilePhotoUri?: string;
+  initialZipCode?: string;
 }
 
 export interface WelcomePageProps {

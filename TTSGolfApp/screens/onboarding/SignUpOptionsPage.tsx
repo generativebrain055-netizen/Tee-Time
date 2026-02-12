@@ -171,9 +171,11 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
             {/* Bottom Section: Apple then Google (Figma: #F7F7F7, #E5E7EB) */}
             <View style={styles.bottomSection}>
               <OAuthButtons
-                variant="signup"
                 onSuccess={onOAuthSuccess}
-                onError={(err) => console.error("OAuth error:", err)}
+                onError={(err) => {
+                  const { logger } = require("../../utils/logger");
+                  logger.error("[SignUpOptions] OAuth error", err);
+                }}
               />
             </View>
           </View>

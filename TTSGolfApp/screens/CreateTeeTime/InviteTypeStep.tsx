@@ -50,7 +50,7 @@ export default function InviteTypeStep({ inviteType, onSelectType }: InviteTypeS
                             flexDirection: 'row',
                             alignItems: 'center',
                             padding: 24,
-                            borderRadius: 12,
+                            borderRadius: 8,
                             marginBottom: 16,
                             backgroundColor: '#FFFFFF',
                             borderWidth: isSelected ? 2 : 1,
@@ -62,7 +62,7 @@ export default function InviteTypeStep({ inviteType, onSelectType }: InviteTypeS
                         <View style={{
                             width: 52,
                             height: 52,
-                            borderRadius: 12,
+                            borderRadius: 8,
                             backgroundColor: opt.iconBg,
                             justifyContent: 'center',
                             alignItems: 'center',

@@ -1,17 +1,17 @@
 /**
- * Full Calendar Screen - Schedule
+ * Full Calendar Screen - Schedule (Figma 565-* full schedule / month view)
  */
 import React, { useCallback, memo, useState } from "react";
-import { View, ScrollView, RefreshControl, Text, TouchableOpacity } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, Text, TouchableOpacity } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 import { useCalendar, StatusFilter, RoleFilter } from "./hooks/useCalendar";
 import { CalendarGrid, TeeTimesList } from "./components";
 import { CALENDAR_COLORS } from "./constants";
-import { ScreenShell, AppHeader, ContentArea } from "../../ui";
+import { ScreenShell, AppHeader } from "../../ui";
+import { spacing, fontSize, fontFamily, radii } from "../../ui/theme/tokens";
 
-const PRIMARY_GREEN = "#5EBC68";
+const PRIMARY_GREEN = CALENDAR_COLORS.primary;
 
 interface Props {
   navigation: any;
@@ -49,13 +49,27 @@ const FilterDropdown = memo(
   }) => {
     const selectedLabel = options.find((o) => o.key === selectedKey)?.label ?? "All";
     return (
-      <View className="relative">
+      <View style={{ position: "relative" }}>
         <TouchableOpacity
-          className="flex-row items-center gap-1.5 bg-gray-100 rounded-lg px-4 py-2.5"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            backgroundColor: "#F3F4F6",
+            borderRadius: radii.md,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.sm + 2,
+          }}
           onPress={onToggle}
           activeOpacity={0.7}
         >
-          <Text className="text-sm font-semibold text-gray-700" style={{ fontFamily: 'Inter_600SemiBold' }}>
+          <Text
+            style={{
+              fontFamily: fontFamily.semiBold,
+              fontSize: fontSize.sm,
+              color: "#374151",
+            }}
+          >
             {label}: {selectedLabel}
           </Text>
           {isOpen ? (
@@ -66,8 +80,16 @@ const FilterDropdown = memo(
         </TouchableOpacity>
         {isOpen && (
           <View
-            className="absolute top-full left-0 mt-1 bg-[#EEEEEE] rounded-lg py-1 min-w-[180px] z-50"
             style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              marginTop: spacing.xs,
+              backgroundColor: "#EEEEEE",
+              borderRadius: radii.md,
+              paddingVertical: spacing.xs,
+              minWidth: 180,
+              zIndex: 50,
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.1,
@@ -80,7 +102,13 @@ const FilterDropdown = memo(
               return (
                 <TouchableOpacity
                   key={opt.key}
-                  className="flex-row items-center gap-2 px-4 py-2.5"
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: spacing.sm,
+                    paddingHorizontal: spacing.lg,
+                    paddingVertical: spacing.sm + 2,
+                  }}
                   onPress={() => {
                     onSelect(opt.key);
                     onToggle();
@@ -88,19 +116,27 @@ const FilterDropdown = memo(
                   activeOpacity={0.7}
                 >
                   <View
-                    className="w-4 h-4 rounded-full border-2 items-center justify-center"
                     style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      borderWidth: 2,
                       borderColor: isSelected ? PRIMARY_GREEN : "#D1D5DB",
                       backgroundColor: isSelected ? PRIMARY_GREEN : "transparent",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
                     {isSelected ? (
-                      <Text className="text-white text-[10px] font-bold">✓</Text>
+                      <Text style={{ color: "#FFF", fontSize: 10, fontFamily: fontFamily.bold }}>✓</Text>
                     ) : null}
                   </View>
                   <Text
-                    className="text-sm font-medium"
-                    style={{ color: isSelected ? "#1F2937" : "#6B7280", fontFamily: 'Inter_500Medium' }}
+                    style={{
+                      fontFamily: fontFamily.medium,
+                      fontSize: fontSize.sm,
+                      color: isSelected ? "#1F2937" : "#6B7280",
+                    }}
                   >
                     {opt.label}
                   </Text>
@@ -136,8 +172,6 @@ export default function FullCalendarScreen({ navigation }: Props) {
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
 
-  const insets = useSafeAreaInsets();
-
   const handleBack = useCallback(() => {
     navigation?.goBack();
   }, [navigation]);
@@ -151,23 +185,24 @@ export default function FullCalendarScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-
       <AppHeader title="Schedule" onBack={handleBack} />
 
-      <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
-        {/* Calendar Section - 48% (reduced from 55%) */}
-        <View style={{ 
-          flex: 0.48, 
-          marginHorizontal: 16, 
-          marginTop: 16,
-          backgroundColor: '#FFFFFF',
-          borderRadius: 16,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 2,
-        }}>
+      <View style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
+        {/* Month calendar (Figma 565-*) */}
+        <View
+          style={{
+            flex: 0.48,
+            marginHorizontal: spacing.lg,
+            marginTop: spacing.lg,
+            backgroundColor: "#FFFFFF",
+            borderRadius: radii.lg,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2,
+          }}
+        >
           <CalendarGrid
             currentMonth={currentMonth}
             currentYear={currentYear}
@@ -178,27 +213,37 @@ export default function FullCalendarScreen({ navigation }: Props) {
           />
         </View>
 
-        {/* Tee Times Section - 52% (increased from 45%) */}
-        <View style={{ flex: 0.52, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 80 }}>
-          <View style={{
-            backgroundColor: '#F9FAFB',
-            borderRadius: 16,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 2,
-            flex: 1,
-            overflow: 'hidden',
-          }}>
-            {/* Filter bar */}
-            <View style={{ 
-              paddingHorizontal: 12, 
-              paddingTop: 12, 
-              paddingBottom: 12,
-              backgroundColor: '#F9FAFB',
-            }}>
-              <View className="flex-row gap-3">
+        {/* Tee times for selected day */}
+        <View
+          style={{
+            flex: 0.52,
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.lg,
+            paddingBottom: 80,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#F9FAFB",
+              borderRadius: radii.lg,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.05,
+              shadowRadius: 8,
+              elevation: 2,
+              flex: 1,
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                paddingHorizontal: spacing.md,
+                paddingTop: spacing.md,
+                paddingBottom: spacing.md,
+                backgroundColor: "#F9FAFB",
+              }}
+            >
+              <View style={{ flexDirection: "row", gap: spacing.md }}>
                 <FilterDropdown
                   label="Role"
                   options={ROLE_OPTIONS}
@@ -224,12 +269,13 @@ export default function FullCalendarScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* Scrollable Tee Times List */}
-            <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+            <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
               <TeeTimesList
                 selectedDate={selectedDate}
                 teeTimes={selectedDateTeeTimes}
                 loading={loading}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
                 onTeeTimePress={handleTeeTimePress}
                 onCancelSuccess={onRefresh}
               />

@@ -164,14 +164,9 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
 
   const handleNext = useCallback((): void => {
-    console.log("PreferencesPage - handleNext called");
-    console.log("isValid:", isValid);
-    console.log("preferredTime:", preferredTime);
-    console.log("playStyle:", playStyle);
-    console.log("partnerCount:", partnerCount);
+    // Validation handled by button disabled state
 
     if (!isValid) {
-      console.log("Validation failed - button should be disabled");
       return;
     }
 
@@ -181,7 +176,6 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
       playerCount: partnerCount,
     };
 
-    console.log("Calling onNext with preferences:", preferencesData);
     onNext({ preferences: preferencesData });
   }, [isValid, playStyle, preferredTime, partnerCount, onNext]);
 

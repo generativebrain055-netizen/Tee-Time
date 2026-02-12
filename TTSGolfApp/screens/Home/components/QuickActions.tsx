@@ -1,8 +1,10 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { CalendarPlus, UserPlus, Search } from "lucide-react-native";
 import { MotiView } from "moti";
 import { transitions } from "../../../theme/animations";
+import { spacing, fontSize, radii, shadows, palette } from "../../../ui/theme/tokens";
+import { colorTokens } from "../../../theme/tokens";
 
 interface QuickActionsProps {
   onCreateTeeTime: () => void;
@@ -26,24 +28,17 @@ function ActionButton({
       from={{ opacity: 0, translateY: 8 }}
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ ...transitions.standard, delay: index * 50 }}
-      className="flex-1"
+      style={styles.actionWrapper}
     >
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={onPress}
-        className="bg-white rounded-2xl py-5 px-3 items-center justify-center aspect-square"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          elevation: 4,
-        }}
+        style={[styles.actionCard, shadows.md]}
       >
-        <View className="mb-2">
-          <Icon size={32} color="#22C55E" strokeWidth={2} />
+        <View style={styles.iconWrap}>
+          <Icon size={28} color={palette.green500} strokeWidth={2} />
         </View>
-        <Text className="font-sans-semibold text-sm text-gray-900 text-center leading-5" numberOfLines={2}>
+        <Text style={styles.actionLabel} numberOfLines={2}>
           {label}
         </Text>
       </TouchableOpacity>
@@ -56,31 +51,68 @@ function QuickActions({
   onInviteViaLink,
   onFindPlayers,
 }: QuickActionsProps) {
+  const actions = [
+    { icon: CalendarPlus, label: "Create tee time", onPress: onCreateTeeTime },
+    { icon: UserPlus, label: "Invite via link", onPress: onInviteViaLink },
+    { icon: Search, label: "Find Players", onPress: onFindPlayers },
+  ];
+
   return (
-    <View className="px-5 py-5 bg-gray-50">
-      <Text className="font-sans-bold text-lg text-gray-900 mb-4">Quick actions</Text>
-      <View className="flex-row gap-3">
-        <ActionButton
-          icon={CalendarPlus}
-          label={"Create\ntee time"}
-          onPress={onCreateTeeTime}
-          index={0}
-        />
-        <ActionButton
-          icon={UserPlus}
-          label={"Invite\nvia link"}
-          onPress={onInviteViaLink}
-          index={1}
-        />
-        <ActionButton
-          icon={Search}
-          label={"Find\nPlayers"}
-          onPress={onFindPlayers}
-          index={2}
-        />
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Quick actions</Text>
+      <View style={styles.row}>
+        {actions.map((item, index) => (
+          <ActionButton
+            key={item.label}
+            icon={item.icon}
+            label={item.label}
+            onPress={item.onPress}
+            index={index}
+          />
+        ))}
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  section: {
+    paddingHorizontal: spacing["2xl"],
+    paddingVertical: spacing["2xl"],
+    backgroundColor: palette.gray50,
+  },
+  sectionTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: fontSize.xl,
+    color: colorTokens.text.primary,
+    marginBottom: spacing.lg,
+  },
+  row: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  actionWrapper: {
+    flex: 1,
+  },
+  actionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    aspectRatio: 1,
+    elevation: 3,
+  },
+  iconWrap: {
+    marginBottom: spacing.sm,
+  },
+  actionLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: fontSize.sm,
+    color: colorTokens.text.primary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+});
 
 export default memo(QuickActions);

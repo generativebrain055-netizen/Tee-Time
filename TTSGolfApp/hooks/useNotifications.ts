@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Alert } from "react-native";
 import { notificationApi, friendApi, AppNotification } from "../services/api";
+import { logger } from "../utils/logger";
 
 interface UseNotificationsReturn {
   notifications: AppNotification[];
@@ -38,7 +39,7 @@ export function useNotifications(): UseNotificationsReturn {
         setUnreadCount(countResponse.count);
       }
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      logger.error("[useNotifications] Error fetching notifications", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -62,7 +63,7 @@ export function useNotifications(): UseNotificationsReturn {
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error("Error marking notification as read:", error);
+      logger.error("[useNotifications] Error marking notification as read", error);
     }
   }, []);
 
@@ -72,7 +73,7 @@ export function useNotifications(): UseNotificationsReturn {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
-      console.error("Error marking all as read:", error);
+      logger.error("[useNotifications] Error marking all as read", error);
     }
   }, []);
 
@@ -86,7 +87,7 @@ export function useNotifications(): UseNotificationsReturn {
           setUnreadCount((prev) => Math.max(0, prev - 1));
         }
       } catch (error) {
-        console.error("Error deleting notification:", error);
+        logger.error("[useNotifications] Error deleting notification", error);
       }
     },
     [notifications],
@@ -135,7 +136,7 @@ export function useNotifications(): UseNotificationsReturn {
           setUnreadCount((prev) => Math.max(0, prev - 1));
         }
       } catch (error) {
-        console.error("Error accepting friend request:", error);
+        logger.error("[useNotifications] Error accepting friend request", error);
       }
     }, []),
     declineFriendRequest: useCallback(async (item: AppNotification) => {
@@ -158,7 +159,7 @@ export function useNotifications(): UseNotificationsReturn {
           setUnreadCount((prev) => Math.max(0, prev - 1));
         }
       } catch (error) {
-        console.error("Error declining friend request:", error);
+        logger.error("[useNotifications] Error declining friend request", error);
       }
     }, []),
     markAsResponded: useCallback(async (item: AppNotification) => {
@@ -175,7 +176,7 @@ export function useNotifications(): UseNotificationsReturn {
           setUnreadCount((prev) => Math.max(0, prev - 1));
         }
       } catch (error) {
-        console.error("Error marking as responded:", error);
+        logger.error("[useNotifications] Error marking as responded", error);
       }
     }, []),
   };

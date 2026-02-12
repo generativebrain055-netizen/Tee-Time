@@ -3,13 +3,14 @@
  */
 const inviteRepository = require("../../repositories/inviteRepository");
 const teeTimeRepository = require("../../repositories/teeTimeRepository");
+const notificationService = require("../../services/notificationService");
 const logger = require("../../config/logger");
 
 const { INVITE_TYPES, INVITE_RESPONSES } = require("./constants");
 const { sendInviteSms } = require("./smsService");
 const { createFCFSInvites, createRosterInvites, createFromRoster } = require("./handlers/createHandlers");
 const { processNextRosterInvite, handleAcceptance, handleDecline, handleMaybe } = require("./handlers/responseHandlers");
-const { getPendingInvites, getSentInvites, getInviteResponses, getUserResponseHistory, getWaitlist } = require("./handlers/queryHandlers");
+const { getInviteById, getPendingInvites, getSentInvites, getInviteResponses, getUserResponseHistory, getWaitlist } = require("./handlers/queryHandlers");
 
 class InviteController {
     constructor() {
@@ -18,6 +19,7 @@ class InviteController {
         this.createFCFSInvites = createFCFSInvites;
         this.createRosterInvites = createRosterInvites;
         this.createFromRoster = createFromRoster;
+        this.getInviteById = getInviteById;
         this.getPendingInvites = getPendingInvites;
         this.getSentInvites = getSentInvites;
         this.respondToInvite = this.respondToInvite.bind(this);
@@ -56,7 +58,22 @@ class InviteController {
             const createdInvites = await inviteRepository.createBulkInvites(teeTimeId, userId, invitees);
 
             for (const invite of createdInvites) {
-                if (!invite.invitee_user_id && invite.invitee_phone) {
+                if (invite.invitee_user_id) {
+                    await notificationService.notifyTeeTimeInvite(
+                        invite.invitee_user_id,
+                        {
+                            id: teeTime.id,
+                            date: teeTime.tee_date,
+                            time: teeTime.tee_time,
+                            courseName: teeTime.course_name,
+                        },
+                        {
+                            id: userId,
+                            firstName: req.user.firstName,
+                            lastName: req.user.lastName,
+                        }
+                    );
+                } else if (invite.invitee_phone) {
                     await sendInviteSms(invite, teeTime);
                 }
             }

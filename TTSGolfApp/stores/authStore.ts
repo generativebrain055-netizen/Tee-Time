@@ -10,6 +10,8 @@ interface UserData {
   handicap?: number | null;
   socialRate?: number;
   avatar?: string;
+  /** From API (login/profile); prefer avatar if both set */
+  avatarUrl?: string | null;
 }
 
 interface AuthState {

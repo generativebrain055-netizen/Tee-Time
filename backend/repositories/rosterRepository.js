@@ -267,6 +267,40 @@ class RosterRepository {
       return data || [];
     } catch (error) {
       handleError(error, "searchUsers");
+      return [];
+    }
+  }
+
+  /**
+   * Search roster groups by name (for global search, Figma 795-6009)
+   */
+  async searchGroups(userId, query, limit = 10) {
+    try {
+      if (!query || query.trim().length < 2) return [];
+      const pattern = `%${query.trim()}%`;
+      const { data, error } = await supabaseAdmin
+        .from("roster_groups")
+        .select("id, name, color, description")
+        .eq("user_id", userId)
+        .ilike("name", pattern)
+        .order("position", { ascending: true })
+        .limit(limit);
+
+      if (error) throw error;
+
+      const withCounts = await Promise.all(
+        (data || []).map(async (g) => {
+          const { count } = await supabaseAdmin
+            .from("roster")
+            .select("*", { count: "exact", head: true })
+            .eq("group_id", g.id);
+          return { ...g, member_count: count || 0 };
+        }),
+      );
+      return withCounts;
+    } catch (error) {
+      handleError(error, "searchGroups");
+      return [];
     }
   }
 

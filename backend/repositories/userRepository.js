@@ -341,7 +341,8 @@ const updateProfile = async (userId, updates) => {
     "clubs",
   ];
 
-  console.log("[UPDATE_PROFILE] Input updates:", updates);
+  const logger = require("../config/logger");
+  logger.debug("[UPDATE_PROFILE] Input updates", updates);
 
   try {
     // Build user table updates
@@ -355,7 +356,7 @@ const updateProfile = async (userId, updates) => {
 
     // Update users table
     if (Object.keys(userUpdates).length > 0) {
-      console.log("[UPDATE_PROFILE] User table updates:", userUpdates);
+      logger.debug("[UPDATE_PROFILE] User table updates", userUpdates);
       const { error: userError } = await supabaseAdmin
         .from("users")
         .update(userUpdates)
@@ -386,7 +387,7 @@ const updateProfile = async (userId, updates) => {
 
     // Update user_profiles table
     if (Object.keys(profileUpdates).length > 0) {
-      console.log("[UPDATE_PROFILE] Profile table updates:", profileUpdates);
+      logger.debug("[UPDATE_PROFILE] Profile table updates", profileUpdates);
       const { error: profileError } = await supabaseAdmin
         .from("user_profiles")
         .update(profileUpdates)

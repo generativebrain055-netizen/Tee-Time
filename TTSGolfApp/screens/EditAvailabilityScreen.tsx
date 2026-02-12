@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Calendar, Clock as ClockIcon } from 'lucide-react-native';
 import { availabilityApi, type TimeSlot, type DayOfWeek, type TimeSlotType } from '../services/api/availabilityApi';
 import { ScreenShell, AppHeader } from '../ui';
+import logger from '../utils/logger';
 
 const WEEK_DAYS: { id: DayOfWeek; label: string }[] = [
   { id: 'Mon', label: 'Monday' },
@@ -163,7 +164,8 @@ function EditAvailabilityScreen({ navigation, route }: any) {
           setCustomTimes(grouped);
         }
       } catch (error) {
-        console.error('Failed to load availability:', error);
+        logger.error('Failed to load availability:', error);
+        // Error loading availability - user can still set new availability
       } finally {
         setLoading(false);
       }
@@ -214,16 +216,25 @@ function EditAvailabilityScreen({ navigation, route }: any) {
       const response = await availabilityApi.saveUserAvailability(availability);
 
       if (response.success) {
-        Alert.alert('Success', 'Your availability has been updated', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
+        // Show success feedback and navigate back
+        Alert.alert(
+          'Success', 
+          'Your availability has been updated successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ],
+          { cancelable: false }
+        );
+      } else {
+        throw new Error(response.message || 'Failed to save availability');
       }
     } catch (error: any) {
-      console.error('Save availability error:', error);
-      Alert.alert('Error', error.message || 'Failed to save availability');
+      logger.error('Save availability error:', error);
+      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to save availability';
+      Alert.alert('Error', errorMessage);
     } finally {
       setSaving(false);
     }
@@ -275,7 +286,7 @@ function EditAvailabilityScreen({ navigation, route }: any) {
                   color: totalSelected > 0 ? '#FFFFFF' : '#9CA3AF',
                 }}
               >
-                Next
+                Save
               </Text>
             )}
           </TouchableOpacity>

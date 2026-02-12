@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ScrollView } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ChatMessage, CurrentUser, ChatDetailState } from "../types";
+import { messagesApi } from "../../../services/api";
+import type { ChatMessage, ChatDetailState } from "../types";
+import type { ChatInfo } from "../types";
+import { logger } from "../../../utils/logger";
 
-export const useChat = () => {
+export const useChat = (chatInfo: ChatInfo | undefined) => {
   const [state, setState] = useState<ChatDetailState>({
     messageText: "",
     showMenu: false,
@@ -11,33 +13,69 @@ export const useChat = () => {
     loading: true,
     currentUser: null,
   });
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Resolve conversation and load messages
   useEffect(() => {
-    const loadCurrentUser = async () => {
+    if (!chatInfo) {
+      setState((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
       try {
-        const userData = await AsyncStorage.getItem("user");
-        if (userData) {
-          const user = JSON.parse(userData);
-          setState(prev => ({
-            ...prev,
-            currentUser: {
-              id: user.id,
-              name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "You",
-              avatar: user.avatarUrl,
-            },
-            loading: false,
-          }));
-        } else {
-          setState(prev => ({ ...prev, loading: false }));
+        setState((prev) => ({ ...prev, loading: true }));
+
+        const params: {
+          conversationId?: string;
+          recipientId?: string;
+          teeTimeId?: string;
+          rosterGroupId?: string;
+        } = {};
+        if (chatInfo.conversationId) params.conversationId = chatInfo.conversationId;
+        else if (chatInfo.recipientId) params.recipientId = chatInfo.recipientId;
+        else if (chatInfo.teeTimeId) params.teeTimeId = chatInfo.teeTimeId;
+        else if (chatInfo.groupId) params.rosterGroupId = chatInfo.groupId;
+
+        const convRes = await messagesApi.getOrCreateConversation(params);
+        if (cancelled || !convRes.success || !convRes.conversation) {
+          setState((prev) => ({ ...prev, loading: false }));
+          return;
         }
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        setState(prev => ({ ...prev, loading: false }));
+
+        const cid = convRes.conversation.id;
+        setConversationId(cid);
+
+        const msgRes = await messagesApi.getMessages(cid);
+        if (cancelled) return;
+        const list = msgRes.success && msgRes.messages ? msgRes.messages : [];
+
+        setState((prev) => ({
+          ...prev,
+          messages: list as ChatMessage[],
+          loading: false,
+        }));
+      } catch (err) {
+        if (!cancelled) {
+          logger.warn("[useChat] Chat load error", err);
+          setState((prev) => ({ ...prev, loading: false }));
+        }
       }
     };
-    loadCurrentUser();
-  }, []);
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    chatInfo?.conversationId,
+    chatInfo?.recipientId,
+    chatInfo?.teeTimeId,
+    chatInfo?.groupId,
+  ]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -46,38 +84,35 @@ export const useChat = () => {
   }, [state.messages]);
 
   const setMessageText = useCallback((text: string) => {
-    setState(prev => ({ ...prev, messageText: text }));
+    setState((prev) => ({ ...prev, messageText: text }));
   }, []);
 
   const setShowMenu = useCallback((show: boolean) => {
-    setState(prev => ({ ...prev, showMenu: show }));
+    setState((prev) => ({ ...prev, showMenu: show }));
   }, []);
 
-  const handleSend = useCallback(() => {
-    if (!state.messageText.trim()) return;
+  const handleSend = useCallback(async () => {
+    const trimmed = state.messageText.trim();
+    if (!trimmed || !conversationId) return;
 
-    const trimmedMessage = state.messageText.trim();
-    setState(prev => ({ ...prev, messageText: "" }));
+    setState((prev) => ({ ...prev, messageText: "" }));
 
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      senderId: state.currentUser?.id || "me",
-      senderName: state.currentUser?.name || "You",
-      senderImg: state.currentUser?.avatar || "",
-      message: trimmedMessage,
-      time: new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
-      isMe: true,
-    };
-
-    setState(prev => ({ ...prev, messages: [...prev.messages, newMessage] }));
-  }, [state.messageText, state.currentUser]);
+    try {
+      const res = await messagesApi.sendMessage(conversationId, trimmed);
+      if (res.success && res.message) {
+        const m = res.message as ChatMessage;
+        setState((prev) => ({ ...prev, messages: [...prev.messages, m] }));
+      } else {
+        setState((prev) => ({ ...prev, messageText: trimmed }));
+      }
+    } catch (err) {
+      setState((prev) => ({ ...prev, messageText: trimmed }));
+    }
+  }, [state.messageText, conversationId]);
 
   return {
     ...state,
+    conversationId,
     scrollViewRef,
     setMessageText,
     setShowMenu,

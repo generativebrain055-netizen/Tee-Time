@@ -91,7 +91,8 @@ export const LocationPage: React.FC<LocationPageProps> = ({
         ]);
       }
     } catch (error) {
-      console.error("Location search error:", error);
+      const { logger } = require("../../utils/logger");
+      logger.error("[LocationPage] Location search error", error);
       setSuggestions([
         {
           id: "manual",

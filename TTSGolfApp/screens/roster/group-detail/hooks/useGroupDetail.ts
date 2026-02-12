@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Alert } from "react-native";
 import { rosterApi, friendApi, teeTimeApi, RosterContact, Friend, TeeTime } from "../../../../services/api";
 import { GroupData, GroupDetailState } from "../types";
+import { logger } from "../../../../utils/logger";
 
 export const useGroupDetail = (groupId: string) => {
   const [state, setState] = useState<GroupDetailState>({
@@ -34,7 +35,7 @@ export const useGroupDetail = (groupId: string) => {
         loading: false,
       }));
     } catch (error) {
-      console.error("Failed to load group data:", error);
+      logger.error("[useGroupDetail] Failed to load group data", error);
       setState(prev => ({ ...prev, loading: false }));
     }
   }, [groupId]);
@@ -60,7 +61,7 @@ export const useGroupDetail = (groupId: string) => {
         setState(prev => ({ ...prev, friends: availableFriends }));
       }
     } catch (error) {
-      console.error("Failed to load friends:", error);
+      logger.error("[useGroupDetail] Failed to load friends", error);
     }
   }, [state.members]);
 

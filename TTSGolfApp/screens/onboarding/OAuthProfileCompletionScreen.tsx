@@ -28,6 +28,7 @@ import { sessionManager } from "../../utils/sessionManager";
 import { profileApi } from "../../services/api/profileApi";
 import { API_URL } from "../../config/api";
 import { ONBOARDING_COLORS as COLORS } from "./constants";
+import { logger } from "../../utils/logger";
 
 interface OAuthProfileCompletionProps {
   navigation: {
@@ -141,11 +142,11 @@ export function OAuthProfileCompletionScreen({
     setIsSubmitting(true);
 
     try {
-      console.log("[OAuthProfileCompletion] Creating account with:", {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phoneNumber: verifiedPhoneNumber,
-        email: providerData?.email,
+      logger.debug("[OAuthProfileCompletion] Creating account", {
+        hasFirstName: !!firstName.trim(),
+        hasLastName: !!lastName.trim(),
+        hasPhone: !!verifiedPhoneNumber,
+        hasEmail: !!providerData?.email,
         hasProfileImage: !!profileImage,
       });
 
@@ -167,10 +168,14 @@ export function OAuthProfileCompletionScreen({
       const data = await response.json();
 
       if (!response.ok) {
+        logger.error("[OAuthProfileCompletion] Account creation failed", {
+          status: response.status,
+          error: data.error || data.message,
+        });
         throw new Error(data.error || data.message || "Failed to create account");
       }
 
-      console.log("[OAuthProfileCompletion] Account created successfully");
+      logger.info("[OAuthProfileCompletion] Account created successfully");
 
       // Save session
       await sessionManager.saveSession({
@@ -184,9 +189,9 @@ export function OAuthProfileCompletionScreen({
         try {
           setIsUploadingImage(true);
           await profileApi.uploadAvatar(profileImage);
-          console.log("[OAuthProfileCompletion] Profile picture uploaded");
+          logger.info("[OAuthProfileCompletion] Profile picture uploaded");
         } catch (imageError) {
-          console.error("[OAuthProfileCompletion] Image upload error:", imageError);
+          logger.error("[OAuthProfileCompletion] Image upload error", imageError);
           Alert.alert(
             "Image Upload Failed",
             "Your account was created but we couldn't upload your profile picture. You can add it later from your profile."
@@ -200,7 +205,7 @@ export function OAuthProfileCompletionScreen({
       navigation.replace("AvailabilityOnboarding", { user: data.user });
 
     } catch (error) {
-      console.error("[OAuthProfileCompletion] Error:", error);
+      logger.error("[OAuthProfileCompletion] Error creating account", error);
       Alert.alert(
         "Error",
         error instanceof Error ? error.message : "Failed to create account. Please try again."

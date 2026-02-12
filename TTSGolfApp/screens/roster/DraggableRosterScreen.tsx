@@ -14,6 +14,7 @@ import {
 import { Star, ChevronDown, ChevronUp, ArrowUp, ArrowDown, SlidersHorizontal, Check, X } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { friendApi, rosterApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 type SortOption = "position" | "socialRate" | "handicap" | "name" | "distance" | "membership";
 
@@ -264,7 +265,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             ]);
 
             if (!friendsRes.success) {
-                console.error("Failed to load friends");
+                logger.error("[DraggableRosterScreen] Failed to load friends");
                 return;
             }
 
@@ -334,7 +335,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             setOnDeckMembers(sortMembers(onDeck, sort));
 
         } catch (error) {
-            console.error("Failed to load roster data:", error);
+            logger.error("[DraggableRosterScreen] Failed to load roster data", error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -385,7 +386,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             [orderedIds[index - 1], orderedIds[index]] = [orderedIds[index], orderedIds[index - 1]];
             await rosterApi.reorderRoster(orderedIds.filter(m => m.rosterId).map(m => m.rosterId!));
         } catch (error) {
-            console.error("Failed to sync reorder:", error);
+            logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
         }
     }, [rosterMembers, onDeckMembers, sortBy]);
 
@@ -414,7 +415,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             [orderedIds[index], orderedIds[index + 1]] = [orderedIds[index + 1], orderedIds[index]];
             await rosterApi.reorderRoster(orderedIds.filter(m => m.rosterId).map(m => m.rosterId!));
         } catch (error) {
-            console.error("Failed to sync reorder:", error);
+            logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
         }
     }, [rosterMembers, onDeckMembers, sortBy]);
 
@@ -452,7 +453,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 }
             }
         } catch (error: any) {
-            console.error("Failed to move member:", error);
+            logger.error("[DraggableRosterScreen] Failed to move member", error);
             // If already in roster error, try to find and move
             if (error?.message?.includes("already in roster")) {
                 // Reload to get the correct rosterId

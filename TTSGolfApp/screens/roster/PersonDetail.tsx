@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { rosterApi, MemberProfile, friendApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface RosterPerson {
     id: string;
@@ -49,7 +50,7 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
             if (profileRes.success) setProfile(profileRes.profile);
             if (historyRes.success) setHistory((historyRes.history || []) as any);
         } catch (error) {
-            console.error("Failed to load profile:", error);
+            logger.error("[PersonDetail] Failed to load profile", error);
         } finally {
             setLoading(false);
         }

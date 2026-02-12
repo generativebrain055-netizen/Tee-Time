@@ -55,6 +55,14 @@ export const inviteApi = {
     ),
 
   /**
+   * Get invite by ID
+   */
+  getInviteById: (inviteId: string) =>
+    apiCall<{ success: boolean; invite: Invite & { participants?: any[] } }>(
+      `${API_ENDPOINTS.INVITES}/${inviteId}`,
+    ),
+
+  /**
    * Get pending invites (received)
    */
   getPendingInvites: () =>

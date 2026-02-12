@@ -152,13 +152,27 @@ async function getCalendar(userId, startDate, endDate) {
     endDate,
   );
 
-  // Import formatter here to avoid circular deps
-  const { formatCalendarEntry } = require("../formatters/teeTimeFormatter");
+  if (!teeTimes || teeTimes.length === 0) {
+    return {};
+  }
 
-  // Group by date
+  // Batch fetch participants for month view (Figma 565-* full schedule)
+  const teeTimeIds = teeTimes.map((t) => t.id);
+  const participantsByTeeTime = (await teeTimeRepository.getParticipantsBatch(teeTimeIds)) || {};
+
+  const { formatCalendarEntry, formatParticipant } = require("../formatters/teeTimeFormatter");
+
   const calendar = {};
   teeTimes.forEach((t) => {
     const entry = formatCalendarEntry(t);
+    const rawParticipants = participantsByTeeTime[entry.id] || [];
+    entry.participants = rawParticipants.map((p) =>
+      formatParticipant({
+        ...p,
+        is_creator: p.user_id === entry.creatorId,
+        handicap: p.user_handicap ?? p.handicap,
+      }),
+    );
     const dateKey = entry.date;
     if (!calendar[dateKey]) {
       calendar[dateKey] = [];

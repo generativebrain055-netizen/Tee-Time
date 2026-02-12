@@ -30,19 +30,11 @@ export const availabilityApi = {
   // Get current user's availability
   async getUserAvailability(): Promise<AvailabilityResponse> {
     try {
-      console.log('[AvailabilityAPI] Fetching user availability from:', `${API_URL}/api/availability`);
       const response = await apiCall<AvailabilityResponse>(`${API_URL}/api/availability`, {
         method: 'GET',
       });
-      console.log('[AvailabilityAPI] Response received:', response);
       return response;
     } catch (error: any) {
-      console.error('[AvailabilityAPI] Error fetching availability:', error);
-      console.error('[AvailabilityAPI] Error details:', {
-        message: error.message,
-        statusCode: error.statusCode,
-        code: error.code,
-      });
       throw error;
     }
   },
@@ -50,15 +42,12 @@ export const availabilityApi = {
   // Save user availability
   async saveUserAvailability(availability: TimeSlot[]): Promise<AvailabilityResponse> {
     try {
-      console.log('[AvailabilityAPI] Saving availability:', availability);
       const response = await apiCall<AvailabilityResponse>(`${API_URL}/api/availability`, {
         method: 'POST',
         body: JSON.stringify({ availability }),
       });
-      console.log('[AvailabilityAPI] Save response:', response);
       return response;
     } catch (error: any) {
-      console.error('[AvailabilityAPI] Error saving availability:', error);
       throw error;
     }
   },
@@ -71,7 +60,6 @@ export const availabilityApi = {
       });
       return response;
     } catch (error: any) {
-      console.error('[AvailabilityAPI] Error clearing availability:', error);
       throw error;
     }
   },
@@ -91,7 +79,6 @@ export const availabilityApi = {
       });
       return response;
     } catch (error: any) {
-      console.error('[AvailabilityAPI] Error fetching multiple availability:', error);
       throw error;
     }
   },

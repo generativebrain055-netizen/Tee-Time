@@ -70,15 +70,30 @@ const formatTeeTimeDate = (teeDate) => {
 /**
  * Build SMS message based on invite type
  */
-const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours) => {
+const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours, deadline = null) => {
     const dateStr = formatTeeTimeDate(teeTime.tee_date);
 
     if (isFCFS) {
-        return `FIRST COME FIRST SERVE!\n\n` +
+        let message = `FIRST COME FIRST SERVE!\n\n` +
             `Location: ${teeTime.course_name}\n` +
             `Date: ${dateStr} at ${teeTime.tee_time}\n\n` +
-            `First to accept get the spots!\n` +
-            `Tap to respond: https://teetime.app/invite/${invite.id}`;
+            `First to accept get the spots!`;
+        
+        // Add deadline information if provided
+        if (deadline) {
+            const deadlineDate = new Date(deadline);
+            const deadlineStr = deadlineDate.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+            message += `\n\nDeadline: ${deadlineStr}`;
+        }
+        
+        message += `\n\nTap to respond: https://teetime.app/invite/${invite.id}`;
+        return message;
     }
 
     if (responseWindowHours) {
@@ -98,14 +113,14 @@ const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours) => {
 /**
  * Send SMS invite
  */
-const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHours = null) => {
+const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHours = null, deadline = null) => {
     try {
         if (!twilioClient) {
             logger.warn(`SMS not sent to ${invite.invitee_phone} - Twilio not configured`);
             return false;
         }
 
-        const message = buildSmsMessage(invite, teeTime, isFCFS, responseWindowHours);
+        const message = buildSmsMessage(invite, teeTime, isFCFS, responseWindowHours, deadline);
         const fromNumber = process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
 
         await twilioClient.messages.create({

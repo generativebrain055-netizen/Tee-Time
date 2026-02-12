@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { logger } from "./logger";
 
 const DEVICE_ID_KEY = "@teetime_device_id";
 
@@ -47,7 +48,7 @@ const generateDeviceId = async (): Promise<string> => {
 
     return deviceId;
   } catch (error) {
-    console.error("Error generating device ID:", error);
+    logger.error("[deviceInfo] Error generating device ID", error);
     // Fallback to random ID
     return `fallback-${Date.now()}-${Math.random().toString(36).substring(2)}`;
   }
@@ -141,7 +142,7 @@ export const clearDeviceId = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem(DEVICE_ID_KEY);
   } catch (error) {
-    console.error("Error clearing device ID:", error);
+    logger.error("[deviceInfo] Error clearing device ID", error);
   }
 };
 

@@ -101,8 +101,9 @@ const authenticate = async (req, res, next) => {
     };
 
     // Update last activity (async, don't wait)
+    const logger = require("../config/logger");
     sessionRepository.updateLastActivity(session.id).catch((err) => {
-      console.error("Failed to update session activity:", err);
+      logger.error("Failed to update session activity", err);
     });
 
     next();

@@ -1,9 +1,14 @@
+/**
+ * Settings Screen (Figma 883-* Account + Profile Settings)
+ * Main settings screen with account information and settings options
+ */
 import React, { useEffect, useCallback } from "react";
 import {
     View,
     Text,
     TouchableOpacity,
     Alert,
+    StyleSheet,
 } from "react-native";
 import { 
     User, 
@@ -19,10 +24,15 @@ import {
 } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "../contexts";
-import { ScreenShell, ContentArea, AppHeader } from "../ui";
+import { ScreenShell, AppHeader } from "../ui";
+import { useColors, useTheme } from "../ui/theme";
+import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
+import { logger } from "../utils/logger";
 
 export default function SettingsScreen({ navigation }: any) {
     const { profile, fetchProfile, clearProfile } = useUser();
+    const colors = useColors();
+    const theme = useTheme();
 
     // Fetch profile on mount if not cached
     useEffect(() => {
@@ -40,8 +50,8 @@ export default function SettingsScreen({ navigation }: any) {
     }, [navigation]);
 
     const handlePrivacy = useCallback(() => {
-        Alert.alert("Privacy & Security", "Privacy settings coming soon");
-    }, []);
+        navigation?.navigate("PrivacySecurity");
+    }, [navigation]);
 
     const handleHelp = useCallback(() => {
         navigation?.navigate("HelpSupport");
@@ -62,7 +72,7 @@ export default function SettingsScreen({ navigation }: any) {
                             await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                             navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
                         } catch (error) {
-                            console.error("Error logging out:", error);
+                            logger.error("[SettingsScreen] Error logging out", error);
                         }
                     },
                 },
@@ -77,268 +87,237 @@ export default function SettingsScreen({ navigation }: any) {
                 onBack={() => navigation?.goBack()}
             />
 
-            <ContentArea
-                contentContainerStyle={{ padding: 16 }}
-                style={{ backgroundColor: '#F9FAFB' }}
-            >
+            <View style={styles.container}>
                 {/* Account Information Section */}
-                <View style={{ marginBottom: 24 }}>
-                    <View style={{ 
-                        flexDirection: 'row', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between',
-                        marginBottom: 16,
-                        paddingHorizontal: 4,
-                    }}>
-                        <Text style={{
-                            fontFamily: 'Inter_700Bold',
-                            fontSize: 20,
-                            color: '#111827',
-                        }}>
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                             Account Information
                         </Text>
                         <TouchableOpacity 
                             onPress={handleEditProfile}
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 20,
-                                backgroundColor: '#F3F4F6',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
+                            style={[styles.editButton, { backgroundColor: colors.surfaceSecondary }]}
+                            activeOpacity={0.7}
                         >
-                            <Edit3 size={20} color="#6B7280" strokeWidth={2} />
+                            <Edit3 size={20} color={colors.textSecondary} strokeWidth={2} />
                         </TouchableOpacity>
                     </View>
 
-                    {/* Full Name */}
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: 16,
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: 12,
-                        marginBottom: 12,
-                    }}>
-                        <View style={{
-                            width: 48,
-                            height: 48,
-                            backgroundColor: '#DBEAFE',
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                        }}>
-                            <User size={24} color="#3B82F6" strokeWidth={2} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{
-                                fontFamily: 'Inter_400Regular',
-                                fontSize: 13,
-                                color: '#9CA3AF',
-                                marginBottom: 4,
-                            }}>
-                                Full Name
-                            </Text>
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 16,
-                                color: '#111827',
-                            }}>
-                                {profile?.firstName && profile?.lastName 
-                                    ? `${profile.firstName} ${profile.lastName}`
-                                    : "Not set"}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Email */}
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: 16,
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: 12,
-                        marginBottom: 12,
-                    }}>
-                        <View style={{
-                            width: 48,
-                            height: 48,
-                            backgroundColor: '#D1FAE5',
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                        }}>
-                            <Mail size={24} color="#10B981" strokeWidth={2} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{
-                                fontFamily: 'Inter_400Regular',
-                                fontSize: 13,
-                                color: '#9CA3AF',
-                                marginBottom: 4,
-                            }}>
-                                Email
-                            </Text>
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 16,
-                                color: '#111827',
-                            }}>
-                                {profile?.email || "Not set"}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Phone */}
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: 16,
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: 12,
-                        marginBottom: 12,
-                    }}>
-                        <View style={{
-                            width: 48,
-                            height: 48,
-                            backgroundColor: '#E9D5FF',
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                        }}>
-                            <Phone size={24} color="#9333EA" strokeWidth={2} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{
-                                fontFamily: 'Inter_400Regular',
-                                fontSize: 13,
-                                color: '#9CA3AF',
-                                marginBottom: 4,
-                            }}>
-                                Phone
-                            </Text>
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 16,
-                                color: '#111827',
-                            }}>
-                                {profile?.phoneNumber || "Not set"}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Location */}
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: 16,
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: 12,
-                    }}>
-                        <View style={{
-                            width: 48,
-                            height: 48,
-                            backgroundColor: '#FEF3C7',
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                        }}>
-                            <MapPin size={24} color="#F59E0B" strokeWidth={2} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{
-                                fontFamily: 'Inter_400Regular',
-                                fontSize: 13,
-                                color: '#9CA3AF',
-                                marginBottom: 4,
-                            }}>
-                                Location
-                            </Text>
-                            <Text style={{
-                                fontFamily: 'Inter_600SemiBold',
-                                fontSize: 16,
-                                color: '#111827',
-                            }}>
-                                {profile?.location || "Not set"}
-                            </Text>
-                        </View>
-                    </View>
+                    {/* Account Info Items */}
+                    {[
+                        { icon: User, label: 'Full Name', value: profile?.firstName && profile?.lastName ? `${profile.firstName} ${profile.lastName}` : "Not set", iconColor: '#3B82F6', iconBg: '#DBEAFE' },
+                        { icon: Mail, label: 'Email', value: profile?.email || "Not set", iconColor: '#10B981', iconBg: '#D1FAE5' },
+                        { icon: Phone, label: 'Phone', value: profile?.phoneNumber || "Not set", iconColor: '#9333EA', iconBg: '#E9D5FF' },
+                        { icon: MapPin, label: 'Location', value: profile?.location || "Not set", iconColor: '#F59E0B', iconBg: '#FEF3C7' },
+                    ].map((item, index, array) => {
+                        const Icon = item.icon;
+                        return (
+                            <View 
+                                key={item.label}
+                                style={[
+                                    styles.infoItem,
+                                    { backgroundColor: colors.surfaceSecondary },
+                                    index < array.length - 1 && styles.infoItemMargin,
+                                ]}
+                            >
+                                <View style={[styles.infoIcon, { backgroundColor: item.iconBg }]}>
+                                    <Icon size={24} color={item.iconColor} strokeWidth={2} />
+                                </View>
+                                <View style={styles.infoContent}>
+                                    <Text style={[styles.infoLabel, { color: colors.textMuted }]}>
+                                        {item.label}
+                                    </Text>
+                                    <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                                        {item.value}
+                                    </Text>
+                                </View>
+                            </View>
+                        );
+                    })}
                 </View>
 
                 {/* Settings Options */}
-                <View className="bg-white rounded-xl mb-4 border border-gray-100 overflow-hidden">
-                    <TouchableOpacity 
-                        className="flex-row items-center p-4 border-b border-gray-100"
-                        onPress={handleNotifications}
-                        activeOpacity={0.7}
-                    >
-                        <View className="w-10 h-10 bg-blue-50 rounded-lg items-center justify-center mr-3">
-                            <Bell size={20} color="#3B82F6" strokeWidth={2} />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-base font-bold text-gray-900 mb-0.5">Notifications</Text>
-                            <Text className="text-xs text-gray-500">Manage notification preferences</Text>
-                        </View>
-                        <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        className="flex-row items-center p-4 border-b border-gray-100"
-                        onPress={handlePrivacy}
-                        activeOpacity={0.7}
-                    >
-                        <View className="w-10 h-10 bg-purple-50 rounded-lg items-center justify-center mr-3">
-                            <Shield size={20} color="#9333EA" strokeWidth={2} />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-base font-bold text-gray-900 mb-0.5">Privacy & Security</Text>
-                            <Text className="text-xs text-gray-500">Privacy settings and policies</Text>
-                        </View>
-                        <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        className="flex-row items-center p-4"
-                        onPress={handleHelp}
-                        activeOpacity={0.7}
-                    >
-                        <View className="w-10 h-10 bg-green-50 rounded-lg items-center justify-center mr-3">
-                            <HelpCircle size={20} color="#5EBC68" strokeWidth={2} />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-base font-bold text-gray-900 mb-0.5">Help & Support</Text>
-                            <Text className="text-xs text-gray-500">Support center and FAQs</Text>
-                        </View>
-                        <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
-                    </TouchableOpacity>
+                <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+                    {[
+                        { icon: Bell, label: 'Notifications', subtitle: 'Manage notification preferences', onPress: handleNotifications, iconColor: '#3B82F6', iconBg: '#DBEAFE' },
+                        { icon: Shield, label: 'Privacy & Security', subtitle: 'Privacy settings and policies', onPress: handlePrivacy, iconColor: '#9333EA', iconBg: '#E9D5FF' },
+                        { icon: HelpCircle, label: 'Help & Support', subtitle: 'Support center and FAQs', onPress: handleHelp, iconColor: colors.primary, iconBg: colors.primaryContainer },
+                    ].map((item, index, array) => {
+                        const Icon = item.icon;
+                        return (
+                            <TouchableOpacity
+                                key={item.label}
+                                style={[
+                                    styles.settingsItem,
+                                    index < array.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: 1 },
+                                ]}
+                                onPress={item.onPress}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.settingsIcon, { backgroundColor: item.iconBg }]}>
+                                    <Icon size={20} color={item.iconColor} strokeWidth={2} />
+                                </View>
+                                <View style={styles.settingsText}>
+                                    <Text style={[styles.settingsLabel, { color: colors.textPrimary }]}>
+                                        {item.label}
+                                    </Text>
+                                    <Text style={[styles.settingsSubtitle, { color: colors.textSecondary }]}>
+                                        {item.subtitle}
+                                    </Text>
+                                </View>
+                                <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
 
                 {/* Logout Button */}
                 <TouchableOpacity 
-                    className="bg-white rounded-xl p-4 border border-gray-100 flex-row items-center"
+                    style={[styles.logoutCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={handleLogout}
                     activeOpacity={0.7}
                 >
-                    <View className="w-10 h-10 bg-red-50 rounded-lg items-center justify-center mr-3">
-                        <LogOut size={20} color="#EF4444" strokeWidth={2} />
+                    <View style={[styles.logoutIcon, { backgroundColor: colors.errorContainer }]}>
+                        <LogOut size={20} color={colors.error} strokeWidth={2} />
                     </View>
-                    <View className="flex-1">
-                        <Text className="text-base font-bold text-red-600 mb-0.5">Log Out</Text>
-                        <Text className="text-xs text-gray-500">Sign out of your account</Text>
+                    <View style={styles.logoutText}>
+                        <Text style={[styles.logoutLabel, { color: colors.error }]}>
+                            Log Out
+                        </Text>
+                        <Text style={[styles.logoutSubtitle, { color: colors.textSecondary }]}>
+                            Sign out of your account
+                        </Text>
                     </View>
-                    <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
+                    <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
                 </TouchableOpacity>
 
                 {/* App Version */}
-                <Text className="text-center text-sm text-gray-400 mt-8">
+                <Text style={[styles.versionText, { color: colors.textMuted }]}>
                     Tee Time Social v1.0.0
                 </Text>
-            </ContentArea>
+            </View>
         </ScreenShell>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#F9FAFB',
+        padding: spacing.lg,
+    },
+    section: {
+        marginBottom: spacing['2xl'],
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.md,
+        paddingHorizontal: spacing.xs,
+    },
+    sectionTitle: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.xl,
+    },
+    editButton: {
+        width: 40,
+        height: 40,
+        borderRadius: radii.full,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    infoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.lg,
+        borderRadius: radii.md,
+    },
+    infoItemMargin: {
+        marginBottom: spacing.sm,
+    },
+    infoIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+    },
+    infoContent: {
+        flex: 1,
+    },
+    infoLabel: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+        marginBottom: spacing['2xs'],
+    },
+    infoValue: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.base,
+    },
+    settingsCard: {
+        borderRadius: radii.lg,
+        marginBottom: spacing.lg,
+        overflow: 'hidden',
+    },
+    settingsItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.lg,
+    },
+    settingsIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+    },
+    settingsText: {
+        flex: 1,
+    },
+    settingsLabel: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.base,
+        marginBottom: spacing['2xs'],
+    },
+    settingsSubtitle: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.xs,
+    },
+    logoutCard: {
+        borderRadius: radii.lg,
+        padding: spacing.lg,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        marginBottom: spacing['2xl'],
+    },
+    logoutIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
+    },
+    logoutText: {
+        flex: 1,
+    },
+    logoutLabel: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.base,
+        marginBottom: spacing['2xs'],
+    },
+    logoutSubtitle: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.xs,
+    },
+    versionText: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+        textAlign: 'center',
+        marginTop: spacing['2xl'],
+    },
+});

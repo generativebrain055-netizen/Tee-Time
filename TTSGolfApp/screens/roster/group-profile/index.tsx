@@ -44,9 +44,10 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         closeAddModal,
         toggleFriend,
         handleAddMembers,
+        handleLeaveGroup,
         handleGroupChat,
         handleSettings,
-    } = useGroupProfile(groupId);
+    } = useGroupProfile(groupId, navigation);
 
     const handleBack = useCallback(() => {
         navigation.goBack();
@@ -197,6 +198,21 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     onBlockMember={handleBlockMember}
                 />
 
+                {/* Leave group option (Figma 1075-927: removing yourself) */}
+                {!group.isOwner && (
+                    <View className="px-5 mb-6">
+                        <TouchableOpacity
+                            className="py-3.5 px-4 rounded-md items-center"
+                            style={{ backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FEE2E2" }}
+                            onPress={handleLeaveGroup}
+                        >
+                            <Text className="text-[15px] font-semibold" style={{ color: "#DC2626" }}>
+                                Leave Group
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 <View className="h-10" />
             </ScrollView>
 
@@ -206,6 +222,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 selectedFriends={selectedFriends}
                 loading={addingMembers}
                 topInset={insets.top}
+                memberUserIds={members.map(m => m.contact?.userId).filter(Boolean)}
                 onClose={closeAddModal}
                 onToggleFriend={toggleFriend}
                 onAdd={handleAddMembers}

@@ -18,6 +18,7 @@ import { useColors } from "../../ui/theme/ThemeContext";
 import { ConfirmModal } from "../../ui/feedback";
 import { profileApi } from "../../services/api";
 import { useUser } from "../../contexts";
+import { logger } from "../../utils/logger";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -240,8 +241,10 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     // Sync clubs with context profile when it updates
     useEffect(() => {
         if (contextProfile?.clubs && Array.isArray(contextProfile.clubs)) {
-            // Filter out any invalid club entries
-            const validClubs = contextProfile.clubs.filter(club => club && club.id && club.name);
+            // Filter out any invalid club entries and ensure id is string
+            const validClubs = contextProfile.clubs
+                .filter((club): club is { id: string; name: string; location?: string; type?: string } => !!(club && club.id && club.name))
+                .map((c) => ({ id: c.id, name: c.name, location: c.location }));
             setClubs(validClubs);
         }
     }, [contextProfile?.clubs]);
@@ -260,15 +263,15 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 clubs: Array.isArray(clubs) ? clubs.map(c => ({ id: c.id, name: c.name, location: c.location || '' })) : [],
             };
 
-            console.log('[EDIT_PROFILE] Saving profile with data:', JSON.stringify(updateData, null, 2));
-            console.log('[EDIT_PROFILE] Clubs being saved:', JSON.stringify(clubs, null, 2));
+            logger.debug('[EditProfileScreen] Saving profile with data', updateData);
+            logger.debug('[EditProfileScreen] Clubs being saved', clubs);
 
             const response = await profileApi.updateProfile(updateData);
 
-            console.log('[EDIT_PROFILE] Update response:', JSON.stringify(response, null, 2));
+            logger.debug('[EditProfileScreen] Update response', response);
 
             if (response.success) {
-                console.log('[EDIT_PROFILE] Update successful, updating context');
+                logger.info('[EditProfileScreen] Update successful, updating context');
                 updateContextProfile({
                     handicap: handicap ? parseInt(handicap) : undefined,
                     preferences: {
@@ -283,7 +286,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 setShowSuccessModal(true);
             }
         } catch (error: any) {
-            console.error("[EDIT_PROFILE] Error:", error);
+            logger.error("[EditProfileScreen] Error saving profile", error);
             setErrorMessage(error.message || "Failed to save profile");
             setShowErrorModal(true);
         } finally {
@@ -323,7 +326,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 setSearchResults(data.clubs || []);
             }
         } catch (error) {
-            console.error("Error searching clubs:", error);
+            logger.error("[EditProfileScreen] Error searching clubs", error);
             setSearchResults([]);
         } finally {
             setSearching(false);
@@ -647,11 +650,11 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 message="Choose an option"
                 onConfirm={() => {
                     setShowPhotoModal(false);
-                    console.log("Camera");
+                    logger.debug("[EditProfileScreen] Camera option selected");
                 }}
                 onCancel={() => {
                     setShowPhotoModal(false);
-                    console.log("Library");
+                    logger.debug("[EditProfileScreen] Library option selected");
                 }}
                 confirmText="Take Photo"
                 cancelText="Choose from Library"

@@ -31,6 +31,7 @@ import { ArrowLeft, User } from "lucide-react-native";
 import CountryPicker, { Country, COUNTRIES } from "../../components/CountryPicker";
 import { requestSmsMagicLink } from "../../utils/smsMagicLink";
 import { ONBOARDING_COLORS as COLORS } from "./constants";
+import { logger } from "../../utils/logger";
 
 interface OAuthPhoneEntryProps {
   navigation: {
@@ -88,9 +89,13 @@ export function OAuthPhoneEntryScreen({
 
     try {
       const fullPhoneNumber = getRawPhoneNumber();
-      console.log("[OAuthPhoneEntry] Sending SMS magic link to:", fullPhoneNumber);
+      logger.debug("[OAuthPhoneEntry] Sending SMS magic link", { phoneNumber: fullPhoneNumber });
 
-      const result = await requestSmsMagicLink(fullPhoneNumber);
+      // Pass OAuth email in userData so backend can link phone to OAuth user
+      const result = await requestSmsMagicLink(fullPhoneNumber, {
+        email: providerData?.email,
+        isOAuth: true,
+      });
 
       if (!result.success) {
         Alert.alert("Error", result.error || "Failed to send verification link");
@@ -98,7 +103,7 @@ export function OAuthPhoneEntryScreen({
         return;
       }
 
-      console.log("[OAuthPhoneEntry] SMS sent successfully, navigating to verification screen");
+      logger.info("[OAuthPhoneEntry] SMS sent successfully, navigating to verification screen");
 
       // Navigate to magic link verification screen
       navigation.navigate("OAuthMagicLinkVerification", {
@@ -107,7 +112,7 @@ export function OAuthPhoneEntryScreen({
       });
 
     } catch (error) {
-      console.error("[OAuthPhoneEntry] Error:", error);
+      logger.error("[OAuthPhoneEntry] Error sending magic link", error);
       Alert.alert("Error", "Failed to send verification link. Please try again.");
     } finally {
       setIsSubmitting(false);

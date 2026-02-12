@@ -7,10 +7,13 @@ import {
     Image,
     RefreshControl,
     ActivityIndicator,
+    Alert,
+    Modal,
 } from "react-native";
-import { MessageCircle } from "lucide-react-native";
+import { MessageCircle, MoreVertical, Trash2 } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
-import { friendApi } from "../../services/api";
+import { rosterApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface RosterListProps {
     navigation: any;
@@ -41,20 +44,60 @@ const formatLastPlayed = (dateStr: string): string => {
     return `${month}/${day}/${year}`;
 };
 
-const RosterItem = memo(({ item, index, navigation, colors, theme }: { 
+const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isEditMode }: { 
     item: any; 
     index: number; 
     navigation: any;
     colors: any;
     theme: any;
+    onRemove?: (rosterId: string) => void;
+    isEditMode?: boolean;
 }) => {
+    const [showMenu, setShowMenu] = useState(false);
+    
     const handlePress = () => {
-        navigation?.navigate("FriendProfile", { userId: item.id });
+        if (isEditMode) return;
+        const userId = item.contact?.userId || item.id;
+        navigation?.navigate("FriendProfile", { userId });
     };
+    
+    const handleLongPress = () => {
+        setShowMenu(true);
+    };
+    
+    const handleRemove = () => {
+        setShowMenu(false);
+        const contact = item.contact || item;
+        const name = contact.name || `${contact.firstName || ""} ${contact.lastName || ""}`.trim();
+        
+        Alert.alert(
+            "Remove from Roster",
+            `Remove ${name} from your roster? They will no longer be auto-invited to your tee times.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: () => {
+                        onRemove?.(item.id);
+                    },
+                },
+            ]
+        );
+    };
+    
+    // Extract contact data (handle both roster API format and flat format)
+    const contact = item.contact || item;
+    const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
+    const lastName = contact.name?.split(" ").slice(1).join(" ") || contact.lastName || "";
+    const avatar = contact.avatar || item.avatar;
+    const lastPlayed = item.stats?.lastPlayedTogether || item.lastPlayed;
 
     return (
+        <>
         <TouchableOpacity 
             onPress={handlePress}
+            onLongPress={handleLongPress}
             activeOpacity={0.7}
             style={{
                 flexDirection: "row",
@@ -82,9 +125,9 @@ const RosterItem = memo(({ item, index, navigation, colors, theme }: {
             </View>
 
             {/* Avatar */}
-            {item.avatar ? (
+            {avatar ? (
                 <Image 
-                    source={{ uri: item.avatar }} 
+                    source={{ uri: avatar }} 
                     style={{
                         width: 56,
                         height: 56,
@@ -101,38 +144,115 @@ const RosterItem = memo(({ item, index, navigation, colors, theme }: {
                     justifyContent: "center",
                 }}>
                     <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>
-                        {getInitials(item.firstName || "", item.lastName || "")}
+                        {getInitials(firstName, lastName)}
                     </Text>
                 </View>
             )}
 
             <View style={{ flex: 1, marginLeft: 14 }}>
                 <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#111827" }}>
-                    {item.firstName} {item.lastName}
+                    {contact.name || `${firstName} ${lastName}`.trim()}
                 </Text>
                 <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 13, color: "#9CA3AF", marginTop: 3 }}>
-                    Last played: {item.lastPlayed ? formatLastPlayed(item.lastPlayed) : "never"}
+                    Last played: {lastPlayed ? formatLastPlayed(lastPlayed) : "never"}
                 </Text>
             </View>
 
-            <TouchableOpacity 
-                onPress={(e) => {
-                    e.stopPropagation();
-                    // Handle message action
-                }}
-                style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: "#DBEAFE",
-                    alignItems: "center",
-                    justifyContent: "center",
-                }}
-                activeOpacity={0.7}
-            >
-                <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <TouchableOpacity 
+                    onPress={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(true);
+                    }}
+                    style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: "#F3F4F6",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <MoreVertical size={18} color="#6B7280" strokeWidth={2} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    onPress={(e) => {
+                        e.stopPropagation();
+                        // Handle message action
+                    }}
+                    style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: "#DBEAFE",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
+                </TouchableOpacity>
+            </View>
         </TouchableOpacity>
+        
+        {/* Action Menu Modal */}
+        <Modal
+            visible={showMenu}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowMenu(false)}
+        >
+            <TouchableOpacity 
+                style={{
+                    flex: 1,
+                    backgroundColor: "rgba(0,0,0,0.5)",
+                    justifyContent: "center",
+                    alignItems: "center",
+                }}
+                activeOpacity={1}
+                onPress={() => setShowMenu(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={(e) => e.stopPropagation()}
+                >
+                    <View style={{
+                        backgroundColor: "#FFFFFF",
+                        borderRadius: 16,
+                        padding: 8,
+                        minWidth: 200,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 8,
+                        elevation: 8,
+                    }}>
+                        <TouchableOpacity
+                            onPress={handleRemove}
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                padding: 12,
+                                borderRadius: 8,
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <Trash2 size={20} color="#EF4444" strokeWidth={2} />
+                            <Text style={{
+                                fontFamily: theme.fontFamily.semiBold,
+                                fontSize: 15,
+                                color: "#EF4444",
+                                marginLeft: 12,
+                            }}>
+                                Remove from Roster
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </TouchableOpacity>
+        </Modal>
+        </>
     );
 });
 
@@ -144,15 +264,16 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
     const [roster, setRoster] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [removingId, setRemovingId] = useState<string | null>(null);
 
     const loadRoster = useCallback(async () => {
         try {
-            const response = await friendApi.getFriends();
+            const response = await rosterApi.getRoster();
             if (response.success) {
-                setRoster(response.friends || []);
+                setRoster(response.roster || []);
             }
         } catch (error) {
-            console.error("Failed to load roster:", error);
+            logger.error("[SimpleRosterList] Failed to load roster", error);
             setRoster([]);
         } finally {
             setLoading(false);
@@ -167,6 +288,21 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await loadRoster();
+    }, [loadRoster]);
+
+    const handleRemove = useCallback(async (rosterId: string) => {
+        setRemovingId(rosterId);
+        try {
+            await rosterApi.removeFromRoster(rosterId);
+            logger.info("[SimpleRosterList] Removed from roster", { rosterId });
+            // Reload roster to reflect changes
+            await loadRoster();
+        } catch (error) {
+            logger.error("[SimpleRosterList] Failed to remove from roster", error);
+            Alert.alert("Error", "Failed to remove from roster. Please try again.");
+        } finally {
+            setRemovingId(null);
+        }
     }, [loadRoster]);
 
     if (loading) {
@@ -246,7 +382,14 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
         >
             {roster.map((item, index) => (
                 <React.Fragment key={item.id || index}>
-                    <RosterItem item={item} index={index} navigation={navigation} colors={colors} theme={theme} />
+                    <RosterItem 
+                        item={item} 
+                        index={index} 
+                        navigation={navigation} 
+                        colors={colors} 
+                        theme={theme}
+                        onRemove={handleRemove}
+                    />
                     {index < roster.length - 1 && (
                         <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />
                     )}

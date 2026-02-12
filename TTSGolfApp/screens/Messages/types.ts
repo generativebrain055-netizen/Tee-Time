@@ -45,6 +45,9 @@ export interface GroupConversationItem {
   lastMessage: string;
   lastMessageTime: string;
   unread?: number;
+  /** For expanded chat header (Figma 1379-5818, 1269-2492) */
+  participantCount?: number;
+  participantAvatars?: string[];
 }
 
 export type ConversationItem =

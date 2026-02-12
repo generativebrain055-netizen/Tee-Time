@@ -33,6 +33,8 @@ export { socialRateApi } from "./socialRateApi";
 export { attendanceApi } from "./attendanceApi";
 export { draftApi } from "./draftApi";
 export { availabilityApi } from "./availabilityApi";
+export { messagesApi } from "./messagesApi";
+export { searchApi } from "./searchApi";
 export { default as onboardingApi } from "./onboardingApi";
 
 // Types
@@ -90,6 +92,13 @@ export type {
   // Generic types
   ApiResponse,
 } from "./types";
+export type {
+  SearchUser,
+  SearchTeeTime,
+  SearchGroup,
+  SearchCourse,
+  GlobalSearchResult,
+} from "./searchApi";
 
 // Onboarding types
 export type {

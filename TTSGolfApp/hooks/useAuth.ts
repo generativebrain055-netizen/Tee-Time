@@ -1,7 +1,14 @@
+/**
+ * Auth hook: session, credentials login, and registration.
+ * Phone verification for sign-up/sign-in must be performed via magic link (SMS link),
+ * not OTP/code. Use requestSmsMagicLink/requestSmsMagicLinkForLogin and verifySmsMagicLink
+ * from utils/smsMagicLink (or the login/onboarding flows that use them).
+ */
 import { useState, useCallback, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import { getDeviceInfoForApi } from "../utils/deviceInfo";
+import { logger } from "../utils/logger";
 
 type DeviceApiInfo = {
   deviceId: string;
@@ -64,10 +71,12 @@ interface UseAuthReturn {
   setError: React.Dispatch<React.SetStateAction<string>>;
   setStatus: React.Dispatch<React.SetStateAction<string>>;
   clearMessages: () => void;
+  /** @deprecated Phone verification must use magic link (SMS link). Use utils/smsMagicLink instead. */
   requestOtp: (
     phoneNumber: string,
     purpose?: string
   ) => Promise<OtpRequestResult>;
+  /** @deprecated Phone verification must use magic link (SMS link). Use utils/smsMagicLink instead. */
   verifyOtp: (phoneNumber: string, otpCode: string) => Promise<AuthResult>;
   loginWithCredentials: (
     username: string,
@@ -95,9 +104,9 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
       try {
         const info = await getDeviceInfoForApi();
         deviceInfoRef.current = info;
-        console.log("📱 Device info loaded:", info.deviceName);
+        logger.debug("[useAuth] Device info loaded", { deviceName: info.deviceName });
       } catch (err) {
-        console.error("Failed to load device info:", err);
+        logger.error("[useAuth] Failed to load device info", err);
       }
     };
     loadDeviceInfo();
@@ -109,7 +118,8 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
   }, []);
 
   /**
-   * Request OTP for phone verification
+   * Request OTP for phone verification.
+   * @deprecated Phone verification must use magic link (SMS link). Use requestSmsMagicLink/requestSmsMagicLinkForLogin from utils/smsMagicLink.
    */
   const requestOtp = useCallback(
     async (
@@ -121,7 +131,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
 
       try {
         const deviceInfo = deviceInfoRef.current;
-        console.log("📤 Requesting OTP with device:", deviceInfo?.deviceName);
+        logger.debug("[useAuth] Requesting OTP with device", { deviceName: deviceInfo?.deviceName });
 
         const response = await fetch(API_ENDPOINTS.REQUEST_OTP, {
           method: "POST",
@@ -174,7 +184,8 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
   );
 
   /**
-   * Verify OTP code (for login - existing users only)
+   * Verify OTP code (for login - existing users only).
+   * @deprecated Phone verification must use magic link. Use verifySmsMagicLink from utils/smsMagicLink.
    */
   const verifyOtp = useCallback(
     async (phoneNumber: string, otpCode: string): Promise<AuthResult> => {
@@ -189,7 +200,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
         }
 
         const deviceInfo = deviceInfoRef.current;
-        console.log("🔍 [FRONTEND] Verifying OTP for LOGIN:", {
+        logger.debug("[useAuth] Verifying OTP for LOGIN", {
           phoneNumber,
           originalOtp: otpCode,
           cleanOtp,
@@ -203,10 +214,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
           purpose: "login",
           deviceInfo: deviceInfo || undefined,
         };
-        console.log(
-          "📤 [FRONTEND] Sending request:",
-          JSON.stringify(requestBody, null, 2)
-        );
+        logger.debug("[useAuth] Sending request", requestBody);
 
         const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
           method: "POST",
@@ -231,7 +239,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
         } catch (parseError) {
           throw new Error("Invalid response from server. Please try again.");
         }
-        console.log("📥 [FRONTEND] Response received:", {
+        logger.debug("[useAuth] Response received", {
           status: response.status,
           ok: response.ok,
           data,
@@ -282,7 +290,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
 
       try {
         const deviceInfo = deviceInfoRef.current;
-        console.log("🔐 Logging in with device:", deviceInfo?.deviceName);
+        logger.debug("[useAuth] Logging in with device", { deviceName: deviceInfo?.deviceName });
 
         const response = await fetch(API_ENDPOINTS.LOGIN, {
           method: "POST",
@@ -366,7 +374,7 @@ export const useAuth = (navigation?: Navigation): UseAuthReturn => {
         }
 
         const deviceInfo = deviceInfoRef.current;
-        console.log("📝 Registering user with device:", deviceInfo?.deviceName);
+        logger.debug("[useAuth] Registering user with device", { deviceName: deviceInfo?.deviceName });
 
         const response = await fetch(API_ENDPOINTS.VERIFY_OTP, {
           method: "POST",

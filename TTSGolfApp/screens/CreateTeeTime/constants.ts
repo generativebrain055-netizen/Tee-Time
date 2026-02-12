@@ -8,6 +8,20 @@ export const COLORS = {
   inputBg: "#FFFFFF",
 };
 
+/** Figma 1269-3055, 1269-3123, 1269-3370, 1269-3456 – Your players list */
+export const FIGMA_YOUR_PLAYERS = {
+  title: "Your players",
+  searchPlaceholder: "Search players",
+  avatarSize: 49,
+  rowPaddingVertical: 14,
+  rowPaddingHorizontal: 16,
+  nameFontSize: 16,
+  nameColor: "#000000",
+  checkSize: 24,
+  inputBorderRadius: 12,
+  inputBorderColor: "#E5E7EB",
+};
+
 export const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",

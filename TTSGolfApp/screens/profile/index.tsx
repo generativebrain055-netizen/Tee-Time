@@ -15,6 +15,7 @@ import { ConfirmModal } from "../../ui/feedback";
 import { Skeleton } from "../../ui/feedback/Skeleton";
 import { teeTimeApi, TeeTime, profileApi } from "../../services/api";
 import { useUser } from "../../contexts";
+import { logger } from "../../utils/logger";
 
 const getInitials = (firstName?: string, lastName?: string): string => {
     return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -84,7 +85,7 @@ export default function ProfileScreen({ navigation }: any) {
                 }
             } catch (error: any) {
                 if (error?.message !== "Session expired") {
-                    console.error("Error fetching rounds:", error);
+                    logger.error("[ProfileScreen] Error fetching rounds", error);
                 }
             } finally {
                 setRoundsLoading(false);
@@ -107,7 +108,7 @@ export default function ProfileScreen({ navigation }: any) {
                         setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
                     }
                 } catch (error) {
-                    console.error("Error fetching rounds:", error);
+                    logger.error("[ProfileScreen] Error fetching rounds", error);
                 }
             })(),
         ]);

@@ -11,6 +11,7 @@ import {
 import { Users, Calendar } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { rosterApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface SimpleGroupsListProps {
     onGroupClick: (groupId: string) => void;
@@ -108,7 +109,7 @@ export default function SimpleGroupsList({ onGroupClick, navigation }: SimpleGro
                 setGroups(response.groups || []);
             }
         } catch (error) {
-            console.error("Failed to load groups:", error);
+            logger.error("[SimpleGroupsList] Failed to load groups", error);
             setGroups([]);
         } finally {
             setLoading(false);

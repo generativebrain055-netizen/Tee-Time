@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fontAssets } from "./theme/fonts";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { logger } from "./utils/logger";
 
 // New design system imports
 import {
@@ -38,6 +39,7 @@ import FullCalendarScreen from "./screens/calendar";
 import ProfileScreen from "./screens/profile";
 import CreateTeeTimeScreen from "./screens/CreateTeeTime";
 import InvitesScreen from "./screens/InvitesScreen";
+import InviteDetailScreen from "./screens/InviteDetailScreen";
 import AvailabilityScreen from "./screens/AvailabilityScreen";
 import EditAvailabilityScreen from "./screens/EditAvailabilityScreen";
 import FriendProfileScreen from "./screens/friend-profile";
@@ -51,10 +53,12 @@ import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
 import CheckInScreen from "./screens/CheckInScreen";
 import RosterProfileScreen from "./screens/roster/RosterProfileScreen";
 import SelectOnDeckScreen from "./screens/SelectOnDeckScreen";
+import GlobalSearchScreen from "./screens/GlobalSearchScreen";
 import FindPlayersScreen from "./screens/FindPlayersScreen";
 import UserProfileScreen from "./screens/UserProfileScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
+import PrivacySecurityScreen from "./screens/PrivacySecurityScreen";
 import HelpSupportScreen from "./screens/HelpSupportScreen";
 import CreateGroupScreen from "./screens/CreateGroupScreen";
 
@@ -85,6 +89,7 @@ type ScreenName =
   | "CreateTeeTime"
   | "CreateGroup"
   | "Invites"
+  | "InviteDetail"
   | "Availability"
   | "EditAvailability"
   | "Community"
@@ -96,7 +101,9 @@ type ScreenName =
   | "CheckIn"
   | "SelectOnDeck"
   | "FindPlayers"
-  | "UserProfile";
+  | "UserProfile"
+  | "GlobalSearch"
+  | "ComposeMessage";
 
 interface UserData {
   firstName: string;
@@ -140,7 +147,7 @@ export default function App(): React.ReactElement {
     Font.loadAsync(fontAssets)
       .then(() => setFontsLoaded(true))
       .catch((err) => {
-        console.warn("Font loading error:", err);
+        logger.warn("[App] Font loading error", err);
         setFontsLoaded(true); // Continue even if fonts fail
       });
   }, []);
@@ -419,6 +426,7 @@ export default function App(): React.ReactElement {
           <CreateTeeTimeScreen
             key={`create-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "Invites":
@@ -426,6 +434,14 @@ export default function App(): React.ReactElement {
           <InvitesScreen
             key={`invites-${screenKey}`}
             navigation={navigation as any}
+          />
+        );
+      case "InviteDetail":
+        return (
+          <InviteDetailScreen
+            key={`invite-detail-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: routeParams }}
           />
         );
       case "Availability":
@@ -458,6 +474,13 @@ export default function App(): React.ReactElement {
             navigation={navigation as any}
           />
         );
+      case "PrivacySecurity":
+        return (
+          <PrivacySecurityScreen
+            key={`privacy-security-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "HelpSupport":
         return (
           <HelpSupportScreen
@@ -470,6 +493,7 @@ export default function App(): React.ReactElement {
           <CreateGroupScreen
             key={`create-group-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "FindPlayers":
@@ -547,6 +571,20 @@ export default function App(): React.ReactElement {
             key={`select-on-deck-${screenKey}`}
             navigation={navigation as any}
             route={{ params: screenParams } as any}
+          />
+        );
+      case "GlobalSearch":
+        return (
+          <GlobalSearchScreen
+            key={`global-search-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "ComposeMessage":
+        return (
+          <ComposeMessageScreen
+            key={`compose-message-${screenKey}`}
+            navigation={navigation as any}
           />
         );
       default:

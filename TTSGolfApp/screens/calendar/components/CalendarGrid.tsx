@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { CalendarDay } from "../types";
 import { MONTHS } from "../constants";
+import { spacing, fontSize, fontFamily, radii } from "../../../ui/theme/tokens";
 
 const PRIMARY_GREEN = "#5EBC68";
 
@@ -15,28 +16,43 @@ const DayCell = memo(({ item, onPress }: DayCellProps) => {
   const handlePress = useCallback(() => onPress(item.day), [item.day, onPress]);
 
   if (item.day === "") {
-    return <View style={{ width: '14.28%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center' }} />;
+    return (
+      <View
+        style={{
+          width: "14.28%",
+          aspectRatio: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      />
+    );
   }
 
   return (
-    <View style={{ width: '14.28%', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}>
+    <View
+      style={{
+        width: "14.28%",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: spacing.sm,
+      }}
+    >
       <TouchableOpacity
         onPress={handlePress}
         style={{
           width: 44,
           height: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: 10,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: radii.md,
           backgroundColor: item.isSelected ? PRIMARY_GREEN : "transparent",
         }}
       >
         <Text
           style={{
-            fontSize: 16,
+            fontSize: fontSize.base,
             color: item.isSelected ? "#FFFFFF" : "#1F2937",
-            fontWeight: item.isToday ? "700" : "600",
-            fontFamily: item.isToday ? 'Inter_700Bold' : 'Inter_600SemiBold',
+            fontFamily: item.isToday ? fontFamily.bold : fontFamily.semiBold,
           }}
         >
           {item.day}
@@ -44,13 +60,13 @@ const DayCell = memo(({ item, onPress }: DayCellProps) => {
       </TouchableOpacity>
       {item.hasEvent && (
         <View
-          style={{ 
-            position: 'absolute',
-            bottom: 2,
+          style={{
+            position: "absolute",
+            bottom: spacing["2xs"],
             width: 20,
             height: 2,
             borderRadius: 1,
-            backgroundColor: PRIMARY_GREEN 
+            backgroundColor: PRIMARY_GREEN,
           }}
         />
       )}
@@ -75,28 +91,56 @@ const CalendarGrid = memo(({
   onNextMonth,
   onDayPress,
 }: CalendarGridProps) => (
-  <View style={{ paddingHorizontal: 16, paddingVertical: 20, flex: 1, justifyContent: 'center' }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-      <TouchableOpacity onPress={onPrevMonth} style={{ padding: 8 }}>
+  <View
+    style={{
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.xl,
+      flex: 1,
+      justifyContent: "center",
+    }}
+  >
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: spacing.xl,
+      }}
+    >
+      <TouchableOpacity onPress={onPrevMonth} style={{ padding: spacing.sm }}>
         <ChevronLeft size={24} color="#6B7280" />
       </TouchableOpacity>
-      <Text style={{ fontSize: 18, fontWeight: '700', color: '#1F2937', fontFamily: 'Inter_700Bold' }}>
+      <Text
+        style={{
+          fontSize: fontSize.lg,
+          fontFamily: fontFamily.bold,
+          color: "#1F2937",
+        }}
+      >
         {MONTHS[currentMonth]} {currentYear}
       </Text>
-      <TouchableOpacity onPress={onNextMonth} style={{ padding: 8 }}>
+      <TouchableOpacity onPress={onNextMonth} style={{ padding: spacing.sm }}>
         <ChevronRight size={24} color="#6B7280" />
       </TouchableOpacity>
     </View>
 
-    <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+    <View style={{ flexDirection: "row", marginBottom: spacing.md }}>
       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-        <View key={day} style={{ width: '14.28%', alignItems: 'center' }}>
-          <Text style={{ fontSize: 13, fontWeight: '500', color: '#9CA3AF', fontFamily: 'Inter_500Medium' }}>{day}</Text>
+        <View key={day} style={{ width: "14.28%", alignItems: "center" }}>
+          <Text
+            style={{
+              fontSize: fontSize.xs + 1,
+              fontFamily: fontFamily.medium,
+              color: "#9CA3AF",
+            }}
+          >
+            {day}
+          </Text>
         </View>
       ))}
     </View>
 
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
       {calendarDays.map((item) => (
         <DayCell key={item.id} item={item} onPress={onDayPress} />
       ))}

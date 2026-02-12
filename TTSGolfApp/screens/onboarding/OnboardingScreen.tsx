@@ -13,6 +13,7 @@ import { colors } from "../../theme";
 import { ONBOARDING_STEPS, STEP_ORDER } from "../../constants/onboarding";
 import { API_ENDPOINTS, API_URL } from "../../config/api";
 import type { OnboardingData } from "../../types";
+import { logger } from "../../utils/logger";
 
 // Import all step components
 import { SignUpOptionsPage } from "./SignUpOptionsPage";
@@ -62,6 +63,9 @@ interface Styles {
   progressBarContainer: ViewStyle;
   progressBar: ViewStyle;
   stepContainer: ViewStyle;
+  loadingOverlay: ViewStyle;
+  loadingContainer: ViewStyle;
+  loadingText: import("react-native").TextStyle;
 }
 
 type StepComponent = React.FC<{
@@ -86,24 +90,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 }) => {
   const oauthData = route?.params?.oauthData;
 
-  // Debug logging
-  console.log("OnboardingScreen - Mounted");
-  console.log(
-    "OnboardingScreen - Route params:",
-    JSON.stringify(route?.params, null, 2),
-  );
-  console.log(
-    "OnboardingScreen - OAuth data:",
-    JSON.stringify(oauthData, null, 2),
-  );
-
   // Determine starting step for OAuth users
   const getInitialStepIndex = () => {
     if (!oauthData) return 0; // Start at signup options for non-OAuth
     // OAuth: skip signup options, go to phone (step 1)
-    console.log(
-      "OnboardingScreen - OAuth user detected, starting at step 1 (Phone)",
-    );
+    logger.debug("[OnboardingScreen] OAuth user detected, starting at step 1 (Phone)");
     return 1;
   };
 
@@ -120,9 +111,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const currentStep = STEP_ORDER[currentStepIndex];
 
   const handleNext = (data: Partial<OnboardingData>): void => {
-    console.log("OnboardingScreen - handleNext called with data:", data);
-    console.log("Current step index:", currentStepIndex);
-    console.log("Total steps:", STEP_ORDER.length);
+    logger.debug("[OnboardingScreen] handleNext called", {
+      currentStepIndex,
+      totalSteps: STEP_ORDER.length,
+      step: currentStep,
+    });
 
     // Merge new data with existing userData
     setUserData((prev) => ({ ...prev, ...data }));
@@ -136,7 +129,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       data.phoneNumber &&
       STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.PHONE
     ) {
-      console.log("SignUpOptionsPage - skipping PHONE step, going to MAGIC_LINK");
+      logger.debug("[OnboardingScreen] Skipping PHONE step, going to MAGIC_LINK");
       nextStepIndex++;
     }
 
@@ -145,7 +138,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       oauthData?.tempToken &&
       STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.MAGIC_LINK
     ) {
-      console.log("OAuth user - skipping magic link step");
+      logger.debug("[OnboardingScreen] OAuth user - skipping magic link step");
       nextStepIndex++;
     }
 
@@ -154,17 +147,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       oauthData?.email &&
       STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.EMAIL
     ) {
-      console.log("OAuth user with email - skipping email step");
+      logger.debug("[OnboardingScreen] OAuth user with email - skipping email step");
       nextStepIndex++;
     }
 
     // Navigate to next step
     if (nextStepIndex < STEP_ORDER.length) {
-      console.log("Moving to step index:", nextStepIndex);
+      logger.debug("[OnboardingScreen] Moving to step index", { nextStepIndex });
       setCurrentStepIndex(nextStepIndex);
     } else {
       // Complete onboarding
-      console.log("Last step reached - completing onboarding");
+      logger.info("[OnboardingScreen] Last step reached - completing onboarding");
       completeOnboarding({ ...userData, ...data });
     }
   };
@@ -181,10 +174,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const completeOnboarding = async (
     finalData: Partial<OnboardingData>,
   ): Promise<void> => {
-    console.log("completeOnboarding called with data:", finalData);
+    logger.debug("[OnboardingScreen] completeOnboarding called");
 
     if (isRegistering) {
-      console.log("Already registering, skipping...");
+      logger.warn("[OnboardingScreen] Already registering, skipping...");
       return;
     }
 
@@ -216,7 +209,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
 
     if (missingFields.length > 0) {
-      console.log("Validation failed. Missing fields:", missingFields);
+      logger.warn("[OnboardingScreen] Validation failed. Missing fields", { missingFields });
       Alert.alert(
         "Missing Information",
         `Please complete the following fields:\n\n${missingFields.join("\n")}`,
@@ -224,10 +217,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       return;
     }
 
-    console.log("Validation passed. Starting registration...");
+    logger.info("[OnboardingScreen] Validation passed. Starting registration...");
     setIsRegistering(true);
     try {
-      console.log("Registering user directly:", finalData);
+      logger.debug("[OnboardingScreen] Registering user", {
+        hasPhone: !!finalData.phoneNumber,
+        hasName: !!(finalData.firstName && finalData.lastName),
+        isOAuth: !!oauthData?.tempToken,
+      });
 
       // Generate username from first and last name
       const username = `${finalData.firstName?.toLowerCase()}${finalData.lastName?.toLowerCase()}${Math.floor(
@@ -272,9 +269,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         email: finalData.email || null,
         zipCode: finalData.zipCode || null,
         profilePhotoBase64: finalData.profilePhotoBase64 || null,
-        handicap: finalData.handicap
-          ? parseInt(finalData.handicap as string)
-          : null,
+        handicap: finalData.handicap != null ? parseInt(String(finalData.handicap), 10) : null,
         location: finalData.location?.name || null,
         homeCourse: finalData.club?.name || null,
         preferredTeeTime: mapPreferredTime(
@@ -282,13 +277,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         ),
         walkOrRide: finalData.preferences?.playStyle || "either",
         playingPartnerPreference: mapGroupSize(
-          finalData.preferences?.playerCount,
+          finalData.preferences?.playerCount != null ? String(finalData.preferences.playerCount) : undefined,
         ),
       };
 
-      console.log("Request body:", JSON.stringify(requestBody, null, 2));
-      console.log("API endpoint:", API_ENDPOINTS.REGISTER);
-      console.log("API_URL from config:", API_URL);
+      logger.debug("[OnboardingScreen] Registration request", {
+        endpoint: API_ENDPOINTS.REGISTER,
+        hasPhone: !!requestBody.phoneNumber,
+        hasName: !!(requestBody.firstName && requestBody.lastName),
+      });
 
       // Create abort controller for timeout
       const controller = new AbortController();
@@ -298,7 +295,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       // Check if this is OAuth registration (has tempToken)
       if (oauthData?.tempToken) {
-        console.log("Completing OAuth registration with tempToken");
+        logger.info("[OnboardingScreen] Completing OAuth registration with tempToken");
 
         // Ensure we have firstName/lastName - use user input or OAuth data
         const firstName =
@@ -313,12 +310,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         if (email) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(email)) {
-            console.log("Invalid email format, setting to null:", email);
+            logger.warn("[OnboardingScreen] Invalid email format, setting to null", { email });
             email = null;
           }
         }
 
-        console.log("Resolved names:", { firstName, lastName, email });
+        logger.debug("[OnboardingScreen] Resolved names", { firstName, lastName, hasEmail: !!email });
 
         if (!firstName || !lastName) {
           Alert.alert(
@@ -338,15 +335,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           username: username,
           zipCode: finalData.zipCode || null,
           profilePhotoBase64: finalData.profilePhotoBase64 || null,
-          handicap: finalData.handicap
-            ? parseInt(finalData.handicap as string)
-            : null,
+          handicap: finalData.handicap != null ? parseInt(String(finalData.handicap), 10) : null,
         };
 
-        console.log(
-          "OAuth request body:",
-          JSON.stringify(oauthRequestBody, null, 2),
-        );
+        logger.debug("[OnboardingScreen] OAuth request body prepared", {
+          hasTempToken: !!oauthRequestBody.tempToken,
+          hasPhone: !!oauthRequestBody.phoneNumber,
+          hasName: !!(oauthRequestBody.firstName && oauthRequestBody.lastName),
+        });
 
         response = await fetch(`${API_URL}/auth/complete-profile`, {
           method: "POST",
@@ -366,17 +362,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       clearTimeout(timeoutId);
 
-      console.log("Response status:", response.status);
-      console.log("Response ok:", response.ok);
+      logger.debug("[OnboardingScreen] Registration response", {
+        status: response.status,
+        ok: response.ok,
+      });
 
       let data;
       try {
         const responseText = await response.text();
-        console.log("Response body:", responseText);
         data = JSON.parse(responseText);
-        console.log("Response data:", data);
+        logger.debug("[OnboardingScreen] Response parsed successfully");
       } catch (parseError) {
-        console.error("Failed to parse response:", parseError);
+        logger.error("[OnboardingScreen] Failed to parse response", parseError);
         throw new Error("Invalid response from server. Please try again.");
       }
 
@@ -398,7 +395,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           errorMessage = data.message;
         }
 
-        console.error("Server error:", { errorMessage, errorDetails, fullData: data });
+        logger.error("[OnboardingScreen] Server error", {
+          errorMessage,
+          errorDetails,
+          status: response.status,
+        });
 
         // Show user-friendly error
         const displayMessage = errorDetails
@@ -408,7 +409,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         throw new Error(displayMessage);
       }
 
-      console.log("User registered successfully:", data);
+      logger.info("[OnboardingScreen] User registered successfully", {
+        hasAccessToken: !!data.accessToken,
+        status: data.status,
+      });
 
       // If OAuth registration (status: authenticated), save session and go to Home
       if (data.status === "authenticated" && data.accessToken) {
@@ -419,10 +423,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           user: data.user,
         });
 
-        console.log("OAuth registration complete - navigating to Home");
+        logger.info("[OnboardingScreen] OAuth registration complete - navigating to Home");
 
         // Navigate immediately to Home, show welcome toast after
-        navigation.replace("Home", { user: data.user });
+        (navigation as { replace: (s: string, p?: object) => void }).replace("Home", { user: data.user });
 
         // Show non-blocking success message after navigation
         setTimeout(() => {
@@ -446,18 +450,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         ],
       );
     } catch (error) {
-      console.error("Error registering user:", error);
-      console.error("Error type:", typeof error);
-      console.error("Error string:", String(error));
-      if (error instanceof Error) {
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-      } else {
-        console.error(
-          "Non-Error object thrown:",
-          JSON.stringify(error, null, 2),
-        );
-      }
+      logger.error("[OnboardingScreen] Error registering user", error);
 
       let errorMessage = "Please try again.";
       if (error instanceof Error) {
@@ -511,13 +504,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const handleOAuthSuccess = (data: any) => {
     if (data.needsOnboarding && data.oauthData) {
-      navigation.navigate("OAuthOnboarding", {
-        oauthData: data.oauthData,
-      });
+      (navigation as any).navigate("OAuthOnboarding", { oauthData: data.oauthData });
     } else if (data.isNewUser && data.partialData) {
-      navigation.navigate("Onboarding", {
-        oauthData: data.partialData,
-      });
+      (navigation as any).navigate("Onboarding", { oauthData: data.partialData });
     } else {
       navigation.replace("Home");
     }
@@ -623,6 +612,6 @@ const styles = StyleSheet.create<Styles>({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: colors.textMain,
+    color: colors.textPrimary,
   },
 });

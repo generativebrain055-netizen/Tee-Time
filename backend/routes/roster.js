@@ -162,6 +162,32 @@ router.delete("/groups/:id", rosterController.deleteGroup);
  */
 router.get("/groups/:id/members", rosterController.getGroupMembers);
 
+/**
+ * @route   POST /api/roster/groups/:id/members
+ * @desc    Add members to a group (Figma 1075-927: Inviting people)
+ * @access  Private
+ */
+router.post(
+  "/groups/:id/members",
+  [
+    body("memberUserIds")
+      .isArray({ min: 1 })
+      .withMessage("memberUserIds must be a non-empty array"),
+    body("memberUserIds.*")
+      .isUUID()
+      .withMessage("Each memberUserIds item must be a valid UUID"),
+  ],
+  validateRequest,
+  rosterController.addMembersToGroup,
+);
+
+/**
+ * @route   POST /api/roster/groups/:id/leave
+ * @desc    Leave a group (remove current user from group) (Figma 1075-927: removing yourself)
+ * @access  Private
+ */
+router.post("/groups/:id/leave", rosterController.leaveGroup);
+
 // ============ WAIVER WIRE (before :id routes) ============
 
 /**

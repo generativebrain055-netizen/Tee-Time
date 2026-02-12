@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Alert } from "react-native";
 import { rosterApi, friendApi, RosterGroup } from "../../../../services/api";
 import { GroupsListState, CreateStep, GROUP_COLORS } from "../types";
+import { logger } from "../../../../utils/logger";
 
 export const useGroupsList = () => {
   const [state, setState] = useState<GroupsListState>({
@@ -25,7 +26,7 @@ export const useGroupsList = () => {
         setState(prev => ({ ...prev, groups: response.groups, loading: false }));
       }
     } catch (error) {
-      console.error("Failed to load groups:", error);
+      logger.error("[useGroupsList] Failed to load groups", error);
       setState(prev => ({ ...prev, loading: false }));
     }
   }, []);
@@ -56,7 +57,7 @@ export const useGroupsList = () => {
         setState(prev => ({ ...prev, friends: response.friends }));
       }
     } catch (error) {
-      console.error("Failed to load friends:", error);
+      logger.error("[useGroupsList] Failed to load friends", error);
     }
   }, []);
 
@@ -125,7 +126,7 @@ export const useGroupsList = () => {
         Alert.alert("Success", `Group "${state.newGroupName}" created with ${state.selectedMembers.length} members!`);
       }
     } catch (error: any) {
-      console.error("Create group error:", error);
+      logger.error("[useGroupsList] Create group error", error);
       Alert.alert("Error", error.message || "Failed to create group");
       setState(prev => ({ ...prev, creating: false }));
     }

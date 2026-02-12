@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { logger } from "./logger";
 
 type SessionExpiredCallback = () => void;
 
@@ -53,7 +54,7 @@ class SessionManager {
 
       return true;
     } catch (error) {
-      console.error("Token validation error:", error);
+      logger.error("[SessionManager] Token validation error", error);
       await this.clearSession();
       return false;
     }
@@ -100,7 +101,7 @@ class SessionManager {
         throw new Error("user data is required to save session");
       }
 
-      console.log("[SessionManager] Saving session:", {
+      logger.debug("[SessionManager] Saving session", {
         hasAccessToken: !!data.accessToken,
         hasRefreshToken: !!data.refreshToken,
         user: {
@@ -118,11 +119,11 @@ class SessionManager {
 
       // Verify the save worked
       const savedUser = await AsyncStorage.getItem("user");
-      console.log("[SessionManager] Session saved, verification:", {
+      logger.debug("[SessionManager] Session saved, verification", {
         savedUserStr: savedUser ? savedUser.substring(0, 100) + "..." : null,
       });
     } catch (error) {
-      console.error("[SessionManager] Error saving session:", error);
+      logger.error("[SessionManager] Error saving session", error);
       throw error;
     }
   }
@@ -133,7 +134,7 @@ class SessionManager {
       const userStr = await AsyncStorage.getItem("user");
       return userStr ? JSON.parse(userStr) : null;
     } catch (error) {
-      console.error("Error getting user:", error);
+      logger.error("[SessionManager] Error getting user", error);
       return null;
     }
   }
@@ -143,7 +144,7 @@ class SessionManager {
     try {
       return await AsyncStorage.getItem("accessToken");
     } catch (error) {
-      console.error("Error getting access token:", error);
+      logger.error("[SessionManager] Error getting access token", error);
       return null;
     }
   }
@@ -153,7 +154,7 @@ class SessionManager {
     try {
       return await AsyncStorage.getItem("refreshToken");
     } catch (error) {
-      console.error("Error getting refresh token:", error);
+      logger.error("[SessionManager] Error getting refresh token", error);
       return null;
     }
   }

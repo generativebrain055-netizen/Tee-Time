@@ -114,12 +114,16 @@ function HomePage({ navigation }: any) {
     navigation?.navigate("Notifications");
   }, [navigation]);
 
+  const handleSearch = useCallback(() => {
+    navigation?.navigate("GlobalSearch");
+  }, [navigation]);
+
   const handleCreateTeeTime = useCallback(() => {
     navigation?.navigate("CreateTeeTime");
   }, [navigation]);
 
   const handleInviteViaLink = useCallback(() => {
-    navigation?.navigate("InviteLink");
+    navigation?.navigate("CreateTeeTime");
   }, [navigation]);
 
   const handleFindPlayers = useCallback(() => {
@@ -147,7 +151,11 @@ function HomePage({ navigation }: any) {
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-        <Header onNotificationPress={handleNotifications} />
+        <Header
+          onNotificationPress={handleNotifications}
+          onSearchPress={handleSearch}
+          userName={user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : undefined}
+        />
         <QuickActions
           onCreateTeeTime={handleCreateTeeTime}
           onInviteViaLink={handleInviteViaLink}

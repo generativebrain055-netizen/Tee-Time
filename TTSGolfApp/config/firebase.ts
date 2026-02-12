@@ -5,7 +5,10 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { logger } from '../utils/logger';
-import { getAuth, initializeAuth, getReactNativePersistence, Auth } from 'firebase/auth';
+import { getAuth, Auth } from 'firebase/auth';
+// React Native persistence: use subpath import if available (firebase v10+)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const authReactNative = require('firebase/auth/react-native');
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
@@ -37,10 +40,10 @@ try {
   if (isFirebaseConfigValid()) {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     
-    // Initialize Auth with AsyncStorage persistence
+    // Initialize Auth with AsyncStorage persistence (React Native)
     try {
-      auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
+      auth = authReactNative.initializeAuth(app, {
+        persistence: authReactNative.getReactNativePersistence(AsyncStorage),
       });
     } catch (authError: any) {
       // Auth might already be initialized, try to get it

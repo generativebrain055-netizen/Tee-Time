@@ -12,8 +12,9 @@ import {
     Friend,
     TeeTime,
 } from "../../../../services/api";
+import { logger } from "../../../../utils/logger";
 
-export const useGroupProfile = (groupId: string) => {
+export const useGroupProfile = (groupId: string, navigation?: any) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [group, setGroup] = useState<RosterGroup | null>(null);
@@ -41,7 +42,7 @@ export const useGroupProfile = (groupId: string) => {
             if (membersRes.success) setMembers(membersRes.members);
             if (teeTimesRes.success) setUpcomingTeeTimes(teeTimesRes.teeTimes.slice(0, 3));
         } catch (error) {
-            console.error("Failed to load group data:", error);
+            logger.error("[useGroupProfile] Failed to load group data", error);
         } finally {
             setLoading(false);
         }
@@ -69,7 +70,8 @@ export const useGroupProfile = (groupId: string) => {
                 setFriends(availableFriends);
             }
         } catch (error) {
-            console.error("Failed to load friends:", error);
+            logger.error("[useGroupProfile] Failed to load friends", error);
+            setFriends([]);
         }
     }, [members]);
 
@@ -88,23 +90,51 @@ export const useGroupProfile = (groupId: string) => {
 
         setAddingMembers(true);
         try {
-            for (const friendId of selectedFriends) {
-                const rosterRes = await rosterApi.getRoster();
-                const rosterEntry = rosterRes.roster.find(r => r.contact?.userId === friendId);
-                if (rosterEntry) {
-                    await rosterApi.updateMemberGroup(rosterEntry.id, groupId);
-                }
+            // Use new batch API (Figma 1075-927: Inviting people to group)
+            const res = await rosterApi.addMembersToGroup(groupId, selectedFriends);
+            if (res.success) {
+                setShowAddModal(false);
+                Alert.alert("Success", `Added ${res.addedCount} member(s) to the group`);
+                loadGroupData();
             }
-
-            setShowAddModal(false);
-            Alert.alert("Success", `Added ${selectedFriends.length} member(s) to the group`);
-            loadGroupData();
         } catch (error: any) {
             Alert.alert("Error", error.message || "Failed to add members");
         } finally {
             setAddingMembers(false);
         }
     }, [selectedFriends, groupId, loadGroupData]);
+
+    const handleLeaveGroup = useCallback(async () => {
+        Alert.alert(
+            "Leave Group",
+            `Leave "${group?.name || "this group"}"? You'll be removed from all members in this group.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Leave",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const res = await rosterApi.leaveGroup(groupId);
+                            if (res.success) {
+                                Alert.alert("Left Group", "You've left the group.", [
+                                    {
+                                        text: "OK",
+                                        onPress: () => {
+                                            // Navigate back - group profile will be invalid
+                                            navigation?.goBack();
+                                        },
+                                    },
+                                ]);
+                            }
+                        } catch (error: any) {
+                            Alert.alert("Error", error.message || "Failed to leave group");
+                        }
+                    },
+                },
+            ],
+        );
+    }, [groupId, group?.name]);
 
     const handleGroupChat = useCallback(() => {
         Alert.alert("Coming Soon", "Group chat feature is coming soon!");
@@ -129,6 +159,7 @@ export const useGroupProfile = (groupId: string) => {
         closeAddModal,
         toggleFriend,
         handleAddMembers,
+        handleLeaveGroup,
         handleGroupChat,
         handleSettings,
     };

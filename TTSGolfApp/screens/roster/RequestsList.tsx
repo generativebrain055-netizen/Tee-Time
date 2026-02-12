@@ -11,6 +11,7 @@ import {
 import { X } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { friendApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 const getInitials = (firstName: string, lastName: string): string => {
     return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -138,7 +139,7 @@ export default function RequestsList() {
                 setRequests(response.requests || []);
             }
         } catch (error) {
-            console.error("Failed to load requests:", error);
+            logger.error("[RequestsList] Failed to load requests", error);
             setRequests([]);
         } finally {
             setLoading(false);
@@ -161,7 +162,7 @@ export default function RequestsList() {
             await friendApi.respondToRequest(requestId, "accepted");
             setRequests((prev) => prev.filter((r) => r.id !== requestId));
         } catch (error) {
-            console.error("Failed to accept request:", error);
+            logger.error("[RequestsList] Failed to accept request", error);
         } finally {
             setRespondingId(null);
         }
@@ -173,7 +174,7 @@ export default function RequestsList() {
             await friendApi.respondToRequest(requestId, "declined");
             setRequests((prev) => prev.filter((r) => r.id !== requestId));
         } catch (error) {
-            console.error("Failed to decline request:", error);
+            logger.error("[RequestsList] Failed to decline request", error);
         } finally {
             setRespondingId(null);
         }

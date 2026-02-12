@@ -54,7 +54,11 @@ const RecentRounds = memo(({ rounds }: Props) => {
               fontSize: 13,
               color: '#6B7280',
             }}>
-              {round.date}
+              {round.date ? new Date(round.date).toLocaleDateString('en-US', { 
+                month: 'long', 
+                day: 'numeric', 
+                year: 'numeric' 
+              }) : round.date}
             </Text>
           </View>
         ))}

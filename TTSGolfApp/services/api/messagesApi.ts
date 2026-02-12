@@ -1,0 +1,93 @@
+/**
+ * Messages API – conversations and chat
+ */
+
+import { API_ENDPOINTS } from "../../config/api";
+import { apiCall } from "./core";
+
+export type ConversationType = "direct" | "tee_time" | "group";
+
+export interface ConversationListItem {
+  id: string;
+  type: ConversationType;
+  tee_time_id?: string;
+  roster_group_id?: string;
+  title: string;
+  subtitle: string;
+  avatarUrl?: string | null;
+  otherUserId?: string | null;
+  participantInitials?: string | null;
+  participantAvatars?: string[];
+  participantCount?: number | null;
+  lastMessage?: {
+    body: string;
+    created_at: string;
+    sender_id: string;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  senderImg: string;
+  message: string;
+  time: string;
+  createdAt: string;
+  isMe: boolean;
+}
+
+export interface GetOrCreateConversationParams {
+  conversationId?: string;
+  recipientId?: string;
+  teeTimeId?: string;
+  rosterGroupId?: string;
+}
+
+export const messagesApi = {
+  /** List conversations (optional filter by type) */
+  listConversations: (type?: ConversationType) => {
+    const url = type
+      ? `${API_ENDPOINTS.MESSAGES_CONVERSATIONS}?type=${type}`
+      : API_ENDPOINTS.MESSAGES_CONVERSATIONS;
+    return apiCall<{ success: boolean; conversations: ConversationListItem[] }>(
+      url
+    );
+  },
+
+  /** Get or create a conversation; returns full conversation for header */
+  getOrCreateConversation: (params: GetOrCreateConversationParams) =>
+    apiCall<{ success: boolean; conversation: ConversationListItem }>(
+      API_ENDPOINTS.MESSAGES_CONVERSATIONS,
+      {
+        method: "POST",
+        body: JSON.stringify(params),
+      }
+    ),
+
+  /** Get messages in a conversation */
+  getMessages: (
+    conversationId: string,
+    options?: { limit?: number; before?: string }
+  ) => {
+    const q = new URLSearchParams();
+    if (options?.limit) q.set("limit", String(options.limit));
+    if (options?.before) q.set("before", options.before);
+    const query = q.toString();
+    const url = API_ENDPOINTS.MESSAGES_CONVERSATION_MESSAGES(conversationId) + (query ? `?${query}` : "");
+    return apiCall<{ success: boolean; messages: ChatMessage[] }>(url);
+  },
+
+  /** Send a message */
+  sendMessage: (conversationId: string, body: string) =>
+    apiCall<{ success: boolean; message: ChatMessage }>(
+      API_ENDPOINTS.MESSAGES_SEND_MESSAGE(conversationId),
+      {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }
+    ),
+};

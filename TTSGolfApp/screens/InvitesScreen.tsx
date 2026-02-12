@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     Timer,
 } from "lucide-react-native";
+import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme/ThemeContext";
 import { inviteApi, Invite } from "../services/api";
@@ -62,7 +63,7 @@ export default function InvitesScreen({ navigation }: any) {
             if (pendingRes.success) setPendingInvites(pendingRes.invites);
             if (sentRes.success) setSentInvites(sentRes.invites);
         } catch (error) {
-            console.error("Failed to load invites:", error);
+            logger.error("[InvitesScreen] Failed to load invites", error);
         } finally {
             setLoading(false);
         }
@@ -125,6 +126,9 @@ export default function InvitesScreen({ navigation }: any) {
     );
 
     const PendingInviteCard = ({ invite }: { invite: Invite }) => {
+        const handleCardPress = () => {
+            navigation?.navigate("InviteDetail", { inviteId: invite.id });
+        };
         const [countdown, setCountdown] = useState<{ days: number; hours: number; mins: number; secs: number } | null>(null);
         const [isUrgent, setIsUrgent] = useState(false);
         const [isExpired, setIsExpired] = useState(false);
@@ -166,6 +170,10 @@ export default function InvitesScreen({ navigation }: any) {
         const padZero = (num: number) => num.toString().padStart(2, '0');
 
         return (
+            <TouchableOpacity
+                onPress={handleCardPress}
+                activeOpacity={0.9}
+            >
             <View 
                 className={`bg-white rounded-md p-4 mb-3.5 shadow-sm ${isUrgent ? "border border-red-200" : ""}`}
                 style={{ elevation: 3 }}
@@ -341,6 +349,7 @@ export default function InvitesScreen({ navigation }: any) {
                     </TouchableOpacity>
                 </View>
             </View>
+            </TouchableOpacity>
         );
     };
 

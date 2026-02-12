@@ -14,15 +14,12 @@ export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) =
 
     const fetchProfile = useCallback(async () => {
         try {
-            console.log('[FriendProfile] Fetching profile for userId:', userId);
             const response = await friendApi.getUserProfile(userId);
-            console.log('[FriendProfile] Profile response:', JSON.stringify(response, null, 2));
             if (response.success) {
-                console.log('[FriendProfile] Friendship status:', response.profile?.friendshipStatus);
                 setProfile(response.profile);
             }
         } catch (error) {
-            console.error("Failed to fetch profile:", error);
+            // Error handling is done by the component
         } finally {
             setLoading(false);
         }

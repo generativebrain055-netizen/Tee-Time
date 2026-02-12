@@ -20,7 +20,7 @@
  * @module screens/onboarding/OAuthOnboardingScreen
  */
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -49,6 +49,7 @@ import type {
   ProfileCompletionPayload,
 } from "../../types/oauth";
 import { ONBOARDING_COLORS as COLORS } from "./constants";
+import { logger } from "../../utils/logger";
 
 // ============================================================================
 // Types
@@ -74,14 +75,12 @@ export function OAuthOnboardingScreen({
 }: OAuthOnboardingProps): React.ReactElement {
   const insets = useSafeAreaInsets();
   const oauthData = route?.params?.oauthData;
-  
-  console.log("[OAuthOnboarding] Received oauthData:", JSON.stringify(oauthData, null, 2));
 
   // Check if this is pending verification (new user) or authenticated (existing user)
   const isPendingVerification = oauthData && "pendingToken" in oauthData && oauthData.needsPhoneVerification;
   const isAuthenticated = oauthData && "accessToken" in oauthData && !oauthData.needsPhoneVerification;
   
-  console.log("[OAuthOnboarding] Flow type:", {
+  logger.debug("[OAuthOnboarding] Flow type", {
     isPendingVerification,
     isAuthenticated,
     hasPendingToken: oauthData && "pendingToken" in oauthData,
@@ -90,26 +89,37 @@ export function OAuthOnboardingScreen({
   });
 
   const providerData = oauthData?.providerData;
-  const user = isAuthenticated ? (oauthData as any)?.user : null;
+  // Prefer session user when it has more complete data (e.g. phoneNumber) to avoid stale missingFields
+  const [sessionUser, setSessionUser] = useState<{ phoneNumber?: string | null; firstName?: string; lastName?: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    sessionManager.getUser().then((u) => {
+      if (!cancelled && u) setSessionUser(u);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  // Pre-fill phone from session when it loads (e.g. after completing step elsewhere)
+  useEffect(() => {
+    if (sessionUser?.phoneNumber && !phoneNumber) setPhoneNumber(sessionUser.phoneNumber);
+  }, [sessionUser?.phoneNumber]);
+  const user = isAuthenticated
+    ? (sessionUser?.phoneNumber != null && (oauthData as any)?.user
+        ? { ...(oauthData as any).user, phoneNumber: sessionUser.phoneNumber ?? (oauthData as any).user?.phoneNumber }
+        : (oauthData as any)?.user)
+    : null;
 
   // Determine the OAuth provider picture (Google provides picture, Apple may have it)
   const oauthPicture = providerData?.picture || user?.avatarUrl || null;
-  
-  console.log("[OAuthOnboarding] Profile picture:", {
-    providerDataPicture: providerData?.picture,
-    userAvatarUrl: user?.avatarUrl,
-    finalOauthPicture: oauthPicture,
-  });
 
   // Form state - pre-fill from OAuth data (prioritize providerData for pending users)
-  const [firstName, setFirstName] = useState(
-    providerData?.first_name || providerData?.firstName || user?.firstName || ""
+  const [firstName, setFirstName] = useState<string>(
+    String(providerData?.first_name ?? providerData?.firstName ?? user?.firstName ?? "")
   );
-  const [lastName, setLastName] = useState(
-    providerData?.last_name || providerData?.lastName || user?.lastName || ""
+  const [lastName, setLastName] = useState<string>(
+    String(providerData?.last_name ?? providerData?.lastName ?? user?.lastName ?? "")
   );
-  const [email] = useState(providerData?.email || user?.email || "");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [email] = useState<string>(String(providerData?.email ?? user?.email ?? ""));
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber ?? "");
   const [selectedCountry, setSelectedCountry] = useState<Country>(
     COUNTRIES.find(c => c.code === "US") || COUNTRIES[0]
   );
@@ -217,7 +227,7 @@ export function OAuthOnboardingScreen({
     setIsSubmitting(true);
 
     try {
-      console.log("[OAuthOnboarding] Starting verification with oauthData:", {
+      logger.debug("[OAuthOnboarding] Starting verification", {
         hasPendingToken: "pendingToken" in oauthData,
         hasAccessToken: "accessToken" in oauthData,
         needsPhoneVerification: oauthData.needsPhoneVerification,
@@ -226,10 +236,10 @@ export function OAuthOnboardingScreen({
       // Check if this is a pending verification (new OAuth user)
       if ("pendingToken" in oauthData && oauthData.needsPhoneVerification) {
         // New user flow - verify phone and create account
-        console.log("[OAuthOnboarding] New user flow - verifying phone");
+        logger.info("[OAuthOnboarding] New user flow - verifying phone");
         
         const response = await oauthService.verifyPhoneAndCompleteSignup({
-          pendingToken: oauthData.pendingToken,
+          pendingToken: oauthData.pendingToken as string,
           phoneNumber: getRawPhoneNumber(),
           verificationCode: "123456", // Auto-verify in test mode
           countryCode: selectedCountry.dialCode,
@@ -237,7 +247,7 @@ export function OAuthOnboardingScreen({
           lastName: lastName.trim(),
         });
 
-        console.log("[OAuthOnboarding] Verification response:", {
+        logger.debug("[OAuthOnboarding] Verification response", {
           success: response.success,
           hasAccessToken: !!(response as any).accessToken,
           hasUser: !!(response as any).user,
@@ -249,7 +259,7 @@ export function OAuthOnboardingScreen({
             setIsUploadingImage(true);
             await profileApi.uploadAvatar(profileImage);
           } catch (imageError) {
-            console.error("[OAuthOnboarding] Image upload error:", imageError);
+            logger.error("[OAuthOnboarding] Image upload error", imageError);
             Alert.alert(
               "Image Upload Failed",
               "Your account was created but we couldn't upload your profile picture. You can add it later from your profile."
@@ -274,7 +284,7 @@ export function OAuthOnboardingScreen({
 
       } else if ("accessToken" in oauthData && !oauthData.needsPhoneVerification) {
         // Existing user flow - just update profile with phone number
-        console.log("[OAuthOnboarding] Existing user flow - updating profile");
+        logger.info("[OAuthOnboarding] Existing user flow - updating profile");
         
         const payload: ProfileCompletionPayload = {
           firstName: firstName.trim(),
@@ -293,7 +303,7 @@ export function OAuthOnboardingScreen({
             setIsUploadingImage(true);
             await profileApi.uploadAvatar(profileImage);
           } catch (imageError) {
-            console.error("[OAuthOnboarding] Image upload error:", imageError);
+            logger.error("[OAuthOnboarding] Image upload error", imageError);
           } finally {
             setIsUploadingImage(false);
           }
@@ -316,7 +326,7 @@ export function OAuthOnboardingScreen({
       }
 
     } catch (error) {
-      console.error("[OAuthOnboarding] Verification error:", error);
+      logger.error("[OAuthOnboarding] Verification error", error);
       Alert.alert("Error", formatOAuthError(error));
     } finally {
       setIsSubmitting(false);

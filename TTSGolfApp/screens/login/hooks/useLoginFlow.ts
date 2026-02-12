@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { requestSmsMagicLinkForLogin, verifySmsMagicLink } from "../../../utils/smsMagicLink";
 import { LoginStep } from "../constants";
 import { Country, COUNTRIES } from "../../../components/CountryPicker";
+import { logger } from "../../../utils/logger";
 
 export const useLoginFlow = (navigation: any) => {
     // State
@@ -54,22 +55,29 @@ export const useLoginFlow = (navigation: any) => {
                 const parsed = Linking.parse(url);
                 const tokenRaw = parsed.queryParams?.token;
                 const token = typeof tokenRaw === "string" ? tokenRaw : Array.isArray(tokenRaw) ? tokenRaw[0] : null;
-                if (!token || typeof token !== "string") return;
+                if (!token || typeof token !== "string") {
+                    logger.warn("[LoginFlow] Invalid magic link token format", { url });
+                    return;
+                }
 
+                logger.debug("[LoginFlow] Verifying magic link token");
                 setLoading(true);
                 const result = await verifySmsMagicLink(token);
                 setLoading(false);
 
                 if (result.success && result.accessToken && result.refreshToken && result.user) {
+                    logger.info("[LoginFlow] Magic link verified successfully, saving session");
                     await AsyncStorage.setItem("accessToken", result.accessToken);
                     await AsyncStorage.setItem("refreshToken", result.refreshToken);
                     await AsyncStorage.setItem("user", JSON.stringify(result.user));
                     navigation?.navigate("Home", { user: result.user });
                 } else if (!result.success) {
+                    logger.error("[LoginFlow] Magic link verification failed", { error: result.error });
                     setHasError(true);
                     setError(result.error || "Verification failed.");
                 }
             } catch (err) {
+                logger.error("[LoginFlow] Error verifying magic link", err);
                 setLoading(false);
                 setHasError(true);
                 setError(err instanceof Error ? err.message : "Verification failed.");
@@ -112,12 +120,15 @@ export const useLoginFlow = (navigation: any) => {
         }
         setLoading(true);
         setError("");
+        logger.debug("[LoginFlow] Requesting magic link", { phoneNumber: fullPhoneNumber, isResend });
         const result = await requestSmsMagicLinkForLogin(fullPhoneNumber);
         setLoading(false);
         if (result.success) {
+            logger.info("[LoginFlow] Magic link sent successfully", { isResend });
             if (!isResend) animateStepChange(() => setCurrentStep("magicLinkSent"));
             setResendTimer(60); // 60s before resend
         } else {
+            logger.error("[LoginFlow] Failed to send magic link", { error: result.error });
             setHasError(true);
             setError(result.error || "Failed to send sign-in link.");
         }

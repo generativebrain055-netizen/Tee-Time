@@ -13,6 +13,7 @@ import { FlashList } from "@shopify/flash-list";
 import { Calendar, MessageCircle, Menu, X, UserMinus, ArrowDown } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { friendApi, Friend } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface RosterListProps {
     navigation: any;
@@ -204,7 +205,7 @@ function RosterList({ navigation }: RosterListProps) {
                 setFriends(response.friends);
             }
         } catch (error) {
-            console.error("Failed to load friends:", error);
+            logger.error("[RosterList] Failed to load friends", error);
             setFriends([]);
         } finally {
             setLoading(false);
@@ -254,7 +255,7 @@ function RosterList({ navigation }: RosterListProps) {
                             await friendApi.removeFriend(friend.id);
                             setFriends(prev => prev.filter(f => f.id !== friend.id));
                         } catch (error: any) {
-                            console.error("Remove friend error:", error);
+                            logger.error("[RosterList] Remove friend error", error);
                             Alert.alert("Error", error.message || "Failed to remove friend");
                         }
                     },

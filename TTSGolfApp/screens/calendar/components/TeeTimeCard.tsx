@@ -74,13 +74,6 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  console.log('TeeTimeCard render:', {
-    id: teeTime.id,
-    course: teeTime.course,
-    participantsCount: teeTime.participants?.length || 0,
-    participants: teeTime.participants
-  });
-
   const handlePress = useCallback(() => {
     onPress?.(teeTime.id);
   }, [onPress, teeTime.id]);

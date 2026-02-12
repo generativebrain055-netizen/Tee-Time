@@ -292,6 +292,52 @@ async function getGroupMembers(userId, groupId, sortBy) {
 }
 
 /**
+ * Add members to a group (Figma 1075-927: Inviting people to group)
+ * @throws {RosterServiceError} If group not found or access denied
+ */
+async function addMembersToGroup(userId, groupId, memberUserIds) {
+  // Verify group exists and user owns it
+  const group = await rosterRepository.getGroupWithAccess(userId, groupId);
+  if (!group) {
+    throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+
+  const addedCount = await rosterRepository.addMembersToGroup(userId, groupId, memberUserIds);
+  return { addedCount, groupId };
+}
+
+/**
+ * Leave a group (remove current user's roster entries from group) (Figma 1075-927: removing yourself)
+ * @throws {RosterServiceError} If group not found
+ */
+async function leaveGroup(userId, groupId) {
+  // Verify group exists
+  const group = await rosterRepository.getGroupWithAccess(userId, groupId);
+  if (!group) {
+    throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+
+  // Get all roster entries for this user in this group
+  const { supabaseAdmin } = require("../config/supabase");
+  const { data: entries, error: fetchError } = await supabaseAdmin
+    .from("roster")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("group_id", groupId);
+
+  if (fetchError) throw fetchError;
+
+  // Remove each entry from the group
+  let removedCount = 0;
+  for (const entry of entries || []) {
+    const removed = await rosterRepository.removeFromGroup(userId, entry.id);
+    if (removed) removedCount++;
+  }
+
+  return { removedCount, groupId };
+}
+
+/**
  * Update which group a member belongs to
  * @throws {RosterServiceError} If roster entry not found
  */
@@ -402,6 +448,8 @@ module.exports = {
   getAutoInviteMembers,
   deleteGroup,
   getGroupMembers,
+  addMembersToGroup,
+  leaveGroup,
   updateMemberGroup,
   moveMember,
 

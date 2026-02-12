@@ -257,6 +257,10 @@ export interface NotificationData {
   courseName?: string;
   date?: string;
   time?: string;
+  teeDate?: string;
+  teeTime?: string;
+  spotsRemaining?: number;
+  unfilledSlotAlert?: boolean;
   responderId?: string;
   responderName?: string;
   accepted?: boolean;

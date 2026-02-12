@@ -10,9 +10,10 @@
 const { supabaseAdmin, testConnection } = require("./supabase");
 
 // Export pool-like interface for gradual migration
+const logger = require("./logger");
 const pool = {
   query: async (text, params) => {
-    console.warn("DEPRECATED: Direct pool.query() usage. Migrate to Supabase client.");
+    logger.warn("DEPRECATED: Direct pool.query() usage. Migrate to Supabase client.");
     throw new Error("Direct SQL queries not supported with Supabase REST API. Use repository methods or RPC functions.");
   }
 };
@@ -25,7 +26,7 @@ module.exports = {
   },
   testConnection,
   closePool: async () => { 
-    console.log("Supabase connections are managed automatically"); 
+    logger.info("Supabase connections are managed automatically"); 
   },
   getPoolStats: () => ({ 
     message: "Supabase manages connections automatically" 

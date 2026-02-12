@@ -17,6 +17,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { logger } from "../utils/logger";
 
 /**
  * Navigation params for the screen
@@ -116,7 +117,7 @@ const MagicLinkHandler: React.FC<Props> = ({ route, navigation }) => {
         );
       }
     } catch (error) {
-      console.error("Magic link verification error:", error);
+      logger.error("[MagicLinkHandler] Magic link verification error", error);
       setStatus("Error occurred");
       Alert.alert("Error", "Unable to verify magic link. Please try again.", [
         {

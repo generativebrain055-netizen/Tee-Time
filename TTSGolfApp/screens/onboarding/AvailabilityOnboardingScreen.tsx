@@ -139,7 +139,6 @@ export default function AvailabilityOnboardingScreen({
   const handleSkip = useCallback(() => {
     // Availability is REQUIRED - no skip allowed
     // User must complete this step
-    console.log('Availability onboarding cannot be skipped');
   }, [navigation]);
 
   const handleSave = useCallback(async () => {
@@ -164,15 +163,18 @@ export default function AvailabilityOnboardingScreen({
       // Save to backend
       await availabilityApi.saveUserAvailability(availabilityData);
 
-      console.log('Availability saved successfully:', availabilityData);
-
       setShowSuccess(true);
       setTimeout(() => {
         navigation?.replace('Home');
       }, 2000);
-    } catch (error) {
-      console.error('Save availability error:', error);
-      Alert.alert('Error', 'Failed to save availability. Please try again.');
+    } catch (error: any) {
+      const { logger } = require('../../utils/logger');
+      logger.error('[AvailabilityOnboarding] Save availability error', error);
+      const message =
+        error?.message ||
+        (error?.response?.data?.error || error?.response?.data?.message) ||
+        'Failed to save availability. Please try again.';
+      Alert.alert('Error', message);
     } finally {
       setSaving(false);
     }

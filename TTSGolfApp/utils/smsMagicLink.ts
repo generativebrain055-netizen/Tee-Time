@@ -16,10 +16,12 @@ export interface VerifySmsMagicLinkResult {
   accessToken?: string;
   refreshToken?: string;
   user?: Record<string, unknown>;
+  phoneNumber?: string;
 }
 
 export async function requestSmsMagicLink(
-  phoneNumber: string
+  phoneNumber: string,
+  userData?: { email?: string; [key: string]: unknown }
 ): Promise<RequestSmsMagicLinkResult> {
   try {
     const deviceInfo = await getDeviceInfoForApi();
@@ -37,6 +39,7 @@ export async function requestSmsMagicLink(
       },
       body: JSON.stringify({
         phoneNumber,
+        userData: userData || undefined,
         deviceInfo: deviceInfo || undefined,
       }),
     });

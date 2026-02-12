@@ -21,6 +21,7 @@ import { PhoneInput } from "./components";
 import { LOGIN_COLORS } from "./constants";
 import { maskPhoneDisplay } from "../../utils/smsMagicLink";
 import { OAuthButtons } from "../../components";
+import { logger } from "../../utils/logger";
 
 interface Props {
   navigation: any;
@@ -113,11 +114,16 @@ export default function LoginScreen({ navigation }: Props) {
                 </View>
                 <OAuthButtons
                   onSuccess={async (data) => {
-                    console.log("[LoginScreen] OAuth onSuccess received:", JSON.stringify(data, null, 2));
+                    logger.debug("[LoginScreen] OAuth onSuccess received", {
+                      status: data.status,
+                      isNewUser: data.isNewUser,
+                      needsPhoneVerification: data.needsPhoneVerification,
+                      needsOnboarding: data.needsOnboarding,
+                    });
                     
                     // Check if user needs phone verification (new user)
                     if (data.status === "pending_phone_verification" && data.needsPhoneVerification) {
-                      console.log("[LoginScreen] New user - navigating to phone entry for SMS verification");
+                      logger.info("[LoginScreen] New user - navigating to phone entry for SMS verification");
                       navigation.navigate("OAuthPhoneEntry", {
                         providerData: data.providerData,
                       });
@@ -126,8 +132,8 @@ export default function LoginScreen({ navigation }: Props) {
                     
                     // Check if user needs to complete profile (missing required fields)
                     if (data.needsOnboarding && data.oauthData && !data.oauthData.needsPhoneVerification) {
-                      const missingFields = data.oauthData.missingFields || [];
-                      console.log("[LoginScreen] User missing fields:", missingFields);
+                      const missingFields = ("missingFields" in data.oauthData ? data.oauthData.missingFields : []) || [];
+                      logger.debug("[LoginScreen] User missing fields", { missingFields });
                       
                       // Only show onboarding if missing critical fields (name or phone)
                       const hasCriticalMissing = missingFields.some(field => 
@@ -135,7 +141,7 @@ export default function LoginScreen({ navigation }: Props) {
                       );
                       
                       if (hasCriticalMissing) {
-                        console.log("[LoginScreen] Missing critical fields - navigating to OAuthOnboarding");
+                        logger.info("[LoginScreen] Missing critical fields - navigating to OAuthOnboarding");
                         navigation.navigate("OAuthOnboarding", {
                           oauthData: data.oauthData,
                         });
@@ -145,7 +151,7 @@ export default function LoginScreen({ navigation }: Props) {
                     
                     // User has all required fields - check availability
                     if (data.user) {
-                      console.log("[LoginScreen] User has required fields, checking availability");
+                      logger.debug("[LoginScreen] User has required fields, checking availability");
                       
                       try {
                         const { availabilityApi } = await import("../../services/api/availabilityApi");
@@ -153,25 +159,25 @@ export default function LoginScreen({ navigation }: Props) {
                         
                         // If no availability set, show availability onboarding
                         if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) {
-                          console.log("[LoginScreen] No availability found, navigating to AvailabilityOnboarding");
+                          logger.info("[LoginScreen] No availability found, navigating to AvailabilityOnboarding");
                           navigation.replace("AvailabilityOnboarding", { user: data.user });
                         } else {
-                          console.log("[LoginScreen] Availability exists, navigating to Home");
+                          logger.info("[LoginScreen] Availability exists, navigating to Home");
                           navigation.replace("Home");
                         }
                       } catch (error) {
-                        console.error("[LoginScreen] Error checking availability:", error);
+                        logger.error("[LoginScreen] Error checking availability", error);
                         // On error, just go to home
                         navigation.replace("Home");
                       }
                     } else {
                       // Fallback - go to home
-                      console.log("[LoginScreen] No user data, navigating to Home");
+                      logger.debug("[LoginScreen] No user data, navigating to Home");
                       navigation.replace("Home");
                     }
                   }}
                   onError={(error) => {
-                    console.error("[LoginScreen] OAuth error:", error);
+                    logger.error("[LoginScreen] OAuth error", error);
                   }}
                 />
               </View>

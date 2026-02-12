@@ -173,11 +173,12 @@ const getStatistics = async () => {
   }
 };
 
+const logger = require("../config/logger");
 const getStatisticsByPurpose = async () => {
   try {
     // Note: Supabase doesn't support GROUP BY directly via REST API
     // This would need to be implemented as a PostgreSQL function
-    console.warn("getStatisticsByPurpose: Consider implementing as PostgreSQL function for better performance");
+    logger.warn("getStatisticsByPurpose: Consider implementing as PostgreSQL function for better performance");
     return [];
   } catch (error) {
     handleError(error, "getStatisticsByPurpose");

@@ -10,6 +10,7 @@ import {
   friendApi,
   AppNotification,
 } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface UseNotificationActionsProps {
   setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
@@ -33,7 +34,7 @@ export function useNotificationActions({
             prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
           );
         } catch (error) {
-          console.error("Error marking notification as read:", error);
+          logger.error("[useNotificationActions] Error marking notification as read", error);
         }
       }
 
@@ -78,6 +79,9 @@ export function useNotificationActions({
               teeTimeId: item.data.teeTimeId,
               spotsRemaining: item.data.spotsRemaining || 1,
               courseName: item.data.courseName,
+              teeDate: item.data.teeDate,
+              teeTime: item.data.teeTime,
+              unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (item.data?.type === "tee_time_not_filled" || item.data?.type === "organizer_fill_warning")),
             });
           }
           break;
@@ -103,7 +107,7 @@ export function useNotificationActions({
                 prev.filter((n) => n.id !== notificationId),
               );
             } catch (error) {
-              console.error("Error deleting notification:", error);
+              logger.error("[useNotificationActions] Error deleting notification", error);
             }
           },
         },
@@ -119,16 +123,16 @@ export function useNotificationActions({
     async (item: AppNotification) => {
       const requestId = item.data?.requestId;
       if (!requestId) {
-        console.warn("[Notifications] No requestId in notification data:", item.data);
+        logger.warn("[useNotificationActions] No requestId in notification data", item.data);
         return;
       }
       try {
-        console.log("[Notifications] Accepting friend request:", requestId);
+        logger.info("[useNotificationActions] Accepting friend request", { requestId });
         const response = await friendApi.respondToRequest(
           requestId,
           "accepted",
         );
-        console.log("[Notifications] Accept response:", JSON.stringify(response));
+        logger.debug("[useNotificationActions] Accept response", response);
         if (response.success) {
           await notificationApi.markAsResponded(item.id);
           
@@ -149,7 +153,7 @@ export function useNotificationActions({
           }
         }
       } catch (error: any) {
-        console.error("[Notifications] Accept friend error:", error);
+        logger.error("[useNotificationActions] Accept friend error", error);
         Alert.alert("Error", error.message || "Failed to accept friend request");
       }
     },
@@ -163,16 +167,16 @@ export function useNotificationActions({
     async (item: AppNotification) => {
       const requestId = item.data?.requestId;
       if (!requestId) {
-        console.warn("[Notifications] No requestId in notification data:", item.data);
+        logger.warn("[useNotificationActions] No requestId in notification data", item.data);
         return;
       }
       try {
-        console.log("[Notifications] Declining friend request:", requestId);
+        logger.info("[useNotificationActions] Declining friend request", { requestId });
         const response = await friendApi.respondToRequest(
           requestId,
           "declined",
         );
-        console.log("[Notifications] Decline response:", JSON.stringify(response));
+        logger.debug("[useNotificationActions] Decline response", response);
         if (response.success) {
           await notificationApi.markAsResponded(item.id);
           
@@ -180,7 +184,7 @@ export function useNotificationActions({
           setNotifications((prev) => prev.filter((n) => n.id !== item.id));
         }
       } catch (error: any) {
-        console.error("[Notifications] Decline friend error:", error);
+        logger.error("[useNotificationActions] Decline friend error", error);
         Alert.alert("Error", error.message || "Failed to decline friend request");
       }
     },
@@ -203,7 +207,7 @@ export function useNotificationActions({
         );
         navigation?.navigate("Invites");
       } catch (error) {
-        console.error(error);
+        logger.error("[useNotificationActions] Error accepting spot", error);
       }
     },
     [navigation, setNotifications],
@@ -227,9 +231,12 @@ export function useNotificationActions({
           teeTimeId: item.data?.teeTimeId,
           spotsRemaining: item.data?.spotsRemaining || 1,
           courseName: item.data?.courseName,
+          teeDate: item.data?.teeDate,
+          teeTime: item.data?.teeTime,
+          unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (item.data?.type === "tee_time_not_filled" || item.data?.type === "organizer_fill_warning")),
         });
       } catch (error) {
-        console.error(error);
+        logger.error("[useNotificationActions] Error selecting on-deck", error);
       }
     },
     [navigation, setNotifications],
@@ -243,7 +250,7 @@ export function useNotificationActions({
       await notificationApi.markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch (error) {
-      console.error(error);
+      logger.error("[useNotificationActions] Error marking all as read", error);
     }
   }, [setNotifications]);
 

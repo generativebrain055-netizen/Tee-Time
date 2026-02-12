@@ -21,6 +21,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { logger } from "../utils/logger";
 
 /**
  * User data interface
@@ -121,7 +122,7 @@ const CompleteProfileScreen: React.FC<Props> = ({ route, navigation }) => {
         Alert.alert("Error", data.message || "Unable to update profile");
       }
     } catch (error) {
-      console.error("Profile update error:", error);
+      logger.error("[CompleteProfileScreen] Profile update error", error);
       Alert.alert("Error", "Unable to update profile. Please try again.");
     } finally {
       setLoading(false);

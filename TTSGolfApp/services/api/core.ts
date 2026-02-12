@@ -6,6 +6,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../../config/api";
 import { sessionManager } from "../../utils/sessionManager";
+import { logger } from "../../utils/logger";
 
 /**
  * Get authentication headers for API requests
@@ -46,7 +47,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
     await sessionManager.handleSessionExpired();
     return null;
   } catch (error) {
-    console.error("Token refresh failed:", error);
+    logger.error("[api/core] Token refresh failed", error);
     return null;
   }
 };

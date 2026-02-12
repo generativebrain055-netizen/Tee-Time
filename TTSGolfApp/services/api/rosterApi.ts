@@ -206,6 +206,29 @@ export const rosterApi = {
     );
   },
 
+  /**
+   * Add members to a group (Figma 1075-927: Inviting people)
+   */
+  addMembersToGroup: (groupId: string, memberUserIds: string[]) =>
+    apiCall<{ success: boolean; addedCount: number; groupId: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ memberUserIds }),
+      },
+    ),
+
+  /**
+   * Leave a group (Figma 1075-927: removing yourself)
+   */
+  leaveGroup: (groupId: string) =>
+    apiCall<{ success: boolean; removedCount: number; groupId: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/leave`,
+      {
+        method: "POST",
+      },
+    ),
+
   // ============ WAIVER WIRE ============
 
   /**

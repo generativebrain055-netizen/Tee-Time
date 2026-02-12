@@ -97,6 +97,20 @@ router.put(
 );
 
 /**
+ * @route   GET /api/invites/:id
+ * @desc    Get invite by ID
+ * @access  Private
+ */
+router.get("/:id", inviteController.getInviteById);
+
+/**
+ * @route   GET /api/invites/:id
+ * @desc    Get invite by ID
+ * @access  Private
+ */
+router.get("/:id", inviteController.getInviteById);
+
+/**
  * @route   GET /api/invites/:id/responses
  * @desc    Get response history for an invite
  * @access  Private

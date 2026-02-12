@@ -263,7 +263,14 @@ class FriendController {
                 roundsPlayed: profile.rounds_played,
                 socialRate: profile.social_rate,
                 averageScore: profile.average_score,
-                friendshipStatus: profile.friendship_status
+                friendshipStatus: profile.friendship_status,
+                // Include additional fields from enhanced getUserProfile
+                roundsCount: profile.roundsCount || profile.rounds_played || 0,
+                coursesCount: profile.coursesCount || 0,
+                recentRounds: profile.recentRounds || [],
+                golfVibe: profile.golfVibe || profile.playing_partner_preference,
+                drinkOfChoice: profile.drinkOfChoice || profile.drink_of_choice,
+                clubs: profile.clubs || []
             };
 
             res.json({ success: true, profile: formatted });

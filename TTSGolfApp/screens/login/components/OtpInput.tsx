@@ -37,7 +37,9 @@ const OtpInput = memo(({
                     ]}
                 >
                     <RNTextInput
-                        ref={(ref) => (inputRefs.current[index] = ref)}
+                        ref={(ref) => {
+                            inputRefs.current[index] = ref;
+                        }}
                         style={[styles.otpInput, hasError && styles.otpInputError]}
                         keyboardType="number-pad"
                         maxLength={1}
@@ -58,7 +60,7 @@ const OtpInput = memo(({
             disabled={resendTimer > 0 || loading}
         >
             <Text style={[styles.resendText, (resendTimer > 0 || loading) && styles.resendTextDisabled]}>
-                {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend code"}
+                {resendTimer > 0 ? `Resend link in ${resendTimer}s` : "Resend link"}
             </Text>
         </TouchableOpacity>
     </View>
@@ -89,7 +91,7 @@ const styles = StyleSheet.create({
     },
     otpBoxError: {
         borderColor: LOGIN_COLORS.error,
-        backgroundColor: LOGIN_COLORS.errorLight,
+        backgroundColor: LOGIN_COLORS.errorContainer,
     },
     otpInput: {
         width: "100%",

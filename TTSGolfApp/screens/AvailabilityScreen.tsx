@@ -256,11 +256,8 @@ function AvailabilityScreen({ navigation }: any) {
         setError(null);
         
         try {
-            console.log('[AVAILABILITY] Fetching data for:', currentTab.dayOfWeek, currentTab.date, 'Filter:', filterType);
-            
             // 1. Fetch user's own availability
             const userAvailResponse = await availabilityApi.getUserAvailability();
-            console.log('[AVAILABILITY] User availability response:', userAvailResponse);
             
             if (!isMountedRef.current) return;
             
@@ -289,7 +286,6 @@ function AvailabilityScreen({ navigation }: any) {
             if (filterType === 'friends') {
                 // Fetch from friendships table
                 const friendsResponse = await friendApi.getFriends();
-                console.log('[AVAILABILITY] Friends response:', friendsResponse);
                 if (friendsResponse.success && friendsResponse.friends) {
                     friendsList = friendsResponse.friends.map((friend: any) => ({
                         id: friend.id,
@@ -300,7 +296,6 @@ function AvailabilityScreen({ navigation }: any) {
                 }
             } else if (filterType === 'roster') {
                 const rosterResponse = await rosterApi.getRoster();
-                console.log('[AVAILABILITY] Roster response:', rosterResponse);
                 if (rosterResponse.success && rosterResponse.roster) {
                     friendsList = rosterResponse.roster
                         .filter((member: any) => !member.isOnDeck && member.contact?.userId)
@@ -313,7 +308,6 @@ function AvailabilityScreen({ navigation }: any) {
                 }
             } else if (filterType === 'onDeck') {
                 const onDeckResponse = await rosterApi.getOnDeck();
-                console.log('[AVAILABILITY] On Deck response:', onDeckResponse);
                 if (onDeckResponse.success && onDeckResponse.onDeck) {
                     friendsList = onDeckResponse.onDeck
                         .filter((member: any) => member.contact?.userId)
@@ -326,7 +320,6 @@ function AvailabilityScreen({ navigation }: any) {
                 }
             } else if (filterType === 'groups') {
                 const groupsResponse = await rosterApi.getGroups();
-                console.log('[AVAILABILITY] Groups response:', groupsResponse);
                 if (groupsResponse.success && groupsResponse.groups) {
                     // Get all members from all groups
                     const allGroupMembers: any[] = [];
@@ -354,34 +347,25 @@ function AvailabilityScreen({ navigation }: any) {
             if (!isMountedRef.current) return;
             
             if (friendsList.length === 0) {
-                console.log('[AVAILABILITY] No friends found for filter:', filterType);
                 setTimeSlots(TIME_SLOTS.map(slot => ({ ...slot, friends: [] })));
                 setLoading(false);
                 return;
             }
 
             const friendIds = friendsList.map((f: any) => f.id);
-            
-            console.log('[AVAILABILITY] Fetching availability for', friendIds.length, 'friends');
 
             // 3. Fetch friends' availability
             const friendsAvailResponse = await availabilityApi.getMultipleUsersAvailability(friendIds);
-            console.log('[AVAILABILITY] Friends availability response:', friendsAvailResponse);
             
             if (!isMountedRef.current) return;
             
             if (!friendsAvailResponse.success || !friendsAvailResponse.data) {
-                console.log('[AVAILABILITY] No availability data for friends');
                 setTimeSlots(TIME_SLOTS.map(slot => ({ ...slot, friends: [] })));
                 setLoading(false);
                 return;
             }
 
             const friendsAvailabilityMap: Record<string, FriendAvailability[]> = friendsAvailResponse.data;
-            
-            console.log('[AVAILABILITY] Friends availability map:', JSON.stringify(friendsAvailabilityMap, null, 2));
-            console.log('[AVAILABILITY] Selected day:', currentTab.dayOfWeek);
-            console.log('[AVAILABILITY] Friends list count:', friendsList.length);
 
             // 4. Filter friends by selected day and group by time slot
             const slotsData: TimeSlotData[] = TIME_SLOTS.map(slot => {
@@ -389,15 +373,12 @@ function AvailabilityScreen({ navigation }: any) {
 
                 friendsList.forEach((friend: any) => {
                     const friendAvail = friendsAvailabilityMap[friend.id] || [];
-                    console.log(`[AVAILABILITY] Friend ${friend.firstName} ${friend.lastName} (${friend.id}) availability:`, friendAvail);
                     
                     const isAvailable = friendAvail.some(
                         (avail: FriendAvailability) =>
                             avail.dayOfWeek === currentTab.dayOfWeek &&
                             avail.timeSlot === slot.id
                     );
-
-                    console.log(`[AVAILABILITY] Friend ${friend.firstName} available for ${slot.id} on ${currentTab.dayOfWeek}:`, isAvailable);
 
                     if (isAvailable) {
                         availableFriends.push({
@@ -414,13 +395,10 @@ function AvailabilityScreen({ navigation }: any) {
                     friends: availableFriends,
                 };
             });
-
-            console.log('[AVAILABILITY] Processed time slots:', slotsData.map(s => ({ id: s.id, count: s.friends.length, friends: s.friends.map(f => f.firstName) })));
             
             if (!isMountedRef.current) return;
             setTimeSlots(slotsData);
         } catch (error: any) {
-            console.error('[AVAILABILITY] Error fetching data:', error);
             if (!isMountedRef.current) return;
             setError(error.message || 'Failed to load availability data');
             setTimeSlots([]);

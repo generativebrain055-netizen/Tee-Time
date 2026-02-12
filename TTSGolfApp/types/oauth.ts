@@ -160,6 +160,7 @@ export interface OAuthButtonsProps {
   onSuccess: (data: OAuthSuccessData) => void;
   onError: (error: string) => void;
   disabled?: boolean;
+  variant?: "signup" | "login";
 }
 
 // ============================================================================

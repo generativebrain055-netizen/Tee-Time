@@ -136,10 +136,10 @@ export const NotificationItem = memo(
     // Determine actionable states
     const isFriendRequest = notifType === "friend_request";
     const isSpotOpened = notifType === "spot_opened";
+    const isUnfilledSlotAlert =
+      notifType === "tee_time_not_filled" || notifType === "organizer_fill_warning";
     const isRosterExhausted =
-      notifType === "roster_exhausted" ||
-      notifType === "tee_time_not_filled" ||
-      notifType === "organizer_fill_warning";
+      notifType === "roster_exhausted" || isUnfilledSlotAlert;
 
     const isFriendRequestActionable =
       isFriendRequest && item.data?.requestId && !item.data?.responded;
@@ -148,9 +148,10 @@ export const NotificationItem = memo(
     const isRosterExhaustedActionable =
       isRosterExhausted && item.data?.teeTimeId && !item.data?.responded;
 
-    // Card base classes
+    // Card base classes (Unfilled Slot Alert: 8px radius per Figma 791-*)
     const cardClasses = `
-      bg-white rounded-md p-4 border
+      bg-white p-4 border
+      ${isUnfilledSlotAlert ? "rounded-lg" : "rounded-md"}
       ${!item.isRead ? "border-green-200 border-[1.5px]" : "border-black/[0.03]"}
       ${Platform.OS === "ios" ? "shadow-sm" : "elevation-3"}
     `;
@@ -161,6 +162,13 @@ export const NotificationItem = memo(
         onPress={() => onPress(item)}
         activeOpacity={0.9}
       >
+        {/* Unfilled Slot Alert label (Figma 791-484, 791-628, etc.) */}
+        {isUnfilledSlotAlert && (
+          <Text className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+            Unfilled Slot Alert
+          </Text>
+        )}
+
         {/* Header */}
         <View className="flex-row items-start">
           <View
@@ -260,12 +268,12 @@ export const NotificationItem = memo(
 
             {isRosterExhaustedActionable && (
               <TouchableOpacity
-                className="flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md bg-red-500"
+                className={`flex-1 flex-row items-center justify-center py-2 px-3.5 rounded-md ${isUnfilledSlotAlert ? "bg-green-600" : "bg-red-500"}`}
                 onPress={() => onSelectOnDeck(item)}
               >
                 <Users size={14} color="#FFF" />
                 <Text className="text-white font-semibold text-[13px] ml-1.5">
-                  Select from On-Deck
+                  {isUnfilledSlotAlert ? "Invite from On-Deck" : "Select from On-Deck"}
                 </Text>
               </TouchableOpacity>
             )}

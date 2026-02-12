@@ -59,7 +59,8 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
         setImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error("Error taking photo:", error);
+      const { logger } = require("../../utils/logger");
+      logger.error("[ProfileImagePage] Error taking photo", error);
       Alert.alert("Error", "Failed to take photo. Please try again.");
     } finally {
       setIsLoading(false);
@@ -89,7 +90,8 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
         setImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error("Error choosing photo:", error);
+      const { logger } = require("../../utils/logger");
+      logger.error("[ProfileImagePage] Error choosing photo", error);
       Alert.alert("Error", "Failed to choose photo. Please try again.");
     } finally {
       setIsLoading(false);

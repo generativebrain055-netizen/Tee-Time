@@ -74,12 +74,18 @@ export interface ApiEndpoints {
   NOTIFICATIONS: string;
   NOTIFICATIONS_UNREAD_COUNT: string;
   NOTIFICATIONS_READ_ALL: string;
+  // Global search (Figma 795-6009, 791-*)
+  SEARCH: string;
   // Draft (QR Code)
   DRAFT_QR: string;
   DRAFT_QR_REGENERATE: string;
   DRAFT_SCAN: string;
   DRAFT_CONFIRM: string;
   DRAFT_HISTORY: string;
+  // Messages
+  MESSAGES_CONVERSATIONS: string;
+  MESSAGES_CONVERSATION_MESSAGES: (id: string) => string;
+  MESSAGES_SEND_MESSAGE: (id: string) => string;
   // Health
   HEALTH: string;
 }
@@ -139,12 +145,19 @@ export const API_ENDPOINTS: ApiEndpoints = {
   NOTIFICATIONS: `${API_URL}/api/notifications`,
   NOTIFICATIONS_UNREAD_COUNT: `${API_URL}/api/notifications/unread-count`,
   NOTIFICATIONS_READ_ALL: `${API_URL}/api/notifications/read-all`,
+  SEARCH: `${API_URL}/api/search`,
   // Draft (QR Code)
   DRAFT_QR: `${API_URL}/api/draft/qr`,
   DRAFT_QR_REGENERATE: `${API_URL}/api/draft/qr/regenerate`,
   DRAFT_SCAN: `${API_URL}/api/draft/scan`,
   DRAFT_CONFIRM: `${API_URL}/api/draft/confirm`,
   DRAFT_HISTORY: `${API_URL}/api/draft/history`,
+  // Messages
+  MESSAGES_CONVERSATIONS: `${API_URL}/api/messages/conversations`,
+  MESSAGES_CONVERSATION_MESSAGES: (id: string) =>
+    `${API_URL}/api/messages/conversations/${id}/messages`,
+  MESSAGES_SEND_MESSAGE: (id: string) =>
+    `${API_URL}/api/messages/conversations/${id}/messages`,
   // Health
   HEALTH: `${API_URL}/health`,
 };

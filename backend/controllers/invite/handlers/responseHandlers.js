@@ -5,12 +5,14 @@ const inviteRepository = require("../../../repositories/inviteRepository");
 const teeTimeRepository = require("../../../repositories/teeTimeRepository");
 const userRepository = require("../../../repositories/userRepository");
 const socialRateService = require("../../../services/socialRateService");
+const notificationService = require("../../../services/notificationService");
 const logger = require("../../../config/logger");
 const { sendInviteSms } = require("../smsService");
 const { INVITE_TYPES, INVITE_RESPONSES } = require("../constants");
 
 /**
- * Process next person in roster queue
+ * Process next person in roster queue (backup invites)
+ * When someone declines, activate the next backup invite immediately
  */
 const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
     try {
@@ -25,19 +27,42 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
             return;
         }
 
+        // Get the next backup invite (pending with no expiry_at)
         const nextInvite = await inviteRepository.getNextPendingInvite(teeTimeId);
 
         if (nextInvite) {
             const responseWindowMs = responseWindowHours * 60 * 60 * 1000;
             const expiresAt = new Date(Date.now() + responseWindowMs);
 
+            // Activate the backup invite by setting expiry
             await inviteRepository.activateInvite(nextInvite.id, expiresAt);
 
-            if (!nextInvite.invitee_user_id && nextInvite.invitee_phone) {
+            // Send notification to the backup invitee
+            if (nextInvite.invitee_user_id) {
+                // Get creator info for notification (getTeeTimeById returns flattened fields)
+                // In-app notification for registered users
+                await notificationService.notifyTeeTimeInvite(
+                    nextInvite.invitee_user_id,
+                    {
+                        id: teeTime.id,
+                        date: teeTime.tee_date,
+                        time: teeTime.tee_time,
+                        courseName: teeTime.course_name,
+                    },
+                    {
+                        id: teeTime.creator_id,
+                        firstName: teeTime.first_name || '',
+                        lastName: teeTime.last_name || '',
+                    },
+                    expiresAt
+                );
+            } else if (nextInvite.invitee_phone) {
                 await sendInviteSms(nextInvite, teeTime, false, responseWindowHours);
             }
 
-            logger.info(`Activated next roster invite ${nextInvite.id} for tee time ${teeTimeId}`);
+            logger.info(`Activated backup roster invite ${nextInvite.id} (position ${nextInvite.position}) for tee time ${teeTimeId}`);
+        } else {
+            logger.info(`No backup invites available for tee time ${teeTimeId}`);
         }
     } catch (error) {
         logger.error("Process next roster invite error:", error);

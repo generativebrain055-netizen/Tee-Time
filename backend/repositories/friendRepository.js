@@ -372,7 +372,8 @@ class FriendRepository {
                     user_profiles (
                         handicap, avatar_url, location, home_course,
                         preferred_tee_time, walk_or_ride, playing_partner_preference,
-                        rounds_played, social_rate, average_score, privacy_settings
+                        rounds_played, social_rate, average_score, privacy_settings,
+                        drink_of_choice, clubs
                     )
                 `
         )
@@ -415,7 +416,84 @@ class FriendRepository {
       else if (sentRequest) friendship_status = "requested";
       else if (receivedRequest) friendship_status = "pending";
 
-      return { ...data, ...profile, friendship_status };
+      // Get recent completed tee times (last 3)
+      let recentRounds = [];
+      let uniqueCourses = new Set();
+      
+      try {
+        // Get completed tee times where user is a participant
+        // Note: Ordering by foreign table columns may not work directly, so we'll sort in JS
+        const { data: completedTeeTimes, error: completedError } = await supabaseAdmin
+          .from("tee_time_participants")
+          .select(
+            `
+            tee_times!inner (
+              id,
+              course_name,
+              tee_date,
+              tee_time,
+              status
+            )
+          `
+          )
+          .eq("user_id", userId)
+          .eq("tee_times.status", "completed");
+
+        if (!completedError && completedTeeTimes && completedTeeTimes.length > 0) {
+          // Extract and sort tee times by date (most recent first)
+          const teeTimes = completedTeeTimes
+            .map((p) => {
+              const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
+              return tt;
+            })
+            .filter(Boolean)
+            .sort((a, b) => {
+              // Sort by date descending (most recent first)
+              const dateCompare = (b.tee_date || "").localeCompare(a.tee_date || "");
+              if (dateCompare !== 0) return dateCompare;
+              // If same date, sort by time descending
+              return (b.tee_time || "").localeCompare(a.tee_time || "");
+            })
+            .slice(0, 3); // Take top 3
+
+          recentRounds = teeTimes.map((round) => ({
+            courseName: round.course_name,
+            date: round.tee_date,
+          }));
+
+          // Get unique courses count from all completed tee times
+          const { data: allCompleted, error: allCompletedError } = await supabaseAdmin
+            .from("tee_time_participants")
+            .select("tee_times!inner(course_name)")
+            .eq("user_id", userId)
+            .eq("tee_times.status", "completed");
+
+          if (!allCompletedError && allCompleted) {
+            allCompleted.forEach((p) => {
+              const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
+              if (tt?.course_name) {
+                uniqueCourses.add(tt.course_name);
+              }
+            });
+          }
+        }
+      } catch (roundsError) {
+        // Continue without recent rounds data - not critical
+        // Log error for debugging but don't fail the entire request
+        const logger = require("../config/logger");
+        logger.warn(`Failed to fetch recent rounds for user ${userId}:`, roundsError);
+      }
+
+      return {
+        ...data,
+        ...profile,
+        friendship_status,
+        roundsCount: profile.rounds_played || recentRounds.length,
+        coursesCount: uniqueCourses.size,
+        recentRounds: recentRounds,
+        golfVibe: profile.playing_partner_preference,
+        drinkOfChoice: profile.drink_of_choice,
+      };
     } catch (error) {
       handleError(error, "getUserProfile");
     }

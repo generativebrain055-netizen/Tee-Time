@@ -46,6 +46,28 @@ export function getInitials(firstName: string, lastName: string): string {
 }
 
 /**
+ * Format message/conversation timestamp for list (e.g. "2m ago", "1h ago", "Mar 5")
+ */
+export function formatRelativeMessageTime(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+/**
  * Deterministic avatar background color based on an ID
  */
 const AVATAR_COLORS = [

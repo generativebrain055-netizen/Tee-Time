@@ -10,6 +10,7 @@ import {
 import { MapPin, X, Check } from "lucide-react-native";
 import { useColors } from "../ui/theme";
 import { API_URL } from "../config/api";
+import { logger } from "../utils/logger";
 
 export interface GolfCourse {
   id: string;
@@ -96,7 +97,7 @@ function GolfCourseAutocomplete({
         setShowSuggestions(true);
       }
     } catch (error) {
-      console.error("Golf course search error:", error);
+      logger.error("[GolfCourseAutocomplete] Golf course search error", error);
       setSuggestions([
         {
           id: "manual",

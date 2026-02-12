@@ -300,13 +300,15 @@ class NotificationService {
    */
 
   /**
-   * Notify organizer that tee time deadline is approaching with unfilled spots
-   * This is sent BEFORE the deadline expires to give them time to act
+   * Unfilled Slot Alert: notify organizer that tee time deadline is approaching with unfilled spots
+   * This is sent BEFORE the deadline expires to give them time to act (Figma 791-484, 791-628, etc.)
    */
   async notifyOrganizerFillWarning(organizerId, teeTime, spotsRemaining) {
+    const teeDateStr = teeTime.tee_date ? this.formatDateForNotification(teeTime.tee_date) : "";
+    const teeTimeStr = teeTime.tee_time != null ? String(teeTime.tee_time).slice(0, 5) : "";
     return this.createNotification({
       userId: organizerId,
-      title: "⏰ Deadline Approaching!",
+      title: "Unfilled Slot Alert",
       body: `Your tee time at ${
         teeTime.course_name
       } still has ${spotsRemaining} open spot${
@@ -316,17 +318,25 @@ class NotificationService {
         type: "organizer_fill_warning",
         teeTimeId: teeTime.id,
         courseName: teeTime.course_name,
+        teeDate: teeDateStr,
+        teeTime: teeTimeStr,
         spotsRemaining,
         action: "SELECT_ON_DECK",
         urgent: true,
+        unfilledSlotAlert: true,
       },
     });
   }
 
+  /**
+   * Unfilled Slot Alert: notify organizer that tee time was not filled by deadline (Figma 791-*)
+   */
   async notifyTeeTimeNotFilled(organizerId, teeTime, spotsRemaining) {
+    const teeDateStr = teeTime.tee_date ? this.formatDateForNotification(teeTime.tee_date) : "";
+    const teeTimeStr = teeTime.tee_time != null ? String(teeTime.tee_time).slice(0, 5) : "";
     return this.createNotification({
       userId: organizerId,
-      title: "Tee Time Not Filled",
+      title: "Unfilled Slot Alert",
       body: `Your tee time at ${
         teeTime.course_name
       } still has ${spotsRemaining} open spot${
@@ -336,8 +346,11 @@ class NotificationService {
         type: "tee_time_not_filled",
         teeTimeId: teeTime.id,
         courseName: teeTime.course_name,
+        teeDate: teeDateStr,
+        teeTime: teeTimeStr,
         spotsRemaining,
         action: "SELECT_ON_DECK",
+        unfilledSlotAlert: true,
       },
     });
   }

@@ -45,35 +45,70 @@ class AttendanceService {
   }
 
   /**
-   * Get attendance records for a tee time
+   * Get attendance records for a tee time (Figma 437-321: Pre tee time check-in)
    */
   async getAttendanceByTeeTime(teeTimeId) {
-    const { data, error } = await supabaseAdmin
-      .from("tee_time_attendance")
-      .select(`
-        *,
-        tee_time_participants!inner (
-          name,
-          is_creator,
-          position
-        ),
-        users (
-          first_name,
-          last_name
-        ),
-        user_profiles (
-          avatar_url
-        )
-      `)
-      .eq("tee_time_id", teeTimeId)
-      .order("tee_time_participants(position)", { ascending: true });
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_attendance")
+        .select(`
+          *,
+          tee_time_participants!inner (
+            id,
+            name,
+            is_creator,
+            position,
+            user_id
+          ),
+          users (
+            id,
+            first_name,
+            last_name,
+            username
+          ),
+          user_profiles (
+            avatar_url
+          )
+        `)
+        .eq("tee_time_id", teeTimeId)
+        .order("tee_time_participants(position)", { ascending: true });
 
-    if (error) {
-      logger.error(`Error fetching attendance for tee time ${teeTimeId}:`, error.message);
+      if (error) {
+        logger.error(`Error fetching attendance for tee time ${teeTimeId}:`, error.message);
+        return [];
+      }
+
+      // Format the data to extract nested fields
+      const formatted = (data || []).map(record => {
+        const participant = Array.isArray(record.tee_time_participants) 
+          ? record.tee_time_participants[0] 
+          : record.tee_time_participants;
+        const user = Array.isArray(record.users) 
+          ? record.users[0] 
+          : record.users;
+        const profile = Array.isArray(record.user_profiles)
+          ? record.user_profiles[0]
+          : record.user_profiles;
+
+        return {
+          ...record,
+          participant_id: participant?.id || record.participant_id,
+          participant_name: participant?.name || 
+            (user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : null) ||
+            'Unknown',
+          first_name: user?.first_name || null,
+          last_name: user?.last_name || null,
+          avatar_url: profile?.avatar_url || null,
+          is_creator: participant?.is_creator || false,
+          user_id: participant?.user_id || record.user_id,
+        };
+      });
+
+      return formatted;
+    } catch (error) {
+      logger.error(`Error in getAttendanceByTeeTime for tee time ${teeTimeId}:`, error);
       return [];
     }
-
-    return data || [];
   }
 
   /**
@@ -112,21 +147,50 @@ class AttendanceService {
   }
 
   /**
-   * One-tap check-in: Mark all participants as present
+   * One-tap check-in: Mark all participants as present (Figma 437-321: Pre tee time check-in)
    */
   async checkInAll(teeTimeId, organizerId) {
-    const attendance = await this.getAttendanceByTeeTime(teeTimeId);
-    
-    for (const record of attendance) {
-      if (record.status === 'pending') {
-        await this.markPresent(record.id, organizerId);
+    try {
+      const attendance = await this.getAttendanceByTeeTime(teeTimeId);
+      
+      if (attendance.length === 0) {
+        // Initialize attendance if needed
+        await this.initializeAttendance(teeTimeId);
+        const refreshed = await this.getAttendanceByTeeTime(teeTimeId);
+        if (refreshed.length === 0) {
+          throw new Error('No participants found for this tee time');
+        }
+        attendance.push(...refreshed);
       }
+      
+      let checkedInCount = 0;
+      const now = new Date().toISOString();
+      
+      // Mark all pending participants as present
+      for (const record of attendance) {
+        if (record.status === 'pending' || record.status === null) {
+          try {
+            await this.markPresent(record.id, organizerId);
+            checkedInCount++;
+          } catch (error) {
+            logger.error(`Failed to mark attendance ${record.id} as present:`, error.message);
+            // Continue with other participants
+          }
+        } else if (record.status === 'present') {
+          checkedInCount++; // Already checked in
+        }
+      }
+      
+      // Complete the check-in process
+      await this.completeCheckIn(teeTimeId, organizerId);
+      
+      logger.info(`All participants checked in for tee time ${teeTimeId} by ${organizerId}. Checked in: ${checkedInCount}/${attendance.length}`);
+      
+      return { success: true, checkedIn: checkedInCount, total: attendance.length };
+    } catch (error) {
+      logger.error(`Error in checkInAll for tee time ${teeTimeId}:`, error);
+      throw error;
     }
-    
-    await this.completeCheckIn(teeTimeId, organizerId);
-    logger.info(`All participants checked in for tee time ${teeTimeId} by ${organizerId}`);
-    
-    return { success: true, checkedIn: attendance.length };
   }
 
   /**
@@ -258,27 +322,74 @@ class AttendanceService {
   }
 
   /**
-   * Complete check-in process
+   * Complete check-in process (Figma 437-321: Pre tee time check-in)
+   * Marks tee time as completed after all attendance is recorded
    */
   async completeCheckIn(teeTimeId, completedBy) {
-    const { data, error } = await supabaseAdmin
-      .from("tee_times")
-      .update({
-        check_in_completed_at: new Date().toISOString(),
-        check_in_completed_by: completedBy,
-        status: "completed",
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", teeTimeId)
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_times")
+        .update({
+          check_in_completed_at: new Date().toISOString(),
+          check_in_completed_by: completedBy,
+          status: "completed",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", teeTimeId)
+        .select()
+        .single();
 
-    if (error) {
-      logger.error(`Error completing check-in for tee time ${teeTimeId}:`, error.message);
+      if (error) {
+        logger.error(`Error completing check-in for tee time ${teeTimeId}:`, error.message);
+        throw error;
+      }
+
+      logger.info(`Check-in completed for tee time ${teeTimeId} by ${completedBy}`);
+      return data;
+    } catch (error) {
+      logger.error(`Error in completeCheckIn for tee time ${teeTimeId}:`, error);
       throw error;
     }
+  }
 
-    return data;
+  /**
+   * Batch update attendance and complete check-in (Figma 437-321: Pre tee time check-in)
+   * Used when marking some as no-show and others as present
+   */
+  async batchUpdateAttendance(teeTimeId, updates, completedBy) {
+    try {
+      const results = {
+        present: 0,
+        noShow: 0,
+        errors: []
+      };
+
+      // Process each update
+      for (const update of updates) {
+        try {
+          if (update.status === 'present') {
+            await this.markPresent(update.attendanceId, completedBy);
+            results.present++;
+          } else if (update.status === 'no_show') {
+            await this.markNoShow(update.attendanceId, completedBy);
+            results.noShow++;
+          }
+        } catch (error) {
+          logger.error(`Failed to update attendance ${update.attendanceId}:`, error.message);
+          results.errors.push({ attendanceId: update.attendanceId, error: error.message });
+        }
+      }
+
+      // Complete check-in if at least some updates succeeded
+      if (results.present > 0 || results.noShow > 0) {
+        await this.completeCheckIn(teeTimeId, completedBy);
+      }
+
+      return results;
+    } catch (error) {
+      logger.error(`Error in batchUpdateAttendance for tee time ${teeTimeId}:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -343,7 +454,9 @@ class AttendanceService {
   }
 
   /**
-   * Check if check-in is available for a tee time
+   * Check if check-in is available for a tee time (Figma 437-321: Pre tee time check-in)
+   * Check-in window: 30 minutes before tee time to 60 minutes after tee time
+   * Only available on the day of the tee time
    */
   async isCheckInAvailable(teeTimeId) {
     const { data: teeTime, error } = await supabaseAdmin

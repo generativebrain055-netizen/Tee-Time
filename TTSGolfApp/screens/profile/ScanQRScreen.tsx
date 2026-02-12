@@ -16,6 +16,7 @@ import { X, UserPlus, Camera, AlertCircle } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "../../ui/theme";
 import { draftApi, ScannedUser } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface Props {
     navigation: any;
@@ -65,26 +66,20 @@ export default function ScanQRScreen({ navigation }: Props) {
         // Update last detection for debugging
         setLastDetection(`${type}: ${data.substring(0, 30)}...`);
 
-        console.log("=== BARCODE SCANNED ===");
-        console.log("Type:", type);
-        console.log("Data:", data);
-        console.log("Data length:", data.length);
-        console.log("Scanned state:", scanned);
-        console.log("Processing state:", processing);
-        console.log("Cooldown:", scanCooldown.current);
+        logger.debug("[ScanQRScreen] Barcode scanned", { type, dataLength: data.length, scanned, processing, cooldown: scanCooldown.current });
 
         // Prevent rapid duplicate scans
         if (scanned || processing || scanCooldown.current) {
-            console.log("Scan blocked - already processing or in cooldown");
+            logger.debug("[ScanQRScreen] Scan blocked - already processing or in cooldown");
             return;
         }
 
         if (lastScannedData.current === data) {
-            console.log("Scan blocked - duplicate data");
+            logger.debug("[ScanQRScreen] Scan blocked - duplicate data");
             return;
         }
 
-        console.log("=== PROCESSING QR CODE ===");
+        logger.debug("[ScanQRScreen] Processing QR code");
 
         scanCooldown.current = true;
         lastScannedData.current = data;
@@ -94,16 +89,16 @@ export default function ScanQRScreen({ navigation }: Props) {
         // Process the scan
         (async () => {
             try {
-                console.log("Calling draftApi.scanQRCode with data:", data.substring(0, 50) + "...");
+                logger.debug("[ScanQRScreen] Calling draftApi.scanQRCode", { dataPreview: data.substring(0, 50) });
                 const result = await draftApi.scanQRCode(data);
-                console.log("Scan result:", result);
+                logger.debug("[ScanQRScreen] Scan result", result);
 
                 if (result.success && result.user) {
-                    console.log("User found:", result.user);
+                    logger.info("[ScanQRScreen] User found", { userId: result.user.id });
                     setScannedUser(result.user);
                     setShowConfirmModal(true);
                 } else {
-                    console.log("Scan failed:", result.message);
+                    logger.warn("[ScanQRScreen] Scan failed", { message: result.message });
                     Alert.alert(
                         "Invalid QR Code",
                         result.message || "This QR code is not valid or has expired.",
@@ -111,7 +106,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                     );
                 }
             } catch (error: any) {
-                console.error("Scan error:", error);
+                logger.error("[ScanQRScreen] Scan error", error);
                 Alert.alert(
                     "Scan Failed",
                     error.message || "Failed to process QR code. Make sure you're scanning a valid TeeTime QR code.",
@@ -211,8 +206,9 @@ export default function ScanQRScreen({ navigation }: Props) {
                     barcodeTypes: ["qr"],
                 }}
                 onCameraReady={() => {
-                    console.log("Camera is ready");
+                    logger.debug("[ScanQRScreen] Camera is ready");
                     setCameraReady(true);
+                    logger.debug("[ScanQRScreen] Camera is ready");
                 }}
                 enableTorch={false}
             />

@@ -7,6 +7,7 @@ const emailService = require("../../services/emailService");
 const twilioService = require("../../services/twilioService");
 const logger = require("../../config/logger");
 const { magicLinksLogger } = require("../../config/logger");
+const { formatUser } = require("../../formatters/userFormatter");
 
 /**
  * Magic Link Controller
@@ -497,20 +498,51 @@ const verifySmsMagicLink = async (req, res, next) => {
         message: "Signed in successfully.",
         accessToken,
         refreshToken,
-        user: {
-          id: user.id,
-          phoneNumber: user.phone_number,
-          email: user.email,
-          username: user.username,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          handicap: user.handicap,
-          socialRate: user.social_rate,
-        },
+        user: formatUser(user),
       });
     }
 
-    // purpose=signup: return phoneNumber only
+    // purpose=signup: Check if this is for OAuth user (has email in metadata)
+    if (magicLink.purpose === "signup" && magicLink.metadata?.email && magicLink.metadata?.isOAuth) {
+      const authProviderRepository = require("../../repositories/authProviderRepository");
+      
+      // Find OAuth user by email (check auth_providers for users with this email)
+      const oauthUser = await userRepository.findByEmail(magicLink.metadata.email);
+      
+      if (oauthUser) {
+        // Check if user has OAuth provider but no phone
+        const providers = await authProviderRepository.findByUserId(oauthUser.id);
+        if (providers && providers.length > 0 && !oauthUser.phone_number) {
+          // Link phone to OAuth user
+          await userRepository.updateProfile(oauthUser.id, {
+            phoneNumber: magicLink.phone_number,
+          });
+          
+          logger.info(`Linked phone ${magicLink.phone_number} to OAuth user ${oauthUser.id}`);
+          
+          // Create session and return tokens
+          const { accessToken, refreshToken } = await sessionService.createSession({
+            userId: oauthUser.id,
+            req,
+            rememberMe: true,
+          });
+          
+          // Re-fetch user to get updated phone_number
+          const updatedUser = await userRepository.findById(oauthUser.id);
+          
+          return res.json({
+            success: true,
+            message: "Phone number verified and linked successfully.",
+            accessToken,
+            refreshToken,
+            user: formatUser(updatedUser),
+            phoneNumber: magicLink.phone_number,
+          });
+        }
+      }
+    }
+
+    // purpose=signup: return phoneNumber only (regular signup flow)
     return res.json({
       success: true,
       message: "Phone number verified successfully.",

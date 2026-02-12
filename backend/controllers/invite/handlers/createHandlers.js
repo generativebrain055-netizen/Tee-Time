@@ -22,7 +22,16 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
 
     // If deadline is provided, use createBulkInvitesWithExpiry
     let createdInvites;
-    const expiresAt = deadline ? new Date(deadline) : null;
+    let expiresAt = null;
+    if (deadline) {
+      const deadlineDate = new Date(deadline);
+      // Validate date is valid and in the future
+      if (!isNaN(deadlineDate.getTime()) && deadlineDate > new Date()) {
+        expiresAt = deadlineDate;
+      } else {
+        logger.warn(`Invalid deadline provided: ${deadline}, ignoring`);
+      }
+    }
 
     if (expiresAt) {
       // Create invites with expiry
@@ -63,7 +72,7 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
           expiresAt // Pass deadline to notification
         );
       } else if (invite.invitee_phone) {
-        await sendInviteSms(invite, teeTime, true);
+        await sendInviteSms(invite, teeTime, true, null, expiresAt);
       }
     }
 
@@ -92,7 +101,9 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
 };
 
 /**
- * Create Roster invites - all at once with response window, priority by position
+ * Create Roster invites - Initial invites sent immediately, backup invites activated on decline
+ * Initial invites: First (maxPlayers - 1) invites get sent immediately
+ * Backup invites: Remaining invites are created but not activated until someone declines
  */
 const createRosterInvites = async (
   req,
@@ -105,25 +116,53 @@ const createRosterInvites = async (
     const userId = req.user.id;
     const responseWindowMs = (responseWindow || 2) * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + responseWindowMs);
-
-    // All invitees get the same expiry time - priority is determined by position
-    const inviteesWithExpiry = invitees.map((inv, idx) => ({
+    
+    // Calculate how many initial invites to send (maxPlayers - 1, since creator is already counted)
+    const initialInviteCount = Math.max(0, teeTime.max_players - 1);
+    
+    // Prepare all invitees with positions
+    const inviteesWithPosition = invitees.map((inv, idx) => ({
       ...inv,
-      position: inv.order || idx,
-      expiresAt: expiresAt, // Everyone gets the same deadline
+      position: inv.order != null ? inv.order : idx,
     }));
 
+    // Split into initial and backup invites
+    const initialInvitees = inviteesWithPosition.slice(0, initialInviteCount);
+    const backupInvitees = inviteesWithPosition.slice(initialInviteCount);
+
+    // Create initial invites with expiry (these will be sent immediately)
+    const initialInvitesData = initialInvitees.map((inv) => ({
+      ...inv,
+      expiresAt: expiresAt,
+    }));
+
+    // Create backup invites without expiry (these will be activated later)
+    const backupInvitesData = backupInvitees.map((inv) => ({
+      ...inv,
+      expiresAt: null, // No expiry until activated
+    }));
+
+    // Create all invites in the database
+    const allInvitesData = [...initialInvitesData, ...backupInvitesData];
     const createdInvites = await inviteRepository.createBulkInvitesWithExpiry(
       teeTime.id,
       userId,
-      inviteesWithExpiry
+      allInvitesData
     );
+
+    // Separate created invites into initial and backup based on position
+    const initialInvites = createdInvites
+      .filter((inv) => inv.position < initialInviteCount)
+      .sort((a, b) => a.position - b.position);
+    const backupInvites = createdInvites
+      .filter((inv) => inv.position >= initialInviteCount)
+      .sort((a, b) => a.position - b.position);
 
     // Notify scheduler new invites exist
     fcfsDeadlineService.triggerUpdate();
 
-    // Send notifications to ALL invitees (not just first)
-    for (const invite of createdInvites) {
+    // Send notifications ONLY to initial invitees (not backup)
+    for (const invite of initialInvites) {
       if (invite.invitee_user_id) {
         // In-app notification for registered users - include deadline
         await notificationService.notifyTeeTimeInvite(
@@ -147,14 +186,16 @@ const createRosterInvites = async (
     }
 
     logger.info(
-      `Roster invites created for tee time ${teeTime.id}: ${createdInvites.length} invites, ${responseWindow}h window, all notified`
+      `Roster invites created for tee time ${teeTime.id}: ${initialInvites.length} initial invites sent, ${backupInvites.length} backup invites created (will be activated on decline)`
     );
 
     res.status(201).json({
       success: true,
       invites: createdInvites,
+      initialInvites: initialInvites.length,
+      backupInvites: backupInvites.length,
       responseWindow,
-      message: `${createdInvites.length} invites sent. Priority goes to those invited first. Response window: ${responseWindow} hour(s).`,
+      message: `${initialInvites.length} initial invites sent. ${backupInvites.length > 0 ? `${backupInvites.length} backup invites ready.` : ''}`,
     });
   } catch (error) {
     logger.error("Create roster invites error:", error);

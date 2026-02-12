@@ -10,6 +10,7 @@ class AttendanceController {
     this.getAttendance = this.getAttendance.bind(this);
     this.checkInAll = this.checkInAll.bind(this);
     this.updateAttendance = this.updateAttendance.bind(this);
+    this.batchUpdateAttendance = this.batchUpdateAttendance.bind(this);
     this.cancelParticipation = this.cancelParticipation.bind(this);
   }
 
@@ -41,16 +42,16 @@ class AttendanceController {
         attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       }
       
-      // If still no attendance records, get participants directly
+      // If still no attendance records, get participants directly and create temporary format
       if (attendance.length === 0) {
         const participants = await teeTimeRepository.getParticipants(teeTimeId);
         const formatted = participants.map(p => ({
-          id: p.id,
+          id: `temp-${p.id}`, // Temporary ID for frontend
           participantId: p.id,
           userId: p.user_id,
           name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
-          avatar: p.avatar_url,
-          isCreator: p.is_creator,
+          avatar: p.avatar_url || null,
+          isCreator: p.is_creator || false,
           status: 'pending',
           checkedInAt: null,
           markedNoShowAt: null,
@@ -74,17 +75,20 @@ class AttendanceController {
       
       const summary = await attendanceService.getAttendanceSummary(teeTimeId);
 
+      // Format attendance records for frontend (Figma 437-321: Pre tee time check-in)
       const formatted = attendance.map(a => ({
         id: a.id,
         participantId: a.participant_id,
         userId: a.user_id,
-        name: a.participant_name || `${a.first_name || ''} ${a.last_name || ''}`.trim() || 'Unknown',
-        avatar: a.avatar_url,
-        isCreator: a.is_creator,
-        status: a.status,
-        checkedInAt: a.checked_in_at,
-        markedNoShowAt: a.marked_no_show_at,
-        penaltyApplied: a.penalty_applied
+        name: a.participant_name || 
+              (a.first_name || a.last_name ? `${a.first_name || ''} ${a.last_name || ''}`.trim() : null) ||
+              'Unknown',
+        avatar: a.avatar_url || null,
+        isCreator: a.is_creator || false,
+        status: a.status || 'pending',
+        checkedInAt: a.checked_in_at || null,
+        markedNoShowAt: a.marked_no_show_at || null,
+        penaltyApplied: a.penalty_applied || false
       }));
 
       res.json({
@@ -125,6 +129,15 @@ class AttendanceController {
         return res.status(403).json({ success: false, message: "Only organizer can check in" });
       }
 
+      // Check if check-in is available
+      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
+      if (!checkInStatus.available) {
+        return res.status(400).json({ 
+          success: false, 
+          message: checkInStatus.reason || "Check-in is not available" 
+        });
+      }
+
       // Initialize attendance records if they don't exist
       let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       if (attendance.length === 0) {
@@ -149,7 +162,7 @@ class AttendanceController {
       res.json({
         success: true,
         message: "All participants checked in successfully",
-        checkedIn: result.checkedIn
+        checkedIn: result.checkedIn || attendance.length
       });
     } catch (error) {
       logger.error("Check in all error:", error);
@@ -158,8 +171,8 @@ class AttendanceController {
   }
 
   /**
-   * POST /api/tee-times/:id/check-in/:participantId
-   * Mark individual participant status (present or no_show)
+   * POST /api/tee-times/:id/check-in/:attendanceId
+   * Mark individual participant status (present or no_show) (Figma 437-321: Pre tee time check-in)
    */
   async updateAttendance(req, res) {
     try {
@@ -169,7 +182,10 @@ class AttendanceController {
       const { status } = req.body;
 
       if (!['present', 'no_show'].includes(status)) {
-        return res.status(400).json({ success: false, message: "Invalid status. Use 'present' or 'no_show'" });
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid status. Use 'present' or 'no_show'" 
+        });
       }
 
       // Verify user is organizer
@@ -178,20 +194,47 @@ class AttendanceController {
         return res.status(404).json({ success: false, message: "Tee time not found" });
       }
       if (teeTime.creator_id !== userId) {
-        return res.status(403).json({ success: false, message: "Only organizer can update attendance" });
+        return res.status(403).json({ 
+          success: false, 
+          message: "Only organizer can update attendance" 
+        });
+      }
+
+      // Check if check-in is available
+      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
+      if (!checkInStatus.available) {
+        return res.status(400).json({ 
+          success: false, 
+          message: checkInStatus.reason || "Check-in is not available" 
+        });
       }
 
       // Initialize attendance records if they don't exist
       let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       if (attendance.length === 0) {
         await attendanceService.initializeAttendance(teeTimeId);
+        attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      }
+
+      // Find attendance record by ID or participant ID (handle temp IDs from frontend)
+      let targetRecord = attendance.find(a => a.id === attendanceId);
+      if (!targetRecord && attendanceId.startsWith('temp-')) {
+        const participantId = attendanceId.replace('temp-', '');
+        targetRecord = attendance.find(a => a.participant_id === participantId);
+      }
+
+      if (!targetRecord) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "Attendance record not found" 
+        });
       }
 
       let result;
       if (status === 'present') {
-        result = await attendanceService.markPresent(attendanceId, userId);
+        result = await attendanceService.markPresent(targetRecord.id, userId);
       } else {
-        result = await attendanceService.markNoShow(attendanceId, userId);
+        result = await attendanceService.markNoShow(targetRecord.id, userId);
       }
 
       res.json({
@@ -200,12 +243,104 @@ class AttendanceController {
         attendance: {
           id: result.id,
           status: result.status,
-          penaltyApplied: result.penalty_applied
+          penaltyApplied: result.penalty_applied || false
         }
       });
     } catch (error) {
       logger.error("Update attendance error:", error);
-      res.status(400).json({ success: false, message: error.message || "Failed to update attendance" });
+      res.status(400).json({ 
+        success: false, 
+        message: error.message || "Failed to update attendance" 
+      });
+    }
+  }
+
+  /**
+   * POST /api/tee-times/:id/check-in/batch
+   * Batch update attendance (mark some as present, others as no-show) and complete check-in (Figma 437-321)
+   */
+  async batchUpdateAttendance(req, res) {
+    try {
+      const userId = req.user.id;
+      const teeTimeId = req.params.id;
+      const { updates } = req.body; // Array of { attendanceId, status }
+
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Updates array is required and must not be empty" 
+        });
+      }
+
+      // Validate each update
+      for (const update of updates) {
+        if (!update.attendanceId || !['present', 'no_show'].includes(update.status)) {
+          return res.status(400).json({ 
+            success: false, 
+            message: "Each update must have attendanceId and status ('present' or 'no_show')" 
+          });
+        }
+      }
+
+      // Verify user is organizer
+      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
+      if (!teeTime) {
+        return res.status(404).json({ success: false, message: "Tee time not found" });
+      }
+      if (teeTime.creator_id !== userId) {
+        return res.status(403).json({ 
+          success: false, 
+          message: "Only organizer can update attendance" 
+        });
+      }
+
+      // Check if check-in is available
+      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
+      if (!checkInStatus.available) {
+        return res.status(400).json({ 
+          success: false, 
+          message: checkInStatus.reason || "Check-in is not available" 
+        });
+      }
+
+      // Initialize attendance records if they don't exist
+      let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      if (attendance.length === 0) {
+        await attendanceService.initializeAttendance(teeTimeId);
+        attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+      }
+
+      // Resolve temp IDs and find actual attendance IDs
+      const resolvedUpdates = updates.map(update => {
+        let targetRecord = attendance.find(a => a.id === update.attendanceId);
+        if (!targetRecord && update.attendanceId.startsWith('temp-')) {
+          const participantId = update.attendanceId.replace('temp-', '');
+          targetRecord = attendance.find(a => a.participant_id === participantId);
+        }
+        if (!targetRecord) {
+          throw new Error(`Attendance record not found for ${update.attendanceId}`);
+        }
+        return {
+          attendanceId: targetRecord.id,
+          status: update.status
+        };
+      });
+
+      const result = await attendanceService.batchUpdateAttendance(teeTimeId, resolvedUpdates, userId);
+
+      res.json({
+        success: true,
+        message: `Check-in complete: ${result.present} present, ${result.noShow} no-show(s)`,
+        present: result.present,
+        noShow: result.noShow,
+        errors: result.errors.length > 0 ? result.errors : undefined
+      });
+    } catch (error) {
+      logger.error("Batch update attendance error:", error);
+      res.status(400).json({ 
+        success: false, 
+        message: error.message || "Failed to update attendance" 
+      });
     }
   }
 

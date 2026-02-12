@@ -128,6 +128,7 @@ const createAccountAfterOTP = async (req, res, phoneNumber, firstName, lastName,
         lastName: user.last_name,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
       },
     });
   } catch (error) {
@@ -187,6 +188,7 @@ const loginUserAfterOTP = async (req, res, phoneNumber) => {
         lastName: user.last_name,
         handicap: user.handicap,
         socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
       },
     });
   } catch (error) {

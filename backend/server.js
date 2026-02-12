@@ -26,6 +26,7 @@ const avatarUploadService = require("./services/avatarUploadService");
 const authRoutes = require("./routes/auth");
 const availabilityRoutes = require("./routes/availability");
 const rosterRoutes = require("./routes/roster");
+const searchRoutes = require("./routes/search");
 const teeTimeRoutes = require("./routes/teeTimes");
 const inviteRoutes = require("./routes/invites");
 const friendRoutes = require("./routes/friends");
@@ -34,6 +35,7 @@ const socialRateRoutes = require("./routes/socialRate");
 const attendanceRoutes = require("./routes/attendance");
 const notificationRoutes = require("./routes/notifications");
 const draftRoutes = require("./routes/draft");
+const messageRoutes = require("./routes/messages");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -91,6 +93,7 @@ app.get("/health", (req, res) => {
 app.use("/auth", authRoutes);
 app.use("/api/availability", availabilityRoutes);
 app.use("/api/roster", rosterRoutes);
+app.use("/api/search", searchRoutes);
 app.use("/api/tee-times", teeTimeRoutes);
 app.use("/api/tee-times", attendanceRoutes); // Attendance routes under tee-times
 app.use("/api/invites", inviteRoutes);
@@ -99,6 +102,7 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/social-rate", socialRateRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/draft", draftRoutes);
+app.use("/api/messages", messageRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

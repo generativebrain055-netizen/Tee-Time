@@ -58,7 +58,7 @@ export default function InviteDetailsStep({
         >
             {/* Date Picker */}
             <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Pick a date</Text>
-            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-md px-4 py-4" onPress={onOpenDatePicker}>
+            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-lg px-4 py-4" style={{ borderRadius: 8 }} onPress={onOpenDatePicker}>
                 <Text className={selectedDate ? "text-base text-[#1F2937]" : "text-base text-[#9CA3AF]"}>
                     {formatDateDisplay(selectedDate)}
                 </Text>
@@ -67,7 +67,7 @@ export default function InviteDetailsStep({
 
             {/* Time Picker */}
             <Text className="text-base font-semibold text-[#1F2937] mb-3 mt-6">Pick a time</Text>
-            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-md px-4 py-4" onPress={onOpenTimePicker}>
+            <TouchableOpacity className="flex-row items-center justify-between bg-white border border-border rounded-lg px-4 py-4" style={{ borderRadius: 8 }} onPress={onOpenTimePicker}>
                 <Text className={selectedTime ? "text-base text-[#1F2937]" : "text-base text-[#9CA3AF]"}>
                     {selectedTime || "10:00 AM"}
                 </Text>

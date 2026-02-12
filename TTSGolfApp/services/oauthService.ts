@@ -174,7 +174,6 @@ export function formatOAuthError(error: unknown): string {
 
 export const oauthService = {
   signInWithGoogle,
-  signInWithGoogleCode,
   signInWithApple,
   completeOAuthProfile,
   verifyPhoneAndCompleteSignup,

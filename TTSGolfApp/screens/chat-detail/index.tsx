@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -12,6 +12,8 @@ import { useChat } from "./hooks/useChat";
 import { ChatHeader, ChatActionsMenu, MessageBubble, MessageInput } from "./components";
 import { COLORS } from "./styles";
 import { ChatInfo } from "./types";
+import { teeTimeApi, rosterApi } from "../../services/api";
+import { logger } from "../../utils/logger";
 
 interface ChatDetailScreenProps {
     navigation: any;
@@ -19,6 +21,13 @@ interface ChatDetailScreenProps {
 }
 
 function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
+    const chatInfo: ChatInfo = route?.params?.chatInfo || {
+        id: "1",
+        name: "Unknown",
+        subtitle: "",
+        img: undefined,
+    };
+
     const {
         messageText,
         showMenu,
@@ -28,14 +37,42 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         setMessageText,
         setShowMenu,
         handleSend,
-    } = useChat();
+    } = useChat(chatInfo);
 
-    const chatInfo: ChatInfo = route?.params?.chatInfo || {
-        id: "1",
-        name: "Unknown",
-        subtitle: "",
-        img: undefined,
-    };
+    const [participants, setParticipants] = useState<string[]>([]);
+
+    // Extract participants from chat for "Create group" flow (Figma 1269-2563)
+    useEffect(() => {
+        const loadParticipants = async () => {
+            try {
+                if (chatInfo.teeTimeId) {
+                    // Tee time chat: get participants from tee time
+                    const ttRes = await teeTimeApi.getTeeTime(chatInfo.teeTimeId);
+                    if (ttRes.success && ttRes.teeTime?.participants) {
+                        const userIds = ttRes.teeTime.participants
+                            .map((p: any) => p.userId)
+                            .filter((id: string | undefined): id is string => !!id);
+                        setParticipants(userIds);
+                    }
+                } else if (chatInfo.groupId) {
+                    // Group chat: get members from group
+                    const groupRes = await rosterApi.getGroupMembers(chatInfo.groupId);
+                    if (groupRes.success && groupRes.members) {
+                        const userIds = groupRes.members
+                            .map((m: any) => m.contact?.userId)
+                            .filter((id: string | undefined): id is string => !!id);
+                        setParticipants(userIds);
+                    }
+                } else if (chatInfo.recipientId) {
+                    // Direct message: just the recipient
+                    setParticipants([chatInfo.recipientId]);
+                }
+            } catch (error) {
+                logger.warn("[ChatDetailScreen] Failed to load participants", error);
+            }
+        };
+        loadParticipants();
+    }, [chatInfo.teeTimeId, chatInfo.groupId, chatInfo.recipientId]);
 
     const handleBack = useCallback(() => {
         navigation?.goBack();
@@ -47,7 +84,15 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
 
     const handleMenuClose = useCallback(() => {
         setShowMenu(false);
-    }, [setShowMenu]);
+    }, []);
+
+    const handleCreateGroup = useCallback(() => {
+        setShowMenu(false);
+        // Pass participants from chat to pre-fill CreateGroup (Figma 1269-2563)
+        navigation?.navigate("CreateGroup", {
+            initialParticipantIds: participants.length > 0 ? participants : undefined,
+        });
+    }, [navigation, participants]);
 
     const handleHeaderPress = useCallback(() => {
         if (chatInfo.isGroup && chatInfo.groupId) {
@@ -63,30 +108,30 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
 
     if (loading) {
         return (
-            <View className="flex-1 bg-bg-muted justify-center items-center">
+            <View style={{ flex: 1, backgroundColor: COLORS.bg, justifyContent: "center", alignItems: "center" }}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
     }
 
     return (
-        <View className="flex-1 bg-bg-muted">
+        <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
             <StatusBar style="dark" />
             <KeyboardAvoidingView
-                className="flex-1"
+                style={{ flex: 1 }}
                 behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
                 <ChatHeader chatInfo={chatInfoWithHandler} onBack={handleBack} onMenuPress={handleMenuPress} />
                 <ScrollView
                     ref={scrollViewRef}
-                    className="flex-1 bg-bg-muted"
+                    style={{ flex: 1, backgroundColor: COLORS.bg }}
                     contentContainerStyle={{ paddingVertical: 16, paddingHorizontal: 16, flexGrow: 1 }}
                     showsVerticalScrollIndicator={false}
                 >
                     {messages.length === 0 ? (
-                        <View className="flex-1 justify-center items-center pt-[100px]">
-                            <Text className="text-base font-semibold text-[#111827]">No messages yet</Text>
-                            <Text className="text-sm text-text-secondary mt-1">Send a message to start the conversation</Text>
+                        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 100 }}>
+                            <Text style={{ fontSize: 16, fontWeight: "600", color: COLORS.textMain }}>No messages yet</Text>
+                            <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8 }}>Send a message to start the conversation</Text>
                         </View>
                     ) : (
                         messages.map((message) => <MessageBubble key={message.id} message={message} />)
@@ -94,7 +139,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                 </ScrollView>
                 <MessageInput value={messageText} onChangeText={setMessageText} onSend={handleSend} />
             </KeyboardAvoidingView>
-            <ChatActionsMenu visible={showMenu} onClose={handleMenuClose} />
+            <ChatActionsMenu visible={showMenu} onClose={handleMenuClose} onCreateGroup={handleCreateGroup} />
         </View>
     );
 }

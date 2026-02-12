@@ -2,7 +2,7 @@
  * TeeTime Detail Screen - Pixel Perfect iOS Design
  * Shows tee time details, participant list, and status
  */
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import {
     View,
     Text,
@@ -12,10 +12,13 @@ import {
     RefreshControl,
     Image,
 } from "react-native";
-import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight } from "lucide-react-native";
-import { teeTimeApi } from "../services/api";
+import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut } from "lucide-react-native";
+import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { ConfirmModal } from "../ui/feedback";
+import { Alert } from "react-native";
+import { useAuthStore } from "../store/authStore";
+import { logger } from "../utils/logger";
 
 // Import tick and cross assets
 const TickIcon = require('../assets/Tick.png');
@@ -56,6 +59,12 @@ interface TeeTimeDetail {
     invites: Invite[];
     acceptedCount: number;
     slotsOpen: number;
+    creator?: {
+        id: string;
+        firstName?: string;
+        lastName?: string;
+        avatar?: string;
+    };
 }
 
 const StatusBadge = memo(({ status }: { status: string }) => {
@@ -177,11 +186,15 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
 
 function TeeTimeDetailScreen({ navigation, route }: any) {
     const { teeTimeId } = route.params || {};
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [teeTime, setTeeTime] = useState<TeeTimeDetail | null>(null);
     const [showBackupDeclined, setShowBackupDeclined] = useState(false);
-    const [showModal, setShowModal] = useState(false);
+    const [showLeaveModal, setShowLeaveModal] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [isLeaving, setIsLeaving] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
 
     // Update current time every second for real-time countdown
@@ -277,10 +290,11 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     invites: data.invites || [],
                     acceptedCount,
                     slotsOpen,
+                    creator: data.creator,
                 });
             }
         } catch (error) {
-            console.error('[TEE_TIME_DETAIL] Error:', error);
+            logger.error('[TeeTimeDetailScreen] Error loading tee time', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -295,6 +309,80 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         setRefreshing(true);
         fetchTeeTimeDetails();
     }, [fetchTeeTimeDetails]);
+
+    // Check if current user is the organizer
+    const isOrganizer = useMemo(() => {
+        if (!teeTime || !currentUserId) return false;
+        // Check creator ID from tee time data (most reliable)
+        if (teeTime.creator?.id === currentUserId) return true;
+        // Fallback: check if any participant is marked as creator
+        const creator = teeTime.participants.find(p => p.isCreator);
+        return creator?.userId === currentUserId;
+    }, [teeTime, currentUserId]);
+
+    // Check if current user is a participant
+    const isParticipant = useMemo(() => {
+        if (!teeTime || !currentUserId) return false;
+        return teeTime.participants.some(p => p.userId === currentUserId && p.status === 'accepted');
+    }, [teeTime, currentUserId]);
+
+    // Handle leave tee time (cancel participation)
+    const handleLeaveTeeTime = useCallback(async () => {
+        if (!teeTimeId) return;
+        setIsLeaving(true);
+        try {
+            const response = await attendanceApi.cancelParticipation(teeTimeId);
+            if (response.success) {
+                Alert.alert(
+                    "Left Tee Time",
+                    response.penaltyApplied 
+                        ? `${response.message}\n\nA Social Rate penalty was applied.`
+                        : response.message || "You've left this tee time.",
+                    [
+                        {
+                            text: "OK",
+                            onPress: () => {
+                                setShowLeaveModal(false);
+                                navigation?.goBack();
+                            },
+                        },
+                    ]
+                );
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error?.message || "Failed to leave tee time. Please try again.");
+        } finally {
+            setIsLeaving(false);
+        }
+    }, [teeTimeId, navigation]);
+
+    // Handle cancel tee time (organizer only)
+    const handleCancelTeeTime = useCallback(async () => {
+        if (!teeTimeId) return;
+        setIsCancelling(true);
+        try {
+            const response = await teeTimeApi.cancelTeeTime(teeTimeId);
+            if (response.success) {
+                Alert.alert(
+                    "Tee Time Cancelled",
+                    "This tee time has been cancelled and all participants have been notified.",
+                    [
+                        {
+                            text: "OK",
+                            onPress: () => {
+                                setShowCancelModal(false);
+                                navigation?.goBack();
+                            },
+                        },
+                    ]
+                );
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error?.message || "Failed to cancel tee time. Please try again.");
+        } finally {
+            setIsCancelling(false);
+        }
+    }, [teeTimeId, navigation]);
 
     if (loading) {
         return (
@@ -451,21 +539,69 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     </>
                 )}
 
+                {/* Action Buttons */}
+                {(isOrganizer || isParticipant) && (
+                    <>
+                        <View className="h-2.5 bg-gray-50" />
+                        <View className="bg-white px-6 py-5">
+                            {isOrganizer && (
+                                <TouchableOpacity
+                                    className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"
+                                    style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FEE2E2' }}
+                                    onPress={() => setShowCancelModal(true)}
+                                    activeOpacity={0.7}
+                                >
+                                    <X size={20} color="#DC2626" style={{ marginRight: 8 }} />
+                                    <Text className="font-jakarta-semibold text-base" style={{ color: '#DC2626' }}>
+                                        Cancel Tee Time
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                            {isParticipant && !isOrganizer && (
+                                <TouchableOpacity
+                                    className="flex-row items-center justify-center py-4 px-6 rounded-lg"
+                                    style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FEE2E2' }}
+                                    onPress={() => setShowLeaveModal(true)}
+                                    activeOpacity={0.7}
+                                    disabled={isLeaving}
+                                >
+                                    <LogOut size={20} color="#DC2626" style={{ marginRight: 8 }} />
+                                    <Text className="font-jakarta-semibold text-base" style={{ color: '#DC2626' }}>
+                                        {isLeaving ? "Leaving..." : "Leave Tee Time"}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </>
+                )}
+
                 <View className="h-24" />
             </ScrollView>
 
+            {/* Leave Tee Time Modal */}
             <ConfirmModal
-                visible={showModal}
+                visible={showLeaveModal}
                 title="Leave tee time?"
-                message="You will be removed from this tee time and your spot will be available to others."
-                confirmText="Leave"
+                message="You will be removed from this tee time and your spot will be available to others. A Social Rate penalty may apply if this is a confirmed tee time."
+                confirmText={isLeaving ? "Leaving..." : "Leave"}
                 cancelText="Cancel"
                 confirmColor="#DC2626"
-                onConfirm={() => {
-                    setShowModal(false);
-                    navigation?.goBack();
-                }}
-                onCancel={() => setShowModal(false)}
+                onConfirm={handleLeaveTeeTime}
+                onCancel={() => setShowLeaveModal(false)}
+                disabled={isLeaving}
+            />
+
+            {/* Cancel Tee Time Modal */}
+            <ConfirmModal
+                visible={showCancelModal}
+                title="Cancel tee time?"
+                message="This will cancel the entire tee time and notify all participants. This action cannot be undone."
+                confirmText={isCancelling ? "Cancelling..." : "Cancel Tee Time"}
+                cancelText="Keep Tee Time"
+                confirmColor="#DC2626"
+                onConfirm={handleCancelTeeTime}
+                onCancel={() => setShowCancelModal(false)}
+                disabled={isCancelling}
             />
         </ScreenShell>
     );

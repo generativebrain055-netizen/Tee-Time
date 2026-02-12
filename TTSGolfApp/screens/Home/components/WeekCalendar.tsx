@@ -4,6 +4,8 @@ import { ChevronRight } from "lucide-react-native";
 import { MotiView } from "moti";
 import { WeekDay } from "../types";
 import { transitions } from "../../../theme/animations";
+import { spacing, fontSize, radii, shadows, palette } from "../../../ui/theme/tokens";
+import { colorTokens } from "../../../theme/tokens";
 
 interface WeekCalendarProps {
   weekDays: WeekDay[];
@@ -31,22 +33,25 @@ const DayColumn = memo(
       from={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ ...transitions.snappy, delay: index * 30 }}
-      className="items-center justify-center flex-1 min-w-[48px]"
+      style={styles.dayColumnWrap}
     >
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.8}
-        className={`items-center justify-center py-3 px-2 rounded-lg min-w-[48px] w-12 ${isSelected ? 'bg-primary' : ''}`}
+        style={[
+          styles.dayPill,
+          isSelected && styles.dayPillSelected,
+        ]}
       >
-        <Text className={`font-sans text-sm mb-1 ${isSelected ? 'font-sans-semibold text-white' : 'text-gray-400'}`}>
+        <Text style={[styles.dayName, isSelected && styles.dayNameSelected]}>
           {day.dayName}
         </Text>
-        <Text className={`font-sans-bold text-xl ${isSelected ? 'text-white' : 'text-gray-600'}`}>
+        <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
           {day.dayNumber}
         </Text>
       </TouchableOpacity>
       {!isSelected && day.hasEvent && (
-        <View className="w-5 h-0.5 bg-primary rounded-full mt-1" />
+        <View style={styles.dayDot} />
       )}
     </MotiView>
   )
@@ -63,33 +68,24 @@ function WeekCalendar({
   const selectedKey = selectedDate ? toDateString(selectedDate) : null;
 
   return (
-    <View className="px-5 pt-5 pb-5 bg-gray-50 flex-1">
-      <View className="flex-row justify-between items-center mb-4">
-        <Text className="font-sans-bold text-xl text-gray-900">This week</Text>
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>This week</Text>
         <TouchableOpacity
-          className="flex-row items-center gap-1"
+          style={styles.viewScheduleButton}
           onPress={onViewSchedule}
           activeOpacity={0.7}
         >
-          <Text className="font-sans-semibold text-base text-blue-500">View schedule</Text>
-          <ChevronRight size={18} color="#3B82F6" strokeWidth={2.5} />
+          <Text style={styles.viewScheduleText}>View schedule</Text>
+          <ChevronRight size={18} color={palette.blue500} strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
-      <View 
-        className="bg-white rounded-2xl overflow-hidden flex-1"
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 2,
-        }}
-      >
-        <View className="px-4 pt-4 pb-4">
+      <View style={[styles.card, shadows.sm]}>
+        <View style={styles.daysContainer}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, minWidth: '100%' }}
+            contentContainerStyle={styles.daysScrollContent}
           >
             {weekDays.map((day, index) => {
               const isSelected =
@@ -108,8 +104,8 @@ function WeekCalendar({
         </View>
         {children && (
           <>
-            <View className="h-px bg-gray-200" />
-            <View className="flex-1">
+            <View style={styles.cardDivider} />
+            <View style={styles.cardContent}>
               {children}
             </View>
           </>
@@ -119,6 +115,104 @@ function WeekCalendar({
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  section: {
+    paddingHorizontal: spacing["2xl"],
+    paddingTop: spacing["2xl"],
+    paddingBottom: spacing["2xl"],
+    backgroundColor: palette.gray50,
+    flex: 1,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  sectionTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: fontSize.xl,
+    color: colorTokens.text.primary,
+  },
+  viewScheduleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  viewScheduleText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: fontSize.base,
+    color: palette.blue500,
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    flex: 1,
+    elevation: 2,
+  },
+  daysContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  daysScrollContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.xs,
+    minWidth: "100%",
+  },
+  dayColumnWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    minWidth: 48,
+  },
+  dayPill: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    minWidth: 48,
+    width: 48,
+  },
+  dayPillSelected: {
+    backgroundColor: palette.green500,
+  },
+  dayName: {
+    fontFamily: "Inter_400Regular",
+    fontSize: fontSize.sm,
+    color: palette.gray400,
+    marginBottom: spacing.xs,
+  },
+  dayNameSelected: {
+    fontFamily: "Inter_600SemiBold",
+    color: "#FFFFFF",
+  },
+  dayNumber: {
+    fontFamily: "Inter_700Bold",
+    fontSize: fontSize.xl,
+    color: palette.gray600,
+  },
+  dayNumberSelected: {
+    color: "#FFFFFF",
+  },
+  dayDot: {
+    width: 20,
+    height: 2,
+    backgroundColor: palette.green500,
+    borderRadius: 1,
+    marginTop: spacing.xs,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: palette.gray200,
+  },
+  cardContent: {
+    flex: 1,
+  },
+});
 
 export default memo(WeekCalendar);

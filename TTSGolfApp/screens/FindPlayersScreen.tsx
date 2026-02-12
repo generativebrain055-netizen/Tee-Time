@@ -12,10 +12,11 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Search, X, UserPlus, Clock } from 'lucide-react-native';
-import { friendApi, type DiscoveredUser } from '../services/api';
+import { Search, X, UserPlus, Clock, Check } from 'lucide-react-native';
+import { friendApi, rosterApi, type DiscoveredUser } from '../services/api';
 import { useDebounce } from '../hooks';
 import { ScreenShell, AppHeader } from '../ui';
+import { logger } from '../utils/logger';
 
 interface FindPlayersScreenProps {
   navigation: any;
@@ -30,10 +31,13 @@ const getAvatarColor = (id: string): string => {
   return '#22C55E'; // Green color matching the app theme
 };
 
-const Avatar: React.FC<{ user: DiscoveredUser; size?: 'sm' | 'md' | 'lg' }> = ({ 
+const Avatar: React.FC<{ user: DiscoveredUser | ExtendedUser; size?: 'sm' | 'md' | 'lg' }> = ({ 
   user, 
   size = 'md' 
 }) => {
+  // Handle both name formats
+  const firstName = user.firstName || (user.name ? user.name.split(/\s+/)[0] : '');
+  const lastName = user.lastName || (user.name ? user.name.split(/\s+/).slice(1).join(' ') : '');
   const sizeMap = {
     sm: 40,
     md: 52,
@@ -84,7 +88,7 @@ const Avatar: React.FC<{ user: DiscoveredUser; size?: 'sm' | 'md' | 'lg' }> = ({
         fontFamily: 'PlusJakartaSans_700Bold',
         color: '#FFFFFF',
       }}>
-        {getInitials(user.firstName, user.lastName)}
+        {getInitials(firstName, lastName)}
       </Text>
     </View>
   );
@@ -124,6 +128,12 @@ const UserListItem: React.FC<{
 
   const buttonStyle = getButtonStyle();
   const location = user.location || user.homeCourse || 'Unknown location';
+  const IconComponent = buttonStyle.icon;
+  
+  // Handle both name formats
+  const displayName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  const firstName = user.firstName || (user.name ? user.name.split(/\s+/)[0] : '');
+  const lastName = user.lastName || (user.name ? user.name.split(/\s+/).slice(1).join(' ') : '');
 
   return (
     <TouchableOpacity
@@ -152,7 +162,7 @@ const UserListItem: React.FC<{
             marginBottom: 4,
             lineHeight: 20,
           }}>
-            {user.firstName} {user.lastName}
+            {displayName || 'Unknown User'}
           </Text>
           <Text style={{
             fontFamily: 'PlusJakartaSans_400Regular',
@@ -169,18 +179,21 @@ const UserListItem: React.FC<{
         onPress={onAddPress}
         disabled={buttonStyle.disabled}
         style={{
-          paddingHorizontal: 20,
+          paddingHorizontal: 16,
           paddingVertical: 10,
           borderRadius: 20,
           backgroundColor: buttonStyle.bg,
-          borderWidth: 1,
+          borderWidth: user.inRoster ? 0 : 1,
           borderColor: '#E5E7EB',
-          minWidth: 80,
+          minWidth: 120,
           alignItems: 'center',
           justifyContent: 'center',
+          flexDirection: 'row',
+          gap: 6,
         }}
         activeOpacity={0.7}
       >
+        {IconComponent && <IconComponent size={16} color={buttonStyle.textColor} strokeWidth={2.5} />}
         <Text style={{
           fontFamily: 'PlusJakartaSans_600SemiBold',
           fontSize: 14,
@@ -196,80 +209,143 @@ const UserListItem: React.FC<{
 export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps) {
   const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState('');
-  const [users, setUsers] = useState<DiscoveredUser[]>([]);
-  const [loading, setLoading] = useState(true); // Start with loading=true to fetch initial users
+  const [users, setUsers] = useState<ExtendedUser[]>([]);
+  const [loading, setLoading] = useState(false);
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
+  const [addingToRosterIds, setAddingToRosterIds] = useState<Set<string>>(new Set());
+  const [rosterUserIds, setRosterUserIds] = useState<Set<string>>(new Set());
   
   const debouncedSearch = useDebounce(searchText, 300);
+  
+  // Load roster to check which users are already in roster
+  useEffect(() => {
+    const loadRoster = async () => {
+      try {
+        const response = await rosterApi.getRoster();
+        if (response.success && response.roster) {
+          const userIds = new Set<string>();
+          response.roster.forEach((item: any) => {
+            if (item.contact?.userId) {
+              userIds.add(item.contact.userId);
+            }
+          });
+          setRosterUserIds(userIds);
+        }
+      } catch (error) {
+        logger.error("[FindPlayersScreen] Failed to load roster", error);
+      }
+    };
+    loadRoster();
+  }, []);
 
   const handleBack = useCallback(() => {
     navigation?.goBack();
   }, [navigation]);
 
   const searchUsers = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 2) {
+      setUsers([]);
+      return;
+    }
+    
     setLoading(true);
     try {
-      const response = await friendApi.discoverUsers();
+      const response = await rosterApi.searchUsers(query.trim());
       if (response.success && response.users) {
-        if (query.trim()) {
-          // Filter users by search query locally
-          const filtered = response.users.filter(user => {
-            const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
-            const searchLower = query.toLowerCase();
-            return fullName.includes(searchLower) || 
-                   user.username?.toLowerCase().includes(searchLower) ||
-                   user.location?.toLowerCase().includes(searchLower);
-          });
-          setUsers(filtered);
-        } else {
-          // Show all suggested users when no search query
-          setUsers(response.users.slice(0, 20)); // Limit to 20 suggested users
-        }
+        // Mark users that are already in roster and normalize name format
+        const usersWithRosterStatus = (response.users as any[]).map((user: any) => {
+          // Backend returns 'name' as single string, but frontend expects firstName/lastName
+          let firstName = user.firstName || '';
+          let lastName = user.lastName || '';
+          
+          if (!firstName && !lastName && user.name) {
+            // Parse name string into firstName and lastName
+            const nameParts = user.name.trim().split(/\s+/);
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+          }
+          
+          return {
+            ...user,
+            firstName,
+            lastName,
+            inRoster: rosterUserIds.has(user.id),
+            addingToRoster: addingToRosterIds.has(user.id),
+          };
+        });
+        setUsers(usersWithRosterStatus);
+      } else {
+        setUsers([]);
       }
     } catch (error) {
-      console.error('Search users error:', error);
-      Alert.alert('Error', 'Failed to load users');
+      logger.error('[FindPlayersScreen] Search users error:', error);
+      Alert.alert('Error', 'Failed to search users');
+      setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // Load suggested users on mount
-  useEffect(() => {
-    searchUsers('');
-  }, []);
+  }, [rosterUserIds, addingToRosterIds]);
 
   useEffect(() => {
-    if (debouncedSearch !== null) {
+    if (debouncedSearch !== null && debouncedSearch.trim().length >= 2) {
       searchUsers(debouncedSearch);
+    } else {
+      setUsers([]);
     }
   }, [debouncedSearch, searchUsers]);
 
-  const handleAddFriend = useCallback(async (e: any, user: DiscoveredUser) => {
+  const handleAddToRoster = useCallback(async (e: any, user: ExtendedUser) => {
     e.stopPropagation();
     
-    if (user.friendshipStatus !== 'none') return;
+    if (user.inRoster || user.addingToRoster) return;
 
-    setRequestingIds(prev => new Set(prev).add(user.id));
+    setAddingToRosterIds(prev => new Set(prev).add(user.id));
     
     try {
-      const response = await friendApi.sendRequest(user.id);
+      const payload: any = {};
+      
+      if (user.id) {
+        payload.contactUserId = user.id;
+      }
+      
+      // Handle both name formats (single string or firstName/lastName)
+      if (user.name) {
+        payload.contactName = user.name;
+      } else if (user.firstName || user.lastName) {
+        payload.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+      }
+      
+      if (user.email) {
+        payload.contactEmail = user.email;
+      }
+      
+      if (user.phone) {
+        payload.contactPhone = user.phone;
+      }
+      
+      const response = await rosterApi.addToRoster(payload);
+      
       if (response.success) {
+        logger.info('[FindPlayersScreen] Added to roster', { userId: user.id });
         // Update user's status locally
         setUsers(prevUsers =>
           prevUsers.map(u =>
             u.id === user.id
-              ? { ...u, friendshipStatus: 'requested' as const }
+              ? { ...u, inRoster: true, addingToRoster: false }
               : u
           )
         );
-        Alert.alert('Success', 'Friend request sent!');
+        // Add to roster set
+        setRosterUserIds(prev => new Set(prev).add(user.id));
+        const userName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User';
+        Alert.alert('Success', `${userName} has been added to your roster`);
       }
     } catch (error: any) {
-      console.error('Send friend request error:', error);
-      Alert.alert('Error', error.message || 'Failed to send friend request');
+      logger.error('[FindPlayersScreen] Add to roster error:', error);
+      const errorMessage = error.message || 'Failed to add to roster. Please try again.';
+      Alert.alert('Error', errorMessage);
     } finally {
-      setRequestingIds(prev => {
+      setAddingToRosterIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(user.id);
         return newSet;
@@ -277,7 +353,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     }
   }, []);
 
-  const handleUserPress = useCallback((user: DiscoveredUser) => {
+  const handleUserPress = useCallback((user: ExtendedUser) => {
     navigation?.navigate('FriendProfile', { userId: user.id, user });
   }, [navigation]);
 
@@ -286,15 +362,15 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     setUsers([]);
   }, []);
 
-  const renderUser = useCallback(({ item }: { item: DiscoveredUser }) => (
+  const renderUser = useCallback(({ item }: { item: ExtendedUser }) => (
     <UserListItem
       user={item}
       onPress={() => handleUserPress(item)}
-      onAddPress={(e) => handleAddFriend(e, item)}
+      onAddPress={(e) => handleAddToRoster(e, item)}
     />
-  ), [handleUserPress, handleAddFriend]);
+  ), [handleUserPress, handleAddToRoster]);
 
-  const keyExtractor = useCallback((item: DiscoveredUser) => item.id, []);
+  const keyExtractor = useCallback((item: ExtendedUser) => item.id, []);
 
   return (
     <ScreenShell>
@@ -381,7 +457,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
               marginTop: 20,
               textAlign: 'center',
             }}>
-              {searchText ? 'No users found' : 'No players available'}
+              {searchText ? 'No users found' : 'Search for players'}
             </Text>
             <Text style={{
               fontFamily: 'PlusJakartaSans_400Regular',
@@ -390,7 +466,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
               marginTop: 8,
               textAlign: 'center',
             }}>
-              {searchText ? 'Try a different search' : 'Check back later'}
+              {searchText ? 'Try a different search' : 'Enter at least 2 characters to search'}
             </Text>
           </View>
         ) : (

@@ -113,8 +113,9 @@ class CourseRepository {
             return data || [];
         } catch (error) {
             // Fallback: Get all courses and filter client-side (not recommended for production)
-            console.warn("get_nearby_courses function not found. Implement PostgreSQL function for better performance.");
-            console.warn("CREATE FUNCTION get_nearby_courses(p_latitude FLOAT, p_longitude FLOAT, p_radius_miles FLOAT, p_limit INT)");
+            const logger = require("../config/logger");
+            logger.warn("get_nearby_courses function not found. Implement PostgreSQL function for better performance.");
+            logger.warn("CREATE FUNCTION get_nearby_courses(p_latitude FLOAT, p_longitude FLOAT, p_radius_miles FLOAT, p_limit INT)");
             
             try {
                 const { data, error: fallbackError } = await supabaseAdmin
@@ -161,7 +162,8 @@ class CourseRepository {
             return data || [];
         } catch (error) {
             // Fallback: Just return courses by rating
-            console.warn("get_popular_courses function not found. Returning by rating instead.");
+            const logger = require("../config/logger");
+            logger.warn("get_popular_courses function not found. Returning by rating instead.");
             
             try {
                 const { data, error: fallbackError } = await supabaseAdmin

@@ -87,7 +87,8 @@ export const ClubPage: React.FC<ClubPageProps> = ({
         ]);
       }
     } catch (error) {
-      console.error("Golf course search error:", error);
+      const { logger } = require("../../utils/logger");
+      logger.error("[ClubPage] Golf course search error", error);
       setSuggestions([
         {
           id: "manual",

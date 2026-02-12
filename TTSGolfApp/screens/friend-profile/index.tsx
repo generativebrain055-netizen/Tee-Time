@@ -108,16 +108,6 @@ function FriendProfileScreen({ navigation, route }: Props) {
   const fullName = getFullName(profile.firstName, profile.lastName);
   const initials = getInitials(profile.firstName, profile.lastName);
   const isFriend = profile.friendshipStatus === "friend";
-  
-  console.log('[FriendProfileScreen] Full Profile Data:', JSON.stringify(profile, null, 2));
-  console.log('[FriendProfileScreen] Stats:', {
-    roundsCount: profile.roundsCount,
-    roundsPlayed: profile.roundsPlayed,
-    coursesCount: profile.coursesCount,
-    socialRate: profile.socialRate,
-    homeCourse: profile.homeCourse,
-    recentRounds: profile.recentRounds,
-  });
 
   const rounds = profile.roundsCount ?? profile.roundsPlayed ?? 0;
   const courses = profile.coursesCount ?? 0;

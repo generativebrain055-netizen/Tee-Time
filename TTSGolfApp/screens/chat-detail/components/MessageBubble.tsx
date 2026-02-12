@@ -1,36 +1,96 @@
 import React, { memo } from "react";
-import { View, Text, Image } from "react-native";
-import { COLORS } from "../styles";
+import { View, Text, Image, StyleSheet } from "react-native";
+import { COLORS, FIGMA } from "../styles";
 import { ChatMessage } from "../types";
 
 interface MessageBubbleProps {
-    message: ChatMessage;
+  message: ChatMessage;
 }
 
 export const MessageBubble = memo(({ message }: MessageBubbleProps) => (
+  <View style={[styles.row, message.isMe ? styles.rowSent : styles.rowOther]}>
+    {!message.isMe && (
+      <Image
+        source={{ uri: message.senderImg }}
+        style={styles.avatar}
+      />
+    )}
     <View
-        className={`flex-row mb-4 items-end ${
-            message.isMe ? "justify-end" : "justify-start"
-        }`}
+      style={[
+        styles.bubble,
+        message.isMe
+          ? [styles.bubbleSent, FIGMA.bubbleSentRadius]
+          : [styles.bubbleOther, FIGMA.bubbleOtherRadius],
+      ]}
     >
-        {!message.isMe && (
-            <Image source={{ uri: message.senderImg }} className="w-8 h-8 rounded-[16px] bg-[#E5E5E5] mr-2" />
-        )}
-        <View
-            className={`max-w-[70%] rounded-md px-4 py-2.5 ${
-                message.isMe 
-                    ? "bg-[#E8F4FD] rounded-br-[4px]" 
-                    : "bg-white rounded-bl-[4px]"
-            }`}
-            style={message.isMe ? {} : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}
-        >
-            <Text className={`text-[15px] leading-5 ${message.isMe ? "text-[#111827]" : "text-[#111827]"}`}>
-                {message.message}
-            </Text>
-            <Text className={`text-[11px] mt-1 ${message.isMe ? "text-text-secondary text-right" : "text-text-secondary"}`}>
-                {message.time}
-            </Text>
-        </View>
-        {message.isMe && <View className="w-10" />}
+      <Text style={[styles.body, message.isMe ? styles.bodySent : styles.bodyOther]}>
+        {message.message}
+      </Text>
+      <Text style={[styles.time, message.isMe ? styles.timeSent : styles.timeOther]}>
+        {message.time}
+      </Text>
     </View>
+    {message.isMe && <View style={styles.spacer} />}
+  </View>
 ));
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginBottom: 16,
+  },
+  rowSent: {
+    justifyContent: "flex-end",
+  },
+  rowOther: {
+    justifyContent: "flex-start",
+  },
+  avatar: {
+    width: FIGMA.avatarSize,
+    height: FIGMA.avatarSize,
+    borderRadius: FIGMA.avatarSize / 2,
+    backgroundColor: "#E5E5E5",
+    marginRight: 8,
+  },
+  bubble: {
+    maxWidth: "70%",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  bubbleSent: {
+    backgroundColor: COLORS.myMessageBg,
+  },
+  bubbleOther: {
+    backgroundColor: COLORS.otherMessageBg,
+    ...FIGMA.headerShadow,
+  },
+  body: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  bodySent: {
+    color: "#000000",
+  },
+  bodyOther: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.textMain,
+  },
+  time: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  timeSent: {
+    color: COLORS.timeSent,
+    textAlign: "right",
+  },
+  timeOther: {
+    color: COLORS.timeOther,
+  },
+  spacer: {
+    width: 40,
+  },
+});

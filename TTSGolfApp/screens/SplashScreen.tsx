@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { logger } from "../utils/logger";
 
 const { width, height } = Dimensions.get("window");
 
@@ -71,7 +72,7 @@ export default function SplashScreen({
           AsyncStorage.getItem("user"),
         ]);
 
-        console.log("[SplashScreen] Session check:", {
+        logger.debug("[SplashScreen] Session check", {
           hasAccessToken: !!accessToken,
           hasUserStr: !!userStr,
           accessTokenPreview: accessToken ? accessToken.substring(0, 30) + "..." : null,
@@ -89,7 +90,7 @@ export default function SplashScreen({
               const payload = JSON.parse(atob(tokenParts[1]));
               const currentTime = Math.floor(Date.now() / 1000);
 
-              console.log("[SplashScreen] Token validation:", {
+              logger.debug("[SplashScreen] Token validation", {
                 expiration: payload.exp,
                 currentTime,
                 isExpired: payload.exp && payload.exp < currentTime,
@@ -98,7 +99,7 @@ export default function SplashScreen({
               // Check if token is expired
               if (payload.exp && payload.exp < currentTime) {
                 // Token expired, clear storage and go to Welcome
-                console.log("[SplashScreen] Token expired, clearing session");
+                logger.info("[SplashScreen] Token expired, clearing session");
                 await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                 navigation.replace("Welcome");
                 return;
@@ -107,7 +108,7 @@ export default function SplashScreen({
 
             // Token is valid, check if user still exists in database
             const user = JSON.parse(userStr);
-            console.log("[SplashScreen] Valid session found, verifying user exists:", {
+            logger.debug("[SplashScreen] Valid session found, verifying user exists", {
               userId: user.id,
               firstName: user.firstName,
               lastName: user.lastName,
@@ -122,23 +123,23 @@ export default function SplashScreen({
               
               if (!profileResponse.success || !profileResponse.user) {
                 // User doesn't exist in database, clear session
-                console.log("[SplashScreen] User not found in database, clearing session");
+                logger.info("[SplashScreen] User not found in database, clearing session");
                 await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                 navigation.replace("Welcome");
                 return;
               }
               
-              console.log("[SplashScreen] User verified, checking availability");
+              logger.debug("[SplashScreen] User verified, checking availability");
             } catch (userError: any) {
               // If 401/404, user doesn't exist
               if (userError.statusCode === 401 || userError.statusCode === 404) {
-                console.log("[SplashScreen] User not found (401/404), clearing session");
+                logger.info("[SplashScreen] User not found (401/404), clearing session");
                 await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                 navigation.replace("Welcome");
                 return;
               }
               // Other errors, log but continue
-              console.error("[SplashScreen] Error verifying user:", userError);
+              logger.error("[SplashScreen] Error verifying user", userError);
             }
             
             // Check availability
@@ -152,24 +153,23 @@ export default function SplashScreen({
               
               const availabilityPromise = availabilityApi.getUserAvailability();
               
-              const response = await Promise.race([availabilityPromise, timeoutPromise]);
-              
+              const response = (await Promise.race([availabilityPromise, timeoutPromise])) as { data?: unknown };
               // If no availability set, show availability onboarding
               if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) {
-                console.log("[SplashScreen] No availability found, navigating to AvailabilityOnboarding");
+                logger.info("[SplashScreen] No availability found, navigating to AvailabilityOnboarding");
                 navigation.replace("AvailabilityOnboarding", { user });
               } else {
-                console.log("[SplashScreen] Availability exists, navigating to Home");
+                logger.debug("[SplashScreen] Availability exists, navigating to Home");
                 navigation.replace("Home", { user });
               }
             } catch (availError) {
-              console.error("[SplashScreen] Error checking availability:", availError);
+              logger.error("[SplashScreen] Error checking availability", availError);
               // On error or timeout, just go to home (user can set availability later)
               navigation.replace("Home", { user });
             }
           } catch (tokenError) {
             // Invalid token format, clear and go to Welcome
-            console.error("[SplashScreen] Invalid token format:", tokenError);
+            logger.error("[SplashScreen] Invalid token format", tokenError);
             await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
             navigation.replace("Welcome");
           }
@@ -178,7 +178,7 @@ export default function SplashScreen({
           navigation.replace("Welcome");
         }
       } catch (error) {
-        console.error("Session check error:", error);
+        logger.error("[SplashScreen] Session check error", error);
         // Clear any corrupted data and go to Welcome
         await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
         navigation.replace("Welcome");

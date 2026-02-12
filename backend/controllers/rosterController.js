@@ -204,6 +204,30 @@ class RosterController {
     }
   }
 
+  // POST /api/roster/groups/:id/members (Figma 1075-927: Inviting people to group)
+  async addMembersToGroup(req, res) {
+    try {
+      const { memberUserIds } = req.body;
+      if (!Array.isArray(memberUserIds) || memberUserIds.length === 0) {
+        return error(res, "memberUserIds must be a non-empty array", 400);
+      }
+      const result = await rosterService.addMembersToGroup(req.user.id, req.params.id, memberUserIds);
+      success(res, result);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to add members to group');
+    }
+  }
+
+  // POST /api/roster/groups/:id/leave (Figma 1075-927: removing yourself)
+  async leaveGroup(req, res) {
+    try {
+      const result = await rosterService.leaveGroup(req.user.id, req.params.id);
+      success(res, result);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to leave group');
+    }
+  }
+
   // PUT /api/roster/:id/group
   async updateMemberGroup(req, res) {
     try {
@@ -308,6 +332,8 @@ module.exports = {
   getAutoInviteMembers: controller.getAutoInviteMembers.bind(controller),
   deleteGroup: controller.deleteGroup.bind(controller),
   getGroupMembers: controller.getGroupMembers.bind(controller),
+  addMembersToGroup: controller.addMembersToGroup.bind(controller),
+  leaveGroup: controller.leaveGroup.bind(controller),
   updateMemberGroup: controller.updateMemberGroup.bind(controller),
   moveMember: controller.moveMember.bind(controller),
   getMemberProfile: controller.getMemberProfile.bind(controller),

@@ -10,6 +10,7 @@ import { FlashList } from "@shopify/flash-list";
 import { MapPin, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { teeTimeApi, TeeTimeHistoryEntry } from "../services/api";
+import { logger } from "../utils/logger";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -165,7 +166,7 @@ export default function TeeTimeHistoryScreen({ navigation }: any) {
                 setHistory(response.history);
             }
         } catch (error) {
-            console.error("Failed to load history:", error);
+            logger.error("[TeeTimeHistoryScreen] Failed to load history", error);
         } finally {
             setLoading(false);
             setRefreshing(false);

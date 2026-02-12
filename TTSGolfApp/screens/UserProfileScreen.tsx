@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, UserPlus, Clock, Users } from 'lucide-react-native';
 import { friendApi, type DiscoveredUser } from '../services/api';
+import { logger } from '../utils/logger';
 
 interface UserProfileScreenProps {
   navigation: any;
@@ -93,7 +94,7 @@ export default function UserProfileScreen({ navigation, route }: UserProfileScre
           setUser(response.profile);
         }
       } catch (error) {
-        console.error('Fetch user profile error:', error);
+        logger.error('[UserProfileScreen] Fetch user profile error', error);
         Alert.alert('Error', 'Failed to load user profile');
         handleBack();
       } finally {
@@ -115,7 +116,7 @@ export default function UserProfileScreen({ navigation, route }: UserProfileScre
         Alert.alert('Success', 'Friend request sent!');
       }
     } catch (error: any) {
-      console.error('Send friend request error:', error);
+      logger.error('[UserProfileScreen] Send friend request error', error);
       Alert.alert('Error', error.message || 'Failed to send friend request');
     } finally {
       setRequesting(false);

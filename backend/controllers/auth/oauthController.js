@@ -760,22 +760,27 @@ const completeOAuthProfile = async (req, res, next) => {
     if (zipCode !== undefined) updates.zipCode = zipCode;
     if (avatarUrl) updates.avatarUrl = avatarUrl;
 
-    // Upload profile photo if base64 provided
+    // Upload profile photo if base64 provided (non-blocking: do not fail profile update)
     if (profilePhotoBase64) {
       try {
         const avatarUploadService = require("../../services/avatarUploadService");
         updates.avatarUrl = await avatarUploadService.uploadAvatar(profilePhotoBase64, userId);
       } catch (uploadErr) {
-        logger.error("Avatar upload failed:", uploadErr);
-        return res.status(400).json({
-          success: false,
-          error: uploadErr.message || "Failed to upload profile photo.",
-        });
+        logger.warn("Avatar upload failed (profile update continues):", uploadErr.message);
+        delete updates.avatarUrl;
       }
     }
 
     // Update profile
-    const updatedUser = await userRepository.updateProfile(userId, updates);
+    let updatedUser = await userRepository.updateProfile(userId, updates);
+    // Re-fetch so response has latest DB state (e.g. phone_number)
+    updatedUser = await userRepository.findById(userId);
+    if (!updatedUser) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to load updated profile",
+      });
+    }
 
     // Check profile completeness (business logic in service)
     const profileStatus = oauthService.getProfileCompleteness(updatedUser);

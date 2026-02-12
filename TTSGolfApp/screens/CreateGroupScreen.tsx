@@ -9,10 +9,12 @@ import {
     ActivityIndicator,
     Alert,
 } from "react-native";
-import { X, Check } from "lucide-react-native";
+import { X, Check, Search } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { friendApi, rosterApi } from "../services/api";
+import { useDebounce } from "../hooks";
+import { logger } from "../utils/logger";
 
 interface Friend {
     id: string;
@@ -21,18 +23,54 @@ interface Friend {
     avatar?: string;
 }
 
-export default function CreateGroupScreen({ navigation }: any) {
+interface SearchUser {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+    avatar?: string;
+}
+
+const GROUP_COLORS = [
+    "#5EBC68",
+    "#3B82F6",
+    "#F59E0B",
+    "#EF4444",
+    "#8B5CF6",
+    "#EC4899",
+    "#14B8A6",
+];
+
+export default function CreateGroupScreen({ navigation, route }: any) {
     const colors = useColors();
     const theme = useTheme();
+    const initialParticipantIds = route?.params?.initialParticipantIds as string[] | undefined;
     const [groupName, setGroupName] = useState("");
+    const [groupColor, setGroupColor] = useState(GROUP_COLORS[0]);
     const [friends, setFriends] = useState<Friend[]>([]);
     const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
+    const [searchText, setSearchText] = useState("");
+    const [searchUsers, setSearchUsers] = useState<SearchUser[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [showSearchResults, setShowSearchResults] = useState(false);
+    
+    const debouncedSearch = useDebounce(searchText, 300);
 
     useEffect(() => {
         loadFriends();
     }, []);
+
+    // Pre-select participants if coming from chat (Figma 1269-2563: Creating a group from TT/ad hoc group chat)
+    useEffect(() => {
+        if (initialParticipantIds && initialParticipantIds.length > 0 && friends.length > 0) {
+            const validIds = initialParticipantIds.filter((id) => friends.some((f) => f.id === id));
+            if (validIds.length > 0) {
+                setSelectedFriends(new Set(validIds));
+            }
+        }
+    }, [initialParticipantIds, friends]);
 
     const loadFriends = async () => {
         try {
@@ -41,11 +79,53 @@ export default function CreateGroupScreen({ navigation }: any) {
                 setFriends(response.friends);
             }
         } catch (error) {
-            console.error("Failed to load friends:", error);
+            logger.error("[CreateGroupScreen] Failed to load friends", error);
         } finally {
             setLoading(false);
         }
     };
+    
+    // Search users when typing
+    useEffect(() => {
+        if (!debouncedSearch || debouncedSearch.trim().length < 2) {
+            setShowSearchResults(false);
+            setSearchUsers([]);
+            return;
+        }
+        
+        const performSearch = async () => {
+            setSearching(true);
+            try {
+                const response = await rosterApi.searchUsers(debouncedSearch.trim());
+                if (response.success && response.users) {
+                    // Format users and filter out already selected friends
+                    const formatted = (response.users as any[]).map((user: any) => {
+                        let firstName = user.firstName || '';
+                        let lastName = user.lastName || '';
+                        if (!firstName && !lastName && user.name) {
+                            const nameParts = user.name.trim().split(/\s+/);
+                            firstName = nameParts[0] || '';
+                            lastName = nameParts.slice(1).join(' ') || '';
+                        }
+                        return {
+                            ...user,
+                            firstName,
+                            lastName,
+                        };
+                    });
+                    setSearchUsers(formatted);
+                    setShowSearchResults(true);
+                }
+            } catch (error) {
+                logger.error("[CreateGroupScreen] Search error", error);
+                setSearchUsers([]);
+            } finally {
+                setSearching(false);
+            }
+        };
+        
+        performSearch();
+    }, [debouncedSearch]);
 
     const toggleFriend = useCallback((friendId: string) => {
         setSelectedFriends((prev) => {
@@ -72,30 +152,18 @@ export default function CreateGroupScreen({ navigation }: any) {
 
         setCreating(true);
         try {
-            // Create the group
+            // Create the group with members using memberIds parameter
+            const memberIds = Array.from(selectedFriends);
             const createResponse = await rosterApi.createGroup({
                 name: groupName.trim(),
                 description: "",
-                color: "#3B82F6",
+                color: groupColor,
+                memberIds: memberIds,
             });
 
             if (createResponse.success && createResponse.group) {
                 const groupId = createResponse.group.id;
-
-                // Add selected friends to the group by updating their group membership
-                // First, we need to get the roster entries for these friends
-                const rosterResponse = await rosterApi.getRoster();
-                
-                if (rosterResponse.success && rosterResponse.roster) {
-                    const memberIds = Array.from(selectedFriends);
-                    
-                    // Find roster entries for selected friends and update their group
-                    const updatePromises = rosterResponse.roster
-                        .filter(member => member.contact?.userId && memberIds.includes(member.contact.userId))
-                        .map(member => rosterApi.updateMemberGroup(member.id, groupId));
-                    
-                    await Promise.all(updatePromises);
-                }
+                logger.info("[CreateGroupScreen] Group created successfully", { groupId, memberCount: memberIds.length });
 
                 Alert.alert("Success", "Group created successfully", [
                     {
@@ -106,9 +174,10 @@ export default function CreateGroupScreen({ navigation }: any) {
                     },
                 ]);
             }
-        } catch (error) {
-            console.error("Failed to create group:", error);
-            Alert.alert("Error", "Failed to create group. Please try again.");
+        } catch (error: any) {
+            logger.error("[CreateGroupScreen] Failed to create group", error);
+            const errorMessage = error.message || "Failed to create group. Please try again.";
+            Alert.alert("Error", errorMessage);
         } finally {
             setCreating(false);
         }
@@ -121,28 +190,8 @@ export default function CreateGroupScreen({ navigation }: any) {
     return (
         <ScreenShell>
             <AppHeader
-                title="Create Group"
+                title="Group details"
                 onBack={() => navigation?.goBack()}
-                rightComponent={
-                    <TouchableOpacity
-                        onPress={handleCreate}
-                        disabled={creating || !groupName.trim() || selectedFriends.size === 0}
-                        style={{ padding: 4 }}
-                    >
-                        <Text
-                            style={{
-                                fontSize: 16,
-                                fontWeight: "600",
-                                color:
-                                    creating || !groupName.trim() || selectedFriends.size === 0
-                                        ? "#9CA3AF"
-                                        : colors.primary,
-                            }}
-                        >
-                            {creating ? "Creating..." : "Create"}
-                        </Text>
-                    </TouchableOpacity>
-                }
             />
 
             <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
@@ -152,23 +201,18 @@ export default function CreateGroupScreen({ navigation }: any) {
                         backgroundColor: "#FFFFFF",
                         paddingHorizontal: 20,
                         paddingVertical: 16,
+                        marginHorizontal: 20,
+                        marginTop: 16,
                         marginBottom: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: "#E5E7EB",
                     }}
                 >
-                    <Text
-                        style={{
-                            fontFamily: theme.fontFamily.medium,
-                            fontSize: 13,
-                            color: "#6B7280",
-                            marginBottom: 8,
-                        }}
-                    >
-                        GROUP NAME
-                    </Text>
                     <TextInput
                         value={groupName}
                         onChangeText={setGroupName}
-                        placeholder="Enter group name"
+                        placeholder="Group name"
                         placeholderTextColor="#9CA3AF"
                         style={{
                             fontFamily: theme.fontFamily.regular,
@@ -180,24 +224,200 @@ export default function CreateGroupScreen({ navigation }: any) {
                     />
                 </View>
 
-                {/* Members Section */}
-                <View style={{ backgroundColor: "#FFFFFF", paddingTop: 16 }}>
+                {/* Color Selection */}
+                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
+                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#1F2937", marginBottom: 12 }}>
+                        Color
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 12 }}>
+                        {GROUP_COLORS.map((color) => (
+                            <TouchableOpacity
+                                key={color}
+                                onPress={() => setGroupColor(color)}
+                                style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 18,
+                                    backgroundColor: color,
+                                    borderWidth: groupColor === color ? 3 : 0,
+                                    borderColor: "#111827",
+                                }}
+                            />
+                        ))}
+                    </View>
+                </View>
+
+                {/* Search Bar */}
+                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
+                    <View style={{ position: "relative" }}>
+                        <View style={{ position: "absolute", left: 12, top: "50%", transform: [{ translateY: -9 }], zIndex: 1 }}>
+                            <Search size={18} color="#9CA3AF" strokeWidth={2} />
+                        </View>
+                        <TextInput
+                            placeholder="Search friends or players..."
+                            value={searchText}
+                            onChangeText={setSearchText}
+                            style={{
+                                width: "100%",
+                                backgroundColor: "#F9FAFB",
+                                borderWidth: 1,
+                                borderColor: "#E5E7EB",
+                                borderRadius: 8,
+                                paddingVertical: 10,
+                                paddingHorizontal: 16,
+                                paddingLeft: 40,
+                                paddingRight: searchText.length > 0 ? 40 : 16,
+                                fontSize: 15,
+                                fontFamily: theme.fontFamily.regular,
+                                color: "#111827",
+                            }}
+                            placeholderTextColor="#9CA3AF"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+                        {searchText.length > 0 && (
+                            <TouchableOpacity
+                                style={{ position: "absolute", right: 12, top: "50%", transform: [{ translateY: -9 }] }}
+                                onPress={() => setSearchText("")}
+                            >
+                                <X size={18} color="#9CA3AF" strokeWidth={2} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+
+                {/* Figma 1269-2434: Group members (N) section */}
+                <View style={{ backgroundColor: "#FFFFFF", paddingTop: 16, marginTop: 8 }}>
                     <Text
                         style={{
                             fontFamily: theme.fontFamily.semiBold,
                             fontSize: 15,
-                            color: "#111827",
+                            color: "#1F2937",
                             paddingHorizontal: 20,
-                            marginBottom: 12,
+                            marginBottom: 4,
                         }}
                     >
-                        Add Members ({selectedFriends.size})
+                        Group members ({selectedFriends.size})
                     </Text>
+                    {selectedFriends.size > 0 ? (
+                        <Text
+                            style={{
+                                fontFamily: theme.fontFamily.regular,
+                                fontSize: 14,
+                                color: "#374151",
+                                paddingHorizontal: 20,
+                                marginBottom: 12,
+                            }}
+                        >
+                            We'll invite these members to join the group
+                        </Text>
+                    ) : null}
 
                     {loading ? (
                         <View style={{ paddingVertical: 40, alignItems: "center" }}>
                             <ActivityIndicator size="large" color={colors.primary} />
                         </View>
+                    ) : showSearchResults ? (
+                        // Show search results
+                        searching ? (
+                            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                                <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 14, color: "#9CA3AF", marginTop: 12 }}>
+                                    Searching...
+                                </Text>
+                            </View>
+                        ) : searchUsers.length > 0 ? (
+                            searchUsers.map((user, index) => {
+                                const isSelected = selectedFriends.has(user.id);
+                                const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+                                return (
+                                    <TouchableOpacity
+                                        key={user.id}
+                                        onPress={() => toggleFriend(user.id)}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            paddingHorizontal: 20,
+                                            paddingVertical: 12,
+                                            borderTopWidth: index === 0 ? 0 : 1,
+                                            borderTopColor: "#F3F4F6",
+                                        }}
+                                    >
+                                        {user.avatar ? (
+                                            <Image
+                                                source={{ uri: user.avatar }}
+                                                style={{
+                                                    width: 48,
+                                                    height: 48,
+                                                    borderRadius: 24,
+                                                }}
+                                            />
+                                        ) : (
+                                            <View
+                                                style={{
+                                                    width: 48,
+                                                    height: 48,
+                                                    borderRadius: 24,
+                                                    backgroundColor: "#E5E7EB",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                }}
+                                            >
+                                                <Text
+                                                    style={{
+                                                        fontFamily: theme.fontFamily.semiBold,
+                                                        fontSize: 16,
+                                                        color: "#6B7280",
+                                                    }}
+                                                >
+                                                    {getInitials(user.firstName || '', user.lastName || '')}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        <Text
+                                            style={{
+                                                flex: 1,
+                                                marginLeft: 12,
+                                                fontFamily: theme.fontFamily.medium,
+                                                fontSize: 16,
+                                                color: "#111827",
+                                            }}
+                                        >
+                                            {name || 'Unknown'}
+                                        </Text>
+
+                                        <View
+                                            style={{
+                                                width: 24,
+                                                height: 24,
+                                                borderRadius: 12,
+                                                borderWidth: 2,
+                                                borderColor: isSelected ? colors.primary : "#D1D5DB",
+                                                backgroundColor: isSelected ? colors.primary : "#FFFFFF",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                            }}
+                                        >
+                                            {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })
+                        ) : (
+                            <View style={{ paddingVertical: 40, paddingHorizontal: 20, alignItems: "center" }}>
+                                <Text
+                                    style={{
+                                        fontFamily: theme.fontFamily.regular,
+                                        fontSize: 14,
+                                        color: "#9CA3AF",
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    No users found. Try a different search term.
+                                </Text>
+                            </View>
+                        )
                     ) : friends.length === 0 ? (
                         <View style={{ paddingVertical: 40, paddingHorizontal: 20, alignItems: "center" }}>
                             <Text
@@ -208,7 +428,7 @@ export default function CreateGroupScreen({ navigation }: any) {
                                     textAlign: "center",
                                 }}
                             >
-                                No friends available. Add friends from the Roster tab first.
+                                No friends available. Add friends from the Roster tab first or search for players.
                             </Text>
                         </View>
                     ) : (
@@ -291,7 +511,33 @@ export default function CreateGroupScreen({ navigation }: any) {
                     )}
                 </View>
 
-                <View style={{ height: 100 }} />
+                {/* Figma 1269-2434: Create group button (Primary Green, 8px radius) */}
+                <View style={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }}>
+                    <TouchableOpacity
+                        onPress={handleCreate}
+                        disabled={creating || !groupName.trim() || selectedFriends.size === 0}
+                        style={{
+                            backgroundColor:
+                                creating || !groupName.trim() || selectedFriends.size === 0
+                                    ? "#9CA3AF"
+                                    : colors.primary ?? "#5EBC68",
+                            borderRadius: 8,
+                            paddingVertical: 16,
+                            alignItems: "center",
+                            justifyContent: "center",
+                        }}
+                    >
+                        <Text
+                            style={{
+                                fontFamily: theme.fontFamily.semiBold,
+                                fontSize: 16,
+                                color: "#FFFFFF",
+                            }}
+                        >
+                            {creating ? "Creating..." : "Create group"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             </ScrollView>
         </ScreenShell>
     );

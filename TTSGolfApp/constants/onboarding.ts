@@ -9,11 +9,13 @@
  */
 export const ONBOARDING_STEPS = {
   WELCOME: "welcome",
+  SIGNUP_OPTIONS: "signup_options",
   PHONE: "phone",
   MAGIC_LINK: "magic_link",
   NAME: "name",
   EMAIL: "email",
   PROFILE_IMAGE: "profile_image",
+  PHOTO_ZIP: "photo_zip",
   LOCATION: "location",
   CLUB: "club",
   HANDICAP: "handicap",
@@ -33,11 +35,13 @@ export type OnboardingStep =
  */
 export const STEP_ORDER: OnboardingStep[] = [
   ONBOARDING_STEPS.WELCOME,
+  ONBOARDING_STEPS.SIGNUP_OPTIONS,
   ONBOARDING_STEPS.PHONE,
   ONBOARDING_STEPS.MAGIC_LINK,
   ONBOARDING_STEPS.NAME,
   ONBOARDING_STEPS.EMAIL,
   ONBOARDING_STEPS.PROFILE_IMAGE,
+  ONBOARDING_STEPS.PHOTO_ZIP,
   ONBOARDING_STEPS.LOCATION,
   ONBOARDING_STEPS.CLUB,
   ONBOARDING_STEPS.HANDICAP,

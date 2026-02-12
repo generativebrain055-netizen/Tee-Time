@@ -31,6 +31,24 @@ export const attendanceApi = {
     ),
 
   /**
+   * Batch update attendance and complete check-in (Figma 437-321: Pre tee time check-in)
+   */
+  batchUpdateAttendance: (
+    teeTimeId: string,
+    updates: Array<{ attendanceId: string; status: "present" | "no_show" }>,
+  ) =>
+    apiCall<{
+      success: boolean;
+      message: string;
+      present: number;
+      noShow: number;
+      errors?: Array<{ attendanceId: string; error: string }>;
+    }>(`${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/check-in/batch`, {
+      method: "POST",
+      body: JSON.stringify({ updates }),
+    }),
+
+  /**
    * Update individual attendance
    */
   updateAttendance: (

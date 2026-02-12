@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
     View,
     Text,
@@ -6,9 +6,11 @@ import {
     TouchableOpacity,
     Image,
     Modal,
+    TextInput,
+    StyleSheet,
 } from "react-native";
-import { Clock, ChevronDown, Check, SlidersHorizontal, X } from "lucide-react-native";
-import { COLORS } from "./constants";
+import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search } from "lucide-react-native";
+import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend } from "../../services/api";
 
 interface RosterInviteStepProps {
@@ -17,6 +19,9 @@ interface RosterInviteStepProps {
     orderedPlayers: string[];
     onResponseWindowChange: (hours: number) => void;
     onReorderPlayers: (orderedIds: string[]) => void;
+    /** Figma 565-351: creator header (name + avatar) */
+    creatorName?: string;
+    creatorAvatarUrl?: string;
 }
 
 const RESPONSE_WINDOWS = [
@@ -45,6 +50,8 @@ export default function RosterInviteStep({
     orderedPlayers,
     onResponseWindowChange,
     onReorderPlayers,
+    creatorName,
+    creatorAvatarUrl,
 }: RosterInviteStepProps) {
     const [showPicker, setShowPicker] = useState(false);
     const [showFilterModal, setShowFilterModal] = useState(false);
@@ -52,6 +59,7 @@ export default function RosterInviteStep({
     const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
     const [selectedSort, setSelectedSort] = useState("roster");
     const [indicatedAvailable, setIndicatedAvailable] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     // Extract unique club names from friends
     const availableClubs = React.useMemo(() => {
@@ -115,6 +123,10 @@ export default function RosterInviteStep({
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
     };
 
+    const creatorInitials = creatorName
+        ? creatorName.trim().split(/\s+/).map((s) => s[0]).join("").slice(0, 2).toUpperCase()
+        : "";
+
     const getSelectedLabel = () => {
         const option = RESPONSE_WINDOWS.find((w) => w.value === responseWindow);
         return option?.label || "Select response time";
@@ -122,21 +134,27 @@ export default function RosterInviteStep({
 
     // Get ordered friends list based on filters and sorting
     const getOrderedFriends = useCallback(() => {
-        // Use filtered and sorted friends as the base
         const baseFriends = filteredAndSortedFriends;
-        
         if (orderedPlayers.length === 0 || selectedClubs.length > 0 || selectedSort !== 'roster') {
-            // If filters/sorting active, ignore manual ordering
             return baseFriends;
         }
-        
-        // Apply manual ordering (drag and drop)
         return orderedPlayers
             .map((id) => baseFriends.find((f) => f.id === id))
             .filter(Boolean) as Friend[];
     }, [filteredAndSortedFriends, orderedPlayers, selectedClubs, selectedSort]);
 
-    const orderedFriends = getOrderedFriends();
+    const orderedFriendsBase = getOrderedFriends();
+
+    // Figma 1269-3370: Search players filter
+    const orderedFriends = useMemo(() => {
+        if (!searchQuery.trim()) return orderedFriendsBase;
+        const q = searchQuery.trim().toLowerCase();
+        return orderedFriendsBase.filter(
+            (f) =>
+                `${f.firstName} ${f.lastName}`.toLowerCase().includes(q) ||
+                (f.username || "").toLowerCase().includes(q)
+        );
+    }, [orderedFriendsBase, searchQuery]);
 
     const toggleClub = (club: string) => {
         setSelectedClubs(prev => 
@@ -160,22 +178,67 @@ export default function RosterInviteStep({
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
+        <View style={{ flex: 1, backgroundColor: '#F5F6F8' }}>
             <ScrollView 
                 style={{ flex: 1 }}
                 contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Response Window Section */}
+                {/* Figma 565-351: Header card – creator name + avatar (Frame 2608818, 8px radius) */}
+                <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                        paddingVertical: 16,
+                        paddingHorizontal: 16,
+                        marginBottom: 16,
+                    }}>
+                        {creatorAvatarUrl ? (
+                            <Image
+                                source={{ uri: creatorAvatarUrl }}
+                                style={{ width: 40, height: 40, borderRadius: 20 }}
+                            />
+                        ) : (
+                            <View style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: '#22C55E',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                            }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 14,
+                                    color: '#FFFFFF',
+                                }}>
+                                    {creatorInitials || "?"}
+                                </Text>
+                            </View>
+                        )}
+                        <Text style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 16,
+                            color: '#374151',
+                            marginLeft: 12,
+                        }}>
+                            {creatorName ?? "Roster host"}
+                        </Text>
+                    </View>
+
+                {/* Response Window Section – Figma 565: "Response window" label, then "Select response time" dropdown */}
                 <Text style={{
-                    fontFamily: 'Inter_700Bold',
-                    fontSize: 18,
-                    color: '#111827',
-                    marginBottom: 12,
+                    fontFamily: 'Inter_600SemiBold',
+                    fontSize: 14,
+                    color: '#374151',
+                    marginBottom: 8,
                 }}>
                     Response window
                 </Text>
-                <View style={{ marginBottom: 32, zIndex: 1000 }}>
+                <View style={{ marginBottom: 24, zIndex: 1000 }}>
                     <TouchableOpacity
                         style={{
                             flexDirection: 'row',
@@ -183,7 +246,7 @@ export default function RosterInviteStep({
                             paddingVertical: 16,
                             paddingHorizontal: 16,
                             backgroundColor: '#FFFFFF',
-                            borderRadius: 12,
+                            borderRadius: 8,
                             borderWidth: 1,
                             borderColor: '#E5E7EB',
                         }}
@@ -203,7 +266,7 @@ export default function RosterInviteStep({
                         <ChevronDown size={20} color="#9CA3AF" strokeWidth={2} />
                     </TouchableOpacity>
 
-                    {/* Dropdown attached to field - absolute positioning */}
+                    {/* Dropdown attached to field - Figma 430-958: 8px radius */}
                     {showPicker && (
                         <View style={{
                             position: 'absolute',
@@ -211,7 +274,7 @@ export default function RosterInviteStep({
                             left: 0,
                             right: 0,
                             backgroundColor: '#FFFFFF',
-                            borderRadius: 12,
+                            borderRadius: 8,
                             borderWidth: 1,
                             borderColor: '#E5E7EB',
                             shadowColor: '#000',
@@ -255,20 +318,25 @@ export default function RosterInviteStep({
                     )}
                 </View>
 
-                {/* Your Roster Section */}
+                {/* Figma 1269-3055: Your players + Search players */}
+                <Text style={rosterStyles.sectionTitle}>{FIGMA_YOUR_PLAYERS.title}</Text>
+                <View style={rosterStyles.searchWrap}>
+                    <Search size={18} color="#9CA3AF" strokeWidth={2} />
+                    <TextInput
+                        style={rosterStyles.searchInput}
+                        placeholder={FIGMA_YOUR_PLAYERS.searchPlaceholder}
+                        placeholderTextColor="#9CA3AF"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
                 <View style={{
                     flexDirection: 'row',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     marginBottom: 16,
                 }}>
-                    <Text style={{
-                        fontFamily: 'Inter_700Bold',
-                        fontSize: 20,
-                        color: '#111827',
-                    }}>
-                        Your roster
-                    </Text>
+                    <View style={{ flex: 1 }} />
                     <TouchableOpacity
                         style={{
                             flexDirection: 'row',
@@ -313,10 +381,10 @@ export default function RosterInviteStep({
                     </TouchableOpacity>
                 </View>
 
-                {/* Roster List */}
+                {/* Roster List – Figma 430-958: 8px radius */}
                 <View style={{
                     backgroundColor: '#FFFFFF',
-                    borderRadius: 12,
+                    borderRadius: 8,
                     borderWidth: 1,
                     borderColor: '#E5E7EB',
                     overflow: 'hidden',
@@ -692,3 +760,31 @@ export default function RosterInviteStep({
         </View>
     );
 }
+
+const rosterStyles = StyleSheet.create({
+    sectionTitle: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 15,
+        color: FIGMA_YOUR_PLAYERS.nameColor,
+        marginBottom: 12,
+    },
+    searchWrap: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 16,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        backgroundColor: "#FFFFFF",
+        borderRadius: FIGMA_YOUR_PLAYERS.inputBorderRadius,
+        borderWidth: 1,
+        borderColor: FIGMA_YOUR_PLAYERS.inputBorderColor,
+        gap: 10,
+    },
+    searchInput: {
+        flex: 1,
+        fontFamily: "Inter_400Regular",
+        fontSize: 16,
+        color: "#111827",
+        padding: 0,
+    },
+});
