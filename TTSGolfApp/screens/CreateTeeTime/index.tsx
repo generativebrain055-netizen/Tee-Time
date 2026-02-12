@@ -27,6 +27,7 @@ import FCFSInviteStep from "./FCFSInviteStep";
 import ReviewFCFSInviteStep from "./ReviewFCFSInviteStep";
 import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
+import OpenInviteStep from "./OpenInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
 
@@ -60,6 +61,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("10:00 AM");
   const [location, setLocation] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState<{ id?: string; name: string; location?: string } | null>(null);
   const [groupSize, setGroupSize] = useState(4);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -79,6 +81,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   // Roster Invite state
   const [responseWindow, setResponseWindow] = useState(2); // hours
   const [orderedPlayers, setOrderedPlayers] = useState<string[]>([]);
+  const [phoneInvites, setPhoneInvites] = useState<Array<{ phone: string; name: string }>>([]);
 
   // FCFS state
   const [fcfsTargetType, setFcfsTargetType] =
@@ -95,6 +98,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   );
   // Keep a ref for immediate access in handleCreate
   const allLoadedPlayersRef = React.useRef<ExtendedFriend[]>([]);
+
+  // Open Invite state
+  const [openDistance, setOpenDistance] = useState(20); // Default 20 miles
 
   // Handle prefilled data from Availability screen
   useEffect(() => {
@@ -348,14 +354,22 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
       });
 
       // Create tee time
-      const response = await teeTimeApi.createTeeTime({
+      const teeTimeData: any = {
         courseName,
         courseLocation: locationStr,
+        courseId: selectedCourse?.id, // Include courseId for distance calculations
         teeDate: formatDateForApi(selectedDate),
         teeTime: formatTimeForApi(selectedTime),
         maxPlayers: groupSize,
         inviteType: inviteType,
-      });
+      };
+
+      // Add distance radius for Open invites
+      if (inviteType === "open") {
+        teeTimeData.distanceRadius = openDistance;
+      }
+
+      const response = await teeTimeApi.createTeeTime(teeTimeData);
 
       logger.debug("Tee time creation response", { success: response.success });
 
@@ -371,21 +385,39 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
       if (inviteType === "roster") {
         // Roster invite - sequential with response window
-        logger.debug("Roster invite", { orderedCount: orderedPlayers.length });
-        if (orderedPlayers.length === 0) {
-          logger.debug("No ordered players to invite");
+        logger.debug("Roster invite", { orderedCount: orderedPlayers.length, phoneInvitesCount: phoneInvites.length });
+        if (orderedPlayers.length === 0 && phoneInvites.length === 0) {
+          logger.debug("No ordered players or phone invites to invite");
         } else {
-          const invitees = orderedPlayers.map((id, index) => {
+          const invitees: Array<{
+            userId?: string;
+            phone?: string;
+            name?: string;
+            order: number;
+          }> = [];
+          
+          // Add roster players
+          orderedPlayers.forEach((id, index) => {
             const friend = friends.find((f) => f.id === id);
-            return {
+            invitees.push({
               userId: id,
               name: friend
                 ? `${friend.firstName} ${friend.lastName}`
                 : undefined,
               order: index + 1,
-            };
+            });
           });
-          logger.debug("Roster invitees prepared", { count: invitees.length });
+          
+          // Add phone invites (non-registered users)
+          phoneInvites.forEach((phoneInvite, index) => {
+            invitees.push({
+              phone: phoneInvite.phone,
+              name: phoneInvite.name,
+              order: orderedPlayers.length + index + 1,
+            });
+          });
+          
+          logger.debug("Roster invitees prepared", { count: invitees.length, phoneInvites: phoneInvites.length });
           const inviteResponse = await inviteApi.createInvites(
             teeTimeId,
             invitees,
@@ -516,6 +548,11 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         } else {
           logger.debug("No manual invitees - players may not have userId or phone");
         }
+      } else if (inviteType === "open") {
+        // Open invite - no specific invites needed, just mark tee time as open
+        // The tee time will be visible on community board
+        logger.debug("Open invite created", { distance: openDistance });
+        // No invites to send - tee time is open to community
       }
 
       Alert.alert("Success", "Tee time created and invites sent!", [
@@ -654,6 +691,14 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           onOpenDatePicker={() => setShowDatePicker(true)}
           onOpenTimePicker={() => setShowTimePicker(true)}
           onLocationChange={setLocation}
+          onCourseSelect={(course) => {
+            setSelectedCourse(course);
+            // Also update location string
+            const fullLocation = course.location && course.location !== "Custom entry"
+              ? `${course.name}, ${course.location}`
+              : course.name;
+            setLocation(fullLocation);
+          }}
           onGroupSizeChange={setGroupSize}
         />
       )}
@@ -669,6 +714,10 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           orderedPlayers={orderedPlayers}
           onResponseWindowChange={setResponseWindow}
           onReorderPlayers={setOrderedPlayers}
+          onAddPhoneInvite={(phone, name) => {
+            setPhoneInvites(prev => [...prev, { phone, name }]);
+          }}
+          phoneInvites={phoneInvites}
           creatorName={user ? `${user.firstName} ${user.lastName}`.trim() : undefined}
           creatorAvatarUrl={user?.avatar ?? user?.avatarUrl ?? undefined}
         />
@@ -711,6 +760,15 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             setFcfsSelectedPlayers([]);
           }}
           groupMembers={groupMembers}
+        />
+      )}
+
+      {step === 3 && inviteType === "open" && (
+        <OpenInviteStep
+          distance={openDistance}
+          onDistanceChange={setOpenDistance}
+          creatorName={user ? `${user.firstName} ${user.lastName}`.trim() : undefined}
+          creatorAvatarUrl={user?.avatar ?? user?.avatarUrl ?? undefined}
         />
       )}
 

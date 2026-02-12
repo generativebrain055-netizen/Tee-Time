@@ -8,19 +8,20 @@ class AttendanceService {
    * Initialize attendance records when tee time is confirmed
    */
   async initializeAttendance(teeTimeId) {
-    // Get all participants for this tee time
+    // Get all active participants for this tee time (exclude cancelled)
     const { data: participants, error: fetchError } = await supabaseAdmin
       .from("tee_time_participants")
-      .select("id, user_id, tee_time_id")
-      .eq("tee_time_id", teeTimeId);
+      .select("id, user_id, tee_time_id, status")
+      .eq("tee_time_id", teeTimeId)
+      .or("status.is.null,status.neq.cancelled");
 
     if (fetchError) {
       logger.error(`Error fetching participants for tee time ${teeTimeId}:`, fetchError.message);
       throw fetchError;
     }
 
-    // Create attendance records
-    const attendanceRecords = participants.map(p => ({
+    // Create attendance records only for active participants
+    const attendanceRecords = (participants || []).map(p => ({
       tee_time_id: p.tee_time_id,
       participant_id: p.id,
       user_id: p.user_id,
@@ -286,6 +287,81 @@ class AttendanceService {
 
     logger.info(`Marked no-show for attendance ${attendanceId}, penalty log: ${penaltyLogId}`);
     return data;
+  }
+
+  /**
+   * Apply automatic no-show penalties when tee time is completed
+   * For participants who didn't check in (status is still 'pending' or null)
+   */
+  async applyAutomaticNoShowPenalties(teeTimeId, organizerId) {
+    try {
+      // Get all attendance records for this tee time
+      let attendance = await this.getAttendanceByTeeTime(teeTimeId);
+      
+      if (!attendance || attendance.length === 0) {
+        // No attendance records exist - initialize them first
+        await this.initializeAttendance(teeTimeId);
+        attendance = await this.getAttendanceByTeeTime(teeTimeId);
+        if (!attendance || attendance.length === 0) {
+          logger.info(`No attendance records found for tee time ${teeTimeId} - skipping automatic penalties`);
+          return { applied: 0 };
+        }
+      }
+
+      let appliedCount = 0;
+      
+      // Apply penalty to participants who didn't check in
+      for (const record of attendance) {
+        // Skip participants already marked as present, no-show, or cancelled
+        if (record.status === 'present' || record.status === 'no_show' || record.status === 'cancelled') {
+          continue;
+        }
+        
+        // Apply penalty if status is 'pending' or null (didn't check in)
+        // Status will be 'pending' if attendance was initialized, or null if not initialized
+        if (record.status !== 'pending' && record.status !== null) {
+          continue;
+        }
+        
+        // Check if participant is organizer or cancelled
+        const { data: participant, error: participantError } = await supabaseAdmin
+          .from("tee_time_participants")
+          .select("is_creator, status")
+          .eq("id", record.participant_id)
+          .single();
+
+        if (participantError || !participant) {
+          logger.error(`Error checking participant ${record.participant_id}:`, participantError?.message);
+          continue;
+        }
+
+        // Skip organizer
+        if (participant.is_creator) {
+          continue;
+        }
+
+        // Skip cancelled participants (double-check)
+        if (participant.status === 'cancelled') {
+          continue;
+        }
+
+        // Apply no-show penalty
+        try {
+          await this.markNoShow(record.id, organizerId);
+          appliedCount++;
+          logger.info(`Applied automatic no-show penalty for attendance ${record.id} (user ${record.user_id})`);
+        } catch (penaltyError) {
+          // Log but continue with other participants
+          logger.error(`Error applying no-show penalty for attendance ${record.id}:`, penaltyError.message);
+        }
+      }
+
+      logger.info(`Applied automatic no-show penalties for tee time ${teeTimeId}: ${appliedCount} penalties applied`);
+      return { applied: appliedCount };
+    } catch (error) {
+      logger.error(`Error in applyAutomaticNoShowPenalties for tee time ${teeTimeId}:`, error);
+      throw error;
+    }
   }
 
   /**

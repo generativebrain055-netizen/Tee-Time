@@ -1,18 +1,31 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
 const logger = require("../config/logger");
 const { createTeeDateTime } = require("../utils/dateUtils");
+const courseRepository = require("./courseRepository");
 
 class TeeTimeRepository {
   async createTeeTime(creatorId, teeTimeData) {
     const {
       courseName,
       courseLocation,
+      courseId,
       teeDate,
       teeTime,
       maxPlayers,
       inviteType,
       notes,
+      distanceRadius,
     } = teeTimeData;
+
+    // Store distance radius in notes as JSON for Open invites
+    // TODO: Add distance_radius column to tee_times table via migration
+    let notesWithMetadata = notes;
+    if (inviteType === "open" && distanceRadius) {
+      const metadata = { distanceRadius };
+      notesWithMetadata = notes 
+        ? JSON.stringify({ ...JSON.parse(notes || "{}"), ...metadata })
+        : JSON.stringify(metadata);
+    }
 
     try {
       const { data: teeTimeRecord, error } = await supabaseAdmin
@@ -21,11 +34,12 @@ class TeeTimeRepository {
           creator_id: creatorId,
           course_name: courseName,
           course_location: courseLocation,
+          course_id: courseId || null,
           tee_date: teeDate,
           tee_time: teeTime,
           max_players: maxPlayers || 4,
           invite_type: inviteType || "roster",
-          notes,
+          notes: notesWithMetadata,
         })
         .select()
         .single();
@@ -284,6 +298,19 @@ class TeeTimeRepository {
         .single();
 
       if (error) throw error;
+
+      // When tee time is confirmed, automatically create group chat and add all participants
+      if (status === "confirmed") {
+        try {
+          const conversationRepository = require("./conversationRepository");
+          await conversationRepository.createTeeTimeConversationWithParticipants(teeTimeId);
+          logger.info(`Created group chat for confirmed tee time ${teeTimeId}`);
+        } catch (chatError) {
+          // Don't fail status update if chat creation fails
+          logger.error(`Failed to create group chat for tee time ${teeTimeId}:`, chatError.message);
+        }
+      }
+
       return data;
     } catch (error) {
       handleError(error, "updateStatus");
@@ -319,6 +346,29 @@ class TeeTimeRepository {
         .single();
 
       if (error && error.code !== "23505") throw error;
+
+      // If tee time is confirmed and user is a registered user (not phone-only), add them to conversation
+      if (userId && !phone) {
+        try {
+          const { data: teeTime } = await supabaseAdmin
+            .from("tee_times")
+            .select("status")
+            .eq("id", teeTimeId)
+            .single();
+
+          if (teeTime && teeTime.status === "confirmed") {
+            const conversationRepository = require("./conversationRepository");
+            // Get or create conversation and ensure participant is added
+            const conv = await conversationRepository.getOrCreateTeeTimeConversation(userId, teeTimeId);
+            await conversationRepository.ensureParticipant(conv.id, userId);
+            logger.info(`Added participant ${userId} to conversation for confirmed tee time ${teeTimeId}`);
+          }
+        } catch (chatError) {
+          // Don't fail participant addition if chat update fails
+          logger.error(`Failed to add participant to conversation for tee time ${teeTimeId}:`, chatError.message);
+        }
+      }
+
       return data || null;
     } catch (error) {
       handleError(error, "addParticipant");
@@ -448,15 +498,35 @@ class TeeTimeRepository {
 
   async getParticipantCount(teeTimeId) {
     try {
+      // Count only active participants (exclude cancelled)
       const { count, error } = await supabaseAdmin
         .from("tee_time_participants")
         .select("*", { count: "exact", head: true })
-        .eq("tee_time_id", teeTimeId);
+        .eq("tee_time_id", teeTimeId)
+        .or("status.is.null,status.neq.cancelled");
 
       if (error) throw error;
       return count || 0;
     } catch (error) {
       handleError(error, "getParticipantCount");
+    }
+  }
+
+  async getParticipantByUser(teeTimeId, userId) {
+    try {
+      // Check for active participants only (exclude cancelled)
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("*")
+        .eq("tee_time_id", teeTimeId)
+        .eq("user_id", userId)
+        .or("status.is.null,status.neq.cancelled")
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "getParticipantByUser");
     }
   }
 
@@ -718,9 +788,23 @@ class TeeTimeRepository {
         .update({ status: "completed" })
         .in("status", ["pending", "confirmed"])
         .lt("tee_date", today)
-        .select("id, tee_date, tee_time, status");
+        .select("id, tee_date, tee_time, status, creator_id");
 
       if (error) throw error;
+      
+      // Apply automatic no-show penalties for participants who didn't check in
+      if (data && data.length > 0) {
+        const attendanceService = require("../services/attendanceService");
+        for (const teeTime of data) {
+          try {
+            await attendanceService.applyAutomaticNoShowPenalties(teeTime.id, teeTime.creator_id);
+          } catch (penaltyError) {
+            // Log but don't fail the entire operation
+            logger.error(`Error applying automatic no-show penalties for tee time ${teeTime.id}:`, penaltyError.message);
+          }
+        }
+      }
+      
       return data || [];
     } catch (error) {
       handleError(error, "markPastTeeTimesCompleted");
@@ -762,6 +846,173 @@ class TeeTimeRepository {
       return null;
     } catch (error) {
       handleError(error, "checkAndUpdateStatus");
+    }
+  }
+
+  /**
+   * Get Open invites (community board) filtered by distance, date, time, and course
+   * @param {string} userId - Current user ID
+   * @param {number} userLat - User's latitude
+   * @param {number} userLng - User's longitude
+   * @param {number} maxDistance - Maximum distance in miles (optional filter)
+   * @param {string} filterDate - Filter by specific date (YYYY-MM-DD) (optional)
+   * @param {string} filterTime - Filter by time range (e.g., "morning", "afternoon") (optional)
+   * @param {string} filterCourse - Filter by course name (partial match) (optional)
+   */
+  async getOpenInvites(userId, userLat, userLng, maxDistance = null, filterDate = null, filterTime = null, filterCourse = null) {
+    try {
+      // Build query for open tee times
+      let query = supabaseAdmin
+        .from("tee_times")
+        .select(`
+          *,
+          users!tee_times_creator_id_fkey (
+            first_name,
+            last_name,
+            username,
+            user_profiles (avatar_url, handicap, social_rate)
+          ),
+          tee_time_participants (
+            user_id,
+            users!tee_time_participants_user_id_fkey (
+              first_name,
+              last_name,
+              user_profiles (avatar_url, handicap, social_rate)
+            )
+          )
+        `)
+        .eq("invite_type", "open")
+        .in("status", ["pending", "confirmed"])
+        .gte("tee_date", new Date().toISOString().split("T")[0]);
+
+      // Apply date filter
+      if (filterDate) {
+        query = query.eq("tee_date", filterDate);
+      }
+
+      // Apply course filter
+      if (filterCourse) {
+        query = query.ilike("course_name", `%${filterCourse}%`);
+      }
+
+      query = query.order("tee_date", { ascending: true })
+        .order("tee_time", { ascending: true });
+
+      const { data: openTeeTimes, error } = await query;
+
+      if (error) throw error;
+
+      // Calculate distance for each tee time
+      const teeTimesWithDistance = await Promise.all(
+        (openTeeTimes || []).map(async (tt) => {
+          // Extract distance radius from notes (stored as JSON)
+          let distanceRadius = 20; // Default
+          try {
+            if (tt.notes) {
+              const notesData = JSON.parse(tt.notes);
+              if (notesData.distanceRadius) {
+                distanceRadius = notesData.distanceRadius;
+              }
+            }
+          } catch (e) {
+            // Notes not JSON or doesn't contain distanceRadius
+          }
+
+          // Get course coordinates if course_id exists
+          let distance = null;
+          if (tt.course_id && userLat && userLng) {
+            try {
+              const course = await courseRepository.getCourseById(tt.course_id);
+              if (course && course.latitude && course.longitude) {
+                // Calculate distance using Haversine formula
+                const R = 3959; // Earth radius in miles
+                const dLat = (course.latitude - userLat) * Math.PI / 180;
+                const dLon = (course.longitude - userLng) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                         Math.cos(userLat * Math.PI / 180) * Math.cos(course.latitude * Math.PI / 180) *
+                         Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                distance = R * c;
+              }
+            } catch (e) {
+              logger.warn(`Failed to get course ${tt.course_id} for distance calculation`, e);
+            }
+          }
+
+          // Filter by maxDistance if provided
+          if (maxDistance !== null && distance !== null && distance > maxDistance) {
+            return null;
+          }
+
+          // Filter by tee time's distance radius
+          if (distance !== null && distance > distanceRadius) {
+            return null;
+          }
+
+          // Apply time filter (morning: 5-12, afternoon: 12-17, evening: 17-22)
+          if (filterTime) {
+            const [hours] = tt.tee_time.split(':').map(Number);
+            const hour24 = hours;
+            
+            if (filterTime === "morning" && (hour24 < 5 || hour24 >= 12)) {
+              return null;
+            } else if (filterTime === "afternoon" && (hour24 < 12 || hour24 >= 17)) {
+              return null;
+            } else if (filterTime === "evening" && (hour24 < 17 || hour24 >= 22)) {
+              return null;
+            }
+          }
+
+          const creator = tt.users || {};
+          const creatorProfile = Array.isArray(creator.user_profiles) 
+            ? creator.user_profiles[0] || {}
+            : creator.user_profiles || {};
+
+          const participants = (tt.tee_time_participants || []).map(p => {
+            const participantUser = p.users || {};
+            const participantProfile = Array.isArray(participantUser.user_profiles)
+              ? participantUser.user_profiles[0] || {}
+              : participantUser.user_profiles || {};
+
+            return {
+              userId: p.user_id,
+              firstName: participantUser.first_name,
+              lastName: participantUser.last_name,
+              avatar: participantProfile.avatar_url,
+              handicap: participantProfile.handicap,
+              socialRate: participantProfile.social_rate,
+            };
+          });
+
+          return {
+            id: tt.id,
+            courseName: tt.course_name,
+            courseLocation: tt.course_location,
+            courseId: tt.course_id,
+            teeDate: tt.tee_date,
+            teeTime: tt.tee_time,
+            maxPlayers: tt.max_players,
+            status: tt.status,
+            distanceRadius,
+            distance,
+            creator: {
+              id: tt.creator_id,
+              firstName: creator.first_name,
+              lastName: creator.last_name,
+              username: creator.username,
+              avatar: creatorProfile.avatar_url,
+            },
+            participants,
+            participantCount: participants.length,
+            slotsOpen: tt.max_players - participants.length,
+          };
+        })
+      );
+
+      // Filter out nulls (filtered by distance)
+      return teeTimesWithDistance.filter(tt => tt !== null);
+    } catch (error) {
+      handleError(error, "getOpenInvites");
     }
   }
 }

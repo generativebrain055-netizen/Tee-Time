@@ -205,6 +205,13 @@ router.get("/waiver-wire", rosterController.getWaiverWire);
 router.post("/waiver-wire", rosterController.addToWaiverWire);
 
 /**
+ * @route   PUT /api/roster/waiver-wire/:date
+ * @desc    Update waiver wire entry
+ * @access  Private
+ */
+router.put("/waiver-wire/:date", rosterController.updateWaiverWire);
+
+/**
  * @route   DELETE /api/roster/waiver-wire/:date
  * @desc    Remove from waiver wire
  * @access  Private

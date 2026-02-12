@@ -6,6 +6,7 @@ class NotificationController {
     this.getNotifications = this.getNotifications.bind(this);
     this.getUnreadCount = this.getUnreadCount.bind(this);
     this.markAsRead = this.markAsRead.bind(this);
+    this.markAsUnread = this.markAsUnread.bind(this);
     this.markAsResponded = this.markAsResponded.bind(this);
     this.markAllAsRead = this.markAllAsRead.bind(this);
     this.deleteNotification = this.deleteNotification.bind(this);
@@ -107,6 +108,55 @@ class NotificationController {
     } catch (error) {
       logger.error("Mark as read error:", error.message);
       res.status(500).json({ success: false, message: "Failed to mark notification as read" });
+    }
+  }
+
+  // PUT /api/notifications/:id/unread
+  async markAsUnread(req, res) {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+
+      // First check if notification exists and is read
+      const { data: existing, error: checkError } = await supabaseAdmin
+        .from("notifications")
+        .select("id, read_at")
+        .eq("id", notificationId)
+        .eq("user_id", userId)
+        .single();
+
+      if (checkError || !existing) {
+        return res.status(404).json({ success: false, message: "Notification not found" });
+      }
+
+      if (!existing.read_at) {
+        return res.status(400).json({ success: false, message: "Notification is already unread" });
+      }
+
+      // Mark as unread
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .update({
+          read_at: null,
+          status: "sent"
+        })
+        .eq("id", notificationId)
+        .eq("user_id", userId)
+        .select("id");
+
+      if (error) {
+        logger.error("Mark as unread error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to mark notification as unread" });
+      }
+
+      if (!data || data.length === 0) {
+        return res.status(404).json({ success: false, message: "Notification not found" });
+      }
+
+      res.json({ success: true, message: "Notification marked as unread" });
+    } catch (error) {
+      logger.error("Mark as unread error:", error.message);
+      res.status(500).json({ success: false, message: "Failed to mark notification as unread" });
     }
   }
 

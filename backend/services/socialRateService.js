@@ -183,7 +183,7 @@ class SocialRateService {
    */
   async adjustScore(userId, delta, options = {}) {
     const currentScore = await this.getCurrentScore(userId) ?? POINT_VALUES.INITIAL_SCORE;
-    const newScore = Math.max(0, currentScore + delta); // Floor at 0
+    const newScore = Math.max(0, Math.min(200, currentScore + delta)); // Cap between 0-200
 
     await this.logScoreChange({
       userId,

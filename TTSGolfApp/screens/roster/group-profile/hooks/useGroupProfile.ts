@@ -136,9 +136,26 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
         );
     }, [groupId, group?.name]);
 
-    const handleGroupChat = useCallback(() => {
-        Alert.alert("Coming Soon", "Group chat feature is coming soon!");
-    }, []);
+    const handleGroupChat = useCallback(async () => {
+        if (!group) return;
+        try {
+            // Navigate to group chat
+            navigation?.navigate("ChatDetail", {
+                chatInfo: {
+                    groupId: group.id,
+                    id: group.id,
+                    name: group.name,
+                    subtitle: `${members.length} members`,
+                    img: undefined,
+                    isGroup: true,
+                    participantCount: members.length,
+                },
+            });
+        } catch (error) {
+            logger.error("[useGroupProfile] Failed to open group chat", error);
+            Alert.alert("Error", "Failed to open group chat");
+        }
+    }, [group, members.length, navigation]);
 
     const handleSettings = useCallback(() => {
         Alert.alert("Group Settings", "Group settings coming soon!");

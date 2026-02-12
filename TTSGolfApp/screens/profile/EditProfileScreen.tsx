@@ -219,6 +219,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
     const [selectedClub, setSelectedClub] = useState<any>(null);
+    const [phoneNumber, setPhoneNumber] = useState(initialProfile.phoneNumber || initialProfile.phone || "");
     const [handicap, setHandicap] = useState(initialProfile.handicap?.toString() || "");
     const [preferredTeeTime, setPreferredTeeTime] = useState(
         initialProfile.preferences?.preferredTeeTime || "afternoon"
@@ -253,6 +254,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
         setSaving(true);
         try {
             const updateData = {
+                phoneNumber: phoneNumber || undefined,
                 handicap: handicap ? parseInt(handicap) : undefined,
                 preferences: {
                     preferredTeeTime,
@@ -273,6 +275,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
             if (response.success) {
                 logger.info('[EditProfileScreen] Update successful, updating context');
                 updateContextProfile({
+                    phoneNumber: phoneNumber || undefined,
                     handicap: handicap ? parseInt(handicap) : undefined,
                     preferences: {
                         preferredTeeTime,
@@ -292,7 +295,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
         } finally {
             setSaving(false);
         }
-    }, [handicap, preferredTeeTime, walkOrRide, golfVibe, drinkOfChoice, clubs, navigation, updateContextProfile]);
+    }, [phoneNumber, handicap, preferredTeeTime, walkOrRide, golfVibe, drinkOfChoice, clubs, navigation, updateContextProfile]);
 
     const handleChangePhoto = useCallback(() => {
         setShowPhotoModal(true);
@@ -409,6 +412,37 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
+                        </View>
+                    </View>
+
+                    {/* Basic Information Section */}
+                    <View style={{
+                        backgroundColor: '#F3F4F6',
+                        paddingHorizontal: 16,
+                        paddingTop: 16,
+                    }}>
+                        <View style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 16,
+                            padding: 20,
+                            borderWidth: 1,
+                            borderColor: '#E5E7EB',
+                        }}>
+                            <Text style={{
+                                fontFamily: 'Inter_700Bold',
+                                fontSize: 18,
+                                color: COLORS.gray900,
+                                marginBottom: 16,
+                            }}>
+                                Basic Information
+                            </Text>
+                            <FormInput
+                                label="Phone Number"
+                                value={phoneNumber}
+                                onChangeText={(text) => setPhoneNumber(text.replace(/\D/g, ""))}
+                                placeholder="(555) 123-4567"
+                                keyboardType="phone-pad"
+                            />
                         </View>
                     </View>
 

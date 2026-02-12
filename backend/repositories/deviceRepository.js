@@ -123,6 +123,27 @@ const findByUserId = async (userId) => {
 };
 
 /**
+ * Find all devices with push tokens for a user
+ * @param {string} userId
+ * @returns {Promise<Array>}
+ */
+const findDevicesWithPushTokens = async (userId) => {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("id, push_token, push_platform, device_name, device_type")
+            .eq("user_id", userId)
+            .eq("is_blocked", false)
+            .not("push_token", "is", null);
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        handleError(error, "findDevicesWithPushTokens");
+    }
+};
+
+/**
  * Mark device as trusted
  * @param {string} deviceId
  * @returns {Promise<Object>}
@@ -401,6 +422,7 @@ module.exports = {
     findByFingerprint,
     findById,
     findByUserId,
+    findDevicesWithPushTokens,
     markAsTrusted,
     blockDevice,
     unblockDevice,

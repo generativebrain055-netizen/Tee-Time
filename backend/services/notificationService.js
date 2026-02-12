@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
+const deviceRepository = require("../repositories/deviceRepository");
 
 /**
  * Notification Service
@@ -7,13 +8,122 @@ const logger = require("../config/logger");
  */
 class NotificationService {
   /**
-   * Create a notification
+   * Send push notification via Expo Push Notification API
+   * @param {Array} pushTokens - Array of Expo push tokens
+   * @param {string} title - Notification title
+   * @param {string} body - Notification body
+   * @param {Object} data - Additional data
+   */
+  async sendPushNotifications(pushTokens, title, body, data = {}) {
+    if (!pushTokens || pushTokens.length === 0) {
+      return { sent: 0, failed: 0 };
+    }
+
+    try {
+      // Use Expo Push Notification API
+      const messages = pushTokens.map(token => ({
+        to: token,
+        sound: 'default',
+        title: title,
+        body: body,
+        data: data,
+        priority: 'high',
+      }));
+
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Expo push API error: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      // Expo Push API returns an array directly, or { data: [...] } format
+      const results = Array.isArray(result) ? result : (result.data || []);
+      const sent = results.filter(r => r.status === 'ok').length || 0;
+      const failed = results.filter(r => r.status === 'error').length || 0;
+
+      if (failed > 0) {
+        logger.warn(`Some push notifications failed: ${failed} of ${pushTokens.length}`);
+      }
+
+      return { sent, failed };
+    } catch (error) {
+      logger.error("Error sending push notifications:", error.message);
+      return { sent: 0, failed: pushTokens.length };
+    }
+  }
+
+  /**
+   * Check if user has enabled notifications for a specific type
+   * @param {string} userId - User ID
+   * @param {string} notificationType - Notification type (e.g., 'tee_time_invite', 'friend_request')
+   * @param {'push' | 'inApp'} channel - Channel to check
+   * @returns {Promise<boolean>} - True if enabled, false otherwise
+   */
+  async checkNotificationPreference(userId, notificationType, channel) {
+    try {
+      const { data: profile, error } = await supabaseAdmin
+        .from("user_profiles")
+        .select("notification_preferences")
+        .eq("user_id", userId)
+        .single();
+
+      if (error || !profile) {
+        // Default to enabled if we can't fetch preferences
+        return true;
+      }
+
+      const prefs = profile.notification_preferences || {};
+      
+      // Check global push setting first (only affects push notifications)
+      if (channel === 'push' && prefs.push === false) {
+        return false;
+      }
+
+      // Check per-type preferences if they exist
+      if (prefs.types && prefs.types[notificationType]) {
+        const typePrefs = prefs.types[notificationType];
+        if (channel === 'push') {
+          // For push: check type-specific preference, fallback to global push setting
+          return typePrefs.push !== false && prefs.push !== false;
+        }
+        if (channel === 'inApp') {
+          // For in-app: check type-specific preference, default to true if not set
+          return typePrefs.inApp !== false;
+        }
+      }
+
+      // Default behavior: 
+      // - Push: respect global push setting
+      // - In-app: always enabled by default (unless type-specific preference says otherwise)
+      if (channel === 'push') {
+        return prefs.push !== false;
+      }
+      return true; // In-app defaults to enabled
+    } catch (error) {
+      logger.warn(`Error checking notification preferences for user ${userId}:`, error.message);
+      // Default to enabled on error
+      return true;
+    }
+  }
+
+  /**
+   * Create a notification (in-app and optionally push)
    * @param {Object} params
    * @param {string} params.userId - User to notify
    * @param {string} params.type - Notification type (in_app, push, etc.)
    * @param {string} params.title - Notification title
    * @param {string} params.body - Notification body
    * @param {Object} params.data - Additional data (type, senderId, etc.)
+   * @param {boolean} params.sendPush - Whether to also send push notification (default: false)
    */
   async createNotification({
     userId,
@@ -21,23 +131,57 @@ class NotificationService {
     title,
     body,
     data = {},
+    sendPush = false,
   }) {
     try {
-      const { data: notification, error } = await supabaseAdmin
-        .from("notifications")
-        .insert({
-          user_id: userId,
-          type: type,
-          channel: data.type || "general",
-          title: title,
-          body: body,
-          data: data,
-          status: "sent",
-        })
-        .select()
-        .single();
+      const notificationType = data.type || "general";
+      
+      // Check if user has enabled in-app notifications for this type
+      const inAppEnabled = await this.checkNotificationPreference(userId, notificationType, 'inApp');
+      
+      let notification = null;
+      if (inAppEnabled) {
+        // Create in-app notification
+        const { data: notif, error } = await supabaseAdmin
+          .from("notifications")
+          .insert({
+            user_id: userId,
+            type: type,
+            channel: notificationType,
+            title: title,
+            body: body,
+            data: data,
+            status: "sent",
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
+        notification = notif;
+      } else {
+        logger.debug(`Skipping in-app notification for user ${userId}, type ${notificationType} (disabled)`);
+      }
+
+      // Send push notification if requested and enabled
+      if (sendPush) {
+        const pushEnabled = await this.checkNotificationPreference(userId, notificationType, 'push');
+        if (pushEnabled) {
+          try {
+            const devices = await deviceRepository.findDevicesWithPushTokens(userId);
+            const pushTokens = devices.map(d => d.push_token).filter(Boolean);
+            
+            if (pushTokens.length > 0) {
+              await this.sendPushNotifications(pushTokens, title, body, data);
+            }
+          } catch (pushError) {
+            // Log but don't fail - push notifications are optional
+            logger.error("Error sending push notification:", pushError.message);
+          }
+        } else {
+          logger.debug(`Skipping push notification for user ${userId}, type ${notificationType} (disabled)`);
+        }
+      }
+
       return notification;
     } catch (error) {
       logger.error("Error creating notification:", error.message);
@@ -96,7 +240,11 @@ class NotificationService {
     const inviterName =
       `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
       "Someone";
-    const dateStr = this.formatDateForNotification(teeTime.date);
+    // Handle both camelCase and snake_case field names
+    const date = teeTime.date || teeTime.tee_date;
+    const time = teeTime.time || teeTime.tee_time;
+    const courseName = teeTime.courseName || teeTime.course_name;
+    const dateStr = this.formatDateForNotification(date);
 
     let body = `${inviterName} invited you to play on ${dateStr}`;
     if (expiresAt) {
@@ -120,9 +268,10 @@ class NotificationService {
         teeTimeId: teeTime.id,
         inviterId: inviter.id,
         inviterName,
-        courseName: teeTime.courseName || null,
-        date: teeTime.date,
-        time: teeTime.time,
+        courseName: courseName || null,
+        date: date || null,
+        time: time || null,
+        maxPlayers: teeTime.maxPlayers || teeTime.max_players || null,
         expiresAt: expiresAt || null,
       },
     });
@@ -380,6 +529,50 @@ class NotificationService {
       weekday: "short",
       month: "short",
       day: "numeric",
+    });
+  }
+}
+
+  /**
+   * Notify user when someone in their roster posts on Waiver Wire
+   * Sends both in-app and push notifications
+   */
+  async notifyWaiverWirePost(userId, poster, waiverWireEntry) {
+    const posterName = `${poster.firstName || ""} ${poster.lastName || ""}`.trim() || "Someone";
+    const dateStr = new Date(waiverWireEntry.availableDate).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    
+    // Format time slot label properly
+    const timeSlotLabels = {
+      'morning': 'Morning',
+      'midday': 'Mid-Day',
+      'afternoon': 'Afternoon',
+      'anytime': 'Anytime'
+    };
+    const timeSlotLabel = waiverWireEntry.preferredTime 
+      ? timeSlotLabels[waiverWireEntry.preferredTime] || waiverWireEntry.preferredTime
+      : '';
+    
+    const body = timeSlotLabel 
+      ? `${posterName} posted availability for ${dateStr} (${timeSlotLabel})`
+      : `${posterName} posted availability for ${dateStr}`;
+    
+    return this.createNotification({
+      userId,
+      title: "New Waiver Wire Post",
+      body: body,
+      data: {
+        type: "waiver_wire",
+        posterId: poster.id,
+        posterName,
+        waiverWireId: waiverWireEntry.id,
+        availableDate: waiverWireEntry.availableDate,
+        preferredTime: waiverWireEntry.preferredTime,
+      },
+      sendPush: true, // Enable push notifications for Waiver Wire posts
     });
   }
 }

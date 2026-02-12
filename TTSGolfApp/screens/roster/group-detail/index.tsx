@@ -42,9 +42,8 @@ function GroupDetail({
     const handleGroupChat = useCallback(() => {
         if (onNavigateToChat) {
             onNavigateToChat(groupId);
-        } else {
-            Alert.alert("Coming Soon", "Group chat feature is coming soon!");
         }
+        // Note: If onNavigateToChat is not provided, the parent component should handle navigation
     }, [groupId, onNavigateToChat]);
 
     const handleAddTeeTime = useCallback(() => {

@@ -52,6 +52,21 @@ router.get("/", teeTimeController.getTeeTimes);
 router.get("/upcoming", teeTimeController.getUpcoming);
 
 /**
+ * @route   GET /api/tee-times/open
+ * @desc    Get Open invites (community board) filtered by distance
+ * @query   lat, lng (required), maxDistance (optional)
+ * @access  Private
+ */
+router.get("/open", teeTimeController.getOpenInvites);
+
+/**
+ * @route   POST /api/tee-times/:id/join
+ * @desc    Join an Open invite (community board)
+ * @access  Private
+ */
+router.post("/:id/join", teeTimeController.joinOpenInvite);
+
+/**
  * @route   GET /api/tee-times/calendar
  * @desc    Get tee times for calendar view
  * @access  Private

@@ -867,9 +867,30 @@ class RosterRepository {
 
   // ============ WAIVER WIRE ============
 
-  async getWaiverWire(date, excludeUserId) {
+  /**
+   * Get roster contact user IDs for a user
+   */
+  async getRosterContactUserIds(userId) {
     try {
       const { data, error } = await supabaseAdmin
+        .from("roster")
+        .select("contact_user_id")
+        .eq("user_id", userId)
+        .not("contact_user_id", "is", null);
+
+      if (error) throw error;
+      return (data || []).map(r => r.contact_user_id);
+    } catch (error) {
+      handleError(error, "getRosterContactUserIds");
+      return [];
+    }
+  }
+
+  async getWaiverWire(date, excludeUserId, options = {}) {
+    const { rosterConnectionsOnly = false, maxDistance = null, userLat = null, userLng = null } = options;
+    
+    try {
+      let query = supabaseAdmin
         .from("waiver_wire")
         .select(
           `
@@ -881,15 +902,24 @@ class RosterRepository {
         .eq("available_date", date)
         .eq("is_active", true)
         .neq("user_id", excludeUserId)
-        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-        .order("user_profiles(social_rate)", {
-          ascending: false,
-          nullsFirst: false,
-        });
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+
+      // Filter by roster connections if requested
+      if (rosterConnectionsOnly) {
+        const rosterUserIds = await this.getRosterContactUserIds(excludeUserId);
+        if (rosterUserIds.length > 0) {
+          query = query.in("user_id", rosterUserIds);
+        } else {
+          // No roster connections, return empty array
+          return [];
+        }
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
-      return (data || []).map((w) => {
+      let results = (data || []).map((w) => {
         const user = w.users || {};
         const profile = w.user_profiles?.[0] || {};
         delete w.users;
@@ -907,6 +937,67 @@ class RosterRepository {
           home_course: profile.home_course,
         };
       });
+
+      // Apply distance filtering if coordinates provided
+      // Note: For now, distance filtering uses home course coordinates if available
+      // In a production system, you might want to store user location coordinates separately
+      if (maxDistance && userLat && userLng) {
+        const courseRepository = require("./courseRepository");
+        const R = 3959; // Earth radius in miles
+        
+        // Batch fetch course coordinates for all unique home courses
+        const uniqueCourses = [...new Set(results.map(w => w.home_course).filter(Boolean))];
+        const courseCoordinates = {};
+        
+        // Fetch coordinates for all courses in parallel
+        await Promise.all(
+          uniqueCourses.map(async (courseName) => {
+            try {
+              const courses = await courseRepository.searchCourses(courseName, 1);
+              if (courses && courses.length > 0 && courses[0].latitude && courses[0].longitude) {
+                courseCoordinates[courseName] = {
+                  lat: courses[0].latitude,
+                  lng: courses[0].longitude,
+                };
+              }
+            } catch (err) {
+              // Ignore course lookup errors
+            }
+          })
+        );
+        
+        // Calculate distances and filter
+        results = results.map((w) => {
+          const coords = w.home_course ? courseCoordinates[w.home_course] : null;
+          
+          if (!coords) {
+            // No coordinates available, include but without distance
+            return { ...w, distance_miles: null };
+          }
+          
+          const dLat = (coords.lat - userLat) * Math.PI / 180;
+          const dLon = (coords.lng - userLng) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                   Math.cos(userLat * Math.PI / 180) * Math.cos(coords.lat * Math.PI / 180) *
+                   Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance_miles = R * c;
+          
+          return { ...w, distance_miles };
+        }).filter(w => 
+          w.distance_miles === null || w.distance_miles <= maxDistance
+        );
+      }
+
+      // Sort by social rate, then by distance if available
+      results.sort((a, b) => {
+        if (a.distance_miles !== undefined && b.distance_miles !== undefined) {
+          return a.distance_miles - b.distance_miles;
+        }
+        return (b.social_rate || 0) - (a.social_rate || 0);
+      });
+
+      return results;
     } catch (error) {
       handleError(error, "getWaiverWire");
     }

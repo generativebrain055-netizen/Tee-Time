@@ -142,11 +142,14 @@ export async function verifySmsMagicLink(
       throw new Error(data.message || "Unable to verify link.");
     }
 
+    // For signup flow, backend returns phoneNumber only (no tokens yet)
+    // For login flow, backend returns accessToken, refreshToken, and user
     return {
       success: true,
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,
       user: data.user,
+      phoneNumber: data.phoneNumber, // Present for signup flow
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unable to verify link.";

@@ -101,6 +101,7 @@ const updateProfile = async (req, res, next) => {
       firstName,
       lastName,
       email,
+      phoneNumber,
       handicap,
       location,
       homeCourse,
@@ -126,6 +127,7 @@ const updateProfile = async (req, res, next) => {
     if (firstName !== undefined) updates.firstName = firstName;
     if (lastName !== undefined) updates.lastName = lastName;
     if (email !== undefined) updates.email = email;
+    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
     if (handicap !== undefined) updates.handicap = handicap;
     if (location !== undefined) updates.location = location;
     if (homeCourse !== undefined) updates.homeCourse = homeCourse;

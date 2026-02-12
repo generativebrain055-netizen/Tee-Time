@@ -8,6 +8,7 @@ import { Alert } from "react-native";
 import {
   notificationApi,
   friendApi,
+  rosterApi,
   AppNotification,
 } from "../../services/api";
 import { logger } from "../../utils/logger";
@@ -83,6 +84,11 @@ export function useNotificationActions({
               teeTime: item.data.teeTime,
               unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (item.data?.type === "tee_time_not_filled" || item.data?.type === "organizer_fill_warning")),
             });
+          }
+          break;
+        case "waiver_wire":
+          if (item.data?.waiverWireId) {
+            navigation?.navigate("WaiverWire");
           }
           break;
       }
@@ -243,6 +249,53 @@ export function useNotificationActions({
   );
 
   /**
+   * Add back - Add the person who added you to their roster to your roster
+   */
+  const handleAddBack = useCallback(
+    async (item: AppNotification) => {
+      const ownerId = item.data?.ownerId;
+      if (!ownerId) {
+        logger.warn("[useNotificationActions] No ownerId in roster_add notification", item.data);
+        Alert.alert("Error", "Unable to add this user to your roster");
+        return;
+      }
+
+      try {
+        logger.info("[useNotificationActions] Adding user to roster", { ownerId });
+        const response = await rosterApi.addToRoster({ contactUserId: ownerId });
+        
+        if (response.success) {
+          await notificationApi.markAsResponded(item.id);
+          
+          // Remove notification from list after adding
+          setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+
+          const ownerName = item.data?.ownerName || "User";
+          Alert.alert(
+            "Added to Roster!",
+            `${ownerName} has been added to your roster.`,
+            [
+              { text: "View Roster", onPress: () => navigation?.navigate("Roster") },
+              { text: "OK", style: "cancel" },
+            ]
+          );
+        }
+      } catch (error: any) {
+        logger.error("[useNotificationActions] Add back error", error);
+        if (error?.message?.includes("already in roster")) {
+          Alert.alert("Already Added", "This user is already in your roster.");
+          // Still mark as responded and remove notification
+          await notificationApi.markAsResponded(item.id);
+          setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+        } else {
+          Alert.alert("Error", error.message || "Failed to add user to roster");
+        }
+      }
+    },
+    [setNotifications, navigation],
+  );
+
+  /**
    * Mark all notifications as read
    */
   const handleMarkAllRead = useCallback(async () => {
@@ -261,6 +314,7 @@ export function useNotificationActions({
     handleDeclineFriend,
     handleAcceptSpot,
     handleSelectOnDeck,
+    handleAddBack,
     handleMarkAllRead,
   };
 }

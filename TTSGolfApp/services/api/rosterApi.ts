@@ -17,6 +17,7 @@ import type {
   CreateGroupRequest,
   MoveMemberRequest,
   AddToWaiverWireRequest,
+  UpdateWaiverWireRequest,
 } from "./types";
 
 export const rosterApi = {
@@ -233,11 +234,24 @@ export const rosterApi = {
 
   /**
    * Get waiver wire for a date
+   * @param date - Date in YYYY-MM-DD format
+   * @param options - Optional filters: rosterConnectionsOnly, maxDistance, lat, lng
    */
-  getWaiverWire: (date: string) =>
-    apiCall<{ success: boolean; waiverWire: WaiverWireEntry[] }>(
-      `${API_ENDPOINTS.ROSTER}/waiver-wire?date=${date}`,
-    ),
+  getWaiverWire: (date: string, options?: {
+    rosterConnectionsOnly?: boolean;
+    maxDistance?: number;
+    lat?: number;
+    lng?: number;
+  }) => {
+    const params = new URLSearchParams({ date });
+    if (options?.rosterConnectionsOnly) params.append('rosterConnectionsOnly', 'true');
+    if (options?.maxDistance) params.append('maxDistance', options.maxDistance.toString());
+    if (options?.lat) params.append('lat', options.lat.toString());
+    if (options?.lng) params.append('lng', options.lng.toString());
+    return apiCall<{ success: boolean; waiverWire: WaiverWireEntry[] }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire?${params.toString()}`,
+    );
+  },
 
   /**
    * Add to waiver wire
@@ -247,6 +261,18 @@ export const rosterApi = {
       `${API_ENDPOINTS.ROSTER}/waiver-wire`,
       {
         method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  /**
+   * Update waiver wire entry
+   */
+  updateWaiverWire: (date: string, data: UpdateWaiverWireRequest) =>
+    apiCall<{ success: boolean; entry: WaiverWireEntry }>(
+      `${API_ENDPOINTS.ROSTER}/waiver-wire/${date}`,
+      {
+        method: "PUT",
         body: JSON.stringify(data),
       },
     ),

@@ -12,10 +12,12 @@ export type {
   AutoInviteMember,
   MemberProfile,
   WaiverWireEntry,
+  TimeSlot,
   AddToRosterRequest,
   CreateGroupRequest,
   MoveMemberRequest,
   AddToWaiverWireRequest,
+  UpdateWaiverWireRequest,
 } from "./roster";
 
 // Tee time types
@@ -101,6 +103,13 @@ export interface NotificationPreferences {
   email: boolean;
   sms: boolean;
   push: boolean;
+  // Per-type preferences for push and in-app notifications
+  types?: {
+    [key: string]: {
+      push?: boolean;
+      inApp?: boolean;
+    };
+  };
 }
 
 export interface PrivacySettings {
@@ -259,6 +268,7 @@ export interface NotificationData {
   time?: string;
   teeDate?: string;
   teeTime?: string;
+  maxPlayers?: number;
   spotsRemaining?: number;
   unfilledSlotAlert?: boolean;
   responderId?: string;

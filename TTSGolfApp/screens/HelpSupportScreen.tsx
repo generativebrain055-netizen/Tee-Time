@@ -10,8 +10,13 @@ import {
     ScrollView,
     Linking,
     StyleSheet,
+    TextInput,
+    Alert,
+    Modal,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
-import { Mail, ChevronDown, ChevronUp, HelpCircle } from "lucide-react-native";
+import { Mail, ChevronDown, ChevronUp, HelpCircle, Bug, MessageSquare } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
@@ -71,6 +76,10 @@ export default function HelpSupportScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [feedbackType, setFeedbackType] = useState<'bug' | 'feedback'>('bug');
+    const [feedbackText, setFeedbackText] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
     const handleSendEmail = () => {
         Linking.openURL("mailto:support@teetimesocial.com?subject=Support Request");
@@ -78,6 +87,40 @@ export default function HelpSupportScreen({ navigation }: any) {
 
     const toggleFAQ = (index: number) => {
         setExpandedIndex(expandedIndex === index ? null : index);
+    };
+
+    const handleReportBug = () => {
+        setFeedbackType('bug');
+        setFeedbackText('');
+        setShowFeedbackModal(true);
+    };
+
+    const handleSendFeedback = () => {
+        setFeedbackType('feedback');
+        setFeedbackText('');
+        setShowFeedbackModal(true);
+    };
+
+    const submitFeedback = async () => {
+        if (!feedbackText.trim()) {
+            Alert.alert("Error", "Please enter your feedback");
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const subject = feedbackType === 'bug' ? 'Bug Report' : 'Feedback';
+            const body = `Type: ${subject}\n\n${feedbackText.trim()}`;
+            const mailtoUrl = `mailto:support@teetimesocial.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            await Linking.openURL(mailtoUrl);
+            setShowFeedbackModal(false);
+            setFeedbackText('');
+            Alert.alert("Success", "Your feedback has been sent. Thank you!");
+        } catch (error) {
+            Alert.alert("Error", "Failed to send feedback. Please try again.");
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -129,6 +172,48 @@ export default function HelpSupportScreen({ navigation }: any) {
                             </Text>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Report Bug */}
+                    <TouchableOpacity
+                        style={[styles.feedbackRow, { backgroundColor: colors.surfaceSecondary }]}
+                        onPress={handleReportBug}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.contactContent}>
+                            <View style={[styles.contactIcon, { backgroundColor: '#FEE2E2' }]}>
+                                <Bug size={24} color="#EF4444" strokeWidth={2} />
+                            </View>
+                            <View style={styles.feedbackContent}>
+                                <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
+                                    Report a Bug
+                                </Text>
+                                <Text style={[styles.feedbackSubtitle, { color: colors.textSecondary }]}>
+                                    Found an issue? Let us know
+                                </Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                    {/* Send Feedback */}
+                    <TouchableOpacity
+                        style={[styles.feedbackRow, { backgroundColor: colors.surfaceSecondary, marginTop: spacing.sm }]}
+                        onPress={handleSendFeedback}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.contactContent}>
+                            <View style={[styles.contactIcon, { backgroundColor: '#DBEAFE' }]}>
+                                <MessageSquare size={24} color={colors.primary} strokeWidth={2} />
+                            </View>
+                            <View style={styles.feedbackContent}>
+                                <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
+                                    Send Feedback
+                                </Text>
+                                <Text style={[styles.feedbackSubtitle, { color: colors.textSecondary }]}>
+                                    Share your thoughts and suggestions
+                                </Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
                 </View>
 
                 {/* FAQ Section */}
@@ -175,6 +260,100 @@ export default function HelpSupportScreen({ navigation }: any) {
                         </View>
                     ))}
                 </View>
+
+                {/* Feedback Modal */}
+                <Modal
+                    visible={showFeedbackModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => {
+                        setShowFeedbackModal(false);
+                        setFeedbackText('');
+                    }}
+                >
+                    <TouchableOpacity
+                        style={styles.modalOverlay}
+                        activeOpacity={1}
+                        onPress={() => {
+                            setShowFeedbackModal(false);
+                            setFeedbackText('');
+                        }}
+                    >
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                            style={styles.modalContainer}
+                        >
+                            <TouchableOpacity
+                                activeOpacity={1}
+                                onPress={(e) => e.stopPropagation()}
+                            >
+                                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                                    {feedbackType === 'bug' ? 'Report a Bug' : 'Send Feedback'}
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setShowFeedbackModal(false);
+                                        setFeedbackText('');
+                                    }}
+                                    style={styles.closeButton}
+                                >
+                                    <Text style={[styles.closeButtonText, { color: colors.textSecondary }]}>
+                                        ✕
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+                                {feedbackType === 'bug' 
+                                    ? 'Please describe the bug you encountered. Include steps to reproduce if possible.'
+                                    : 'We\'d love to hear your thoughts! Share your feedback or suggestions.'}
+                            </Text>
+
+                            <TextInput
+                                style={[styles.feedbackInput, { 
+                                    backgroundColor: colors.surfaceSecondary,
+                                    color: colors.textPrimary,
+                                    borderColor: colors.border,
+                                }]}
+                                value={feedbackText}
+                                onChangeText={setFeedbackText}
+                                placeholder="Enter your feedback..."
+                                placeholderTextColor={colors.textMuted}
+                                multiline
+                                numberOfLines={6}
+                                textAlignVertical="top"
+                            />
+
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity
+                                    style={[styles.cancelButton, { borderColor: colors.border }]}
+                                    onPress={() => {
+                                        setShowFeedbackModal(false);
+                                        setFeedbackText('');
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>
+                                        Cancel
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                                    onPress={submitFeedback}
+                                    disabled={submitting || !feedbackText.trim()}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={[styles.submitButtonText, { color: colors.surface }]}>
+                                        {submitting ? 'Sending...' : 'Send'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                            </TouchableOpacity>
+                        </KeyboardAvoidingView>
+                    </TouchableOpacity>
+                </Modal>
             </ScrollView>
         </ScreenShell>
     );
@@ -281,5 +460,98 @@ const styles = StyleSheet.create({
         fontFamily: fontFamily.regular,
         fontSize: fontSize.sm,
         lineHeight: fontSize.base * 1.5,
+    },
+    feedbackRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: radii.md,
+        padding: spacing.md,
+    },
+    feedbackContent: {
+        flex: 1,
+        marginLeft: spacing.md,
+    },
+    feedbackSubtitle: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.xs,
+        marginTop: spacing['2xs'],
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContainer: {
+        width: '90%',
+        maxWidth: 500,
+    },
+    modalContent: {
+        width: '100%',
+        borderRadius: radii.lg,
+        padding: spacing.lg,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    modalTitle: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.xl,
+    },
+    closeButton: {
+        width: 32,
+        height: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    closeButtonText: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.xl,
+    },
+    modalDescription: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+        marginBottom: spacing.md,
+        lineHeight: fontSize.base * 1.4,
+    },
+    feedbackInput: {
+        borderWidth: 1,
+        borderRadius: radii.md,
+        padding: spacing.md,
+        minHeight: 120,
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.base,
+        marginBottom: spacing.lg,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: spacing.md,
+        borderRadius: radii.md,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelButtonText: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.base,
+    },
+    submitButton: {
+        flex: 1,
+        paddingVertical: spacing.md,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    submitButtonText: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.base,
     },
 });

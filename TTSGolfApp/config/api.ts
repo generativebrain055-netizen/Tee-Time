@@ -50,6 +50,7 @@ export interface ApiEndpoints {
   TEE_TIMES_UPCOMING: string;
   TEE_TIMES_CALENDAR: string;
   TEE_TIMES_HISTORY: string;
+  TEE_TIMES_OPEN: string;
   // Invites
   INVITES: string;
   INVITES_FROM_ROSTER: string;
@@ -121,6 +122,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   TEE_TIMES_UPCOMING: `${API_URL}/api/tee-times/upcoming`,
   TEE_TIMES_CALENDAR: `${API_URL}/api/tee-times/calendar`,
   TEE_TIMES_HISTORY: `${API_URL}/api/tee-times/history`,
+  TEE_TIMES_OPEN: `${API_URL}/api/tee-times/open`,
   // Invites
   INVITES: `${API_URL}/api/invites`,
   INVITES_FROM_ROSTER: `${API_URL}/api/invites/from-roster`,

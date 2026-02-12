@@ -184,6 +184,7 @@ const formatWaiverWireEntry = (e) => ({
   preferredCourse: e.preferred_course,
   maxHandicap: e.max_handicap,
   notes: e.notes,
+  distance: e.distance_miles, // Distance in miles if calculated
 });
 
 module.exports = {

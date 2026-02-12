@@ -62,11 +62,13 @@ export type AttendanceStatus = "pending" | "present" | "no_show" | "cancelled";
 export interface CreateTeeTimeRequest {
   courseName: string;
   courseLocation?: string;
+  courseId?: string; // Golf course ID for distance calculations
   teeDate: string;
   teeTime: string;
   maxPlayers?: number;
   inviteType?: TeeTimeInviteType;
   notes?: string;
+  distanceRadius?: number; // For Open invites - distance in miles
 }
 
 export interface TeeTimeHistoryParams {

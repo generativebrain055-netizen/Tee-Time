@@ -144,8 +144,10 @@ export interface MoveMemberRequest {
 
 export interface AddToWaiverWireRequest {
   availableDate: string;
-  preferredTime?: string;
+  preferredTime?: TimeSlot;
   preferredCourse?: string;
   maxHandicap?: number;
   notes?: string;
 }
+
+export interface UpdateWaiverWireRequest extends AddToWaiverWireRequest {}

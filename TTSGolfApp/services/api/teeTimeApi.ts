@@ -122,4 +122,68 @@ export const teeTimeApi = {
       method: "POST",
       body: JSON.stringify({ deadline }),
     }),
+
+  /**
+   * Get Open invites (community board) filtered by distance, date, time, and course
+   */
+  getOpenInvites: (
+    lat: number,
+    lng: number,
+    maxDistance?: number,
+    filters?: {
+      date?: string; // YYYY-MM-DD
+      time?: "morning" | "afternoon" | "evening";
+      course?: string;
+    }
+  ) => {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+    });
+    if (maxDistance) params.append("maxDistance", maxDistance.toString());
+    if (filters?.date) params.append("date", filters.date);
+    if (filters?.time) params.append("time", filters.time);
+    if (filters?.course) params.append("course", filters.course);
+    return apiCall<{
+      success: boolean;
+      teeTimes: Array<{
+        id: string;
+        courseName: string;
+        courseLocation?: string;
+        teeDate: string;
+        teeTime: string;
+        maxPlayers: number;
+        status: string;
+        distanceRadius: number;
+        distance?: number;
+        creator: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          username?: string;
+          avatar?: string;
+        };
+        participants: Array<{
+          userId: string;
+          firstName: string;
+          lastName: string;
+          avatar?: string;
+          handicap?: number;
+          socialRate?: number;
+        }>;
+        participantCount: number;
+        slotsOpen: number;
+      }>;
+      count: number;
+    }>(`${API_ENDPOINTS.TEE_TIMES_OPEN}?${params.toString()}`);
+  },
+
+  /**
+   * Join an Open invite (community board)
+   */
+  joinOpenInvite: (teeTimeId: string) =>
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/join`,
+      { method: "POST" },
+    ),
 };

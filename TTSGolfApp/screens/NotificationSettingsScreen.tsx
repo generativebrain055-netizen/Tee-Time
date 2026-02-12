@@ -26,6 +26,25 @@ interface NotificationSetting {
     enabled: boolean;
 }
 
+interface NotificationTypeSetting {
+    id: string;
+    type: string;
+    label: string;
+    description: string;
+    pushEnabled: boolean;
+    inAppEnabled: boolean;
+}
+
+const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: string }> = [
+    { type: 'tee_time_invite', label: 'Tee Time Invites', description: 'When someone invites you to a tee time' },
+    { type: 'tee_time_response', label: 'Tee Time Responses', description: 'When someone responds to your invite' },
+    { type: 'friend_request', label: 'Friend Requests', description: 'When someone sends you a friend request' },
+    { type: 'roster_add', label: 'Roster Adds', description: 'When someone adds you to their roster' },
+    { type: 'waiver_wire', label: 'Waiver Wire Posts', description: 'When connections post availability' },
+    { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
+    { type: 'spot_opened', label: 'Spot Opened', description: 'When a spot opens in a tee time' },
+];
+
 export default function NotificationSettingsScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
@@ -54,6 +73,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             enabled: true,
         },
     ]);
+    const [typeSettings, setTypeSettings] = useState<NotificationTypeSetting[]>([]);
 
     useEffect(() => {
         // Load current notification preferences from profile
@@ -62,6 +82,29 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                 ...setting,
                 enabled: profile.notificationPreferences?.[setting.key] ?? setting.enabled,
             })));
+            
+            // Load per-type preferences
+            const types = profile.notificationPreferences?.types || {};
+            const typeSettingsList = NOTIFICATION_TYPES.map(nt => ({
+                id: nt.type,
+                type: nt.type,
+                label: nt.label,
+                description: nt.description,
+                pushEnabled: types[nt.type]?.push ?? true,
+                inAppEnabled: types[nt.type]?.inApp ?? true,
+            }));
+            setTypeSettings(typeSettingsList);
+        } else {
+            // Initialize with defaults
+            const typeSettingsList = NOTIFICATION_TYPES.map(nt => ({
+                id: nt.type,
+                type: nt.type,
+                label: nt.label,
+                description: nt.description,
+                pushEnabled: true,
+                inAppEnabled: true,
+            }));
+            setTypeSettings(typeSettingsList);
         }
     }, [profile]);
 
@@ -82,6 +125,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                 email: newSettings.find(s => s.key === 'email')?.enabled ?? true,
                 sms: newSettings.find(s => s.key === 'sms')?.enabled ?? true,
                 push: newSettings.find(s => s.key === 'push')?.enabled ?? true,
+                types: profile?.notificationPreferences?.types || {},
             };
             
             await profileApi.updateNotificationPreferences(preferences);
@@ -93,7 +137,57 @@ export default function NotificationSettingsScreen({ navigation }: any) {
         } finally {
             setLoading(false);
         }
-    }, [settings, fetchProfile]);
+    }, [settings, fetchProfile, profile]);
+
+    const handleTypeToggle = useCallback(async (type: string, toggleType: 'push' | 'inApp') => {
+        const typeSetting = typeSettings.find(ts => ts.type === type);
+        if (!typeSetting) return;
+
+        const newValue = toggleType === 'push' 
+            ? !typeSetting.pushEnabled 
+            : !typeSetting.inAppEnabled;
+        
+        const newTypeSettings = typeSettings.map(ts => 
+            ts.type === type 
+                ? { 
+                    ...ts, 
+                    pushEnabled: toggleType === 'push' ? newValue : ts.pushEnabled,
+                    inAppEnabled: toggleType === 'inApp' ? newValue : ts.inAppEnabled,
+                }
+                : ts
+        );
+        
+        setTypeSettings(newTypeSettings);
+        setLoading(true);
+
+        try {
+            const currentTypes = profile?.notificationPreferences?.types || {};
+            const updatedTypes = {
+                ...currentTypes,
+                [type]: {
+                    ...currentTypes[type],
+                    push: toggleType === 'push' ? newValue : (currentTypes[type]?.push ?? true),
+                    inApp: toggleType === 'inApp' ? newValue : (currentTypes[type]?.inApp ?? true),
+                },
+            };
+
+            const preferences = {
+                email: settings.find(s => s.key === 'email')?.enabled ?? true,
+                sms: settings.find(s => s.key === 'sms')?.enabled ?? true,
+                push: settings.find(s => s.key === 'push')?.enabled ?? true,
+                types: updatedTypes,
+            };
+            
+            await profileApi.updateNotificationPreferences(preferences);
+            await fetchProfile(); // Refresh profile
+        } catch (error: any) {
+            // Revert on error
+            setTypeSettings(typeSettings);
+            Alert.alert("Error", error?.message || "Failed to update notification preferences");
+        } finally {
+            setLoading(false);
+        }
+    }, [typeSettings, settings, fetchProfile, profile]);
 
     return (
         <ScreenShell>
@@ -147,6 +241,67 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                         </View>
                     ))}
                 </View>
+
+                {/* Per-Type Notification Settings */}
+                {typeSettings.length > 0 && (
+                    <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                            Notification Types
+                        </Text>
+                        <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                            Customize notifications by type
+                        </Text>
+                        
+                        {typeSettings.map((typeSetting, index) => (
+                            <View key={typeSetting.id}>
+                                <View style={[
+                                    styles.typeSettingHeader,
+                                    index < typeSettings.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: 1 },
+                                ]}>
+                                    <View style={styles.typeSettingContent}>
+                                        <Text style={[styles.typeSettingLabel, { color: colors.textPrimary }]}>
+                                            {typeSetting.label}
+                                        </Text>
+                                        <Text style={[styles.typeSettingDescription, { color: colors.textSecondary }]}>
+                                            {typeSetting.description}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={[
+                                    styles.typeSettingToggles,
+                                    index < typeSettings.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: 1 },
+                                ]}>
+                                    <View style={styles.toggleRow}>
+                                        <Text style={[styles.toggleLabel, { color: colors.textSecondary }]}>
+                                            Push
+                                        </Text>
+                                        <Switch
+                                            value={typeSetting.pushEnabled}
+                                            onValueChange={() => handleTypeToggle(typeSetting.type, 'push')}
+                                            disabled={loading}
+                                            trackColor={{ false: colors.border, true: colors.primary }}
+                                            thumbColor={colors.surface}
+                                            ios_backgroundColor={colors.border}
+                                        />
+                                    </View>
+                                    <View style={styles.toggleRow}>
+                                        <Text style={[styles.toggleLabel, { color: colors.textSecondary }]}>
+                                            In-App
+                                        </Text>
+                                        <Switch
+                                            value={typeSetting.inAppEnabled}
+                                            onValueChange={() => handleTypeToggle(typeSetting.type, 'inApp')}
+                                            disabled={loading}
+                                            trackColor={{ false: colors.border, true: colors.primary }}
+                                            thumbColor={colors.surface}
+                                            ios_backgroundColor={colors.border}
+                                        />
+                                    </View>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
 
                 {/* Info Text */}
                 <Text style={[styles.infoText, { color: colors.textMuted }]}>
@@ -221,5 +376,44 @@ const styles = StyleSheet.create({
         fontSize: fontSize.xs,
         textAlign: 'center',
         marginTop: spacing.md,
+    },
+    sectionTitle: {
+        fontFamily: fontFamily.bold,
+        fontSize: fontSize.lg,
+        marginBottom: spacing.xs,
+    },
+    sectionSubtitle: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+        marginBottom: spacing.md,
+    },
+    typeSettingHeader: {
+        padding: spacing.lg,
+    },
+    typeSettingContent: {
+        flex: 1,
+    },
+    typeSettingLabel: {
+        fontFamily: fontFamily.semiBold,
+        fontSize: fontSize.base,
+        marginBottom: spacing['2xs'],
+    },
+    typeSettingDescription: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.sm,
+    },
+    typeSettingToggles: {
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.md,
+    },
+    toggleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+    },
+    toggleLabel: {
+        fontFamily: fontFamily.medium,
+        fontSize: fontSize.sm,
     },
 });

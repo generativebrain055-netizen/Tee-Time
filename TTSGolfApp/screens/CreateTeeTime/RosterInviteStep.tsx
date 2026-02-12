@@ -9,7 +9,7 @@ import {
     TextInput,
     StyleSheet,
 } from "react-native";
-import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search } from "lucide-react-native";
+import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search, Phone, Plus } from "lucide-react-native";
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend } from "../../services/api";
 
@@ -19,6 +19,8 @@ interface RosterInviteStepProps {
     orderedPlayers: string[];
     onResponseWindowChange: (hours: number) => void;
     onReorderPlayers: (orderedIds: string[]) => void;
+    onAddPhoneInvite?: (phone: string, name: string) => void;
+    phoneInvites?: Array<{ phone: string; name: string }>;
     /** Figma 565-351: creator header (name + avatar) */
     creatorName?: string;
     creatorAvatarUrl?: string;
@@ -50,6 +52,8 @@ export default function RosterInviteStep({
     orderedPlayers,
     onResponseWindowChange,
     onReorderPlayers,
+    onAddPhoneInvite,
+    phoneInvites = [],
     creatorName,
     creatorAvatarUrl,
 }: RosterInviteStepProps) {
@@ -60,6 +64,9 @@ export default function RosterInviteStep({
     const [selectedSort, setSelectedSort] = useState("roster");
     const [indicatedAvailable, setIndicatedAvailable] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [showPhoneInput, setShowPhoneInput] = useState(false);
+    const [phoneNumber, setPhoneNumber] = useState("");
+    const [phoneName, setPhoneName] = useState("");
 
     // Extract unique club names from friends
     const availableClubs = React.useMemo(() => {
@@ -440,7 +447,7 @@ export default function RosterInviteStep({
                             </View>
                         </View>
                     ))}
-                    {orderedFriends.length === 0 && (
+                    {orderedFriends.length === 0 && phoneInvites.length === 0 && (
                         <View style={{
                             alignItems: 'center',
                             paddingVertical: 40,
@@ -462,6 +469,179 @@ export default function RosterInviteStep({
                             }}>
                                 Add friends from Availability to use roster invites
                             </Text>
+                        </View>
+                    )}
+                    
+                    {/* Phone Invites Section */}
+                    {phoneInvites.length > 0 && phoneInvites.map((invite, index) => (
+                        <View 
+                            key={`phone-${index}`}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 16,
+                                borderBottomWidth: index < phoneInvites.length - 1 || orderedFriends.length > 0 ? 1 : 0,
+                                borderBottomColor: '#F3F4F6',
+                            }}
+                        >
+                            <View style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 24,
+                                backgroundColor: '#E5E7EB',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                            }}>
+                                <Phone size={20} color="#6B7280" strokeWidth={2} />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={{
+                                    fontFamily: 'Inter_600SemiBold',
+                                    fontSize: 16,
+                                    color: '#111827',
+                                }}>
+                                    {invite.name || 'Unknown'}
+                                </Text>
+                                <Text style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 14,
+                                    color: '#6B7280',
+                                    marginTop: 2,
+                                }}>
+                                    {invite.phone}
+                                </Text>
+                            </View>
+                        </View>
+                    ))}
+                    
+                    {/* Add Phone Number Button */}
+                    {onAddPhoneInvite && (
+                        <TouchableOpacity
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 16,
+                                borderTopWidth: orderedFriends.length > 0 || phoneInvites.length > 0 ? 1 : 0,
+                                borderTopColor: '#F3F4F6',
+                                backgroundColor: showPhoneInput ? '#F9FAFB' : 'transparent',
+                            }}
+                            onPress={() => setShowPhoneInput(!showPhoneInput)}
+                            activeOpacity={0.7}
+                        >
+                            <Plus size={20} color="#22C55E" strokeWidth={2.5} />
+                            <Text style={{
+                                fontFamily: 'Inter_600SemiBold',
+                                fontSize: 16,
+                                color: '#22C55E',
+                                marginLeft: 8,
+                            }}>
+                                Invite by phone number
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                    
+                    {/* Phone Input Form */}
+                    {showPhoneInput && onAddPhoneInvite && (
+                        <View style={{
+                            padding: 16,
+                            backgroundColor: '#F9FAFB',
+                            borderTopWidth: 1,
+                            borderTopColor: '#E5E7EB',
+                        }}>
+                            <TextInput
+                                style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 16,
+                                    color: '#111827',
+                                    backgroundColor: '#FFFFFF',
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: '#E5E7EB',
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 16,
+                                    marginBottom: 12,
+                                }}
+                                placeholder="Name (optional)"
+                                placeholderTextColor="#9CA3AF"
+                                value={phoneName}
+                                onChangeText={setPhoneName}
+                            />
+                            <TextInput
+                                style={{
+                                    fontFamily: 'Inter_400Regular',
+                                    fontSize: 16,
+                                    color: '#111827',
+                                    backgroundColor: '#FFFFFF',
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: '#E5E7EB',
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 16,
+                                    marginBottom: 12,
+                                }}
+                                placeholder="Phone number (e.g., +15551234567)"
+                                placeholderTextColor="#9CA3AF"
+                                value={phoneNumber}
+                                onChangeText={setPhoneNumber}
+                                keyboardType="phone-pad"
+                            />
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <TouchableOpacity
+                                    style={{
+                                        flex: 1,
+                                        paddingVertical: 12,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: '#E5E7EB',
+                                        backgroundColor: '#FFFFFF',
+                                        alignItems: 'center',
+                                    }}
+                                    onPress={() => {
+                                        setShowPhoneInput(false);
+                                        setPhoneNumber("");
+                                        setPhoneName("");
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 16,
+                                        color: '#6B7280',
+                                    }}>
+                                        Cancel
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        flex: 1,
+                                        paddingVertical: 12,
+                                        borderRadius: 8,
+                                        backgroundColor: '#22C55E',
+                                        alignItems: 'center',
+                                    }}
+                                    onPress={() => {
+                                        if (phoneNumber.trim()) {
+                                            onAddPhoneInvite(phoneNumber.trim(), phoneName.trim() || phoneNumber.trim());
+                                            setPhoneNumber("");
+                                            setPhoneName("");
+                                            setShowPhoneInput(false);
+                                        }
+                                    }}
+                                    activeOpacity={0.7}
+                                    disabled={!phoneNumber.trim()}
+                                >
+                                    <Text style={{
+                                        fontFamily: 'Inter_600SemiBold',
+                                        fontSize: 16,
+                                        color: '#FFFFFF',
+                                    }}>
+                                        Add
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
                 </View>

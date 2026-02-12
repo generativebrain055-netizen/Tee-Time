@@ -69,6 +69,7 @@ class InviteManagementService {
             date: teeTime.tee_date,
             time: teeTime.tee_time,
             courseName: teeTime.course_name,
+            maxPlayers: teeTime.max_players,
           },
           {
             id: teeTime.creator_id,
@@ -200,6 +201,7 @@ class InviteManagementService {
               date: teeTime.tee_date,
               time: teeTime.tee_time,
               courseName: teeTime.course_name,
+              maxPlayers: teeTime.max_players,
             },
             {
               id: organizerId,

@@ -8,18 +8,21 @@ import {
     Text,
     ScrollView,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     RefreshControl,
     ActivityIndicator,
     Image,
     StyleSheet,
+    Alert,
 } from "react-native";
-import { Bell, Check, X } from "lucide-react-native";
-import { notificationApi, friendApi, inviteApi, AppNotification } from "../../services/api";
+import { Bell, Check, X, Inbox, Send, Users, Filter, ChevronDown, ChevronUp } from "lucide-react-native";
+import { notificationApi, friendApi, inviteApi, rosterApi, AppNotification } from "../../services/api";
 import { ScreenShell, AppHeader } from "../../ui";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
 
-type TabType = 'activity' | 'invites';
+type TabType = 'inbox' | 'outbox' | 'community';
+type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire';
 
 interface CategorySection {
     title: string;
@@ -28,10 +31,19 @@ interface CategorySection {
 }
 
 export default function NotificationsScreen({ navigation }: any) {
-    const [activeTab, setActiveTab] = useState<TabType>('activity');
+    const [activeTab, setActiveTab] = useState<TabType>('inbox');
+    const [typeFilter, setTypeFilter] = useState<NotificationTypeFilter>('all');
+    const [showTypeFilter, setShowTypeFilter] = useState(false);
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Reset filter when switching tabs
+    const handleTabChange = useCallback((tab: TabType) => {
+        setActiveTab(tab);
+        setTypeFilter('all'); // Reset filter when switching tabs
+        setShowTypeFilter(false); // Close filter dropdown
+    }, []);
 
     const fetchNotifications = useCallback(async () => {
         try {
@@ -89,6 +101,15 @@ export default function NotificationsScreen({ navigation }: any) {
                     unfilledSlotAlert: true,
                 });
             }
+        } else if (dataType === "roster_add") {
+            const d = item.data as Record<string, unknown> | undefined;
+            if (d?.ownerId) {
+                navigation?.navigate("FriendProfile", {
+                    userId: d.ownerId as string,
+                });
+            }
+        } else if (dataType === "waiver_wire") {
+            navigation?.navigate("WaiverWire");
         } else if ((item.data as Record<string, unknown>)?.teeTimeId) {
             navigation?.navigate("TeeTimeDetail", {
                 teeTimeId: (item.data as Record<string, unknown>).teeTimeId,
@@ -136,60 +157,199 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const getDataType = (n: AppNotification) => (n.data as Record<string, unknown> | undefined)?.type as string | undefined;
 
-    const categorizeNotifications = (notifs: AppNotification[], tab: TabType): CategorySection[] => {
-        if (tab === 'activity') {
+    // Get filter options based on current tab
+    const getTypeFilterOptions = (tab: TabType): { key: NotificationTypeFilter; label: string }[] => {
+        const baseOptions: { key: NotificationTypeFilter; label: string }[] = [
+            { key: 'all', label: 'All Types' },
+        ];
+
+        if (tab === 'inbox') {
             return [
-                {
-                    title: 'Recent activity',
-                    count: notifs.filter(n => {
-                        const t = getDataType(n) ?? n.type;
-                        return t.includes('confirmed') || t.includes('cancelled') || t.includes('completed');
-                    }).length,
-                    items: notifs.filter(n => {
-                        const t = getDataType(n) ?? n.type;
-                        return t.includes('confirmed') || t.includes('cancelled') || t.includes('completed');
-                    }),
-                },
-            ].filter(section => section.count > 0);
-        } else {
-            const unfilledSlot = (n: AppNotification) => {
-                const t = getDataType(n);
-                return t === 'organizer_fill_warning' || t === 'tee_time_not_filled';
-            };
+                ...baseOptions,
+                { key: 'tee_time_invite', label: 'Tee Time Invites' },
+                { key: 'friend_request', label: 'Friend Requests' },
+                { key: 'roster_add', label: 'Roster Adds' },
+                { key: 'spot_opened', label: 'Spot Opened' },
+                { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
+            ];
+        } else if (tab === 'outbox') {
             return [
-                {
-                    title: 'Unfilled Slot Alert',
-                    count: notifs.filter(unfilledSlot).length,
-                    items: notifs.filter(unfilledSlot),
-                },
-                {
-                    title: 'Tee time invites',
-                    count: notifs.filter(n => getDataType(n) === 'tee_time_invite' || n.type.includes('tee_time_invite')).length,
-                    items: notifs.filter(n => getDataType(n) === 'tee_time_invite' || n.type.includes('tee_time_invite')),
-                },
-                {
-                    title: 'Group requests',
-                    count: notifs.filter(n => getDataType(n) === 'group_request' || n.type.includes('group_request')).length,
-                    items: notifs.filter(n => getDataType(n) === 'group_request' || n.type.includes('group_request')),
-                },
-                {
-                    title: 'Friend requests',
-                    count: notifs.filter(n => getDataType(n) === 'friend_request' || n.type.includes('friend_request')).length,
-                    items: notifs.filter(n => getDataType(n) === 'friend_request' || n.type.includes('friend_request')),
-                },
-            ].filter(section => section.count > 0);
+                ...baseOptions,
+                { key: 'tee_time_response', label: 'Invite Responses' },
+            ];
+        } else if (tab === 'community') {
+            return [
+                ...baseOptions,
+                { key: 'waiver_wire', label: 'Waiver Wire' },
+            ];
         }
+
+        return baseOptions;
+    };
+
+    // Filter notifications by type
+    const filterByType = (notifs: AppNotification[], filter: NotificationTypeFilter): AppNotification[] => {
+        if (filter === 'all') return notifs;
+        return notifs.filter(n => {
+            const t = getDataType(n);
+            return t === filter;
+        });
+    };
+
+    // Categorize notifications by tab (Inbox/Outbox/Community)
+    const categorizeNotifications = (notifs: AppNotification[], tab: TabType): CategorySection[] => {
+        let filtered: AppNotification[] = [];
+        
+        if (tab === 'inbox') {
+            // Inbox: Invites requiring action (tee_time_invite, friend_request, spot_opened, roster_add, organizer_fill_warning)
+            filtered = notifs.filter(n => {
+                const t = getDataType(n);
+                return t === 'tee_time_invite' || 
+                       t === 'friend_request' || 
+                       t === 'spot_opened' || 
+                       t === 'roster_add' ||
+                       t === 'organizer_fill_warning' ||
+                       t === 'tee_time_not_filled';
+            });
+        } else if (tab === 'outbox') {
+            // Outbox: Status on sent invites (tee_time_response - accepted/declined)
+            filtered = notifs.filter(n => {
+                const t = getDataType(n);
+                return t === 'tee_time_response';
+            });
+        } else if (tab === 'community') {
+            // Community: Waiver Wire posts (waiver_wire type notifications)
+            filtered = notifs.filter(n => {
+                const t = getDataType(n);
+                return t === 'waiver_wire';
+            });
+        } else {
+            filtered = [];
+        }
+
+        // Apply type filter if not 'all' and filter is valid for current tab
+        if (typeFilter !== 'all') {
+            // Validate that the filter is applicable to the current tab
+            const validFilters = getTypeFilterOptions(tab).map(opt => opt.key);
+            if (validFilters.includes(typeFilter)) {
+                filtered = filterByType(filtered, typeFilter);
+            }
+            // If filter is invalid for current tab, keep filtered as is (already filtered by tab)
+        }
+
+        // Group by notification type for display
+        const grouped: Record<string, AppNotification[]> = {};
+        filtered.forEach(n => {
+            const t = getDataType(n) || 'other';
+            if (!grouped[t]) grouped[t] = [];
+            grouped[t].push(n);
+        });
+
+        // Convert to sections
+        const sections: CategorySection[] = Object.entries(grouped).map(([type, items]) => {
+            let title = type;
+            if (type === 'tee_time_invite') title = 'Tee Time Invites';
+            else if (type === 'friend_request') title = 'Friend Requests';
+            else if (type === 'spot_opened') title = 'Spot Opened';
+            else if (type === 'roster_add') title = 'Roster Adds';
+            else if (type === 'organizer_fill_warning' || type === 'tee_time_not_filled') title = 'Unfilled Slot Alerts';
+            else if (type === 'tee_time_response') title = 'Invite Responses';
+            else if (type === 'waiver_wire') title = 'Waiver Wire Posts';
+            else title = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+            return {
+                title,
+                count: items.length,
+                items: items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            };
+        });
+
+        return sections.sort((a, b) => b.count - a.count);
     };
 
     const sections = categorizeNotifications(notifications, activeTab);
+
+    const handleDelete = useCallback(async (item: AppNotification) => {
+        try {
+            await notificationApi.deleteNotification(item.id);
+            setNotifications(prev => prev.filter(n => n.id !== item.id));
+        } catch (error) {
+            logger.error('[NotificationsScreen] Delete error', error);
+            Alert.alert("Error", "Failed to delete notification");
+        }
+    }, []);
+
+    const handleMarkAsUnread = useCallback(async (item: AppNotification) => {
+        try {
+            await notificationApi.markAsUnread(item.id);
+            setNotifications(prev =>
+                prev.map(n => (n.id === item.id ? { ...n, isRead: false } : n))
+            );
+        } catch (error) {
+            logger.error('[NotificationsScreen] Mark as unread error', error);
+            Alert.alert("Error", "Failed to mark notification as unread");
+        }
+    }, []);
+
+    const handleMarkAsRead = useCallback(async (item: AppNotification) => {
+        try {
+            await notificationApi.markAsRead(item.id);
+            setNotifications(prev =>
+                prev.map(n => (n.id === item.id ? { ...n, isRead: true } : n))
+            );
+        } catch (error) {
+            logger.error('[NotificationsScreen] Mark as read error', error);
+            Alert.alert("Error", "Failed to mark notification as read");
+        }
+    }, []);
+
+    const handleAddBack = useCallback(async (item: AppNotification) => {
+        const d = item.data as Record<string, unknown> | undefined;
+        const ownerId = d?.ownerId as string | undefined;
+        
+        if (!ownerId) {
+            Alert.alert("Error", "Unable to add this user to your roster");
+            return;
+        }
+
+        try {
+            const response = await rosterApi.addToRoster({ contactUserId: ownerId });
+            
+            if (response.success) {
+                await notificationApi.markAsResponded(item.id);
+                setNotifications(prev => prev.filter(n => n.id !== item.id));
+                
+                const ownerName = (d?.ownerName as string | undefined) || "User";
+                Alert.alert(
+                    "Added to Roster!",
+                    `${ownerName} has been added to your roster.`,
+                    [
+                        { text: "View Roster", onPress: () => navigation?.navigate("Roster") },
+                        { text: "OK", style: "cancel" },
+                    ]
+                );
+            }
+        } catch (error: any) {
+            logger.error("[NotificationsScreen] Add back error", error);
+            if (error?.message?.includes("already in roster")) {
+                Alert.alert("Already Added", "This user is already in your roster.");
+                await notificationApi.markAsResponded(item.id);
+                setNotifications(prev => prev.filter(n => n.id !== item.id));
+            } else {
+                Alert.alert("Error", error.message || "Failed to add user to roster");
+            }
+        }
+    }, [navigation]);
 
     const renderNotificationItem = (item: AppNotification) => {
         const dataType = (item.data as Record<string, unknown> | undefined)?.type as string | undefined;
         const isUnfilledSlotAlert = dataType === 'organizer_fill_warning' || dataType === 'tee_time_not_filled';
         const isFriendRequest = dataType === 'friend_request' || item.type.includes('friend_request');
+        const isRosterAdd = dataType === 'roster_add';
         const isInvite = (dataType && (dataType.includes('invite') || dataType.includes('request'))) || item.type.includes('invite') || item.type.includes('request');
         const isAccepted = item.type.includes('accepted') || item.status === 'accepted' || (item.data as Record<string, unknown> | undefined)?.responded;
         const isDeclined = item.status === 'declined';
+        const isRosterAddActionable = isRosterAdd && (item.data as Record<string, unknown>)?.ownerId && !(item.data as Record<string, unknown>)?.responded;
         const timeAgo = getTimeAgo(item.createdAt);
 
         const handleUnfilledSlotPress = () => {
@@ -296,6 +456,19 @@ export default function NotificationsScreen({ navigation }: any) {
                         </View>
                     )}
 
+                    {isRosterAddActionable && (
+                        <TouchableOpacity
+                            style={styles.ctaButton}
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                handleAddBack(item);
+                            }}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.ctaButtonText}>Add Back</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {isAccepted && (
                         <View style={styles.statusBadgeAccepted}>
                             <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
@@ -311,7 +484,46 @@ export default function NotificationsScreen({ navigation }: any) {
                     )}
                 </View>
 
-                {!item.isRead && <View style={styles.unreadDot} />}
+                <View style={styles.cardActions}>
+                    {!item.isRead && <View style={styles.unreadDot} />}
+                    <TouchableOpacity
+                        style={styles.actionIconButton}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            if (item.isRead) {
+                                handleMarkAsUnread(item);
+                            } else {
+                                handleMarkAsRead(item);
+                            }
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Text style={styles.actionIconText}>
+                            {item.isRead ? 'Mark unread' : 'Mark read'}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.actionIconButton}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            Alert.alert(
+                                "Delete Notification",
+                                "Are you sure you want to delete this notification?",
+                                [
+                                    { text: "Cancel", style: "cancel" },
+                                    {
+                                        text: "Delete",
+                                        style: "destructive",
+                                        onPress: () => handleDelete(item)
+                                    }
+                                ]
+                            );
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <X size={16} color={palette.gray500} />
+                    </TouchableOpacity>
+                </View>
             </TouchableOpacity>
         );
     };
@@ -336,13 +548,25 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const hasUnread = notifications.some(n => !n.isRead);
 
-    const invitesUnreadCount = notifications.filter(n => {
+    const inboxUnreadCount = notifications.filter(n => {
         const t = getDataType(n);
         return !n.isRead && (
             t === "organizer_fill_warning" || t === "tee_time_not_filled" ||
-            t === "tee_time_invite" || t === "group_request" || t === "friend_request"
+            t === "tee_time_invite" || t === "friend_request" || t === "spot_opened" || t === "roster_add"
         );
     }).length;
+
+    const outboxCount = notifications.filter(n => {
+        const t = getDataType(n);
+        return t === "tee_time_response";
+    }).length;
+
+    const communityCount = notifications.filter(n => {
+        const t = getDataType(n);
+        return t === "waiver_wire";
+    }).length;
+
+    const typeFilterOptions = getTypeFilterOptions(activeTab);
 
     if (loading) {
         return (
@@ -368,28 +592,108 @@ export default function NotificationsScreen({ navigation }: any) {
 
             <View style={styles.tabBar}>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === "activity" && styles.tabActive]}
-                    onPress={() => setActiveTab("activity")}
-                    activeOpacity={0.7}
-                >
-                    <Text style={[styles.tabText, activeTab === "activity" && styles.tabTextActive]}>Activity</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === "invites" && styles.tabActive]}
-                    onPress={() => setActiveTab("invites")}
+                    style={[styles.tab, activeTab === "inbox" && styles.tabActive]}
+                    onPress={() => handleTabChange("inbox")}
                     activeOpacity={0.7}
                 >
                     <View style={styles.tabLabelRow}>
-                        <Text style={[styles.tabText, activeTab === "invites" && styles.tabTextActive]}>Invites</Text>
-                        {invitesUnreadCount > 0 && (
+                        <Inbox size={16} color={activeTab === "inbox" ? palette.green600 : palette.gray500} style={{ marginRight: 4 }} />
+                        <Text style={[styles.tabText, activeTab === "inbox" && styles.tabTextActive]}>Inbox</Text>
+                        {inboxUnreadCount > 0 && (
                             <View style={styles.tabBadge}>
                                 <Text style={styles.tabBadgeText}>
-                                    {invitesUnreadCount > 99 ? "99+" : invitesUnreadCount}
+                                    {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
                                 </Text>
                             </View>
                         )}
                     </View>
                 </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === "outbox" && styles.tabActive]}
+                    onPress={() => handleTabChange("outbox")}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.tabLabelRow}>
+                        <Send size={16} color={activeTab === "outbox" ? palette.green600 : palette.gray500} style={{ marginRight: 4 }} />
+                        <Text style={[styles.tabText, activeTab === "outbox" && styles.tabTextActive]}>Outbox</Text>
+                        {outboxCount > 0 && (
+                            <View style={[styles.tabBadge, { backgroundColor: palette.gray400 }]}>
+                                <Text style={styles.tabBadgeText}>
+                                    {outboxCount > 99 ? "99+" : outboxCount}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === "community" && styles.tabActive]}
+                    onPress={() => handleTabChange("community")}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.tabLabelRow}>
+                        <Users size={16} color={activeTab === "community" ? palette.green600 : palette.gray500} style={{ marginRight: 4 }} />
+                        <Text style={[styles.tabText, activeTab === "community" && styles.tabTextActive]}>Community</Text>
+                        {communityCount > 0 && (
+                            <View style={[styles.tabBadge, { backgroundColor: palette.gray400 }]}>
+                                <Text style={styles.tabBadgeText}>
+                                    {communityCount > 99 ? "99+" : communityCount}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
+            </View>
+
+            {/* Filter by Type */}
+            {showTypeFilter && (
+                <TouchableWithoutFeedback onPress={() => setShowTypeFilter(false)}>
+                    <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+            )}
+            <View style={styles.filterContainer}>
+                <TouchableOpacity
+                    style={styles.filterButton}
+                    onPress={() => setShowTypeFilter(!showTypeFilter)}
+                    activeOpacity={0.7}
+                >
+                    <Filter size={16} color={palette.gray600} />
+                    <Text style={styles.filterButtonText}>
+                        {typeFilterOptions.find(opt => opt.key === typeFilter)?.label || 'All Types'}
+                    </Text>
+                    {showTypeFilter ? (
+                        <ChevronUp size={16} color={palette.gray600} />
+                    ) : (
+                        <ChevronDown size={16} color={palette.gray600} />
+                    )}
+                </TouchableOpacity>
+                {showTypeFilter && (
+                    <View style={styles.filterDropdown}>
+                        {typeFilterOptions.map(option => (
+                            <TouchableOpacity
+                                key={option.key}
+                                style={[
+                                    styles.filterOption,
+                                    typeFilter === option.key && styles.filterOptionActive
+                                ]}
+                                onPress={() => {
+                                    setTypeFilter(option.key);
+                                    setShowTypeFilter(false);
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[
+                                    styles.filterOptionText,
+                                    typeFilter === option.key && styles.filterOptionTextActive
+                                ]}>
+                                    {option.label}
+                                </Text>
+                                {typeFilter === option.key && (
+                                    <Check size={16} color={palette.green600} />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
             </View>
 
             <ScrollView
@@ -405,7 +709,9 @@ export default function NotificationsScreen({ navigation }: any) {
                         </View>
                         <Text style={styles.emptyTitle}>All caught up</Text>
                         <Text style={styles.emptySubtitle}>
-                            You have no new {activeTab === "activity" ? "activity" : "invites"}. We'll let you know when something happens!
+                            {activeTab === "inbox" && "You have no invites requiring action."}
+                            {activeTab === "outbox" && "No responses to your invites yet."}
+                            {activeTab === "community" && "No Waiver Wire posts available."}
                         </Text>
                     </View>
                 ) : (
@@ -694,5 +1000,82 @@ const styles = StyleSheet.create({
     },
     bottomSpacer: {
         height: spacing["4xl"],
+    },
+    filterContainer: {
+        position: "relative",
+        backgroundColor: "#FFFFFF",
+        borderBottomWidth: 1,
+        borderBottomColor: palette.gray200,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        zIndex: 999,
+    },
+    filterButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        paddingVertical: spacing.xs + 2,
+        paddingHorizontal: spacing.md,
+        backgroundColor: palette.gray50,
+        borderRadius: radii.sm,
+        alignSelf: "flex-start",
+    },
+    filterButtonText: {
+        fontFamily: "Inter_500Medium",
+        fontSize: fontSize.sm,
+        color: palette.gray700,
+    },
+    filterDropdown: {
+        position: "absolute",
+        top: "100%",
+        left: spacing.lg,
+        right: spacing.lg,
+        marginTop: spacing.xs,
+        backgroundColor: "#FFFFFF",
+        borderRadius: radii.md,
+        borderWidth: 1,
+        borderColor: palette.gray200,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+        zIndex: 1000,
+        maxHeight: 300,
+    },
+    filterOption: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: spacing.sm + 2,
+        paddingHorizontal: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.gray100,
+    },
+    filterOptionActive: {
+        backgroundColor: palette.green50,
+    },
+    filterOptionText: {
+        fontFamily: "Inter_400Regular",
+        fontSize: fontSize.sm,
+        color: palette.gray700,
+    },
+    filterOptionTextActive: {
+        fontFamily: "Inter_600SemiBold",
+        color: palette.green600,
+    },
+    cardActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        marginLeft: spacing.sm,
+    },
+    actionIconButton: {
+        padding: spacing.xs,
+    },
+    actionIconText: {
+        fontFamily: "Inter_400Regular",
+        fontSize: fontSize.xs,
+        color: palette.gray500,
     },
 });

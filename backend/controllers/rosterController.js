@@ -282,10 +282,16 @@ class RosterController {
 
   // ============ WAIVER WIRE ============
 
-  // GET /api/roster/waiver-wire?date=YYYY-MM-DD
+  // GET /api/roster/waiver-wire?date=YYYY-MM-DD&rosterConnectionsOnly=true&maxDistance=20&lat=...&lng=...
   async getWaiverWire(req, res) {
     try {
-      const entries = await rosterService.getWaiverWire(req.user.id, req.query.date);
+      const options = {
+        rosterConnectionsOnly: req.query.rosterConnectionsOnly === 'true',
+        maxDistance: req.query.maxDistance ? parseFloat(req.query.maxDistance) : null,
+        userLat: req.query.lat ? parseFloat(req.query.lat) : null,
+        userLng: req.query.lng ? parseFloat(req.query.lng) : null,
+      };
+      const entries = await rosterService.getWaiverWire(req.user.id, req.query.date, options);
       const formatted = entries.map(formatter.formatWaiverWireEntry);
       success(res, { waiverWire: formatted });
     } catch (err) {
@@ -300,6 +306,17 @@ class RosterController {
       success(res, { entry }, 201);
     } catch (err) {
       handleServiceError(res, err, 'Failed to add to waiver wire');
+    }
+  }
+
+  // PUT /api/roster/waiver-wire/:date
+  async updateWaiverWire(req, res) {
+    try {
+      const entry = await rosterService.updateWaiverWire(req.user.id, req.params.date, req.body);
+      const formatted = formatter.formatWaiverWireEntry(entry);
+      success(res, { entry: formatted });
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to update waiver wire');
     }
   }
 
@@ -340,5 +357,6 @@ module.exports = {
   getMemberHistory: controller.getMemberHistory.bind(controller),
   getWaiverWire: controller.getWaiverWire.bind(controller),
   addToWaiverWire: controller.addToWaiverWire.bind(controller),
+  updateWaiverWire: controller.updateWaiverWire.bind(controller),
   removeFromWaiverWire: controller.removeFromWaiverWire.bind(controller)
 };

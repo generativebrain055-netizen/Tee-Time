@@ -63,6 +63,7 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
             date: teeTime.tee_date,
             time: teeTime.tee_time,
             courseName: teeTime.course_name,
+            maxPlayers: teeTime.max_players,
           },
           {
             id: userId,
@@ -172,6 +173,7 @@ const createRosterInvites = async (
             date: teeTime.tee_date,
             time: teeTime.tee_time,
             courseName: teeTime.course_name,
+            maxPlayers: teeTime.max_players,
           },
           {
             id: userId,

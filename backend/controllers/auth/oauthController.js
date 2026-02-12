@@ -727,6 +727,7 @@ const completeOAuthProfile = async (req, res, next) => {
       email,
       location,
       homeCourse,
+      clubs, // Support clubs array
       zipCode,
       avatarUrl,
       profilePhotoBase64,
@@ -748,6 +749,13 @@ const completeOAuthProfile = async (req, res, next) => {
 
     const userId = req.user.id;
 
+    // Normalize clubs: use clubs array if provided, otherwise fall back to homeCourse
+    const clubsArray = Array.isArray(clubs) && clubs.length > 0
+      ? clubs
+      : homeCourse
+        ? [{ name: homeCourse, location: null, type: "Public" }]
+        : [];
+
     // Build update object - only include provided fields
     const updates = {};
     if (firstName) updates.firstName = firstName;
@@ -756,7 +764,12 @@ const completeOAuthProfile = async (req, res, next) => {
     if (username) updates.username = username;
     if (handicap !== undefined) updates.handicap = handicap;
     if (location) updates.location = location;
-    if (homeCourse) updates.homeCourse = homeCourse;
+    if (homeCourse || clubsArray.length > 0) {
+      updates.homeCourse = clubsArray.length > 0 ? clubsArray[0].name : homeCourse;
+    }
+    if (clubsArray.length > 0) {
+      updates.clubs = clubsArray; // Save clubs array
+    }
     if (zipCode !== undefined) updates.zipCode = zipCode;
     if (avatarUrl) updates.avatarUrl = avatarUrl;
 
@@ -823,6 +836,9 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     lastName,
     username,
     handicap,
+    location,
+    homeCourse,
+    clubs, // Support clubs array
     zipCode,
     avatarUrl,
     profilePhotoBase64,
@@ -881,6 +897,13 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     firstName || tokenData.givenName || tokenData.firstName;
   const finalLastName = lastName || tokenData.familyName || tokenData.lastName;
 
+  // Normalize clubs: use clubs array if provided, otherwise fall back to homeCourse
+  const clubsArray = Array.isArray(clubs) && clubs.length > 0
+    ? clubs
+    : homeCourse
+      ? [{ name: homeCourse, location: null, type: "Public" }]
+      : [];
+
   // Create user - phone is now OPTIONAL
   const newUser = await userRepository.create({
     phoneNumber: phoneNumber || null, // Phone is OPTIONAL for OAuth
@@ -890,6 +913,9 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     username: username || null,
     handicap: handicap || null,
     isVerified: true,
+    location: location || null,
+    homeCourse: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null),
+    clubs: clubsArray, // Save clubs array
     zipCode: zipCode || null,
     avatarUrl: resolvedAvatarUrl,
   });

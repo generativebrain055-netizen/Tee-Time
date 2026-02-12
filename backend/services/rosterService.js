@@ -404,11 +404,11 @@ async function getMemberHistory(userId, rosterId) {
  * Get waiver wire entries for a specific date
  * @throws {RosterServiceError} If date is missing
  */
-async function getWaiverWire(userId, date) {
+async function getWaiverWire(userId, date, options = {}) {
   if (!date) {
     throw new RosterServiceError("Date is required", "MISSING_DATE");
   }
-  return rosterRepository.getWaiverWire(date, userId);
+  return rosterRepository.getWaiverWire(date, userId, options);
 }
 
 /**
@@ -419,7 +419,43 @@ async function addToWaiverWire(userId, data) {
   if (!data.availableDate) {
     throw new RosterServiceError("Available date is required", "MISSING_DATE");
   }
-  return rosterRepository.addToWaiverWire(userId, data);
+  const entry = await rosterRepository.addToWaiverWire(userId, data);
+  
+  // Notify mutual connections (roster contacts) about the new waiver wire post
+  try {
+    const notificationService = require("./notificationService");
+    const rosterUserIds = await rosterRepository.getRosterContactUserIds(userId);
+    
+    // Get user info for notification
+    const userRepository = require("../repositories/userRepository");
+    const user = await userRepository.findById(userId);
+    
+    if (user && rosterUserIds.length > 0) {
+      // Send notifications in parallel for better performance
+      await Promise.all(
+        rosterUserIds.map((rosterUserId) =>
+          notificationService.notifyWaiverWirePost(rosterUserId, {
+            id: userId,
+            firstName: user.first_name || "",
+            lastName: user.last_name || "",
+            avatar: user.avatar_url || null,
+          }, {
+            id: entry.id,
+            availableDate: data.availableDate,
+            preferredTime: data.preferredTime,
+          }).catch((err) => {
+            // Log individual notification failures but don't fail the whole operation
+            logger.error(`Failed to notify user ${rosterUserId} about waiver wire post:`, err);
+          })
+        )
+      );
+    }
+  } catch (notifError) {
+    // Don't fail the waiver wire post if notification fails
+    logger.error("Error sending waiver wire notifications:", notifError);
+  }
+  
+  return entry;
 }
 
 /**
@@ -427,6 +463,27 @@ async function addToWaiverWire(userId, data) {
  */
 async function removeFromWaiverWire(userId, date) {
   return rosterRepository.removeFromWaiverWire(userId, date);
+}
+
+/**
+ * Update waiver wire entry
+ */
+async function updateWaiverWire(userId, date, data) {
+  if (!date) {
+    throw new RosterServiceError("Date is required", "MISSING_DATE");
+  }
+  
+  // If the date is being changed, we need to delete the old entry and create a new one
+  const newDate = data.availableDate;
+  if (newDate && newDate !== date) {
+    // Remove old entry
+    await rosterRepository.removeFromWaiverWire(userId, date);
+    // Create new entry with new date
+    return rosterRepository.addToWaiverWire(userId, data);
+  }
+  
+  // Otherwise, use upsert to update existing entry (date stays the same)
+  return rosterRepository.addToWaiverWire(userId, { ...data, availableDate: date });
 }
 
 module.exports = {
@@ -460,6 +517,7 @@ module.exports = {
   // Waiver wire
   getWaiverWire,
   addToWaiverWire,
+  updateWaiverWire,
   removeFromWaiverWire,
 
   // Error class for external use

@@ -220,9 +220,10 @@ async function getConversationMeta(conv, userId, lastMessage) {
     const { data: participants } = await supabaseAdmin
       .from("tee_time_participants")
       .select("user_id")
-      .eq("tee_time_id", conv.tee_time_id);
-    const uids = (participants || []).map((p) => p.user_id).slice(0, 3);
-    participantCount = (participants || []).length;
+      .eq("tee_time_id", conv.tee_time_id)
+      .or("status.is.null,status.neq.cancelled"); // Only count active participants
+    const uids = (participants || []).map((p) => p.user_id).filter(Boolean).slice(0, 3);
+    participantCount = (participants || []).filter(p => p.user_id).length;
     for (const uid of uids) {
       const { data: up } = await supabaseAdmin
         .from("user_profiles")
@@ -326,6 +327,68 @@ async function ensureParticipant(conversationId, userId) {
   );
 }
 
+/**
+ * Create or get tee time conversation and add all active participants automatically.
+ * This is called when a tee time is confirmed to ensure all participants can chat.
+ * @param {string} teeTimeId - The tee time ID
+ * @returns {Promise<Object>} The conversation object
+ */
+async function createTeeTimeConversationWithParticipants(teeTimeId) {
+  // Check if conversation already exists
+  const { data: existing } = await supabaseAdmin
+    .from("conversations")
+    .select("id, type, created_at")
+    .eq("type", "tee_time")
+    .eq("tee_time_id", teeTimeId)
+    .single();
+
+  let conversationId;
+  
+  if (existing) {
+    conversationId = existing.id;
+  } else {
+    // Create new conversation
+    const { data: newConv, error } = await supabaseAdmin
+      .from("conversations")
+      .insert({ type: "tee_time", tee_time_id: teeTimeId })
+      .select("id, type, created_at")
+      .single();
+
+    if (error) handleError(error, "createTeeTimeConversationWithParticipants");
+    conversationId = newConv.id;
+  }
+
+  // Get all active participants (exclude cancelled)
+  const { data: participants, error: partError } = await supabaseAdmin
+    .from("tee_time_participants")
+    .select("user_id")
+    .eq("tee_time_id", teeTimeId)
+    .or("status.is.null,status.neq.cancelled")
+    .not("user_id", "is", null);
+
+  if (partError) {
+    handleError(partError, "getTeeTimeParticipants");
+    return existing || { id: conversationId, type: "tee_time", created_at: new Date().toISOString() };
+  }
+
+  // Add all participants to conversation
+  if (participants && participants.length > 0) {
+    const participantRows = participants.map(p => ({
+      conversation_id: conversationId,
+      user_id: p.user_id,
+    }));
+
+    await supabaseAdmin
+      .from("conversation_participants")
+      .upsert(participantRows, {
+        onConflict: "conversation_id,user_id",
+        ignoreDuplicates: false,
+      });
+  }
+
+  return existing || { id: conversationId, type: "tee_time", created_at: new Date().toISOString() };
+}
+
 module.exports = {
   getOrCreateDirectConversation,
   getOrCreateTeeTimeConversation,
@@ -333,4 +396,5 @@ module.exports = {
   listForUser,
   getById,
   ensureParticipant,
+  createTeeTimeConversationWithParticipants,
 };

@@ -25,6 +25,7 @@ interface NotificationItemProps {
   onDeclineFriend: (item: AppNotification) => void;
   onAcceptSpot: (item: AppNotification) => void;
   onSelectOnDeck: (item: AppNotification) => void;
+  onAddBack?: (item: AppNotification) => void;
 }
 
 /**
@@ -127,6 +128,7 @@ export const NotificationItem = memo(
     onDeclineFriend,
     onAcceptSpot,
     onSelectOnDeck,
+    onAddBack,
   }: NotificationItemProps) => {
     const { deadlineText, isUrgent } = useDeadlineCountdown(
       item.data?.expiresAt,
@@ -136,6 +138,7 @@ export const NotificationItem = memo(
     // Determine actionable states
     const isFriendRequest = notifType === "friend_request";
     const isSpotOpened = notifType === "spot_opened";
+    const isRosterAdd = notifType === "roster_add";
     const isUnfilledSlotAlert =
       notifType === "tee_time_not_filled" || notifType === "organizer_fill_warning";
     const isRosterExhausted =
@@ -147,6 +150,8 @@ export const NotificationItem = memo(
       isSpotOpened && item.data?.teeTimeId && !item.data?.responded;
     const isRosterExhaustedActionable =
       isRosterExhausted && item.data?.teeTimeId && !item.data?.responded;
+    const isRosterAddActionable =
+      isRosterAdd && item.data?.ownerId && !item.data?.responded && onAddBack;
 
     // Card base classes (Unfilled Slot Alert: 8px radius per Figma 791-*)
     const cardClasses = `
@@ -206,6 +211,37 @@ export const NotificationItem = memo(
         <View className="mt-3 pl-[52px]">
           <Text className="text-sm text-gray-600 leading-5">{item.body}</Text>
 
+          {/* Full details for tee time invites */}
+          {item.data?.type === "tee_time_invite" && (
+            <View className="mt-3 bg-gray-50 rounded-md p-3">
+              {item.data?.courseName && (
+                <View className="flex-row items-center mb-2">
+                  <Calendar size={14} color={COLORS.primary} />
+                  <Text className="text-xs text-gray-600 ml-2 font-medium">
+                    {item.data.courseName}
+                  </Text>
+                </View>
+              )}
+              {(item.data?.date || item.data?.teeDate) && (
+                <View className="flex-row items-center mb-2">
+                  <Clock size={14} color={COLORS.primary} />
+                  <Text className="text-xs text-gray-600 ml-2">
+                    {item.data.date || item.data.teeDate}
+                    {item.data?.time || item.data?.teeTime ? ` at ${item.data.time || item.data.teeTime}` : ""}
+                  </Text>
+                </View>
+              )}
+              {item.data?.maxPlayers && (
+                <View className="flex-row items-center">
+                  <Users size={14} color={COLORS.primary} />
+                  <Text className="text-xs text-gray-600 ml-2">
+                    Group size: {item.data.maxPlayers} players
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {deadlineText && item.data?.type === "tee_time_invite" && (
             <View
               className={`flex-row items-center self-start mt-2 px-2.5 py-1.5 rounded-full border ${
@@ -229,7 +265,8 @@ export const NotificationItem = memo(
         {/* Action Buttons */}
         {(isFriendRequestActionable ||
           isSpotOpenedActionable ||
-          isRosterExhaustedActionable) && (
+          isRosterExhaustedActionable ||
+          isRosterAddActionable) && (
           <View className="flex-row justify-end gap-2 mt-4 pl-[52px]">
             {isFriendRequestActionable && (
               <>
@@ -252,6 +289,18 @@ export const NotificationItem = memo(
                   </Text>
                 </TouchableOpacity>
               </>
+            )}
+
+            {isRosterAddActionable && (
+              <TouchableOpacity
+                className="flex-row items-center justify-center py-2 px-3.5 rounded-md bg-green-600 shadow-sm"
+                onPress={() => onAddBack?.(item)}
+              >
+                <UserPlus size={14} color="#FFF" />
+                <Text className="text-white font-semibold text-[13px] ml-1.5">
+                  Add Back
+                </Text>
+              </TouchableOpacity>
             )}
 
             {isSpotOpenedActionable && (

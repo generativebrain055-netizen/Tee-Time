@@ -53,6 +53,13 @@ router.put("/read-all", notificationController.markAllAsRead);
 router.put("/:id/read", notificationController.markAsRead);
 
 /**
+ * @route   PUT /api/notifications/:id/unread
+ * @desc    Mark a notification as unread
+ * @access  Private
+ */
+router.put("/:id/unread", notificationController.markAsUnread);
+
+/**
  * @route   PUT /api/notifications/:id/responded
  * @desc    Mark a notification as responded (for actionable notifications like friend requests)
  * @access  Private

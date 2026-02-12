@@ -91,6 +91,7 @@ const registerUser = async (req, res, next) => {
       handicap,
       location,
       homeCourse,
+      clubs, // Support clubs array
       preferredTeeTime,
       walkOrRide,
       playingPartnerPreference,
@@ -120,6 +121,13 @@ const registerUser = async (req, res, next) => {
       });
     }
 
+    // Normalize clubs: use clubs array if provided, otherwise fall back to homeCourse
+    const clubsArray = Array.isArray(clubs) && clubs.length > 0
+      ? clubs
+      : homeCourse
+        ? [{ name: homeCourse, location: null, type: "Public" }]
+        : [];
+
     logger.info("📝 [BACKEND] Direct user registration:", {
       phoneNumber: e164,
       firstName,
@@ -129,6 +137,7 @@ const registerUser = async (req, res, next) => {
       handicap,
       location,
       homeCourse,
+      clubsCount: clubsArray.length,
       preferredTeeTime,
       walkOrRide,
       playingPartnerPreference,
@@ -175,7 +184,8 @@ const registerUser = async (req, res, next) => {
       passwordHash: null,
       isVerified: true,
       location: location || null,
-      homeCourse: homeCourse || null,
+      homeCourse: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null), // First club as homeCourse for backward compatibility
+      clubs: clubsArray, // Save clubs array
       preferredTeeTime: preferredTeeTime || null,
       walkOrRide: walkOrRide || null,
       playingPartnerPreference: playingPartnerPreference || null,

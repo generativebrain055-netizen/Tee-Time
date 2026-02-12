@@ -32,6 +32,8 @@ class TeeTimeController {
     this.skipInvite = this.skipInvite.bind(this);
     this.sendOnDeckInvites = this.sendOnDeckInvites.bind(this);
     this.setFCFSDeadline = this.setFCFSDeadline.bind(this);
+    this.getOpenInvites = this.getOpenInvites.bind(this);
+    this.joinOpenInvite = this.joinOpenInvite.bind(this);
   }
 
   /**
@@ -299,6 +301,129 @@ class TeeTimeController {
       res
         .status(500)
         .json({ success: false, message: "Failed to set deadline" });
+    }
+  }
+
+  /**
+   * GET /api/tee-times/open
+   * Get Open invites (community board) filtered by distance
+   */
+  async getOpenInvites(req, res) {
+    try {
+      const userId = req.user.id;
+      const { lat, lng, maxDistance, date, time, course } = req.query;
+
+      // Get user's location from profile if not provided
+      let userLat = lat ? parseFloat(lat) : null;
+      let userLng = lng ? parseFloat(lng) : null;
+
+      if (!userLat || !userLng) {
+        // Try to get from user profile
+        const userRepository = require("../repositories/userRepository");
+        const user = await userRepository.findById(userId);
+        if (user && user.location) {
+          // Parse location if stored as JSON or coordinates
+          // For now, require lat/lng in query
+          return res.status(400).json({
+            success: false,
+            message: "Latitude and longitude required (lat, lng query params)",
+          });
+        }
+      }
+
+      const maxDist = maxDistance ? parseFloat(maxDistance) : null;
+      const filterDate = date || null;
+      const filterTime = time || null; // "morning", "afternoon", "evening"
+      const filterCourse = course || null;
+      
+      const openInvites = await teeTimeRepository.getOpenInvites(
+        userId,
+        userLat,
+        userLng,
+        maxDist,
+        filterDate,
+        filterTime,
+        filterCourse
+      );
+
+      res.json({
+        success: true,
+        teeTimes: openInvites || [],
+        count: (openInvites || []).length,
+      });
+    } catch (error) {
+      logger.error("Get open invites error:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to get open invites" });
+    }
+  }
+
+  /**
+   * POST /api/tee-times/:id/join
+   * Join an Open invite (community board)
+   */
+  async joinOpenInvite(req, res) {
+    try {
+      const userId = req.user.id;
+      const { id: teeTimeId } = req.params;
+
+      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
+      if (!teeTime) {
+        return res.status(404).json({
+          success: false,
+          message: "Tee time not found",
+        });
+      }
+
+      if (teeTime.invite_type !== "open") {
+        return res.status(400).json({
+          success: false,
+          message: "This tee time is not open for public joining",
+        });
+      }
+
+      // Check if user is already a participant
+      const participantCount = await teeTimeRepository.getParticipantCount(teeTimeId);
+      const existingParticipant = await teeTimeRepository.getParticipantByUser(teeTimeId, userId);
+
+      if (existingParticipant) {
+        return res.status(400).json({
+          success: false,
+          message: "You are already a participant in this tee time",
+        });
+      }
+
+      // Check if tee time is full
+      if (participantCount >= teeTime.max_players) {
+        return res.status(400).json({
+          success: false,
+          message: "This tee time is full",
+        });
+      }
+
+      // Add user as participant
+      const user = await require("../repositories/userRepository").findById(userId);
+      const userName = `${user.first_name} ${user.last_name}`;
+
+      await teeTimeRepository.addParticipant(
+        teeTimeId,
+        userId,
+        null,
+        userName,
+        participantCount,
+        false
+      );
+
+      res.json({
+        success: true,
+        message: "Successfully joined the tee time!",
+      });
+    } catch (error) {
+      logger.error("Join open invite error:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to join tee time" });
     }
   }
 }

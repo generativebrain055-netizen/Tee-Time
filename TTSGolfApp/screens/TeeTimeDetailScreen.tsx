@@ -12,7 +12,7 @@ import {
     RefreshControl,
     Image,
 } from "react-native";
-import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut } from "lucide-react-native";
+import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle } from "lucide-react-native";
 import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { ConfirmModal } from "../ui/feedback";
@@ -29,9 +29,10 @@ interface Participant {
     userId?: string;
     name: string;
     avatar?: string;
-    status: 'accepted' | 'declined' | 'pending' | 'queued' | 'invited';
+    status: 'accepted' | 'declined' | 'pending' | 'queued' | 'invited' | 'expired';
     isCreator: boolean;
     expiresAt?: string;
+    inviteId?: string; // For skip functionality
 }
 
 interface Invite {
@@ -54,6 +55,7 @@ interface TeeTimeDetail {
     teeDate: string;
     teeTime: string;
     maxPlayers: number;
+    inviteType?: 'roster' | 'fcfs' | 'manual' | 'open';
     status: 'pending' | 'confirmed' | 'in_progress' | 'completed';
     participants: Participant[];
     invites: Invite[];
@@ -99,25 +101,37 @@ const formatTime = (timeStr: string): string => {
     return `${hour12}:${minutes} ${ampm}`;
 };
 
-const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup }: { 
+const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, onSkip, canSkip }: { 
     participant: Participant; 
     showTimeLeft?: boolean;
     calculateTimeLeft?: (expiresAt: string) => string | null;
     isInAwaitingGroup?: boolean;
+    onSkip?: (inviteId: string) => void;
+    canSkip?: boolean;
 }) => {
     const getStatusConfig = () => {
+        // Check if expired (by status or by time)
+        const isExpiredByTime = participant.expiresAt && calculateTimeLeft && !calculateTimeLeft(participant.expiresAt);
+        const isExpired = participant.status === 'expired' || (isExpiredByTime && participant.status === 'pending');
+        
+        if (isExpired) {
+            return { color: 'text-gray-400', text: 'Expired', showBadge: true, badgeIcon: 'timeout', showArrow: false };
+        }
+        
         switch (participant.status) {
             case 'accepted':
-                return { color: 'text-gray-600', text: 'Accepted', showBadge: true, showArrow: false };
+                return { color: 'text-gray-600', text: 'Accepted', showBadge: true, badgeIcon: 'check', showArrow: false };
             case 'declined':
-                return { color: 'text-gray-600', text: 'Declined', showBadge: true, showArrow: false };
+                return { color: 'text-gray-600', text: 'Declined', showBadge: true, badgeIcon: 'decline', showArrow: false };
             case 'pending':
-                return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, showArrow: true };
+                return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'queued':
             case 'invited':
-                return { color: 'text-gray-400', text: 'Invited', showBadge: false, showArrow: true };
+                return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
+            case 'expired':
+                return { color: 'text-gray-400', text: 'Expired', showBadge: true, badgeIcon: 'timeout', showArrow: false };
             default:
-                return { color: 'text-gray-600', text: 'Invited', showBadge: false, showArrow: true };
+                return { color: 'text-gray-600', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
         }
     };
 
@@ -151,10 +165,18 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
                     </View>
                 )}
                 {statusConfig.showBadge && (
-                    <View className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full ${participant.status === 'accepted' ? 'bg-primary' : 'bg-error'} items-center justify-center border-2 border-white`}>
-                        <Text className="text-white font-jakarta-bold text-xs">
-                            {participant.status === 'accepted' ? '✓' : '✕'}
-                        </Text>
+                    <View className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full ${
+                        statusConfig.badgeIcon === 'check' ? 'bg-primary' : 
+                        statusConfig.badgeIcon === 'decline' ? 'bg-error' : 
+                        statusConfig.badgeIcon === 'timeout' ? 'bg-gray-400' : 'bg-primary'
+                    } items-center justify-center border-2 border-white`}>
+                        {statusConfig.badgeIcon === 'timeout' ? (
+                            <AlertCircle size={12} color="#FFFFFF" strokeWidth={2.5} />
+                        ) : (
+                            <Text className="text-white font-jakarta-bold text-xs">
+                                {statusConfig.badgeIcon === 'check' ? '✓' : '✕'}
+                            </Text>
+                        )}
                     </View>
                 )}
             </View>
@@ -179,6 +201,21 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
                         time left
                     </Text>
                 </View>
+            )}
+            
+            {/* Skip Button - Only show for pending invites if organizer can skip */}
+            {canSkip && participant.status === 'pending' && participant.inviteId && onSkip && (
+                <TouchableOpacity
+                    className="ml-3 flex-row items-center px-3 py-2 rounded-md"
+                    style={{ backgroundColor: '#F3F4F6' }}
+                    onPress={() => onSkip(participant.inviteId!)}
+                    activeOpacity={0.7}
+                >
+                    <SkipForward size={16} color="#6B7280" strokeWidth={2} />
+                    <Text className="font-jakarta-semibold text-sm text-gray-700 ml-1.5">
+                        Skip
+                    </Text>
+                </TouchableOpacity>
             )}
         </View>
     );
@@ -261,6 +298,10 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         
                         seenUserIds.add(userId);
                         
+                        // Check if invite is expired (either by status or by time)
+                        const isExpiredByTime = invite.expiresAt && new Date(invite.expiresAt) < new Date();
+                        const isExpired = invite.status === 'expired' || isExpiredByTime;
+                        
                         allParticipants.push({
                             id: invite.id,
                             userId: invite.invitee?.userId,
@@ -268,9 +309,10 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             avatar: invite.invitee?.avatar,
                             status: invite.status === 'accepted' ? 'accepted' : 
                                    invite.status === 'declined' ? 'declined' :
-                                   invite.status === 'expired' ? 'queued' : 'pending',
+                                   isExpired ? 'expired' : 'pending',
                             isCreator: false,
                             expiresAt: invite.expiresAt,
+                            inviteId: invite.id, // Store invite ID for skip functionality
                         });
                     });
                 }
@@ -285,6 +327,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     teeDate: data.teeDate,
                     teeTime: data.teeTime,
                     maxPlayers: data.maxPlayers,
+                    inviteType: data.inviteType,
                     status: data.status,
                     participants: allParticipants,
                     invites: data.invites || [],
@@ -309,6 +352,25 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         setRefreshing(true);
         fetchTeeTimeDetails();
     }, [fetchTeeTimeDetails]);
+
+    // Handle skip invite (advance to next roster member)
+    const handleSkipInvite = useCallback(async (inviteId: string) => {
+        if (!teeTimeId || !inviteId) return;
+        
+        try {
+            const response = await teeTimeApi.skipInvite(teeTimeId, inviteId);
+            if (response.success) {
+                Alert.alert("Invite Skipped", "Advanced to next roster member.");
+                // Refresh tee time details to show updated status
+                fetchTeeTimeDetails();
+            } else {
+                Alert.alert("Error", "Failed to skip invite. Please try again.");
+            }
+        } catch (error: any) {
+            logger.error('[TeeTimeDetailScreen] Skip invite error', error);
+            Alert.alert("Error", error.message || "Failed to skip invite.");
+        }
+    }, [teeTimeId, fetchTeeTimeDetails]);
 
     // Check if current user is the organizer
     const isOrganizer = useMemo(() => {
@@ -409,8 +471,9 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const acceptedParticipants = teeTime.participants.filter(p => p.status === 'accepted');
     const pendingParticipants = teeTime.participants.filter(p => p.status === 'pending');
     const declinedParticipants = teeTime.participants.filter(p => p.status === 'declined');
+    const expiredParticipants = teeTime.participants.filter(p => p.status === 'expired');
     const invitedParticipants = teeTime.participants.filter(p => p.status === 'queued' || p.status === 'invited');
-    const backupDeclined = [...declinedParticipants];
+    const backupDeclined = [...declinedParticipants, ...expiredParticipants];
 
     const formatDate = (dateStr: string) => {
         const date = new Date(dateStr);
@@ -429,7 +492,16 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 <Text className="font-jakarta-bold text-lg text-gray-900">
                     Tee time status
                 </Text>
-                <View className="w-8" />
+                {teeTime.status === 'confirmed' && (
+                    <TouchableOpacity 
+                        onPress={() => navigation?.navigate("ChatDetail", { chatInfo: { teeTimeId: teeTimeId } })} 
+                        className="p-1 -mr-1" 
+                        activeOpacity={0.7}
+                    >
+                        <MessageCircle size={24} color="#5EBC68" strokeWidth={2} />
+                    </TouchableOpacity>
+                )}
+                {teeTime.status !== 'confirmed' && <View className="w-8" />}
             </View>
 
             <ScrollView
@@ -471,7 +543,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     </View>
 
                     {/* Participants Count */}
-                    <View className="flex-row items-start">
+                    <View className="flex-row items-start mb-6">
                         <View className="mr-3.5 mt-0.5">
                             <Users size={22} color="#6B7280" strokeWidth={2} />
                         </View>
@@ -489,6 +561,26 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             )}
                         </View>
                     </View>
+
+                    {/* Invite Type */}
+                    {teeTime.inviteType && (
+                        <View className="flex-row items-start">
+                            <View className="mr-3.5 mt-0.5">
+                                <Users size={22} color="#6B7280" strokeWidth={2} />
+                            </View>
+                            <View className="flex-1">
+                                <Text className="font-jakarta-extrabold text-lg text-gray-900 mb-1.5 leading-6">
+                                    Invite Type
+                                </Text>
+                                <Text className="font-jakarta-semibold text-base text-gray-600 leading-5 capitalize">
+                                    {teeTime.inviteType === 'fcfs' ? 'First Come First Served' : 
+                                     teeTime.inviteType === 'roster' ? 'Roster' :
+                                     teeTime.inviteType === 'open' ? 'Open Invite' :
+                                     teeTime.inviteType === 'manual' ? 'Manual' : teeTime.inviteType}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
                 </View>
 
                 {/* Divider */}
@@ -503,7 +595,15 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     
                     {/* Awaiting response section - grouped with green background */}
                     {pendingParticipants.length > 0 && pendingParticipants.map(p => (
-                        <ParticipantRow key={p.id} participant={p} showTimeLeft calculateTimeLeft={calculateTimeLeft} isInAwaitingGroup={true} />
+                        <ParticipantRow 
+                            key={p.id} 
+                            participant={p} 
+                            showTimeLeft 
+                            calculateTimeLeft={calculateTimeLeft} 
+                            isInAwaitingGroup={true}
+                            onSkip={handleSkipInvite}
+                            canSkip={isOrganizer}
+                        />
                     ))}
                     
                     {/* Invited participants */}
@@ -582,9 +682,11 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
             <ConfirmModal
                 visible={showLeaveModal}
                 title="Leave tee time?"
-                message="You will be removed from this tee time and your spot will be available to others. A Social Rate penalty may apply if this is a confirmed tee time."
-                confirmText={isLeaving ? "Leaving..." : "Leave"}
-                cancelText="Cancel"
+                message={teeTime.status === "confirmed" 
+                    ? `You will lose 10 points if you cancel your Tee Time now. Confirm cancellation?`
+                    : "You will be removed from this tee time and your spot will be available to others."}
+                confirmText={isLeaving ? "Leaving..." : "Yes"}
+                cancelText="No"
                 confirmColor="#DC2626"
                 onConfirm={handleLeaveTeeTime}
                 onCancel={() => setShowLeaveModal(false)}

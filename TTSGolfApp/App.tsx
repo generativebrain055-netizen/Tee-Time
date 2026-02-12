@@ -47,6 +47,7 @@ import GroupProfileScreen from "./screens/roster/group-profile";
 import EditProfileScreen from "./screens/profile/EditProfileScreen";
 import QRCodeScreen from "./screens/profile/QRCodeScreen";
 import ScanQRScreen from "./screens/profile/ScanQRScreen";
+import SocialRateHistoryScreen from "./screens/profile/SocialRateHistoryScreen";
 import NotificationsScreen from "./screens/notifications";
 import TeeTimeDetailScreen from "./screens/TeeTimeDetailScreen";
 import TeeTimeHistoryScreen from "./screens/TeeTimeHistoryScreen";
@@ -58,9 +59,11 @@ import FindPlayersScreen from "./screens/FindPlayersScreen";
 import UserProfileScreen from "./screens/UserProfileScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
+import LocationSettingsScreen from "./screens/LocationSettingsScreen";
 import PrivacySecurityScreen from "./screens/PrivacySecurityScreen";
 import HelpSupportScreen from "./screens/HelpSupportScreen";
 import CreateGroupScreen from "./screens/CreateGroupScreen";
+import WaiverWireScreen from "./screens/WaiverWireScreen";
 
 type ScreenName =
   | "Splash"
@@ -85,6 +88,7 @@ type ScreenName =
   | "ScanQR"
   | "Settings"
   | "NotificationSettings"
+  | "LocationSettings"
   | "HelpSupport"
   | "CreateTeeTime"
   | "CreateGroup"
@@ -103,7 +107,8 @@ type ScreenName =
   | "FindPlayers"
   | "UserProfile"
   | "GlobalSearch"
-  | "ComposeMessage";
+  | "ComposeMessage"
+  | "WaiverWire";
 
 interface UserData {
   firstName: string;
@@ -421,6 +426,13 @@ export default function App(): React.ReactElement {
             navigation={navigation as any}
           />
         );
+      case "SocialRateHistory":
+        return (
+          <SocialRateHistoryScreen
+            key={`social-rate-history-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
       case "CreateTeeTime":
         return (
           <CreateTeeTimeScreen
@@ -445,10 +457,23 @@ export default function App(): React.ReactElement {
           />
         );
       case "Availability":
-      case "Community":
         return (
           <AvailabilityScreen
             key={`availability-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "Community":
+        return (
+          <CommunityBoardScreen
+            key={`community-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "WaiverWire":
+        return (
+          <WaiverWireScreen
+            key={`waiver-wire-${screenKey}`}
             navigation={navigation as any}
           />
         );
@@ -471,6 +496,13 @@ export default function App(): React.ReactElement {
         return (
           <NotificationSettingsScreen
             key={`notification-settings-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "LocationSettings":
+        return (
+          <LocationSettingsScreen
+            key={`location-settings-${screenKey}`}
             navigation={navigation as any}
           />
         );

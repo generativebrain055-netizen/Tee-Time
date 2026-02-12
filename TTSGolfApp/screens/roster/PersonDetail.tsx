@@ -385,6 +385,9 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
                         {profile?.contact.username && (
                             <Text className="text-sm text-gray-500 mt-1">@{profile.contact.username}</Text>
                         )}
+                        {profile?.contact.phone && (
+                            <Text className="text-sm text-gray-500 mt-1">{profile.contact.phone}</Text>
+                        )}
                         {profile?.groupName && (
                             <View className="px-3 py-1 rounded-md mt-2" style={{ backgroundColor: profile.groupColor || '#E8F5E9' }}>
                                 <Text className="text-xs font-semibold text-gray-900">{profile.groupName}</Text>

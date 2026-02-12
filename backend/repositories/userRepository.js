@@ -175,6 +175,7 @@ const create = async (userData) => {
     isVerified,
     location,
     homeCourse,
+    clubs, // Support clubs array
     preferredTeeTime,
     walkOrRide,
     playingPartnerPreference,
@@ -200,6 +201,13 @@ const create = async (userData) => {
 
     if (userError) throw userError;
 
+    // Normalize clubs: use clubs array if provided, otherwise fall back to homeCourse
+    const clubsArray = Array.isArray(clubs) && clubs.length > 0
+      ? clubs
+      : homeCourse
+        ? [{ name: homeCourse, location: null, type: "Public" }]
+        : [];
+
     // Create profile
     const { error: profileError } = await supabaseAdmin
       .from("user_profiles")
@@ -207,7 +215,8 @@ const create = async (userData) => {
         user_id: user.id,
         handicap: handicap ? parseFloat(handicap) : null,
         location: location || null,
-        home_course: homeCourse || null,
+        home_course: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null), // First club as homeCourse for backward compatibility
+        clubs: clubsArray.length > 0 ? clubsArray : [], // Save clubs as JSONB array (use empty array instead of null to match schema default)
         preferred_tee_time: preferredTeeTime || null,
         walk_or_ride: walkOrRide || null,
         playing_partner_preference: playingPartnerPreference || null,
@@ -222,7 +231,8 @@ const create = async (userData) => {
       handicap: handicap ? parseFloat(handicap) : null,
       social_rate: 5.0,
       location,
-      home_course: homeCourse,
+      home_course: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null),
+      clubs: clubsArray.length > 0 ? clubsArray : [], // Use empty array to match schema default
       preferred_tee_time: preferredTeeTime,
       walk_or_ride: walkOrRide,
       playing_partner_preference: playingPartnerPreference,

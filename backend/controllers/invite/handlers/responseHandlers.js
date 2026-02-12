@@ -48,6 +48,7 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
                         date: teeTime.tee_date,
                         time: teeTime.tee_time,
                         courseName: teeTime.course_name,
+                        maxPlayers: teeTime.max_players,
                     },
                     {
                         id: teeTime.creator_id,

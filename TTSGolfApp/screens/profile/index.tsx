@@ -13,7 +13,7 @@ import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin } from "lucide-re
 import { ScreenShell, ContentArea, AppHeader, AppBottomNav } from "../../ui";
 import { ConfirmModal } from "../../ui/feedback";
 import { Skeleton } from "../../ui/feedback/Skeleton";
-import { teeTimeApi, TeeTime, profileApi } from "../../services/api";
+import { teeTimeApi, TeeTime, profileApi, TeeTimeHistoryEntry } from "../../services/api";
 import { useUser } from "../../contexts";
 import { logger } from "../../utils/logger";
 
@@ -64,7 +64,7 @@ const getGroupSizeDisplay = (pref?: string): string => {
 export default function ProfileScreen({ navigation }: any) {
     const { profile, loading: profileLoading, fetchProfile } = useUser();
     const [refreshing, setRefreshing] = useState(false);
-    const [recentRounds, setRecentRounds] = useState<TeeTime[]>([]);
+    const [recentRounds, setRecentRounds] = useState<TeeTimeHistoryEntry[]>([]);
     const [roundsLoading, setRoundsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
 
@@ -75,13 +75,13 @@ export default function ProfileScreen({ navigation }: any) {
 
 
 
-    // Fetch recent rounds
+    // Fetch recent rounds with scores
     useEffect(() => {
         const fetchRounds = async () => {
             try {
-                const teeTimesRes = await teeTimeApi.getTeeTimes("completed");
-                if (teeTimesRes.success) {
-                    setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
+                const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 3 });
+                if (historyRes.success) {
+                    setRecentRounds(historyRes.history);
                 }
             } catch (error: any) {
                 if (error?.message !== "Session expired") {
@@ -103,9 +103,9 @@ export default function ProfileScreen({ navigation }: any) {
             fetchProfile(true), // Force refresh
             (async () => {
                 try {
-                    const teeTimesRes = await teeTimeApi.getTeeTimes("completed");
-                    if (teeTimesRes.success) {
-                        setRecentRounds(teeTimesRes.teeTimes.slice(0, 3));
+                    const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 3 });
+                    if (historyRes.success) {
+                        setRecentRounds(historyRes.history);
                     }
                 } catch (error) {
                     logger.error("[ProfileScreen] Error fetching rounds", error);
@@ -550,14 +550,18 @@ export default function ProfileScreen({ navigation }: any) {
                                     Courses
                                 </Text>
                             </View>
-                            <View style={{
-                                flex: 1,
-                                borderRadius: 12,
-                                paddingVertical: 16,
-                                paddingHorizontal: 12,
-                                alignItems: 'center',
-                                backgroundColor: '#FAF5FF',
-                            }}>
+                            <TouchableOpacity
+                                style={{
+                                    flex: 1,
+                                    borderRadius: 12,
+                                    paddingVertical: 16,
+                                    paddingHorizontal: 12,
+                                    alignItems: 'center',
+                                    backgroundColor: '#FAF5FF',
+                                }}
+                                onPress={() => navigation?.navigate("SocialRateHistory")}
+                                activeOpacity={0.7}
+                            >
                                 <Text style={{
                                     fontFamily: 'Inter_700Bold',
                                     fontSize: 28,
@@ -573,7 +577,7 @@ export default function ProfileScreen({ navigation }: any) {
                                 }}>
                                     Social Score
                                 </Text>
-                            </View>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -625,17 +629,28 @@ export default function ProfileScreen({ navigation }: any) {
                                     }}>
                                         {round.courseName}
                                     </Text>
-                                    <Text style={{
-                                        fontFamily: 'Inter_400Regular',
-                                        fontSize: 13,
-                                        color: '#6B7280',
-                                    }}>
-                                        {new Date(round.teeDate).toLocaleDateString('en-US', { 
-                                            month: 'long', 
-                                            day: 'numeric', 
-                                            year: 'numeric' 
-                                        })}
-                                    </Text>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Text style={{
+                                            fontFamily: 'Inter_400Regular',
+                                            fontSize: 13,
+                                            color: '#6B7280',
+                                        }}>
+                                            {new Date(round.teeDate).toLocaleDateString('en-US', { 
+                                                month: 'long', 
+                                                day: 'numeric', 
+                                                year: 'numeric' 
+                                            })}
+                                        </Text>
+                                        {round.gameScore !== undefined && round.gameScore !== null && (
+                                            <Text style={{
+                                                fontFamily: 'Inter_600SemiBold',
+                                                fontSize: 15,
+                                                color: '#111827',
+                                            }}>
+                                                Score: {round.gameScore}{round.holesPlayed === 9 ? ' (9)' : ''}
+                                            </Text>
+                                        )}
+                                    </View>
                                 </TouchableOpacity>
                             ))
                         ) : (

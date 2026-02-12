@@ -261,6 +261,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         return sizeMap[count] || "any";
       };
 
+      // Format clubs array for backend (support multiple clubs)
+      const clubsArray = Array.isArray(finalData.clubs) && finalData.clubs.length > 0
+        ? finalData.clubs.map(club => ({
+            id: club.id || null,
+            name: club.name || null,
+            location: club.location || null,
+            type: club.type || "Public",
+          }))
+        : finalData.club
+          ? [{
+              id: finalData.club.id || null,
+              name: finalData.club.name || null,
+              location: finalData.club.location || null,
+              type: finalData.club.type || "Public",
+            }]
+          : [];
+
       const requestBody = {
         phoneNumber: finalData.phoneNumber,
         firstName: finalData.firstName,
@@ -271,7 +288,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         profilePhotoBase64: finalData.profilePhotoBase64 || null,
         handicap: finalData.handicap != null ? parseInt(String(finalData.handicap), 10) : null,
         location: finalData.location?.name || null,
-        homeCourse: finalData.club?.name || null,
+        homeCourse: clubsArray.length > 0 ? clubsArray[0].name : null, // Keep for backward compatibility
+        clubs: clubsArray, // Send clubs array
         preferredTeeTime: mapPreferredTime(
           finalData.preferences?.preferredTimes,
         ),
@@ -326,6 +344,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           return;
         }
 
+        // Format clubs array for OAuth registration
+        const oauthClubsArray = Array.isArray(finalData.clubs) && finalData.clubs.length > 0
+          ? finalData.clubs.map(club => ({
+              id: club.id || null,
+              name: club.name || null,
+              location: club.location || null,
+              type: club.type || "Public",
+            }))
+          : finalData.club
+            ? [{
+                id: finalData.club.id || null,
+                name: finalData.club.name || null,
+                location: finalData.club.location || null,
+                type: finalData.club.type || "Public",
+              }]
+            : [];
+
         const oauthRequestBody = {
           tempToken: oauthData.tempToken,
           phoneNumber: finalData.phoneNumber,
@@ -336,6 +371,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           zipCode: finalData.zipCode || null,
           profilePhotoBase64: finalData.profilePhotoBase64 || null,
           handicap: finalData.handicap != null ? parseInt(String(finalData.handicap), 10) : null,
+          location: finalData.location?.name || null,
+          homeCourse: oauthClubsArray.length > 0 ? oauthClubsArray[0].name : null,
+          clubs: oauthClubsArray, // Send clubs array
         };
 
         logger.debug("[OnboardingScreen] OAuth request body prepared", {

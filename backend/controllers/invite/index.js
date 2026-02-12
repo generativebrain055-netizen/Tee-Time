@@ -5,6 +5,7 @@ const inviteRepository = require("../../repositories/inviteRepository");
 const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const notificationService = require("../../services/notificationService");
 const logger = require("../../config/logger");
+const { supabaseAdmin } = require("../../config/supabase");
 
 const { INVITE_TYPES, INVITE_RESPONSES } = require("./constants");
 const { sendInviteSms } = require("./smsService");
@@ -52,9 +53,16 @@ class InviteController {
                 return createFCFSInvites(req, res, teeTime, invitees);
             } else if (type === INVITE_TYPES.ROSTER) {
                 return createRosterInvites(req, res, teeTime, invitees, responseWindow);
+            } else if (type === INVITE_TYPES.OPEN) {
+                // Open invites don't need specific invites - tee time is posted to community board
+                return res.status(201).json({
+                    success: true,
+                    message: "Open invite created. Tee time is now visible on the community board.",
+                    invites: [],
+                });
             }
 
-            // Default: create all invites at once (manual/open)
+            // Default: create all invites at once (manual)
             const createdInvites = await inviteRepository.createBulkInvites(teeTimeId, userId, invitees);
 
             for (const invite of createdInvites) {
@@ -66,6 +74,7 @@ class InviteController {
                             date: teeTime.tee_date,
                             time: teeTime.tee_time,
                             courseName: teeTime.course_name,
+                            maxPlayers: teeTime.max_players,
                         },
                         {
                             id: userId,
@@ -135,6 +144,27 @@ class InviteController {
 
             // Check and update tee time status after response
             await teeTimeRepository.checkAndUpdateStatus(invite.tee_time_id);
+            
+            // If invite was accepted and tee time is confirmed, ensure participant is added to conversation
+            if (response === INVITE_RESPONSES.ACCEPTED && userId) {
+                try {
+                    const { data: teeTime } = await supabaseAdmin
+                        .from("tee_times")
+                        .select("status")
+                        .eq("id", invite.tee_time_id)
+                        .single();
+                    
+                    if (teeTime && teeTime.status === "confirmed") {
+                        const conversationRepository = require("../../repositories/conversationRepository");
+                        const conv = await conversationRepository.getOrCreateTeeTimeConversation(userId, invite.tee_time_id);
+                        await conversationRepository.ensureParticipant(conv.id, userId);
+                        logger.info(`Added participant ${userId} to conversation after accepting invite for confirmed tee time ${invite.tee_time_id}`);
+                    }
+                } catch (chatError) {
+                    // Don't fail invite response if conversation update fails
+                    logger.error(`Failed to add participant to conversation after invite acceptance:`, chatError.message);
+                }
+            }
 
             return res.json(result);
         } catch (error) {

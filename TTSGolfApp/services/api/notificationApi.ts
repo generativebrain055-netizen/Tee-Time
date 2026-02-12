@@ -47,6 +47,15 @@ export const notificationApi = {
     ),
 
   /**
+   * Mark notification as unread
+   */
+  markAsUnread: (notificationId: string) =>
+    apiCall<{ success: boolean; message: string }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/unread`,
+      { method: "PUT" },
+    ),
+
+  /**
    * Mark notification as responded (for actionable notifications)
    */
   markAsResponded: (notificationId: string) =>
