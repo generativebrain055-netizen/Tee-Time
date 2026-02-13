@@ -1,5 +1,6 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
 const logger = require("../config/logger");
+const { invitesLogger } = require("../config/logger");
 
 class InviteRepository {
   // Create invite
@@ -29,7 +30,67 @@ class InviteRepository {
 
   async createBulkInvites(teeTimeId, inviterId, invitees) {
     try {
-      const inviteRecords = invitees.map((inv, i) => ({
+      // Validate and potentially fix user IDs
+      const validatedInvitees = await Promise.all(
+        invitees.map(async (inv, i) => {
+          let userId = inv.userId || null;
+          
+          if (userId) {
+            // Check if userId exists in users table
+            const { data: userCheck, error: userError } = await supabaseAdmin
+              .from("users")
+              .select("id")
+              .eq("id", userId)
+              .is("deleted_at", null)
+              .maybeSingle();
+            
+            if (userError) {
+              invitesLogger.warn("[INVITE] Error checking user ID", {
+                event: "user_id_check_error",
+                userId,
+                error: userError?.message,
+              });
+            } else if (!userCheck) {
+              // User ID doesn't exist - might be a roster entry ID, try to look it up
+              invitesLogger.warn("[INVITE] User ID not found in users table, checking roster", {
+                event: "user_id_not_found",
+                userId,
+                inviteeName: inv.name,
+              });
+              
+              const { data: rosterEntry } = await supabaseAdmin
+                .from("roster")
+                .select("contact_user_id")
+                .eq("id", userId)
+                .eq("user_id", inviterId)
+                .maybeSingle();
+              
+              if (rosterEntry?.contact_user_id) {
+                invitesLogger.info("[INVITE] Found contact_user_id from roster entry", {
+                  event: "user_id_fixed_from_roster",
+                  originalId: userId,
+                  fixedId: rosterEntry.contact_user_id,
+                });
+                userId = rosterEntry.contact_user_id;
+              } else {
+                invitesLogger.error("[INVITE] User ID not found in users or roster", {
+                  event: "user_id_invalid",
+                  userId,
+                  inviteeName: inv.name,
+                });
+                userId = null; // Clear invalid ID
+              }
+            }
+          }
+          
+          return {
+            ...inv,
+            userId,
+          };
+        })
+      );
+
+      const inviteRecords = validatedInvitees.map((inv, i) => ({
         tee_time_id: teeTimeId,
         inviter_id: inviterId,
         invitee_user_id: inv.userId || null,
@@ -38,14 +99,56 @@ class InviteRepository {
         position: inv.order != null ? inv.order : i,
       }));
 
+      invitesLogger.info("[INVITE] Creating bulk invites", {
+        event: "bulk_invites_create",
+        teeTimeId,
+        inviterId,
+        totalInvitees: inviteRecords.length,
+        withUserId: inviteRecords.filter(r => r.invitee_user_id).length,
+        withPhone: inviteRecords.filter(r => r.invitee_phone).length,
+        sampleInvitee: inviteRecords[0] ? {
+          hasUserId: !!inviteRecords[0].invitee_user_id,
+          userId: inviteRecords[0].invitee_user_id,
+          hasPhone: !!inviteRecords[0].invitee_phone,
+          name: inviteRecords[0].invitee_name,
+        } : null,
+      });
+
+      logger.info(`Creating ${inviteRecords.length} invites for tee time ${teeTimeId}`, {
+        withUserId: inviteRecords.filter(r => r.invitee_user_id).length,
+        withPhone: inviteRecords.filter(r => r.invitee_phone).length,
+      });
+
       const { data, error } = await supabaseAdmin
         .from("invites")
         .insert(inviteRecords)
         .select();
 
       if (error) throw error;
+      
+      invitesLogger.info("[INVITE] Bulk invites created successfully", {
+        event: "bulk_invites_created",
+        teeTimeId,
+        inviteCount: (data || []).length,
+        invites: (data || []).map(inv => ({
+          inviteId: inv.id,
+          inviteeUserId: inv.invitee_user_id,
+          inviteePhone: inv.invitee_phone,
+          inviteeName: inv.invitee_name,
+          status: inv.status,
+        })),
+      });
+      
+      logger.info(`Successfully created ${(data || []).length} invites`);
       return data || [];
     } catch (error) {
+      invitesLogger.error("[INVITE] Error creating bulk invites", {
+        event: "bulk_invites_error",
+        teeTimeId,
+        error: error?.message,
+        code: error?.code,
+        stack: error?.stack,
+      });
       handleError(error, "createBulkInvites");
     }
   }
@@ -164,30 +267,78 @@ class InviteRepository {
    */
   async acceptInviteAtomic(inviteId, userId, userName, inviteType) {
     try {
+      const { invitesLogger } = require("../config/logger");
+      
+      invitesLogger.info("[INVITE] Starting atomic invite acceptance", {
+        event: "accept_invite_start",
+        inviteId,
+        userId,
+        userName,
+        inviteType,
+      });
+
+      // Note: Database function only accepts p_invite_id, p_user_id, p_response_message
+      // userName and inviteType are not used by the function
       const { data, error } = await supabaseAdmin.rpc("accept_invite_atomic", {
         p_invite_id: inviteId,
         p_user_id: userId,
-        p_user_name: userName,
-        p_invite_type: inviteType,
+        p_response_message: null, // Optional parameter
       });
 
-      if (error) throw error;
+      if (error) {
+        invitesLogger.error("[INVITE] RPC call failed", {
+          event: "accept_invite_rpc_error",
+          inviteId,
+          userId,
+          error: error?.message,
+          code: error?.code,
+        });
+        throw error;
+      }
+
+      invitesLogger.info("[INVITE] Atomic acceptance completed", {
+        event: "accept_invite_success",
+        inviteId,
+        userId,
+        result: data,
+      });
+
       return data;
     } catch (error) {
+      const { invitesLogger } = require("../config/logger");
+      
       // Fallback if function missing OR if it crashes with the known variable error
       if (
         (error.message?.includes("function") &&
           error.message?.includes("does not exist")) ||
         error.message?.includes(
           'record "v_lower_priority_accept" is not assigned yet'
-        )
+        ) ||
+        error.message?.includes("does not exist") ||
+        error.code === "42883" // Function does not exist error code
       ) {
+        invitesLogger.warn("[INVITE] RPC failed, falling back to manual acceptance", {
+          event: "accept_invite_fallback",
+          inviteId,
+          userId,
+          error: error.message,
+        });
         logger.warn(
           "RPC failed or missing, falling back to manual acceptance logic: " +
             error.message
         );
         return this._acceptInviteManual(inviteId, userId, userName);
       }
+      
+      invitesLogger.error("[INVITE] Accept invite error", {
+        event: "accept_invite_error",
+        inviteId,
+        userId,
+        error: error?.message,
+        code: error?.code,
+        stack: error?.stack,
+      });
+      
       handleError(error, "acceptInviteAtomic");
     }
   }
@@ -197,6 +348,15 @@ class InviteRepository {
    */
   async _acceptInviteManual(inviteId, userId, userName) {
     try {
+      const { invitesLogger } = require("../config/logger");
+      
+      invitesLogger.info("[INVITE] Starting manual invite acceptance", {
+        event: "accept_invite_manual_start",
+        inviteId,
+        userId,
+        userName,
+      });
+
       // 1. Get invite and tee time details
       const { data: invite, error: inviteError } = await supabaseAdmin
         .from("invites")
@@ -209,24 +369,86 @@ class InviteRepository {
         .eq("id", inviteId)
         .single();
 
-      if (inviteError) throw inviteError;
-      if (!invite) throw new Error("Invite not found");
+      if (inviteError) {
+        invitesLogger.error("[INVITE] Failed to fetch invite", {
+          event: "accept_invite_manual_error",
+          inviteId,
+          userId,
+          error: inviteError?.message,
+        });
+        throw inviteError;
+      }
+      
+      if (!invite) {
+        invitesLogger.error("[INVITE] Invite not found", {
+          event: "accept_invite_manual_not_found",
+          inviteId,
+          userId,
+        });
+        throw new Error("Invite not found");
+      }
+
+      // Check if invite is already accepted or not pending
+      if (invite.status !== "pending") {
+        invitesLogger.warn("[INVITE] Invite is not pending", {
+          event: "accept_invite_manual_not_pending",
+          inviteId,
+          userId,
+          currentStatus: invite.status,
+        });
+        return {
+          success: false,
+          reason: "already_responded",
+          message: `Invite is already ${invite.status}`,
+        };
+      }
 
       const teeTimeId = invite.tee_time_id;
-      const maxPlayers = invite.tee_times.max_players;
+      const maxPlayers = invite.tee_times?.max_players || 4;
 
-      // 2. Count participants (simulate 'status IS NULL OR statusStr != cancelled')
+      invitesLogger.info("[INVITE] Checking tee time capacity", {
+        event: "accept_invite_manual_check_capacity",
+        inviteId,
+        teeTimeId,
+        maxPlayers,
+      });
+
+      // 2. Count confirmed participants
       const { count, error: countError } = await supabaseAdmin
         .from("tee_time_participants")
         .select("*", { count: "exact", head: true })
         .eq("tee_time_id", teeTimeId)
-        .or("status.is.null,status.neq.cancelled");
+        .eq("status", "confirmed");
 
-      if (countError) throw countError;
+      if (countError) {
+        invitesLogger.error("[INVITE] Failed to count participants", {
+          event: "accept_invite_manual_count_error",
+          inviteId,
+          teeTimeId,
+          error: countError?.message,
+        });
+        throw countError;
+      }
+
+      invitesLogger.info("[INVITE] Participant count", {
+        event: "accept_invite_manual_count",
+        inviteId,
+        teeTimeId,
+        currentCount: count,
+        maxPlayers,
+      });
 
       // 3. Check capacity
       if (count >= maxPlayers) {
         // Full - move to waitlist
+        invitesLogger.info("[INVITE] Tee time is full, moving to waitlist", {
+          event: "accept_invite_manual_full",
+          inviteId,
+          teeTimeId,
+          count,
+          maxPlayers,
+        });
+        
         await supabaseAdmin
           .from("invites")
           .update({ status: "waitlist" })
@@ -235,11 +457,25 @@ class InviteRepository {
         return { success: false, reason: "full" };
       }
 
-      // 4. Accept
-      await supabaseAdmin
+      // 4. Update invite status to accepted
+      const { error: updateError } = await supabaseAdmin
         .from("invites")
-        .update({ status: "accepted" })
+        .update({ status: "accepted", updated_at: new Date().toISOString() })
         .eq("id", inviteId);
+
+      if (updateError) {
+        invitesLogger.error("[INVITE] Failed to update invite status", {
+          event: "accept_invite_manual_update_error",
+          inviteId,
+          error: updateError?.message,
+        });
+        throw updateError;
+      }
+
+      invitesLogger.info("[INVITE] Invite status updated to accepted", {
+        event: "accept_invite_manual_status_updated",
+        inviteId,
+      });
 
       // 5. Add participant
       const { data: participant, error: partError } = await supabaseAdmin
@@ -247,13 +483,33 @@ class InviteRepository {
         .insert({
           tee_time_id: teeTimeId,
           user_id: userId,
-          name: userName,
+          name: userName || invite.invitee_name,
           position: count,
+          status: "confirmed",
         })
         .select()
         .single();
 
-      if (partError) throw partError;
+      if (partError) {
+        invitesLogger.error("[INVITE] Failed to add participant", {
+          event: "accept_invite_manual_participant_error",
+          inviteId,
+          teeTimeId,
+          userId,
+          error: partError?.message,
+          code: partError?.code,
+        });
+        throw partError;
+      }
+
+      invitesLogger.info("[INVITE] Participant added successfully", {
+        event: "accept_invite_manual_success",
+        inviteId,
+        teeTimeId,
+        userId,
+        participantId: participant.id,
+        isFull: count + 1 >= maxPlayers,
+      });
 
       return {
         success: true,
@@ -262,6 +518,14 @@ class InviteRepository {
         isFull: count + 1 >= maxPlayers,
       };
     } catch (manualError) {
+      const { invitesLogger } = require("../config/logger");
+      invitesLogger.error("[INVITE] Manual acceptance error", {
+        event: "accept_invite_manual_error",
+        inviteId,
+        userId,
+        error: manualError?.message,
+        stack: manualError?.stack,
+      });
       handleError(manualError, "_acceptInviteManual");
     }
   }
@@ -962,7 +1226,67 @@ class InviteRepository {
 
   async createBulkInvitesWithExpiry(teeTimeId, inviterId, invitees) {
     try {
-      const inviteRecords = invitees.map((inv, i) => ({
+      // Validate and potentially fix user IDs
+      const validatedInvitees = await Promise.all(
+        invitees.map(async (inv) => {
+          let userId = inv.userId || null;
+          
+          if (userId) {
+            // Check if userId exists in users table
+            const { data: userCheck, error: userError } = await supabaseAdmin
+              .from("users")
+              .select("id")
+              .eq("id", userId)
+              .is("deleted_at", null)
+              .maybeSingle();
+            
+            if (userError) {
+              invitesLogger.warn("[INVITE] Error checking user ID", {
+                event: "user_id_check_error",
+                userId,
+                error: userError?.message,
+              });
+            } else if (!userCheck) {
+              // User ID doesn't exist - might be a roster entry ID, try to look it up
+              invitesLogger.warn("[INVITE] User ID not found in users table, checking roster", {
+                event: "user_id_not_found",
+                userId,
+                inviteeName: inv.name,
+              });
+              
+              const { data: rosterEntry } = await supabaseAdmin
+                .from("roster")
+                .select("contact_user_id")
+                .eq("id", userId)
+                .eq("user_id", inviterId)
+                .maybeSingle();
+              
+              if (rosterEntry?.contact_user_id) {
+                invitesLogger.info("[INVITE] Found contact_user_id from roster entry", {
+                  event: "user_id_fixed_from_roster",
+                  originalId: userId,
+                  fixedId: rosterEntry.contact_user_id,
+                });
+                userId = rosterEntry.contact_user_id;
+              } else {
+                invitesLogger.error("[INVITE] User ID not found in users or roster", {
+                  event: "user_id_invalid",
+                  userId,
+                  inviteeName: inv.name,
+                });
+                userId = null; // Clear invalid ID
+              }
+            }
+          }
+          
+          return {
+            ...inv,
+            userId,
+          };
+        })
+      );
+
+      const inviteRecords = validatedInvitees.map((inv, i) => ({
         tee_time_id: teeTimeId,
         inviter_id: inviterId,
         invitee_user_id: inv.userId || null,
@@ -972,14 +1296,59 @@ class InviteRepository {
         expires_at: inv.expiresAt || null,
       }));
 
+      invitesLogger.info("[INVITE] Creating bulk invites with expiry", {
+        event: "bulk_invites_with_expiry_create",
+        teeTimeId,
+        inviterId,
+        totalInvitees: inviteRecords.length,
+        withUserId: inviteRecords.filter(r => r.invitee_user_id).length,
+        withPhone: inviteRecords.filter(r => r.invitee_phone).length,
+        sampleInvitee: inviteRecords[0] ? {
+          hasUserId: !!inviteRecords[0].invitee_user_id,
+          userId: inviteRecords[0].invitee_user_id,
+          hasPhone: !!inviteRecords[0].invitee_phone,
+          name: inviteRecords[0].invitee_name,
+          expiresAt: inviteRecords[0].expires_at,
+        } : null,
+      });
+
+      logger.info(`Creating ${inviteRecords.length} invites with expiry for tee time ${teeTimeId}`, {
+        withUserId: inviteRecords.filter(r => r.invitee_user_id).length,
+        withPhone: inviteRecords.filter(r => r.invitee_phone).length,
+        sampleInvitee: invitees[0] ? { hasUserId: !!invitees[0].userId, hasPhone: !!invitees[0].phone } : null,
+      });
+
       const { data, error } = await supabaseAdmin
         .from("invites")
         .insert(inviteRecords)
         .select();
 
       if (error) throw error;
+      
+      invitesLogger.info("[INVITE] Bulk invites with expiry created successfully", {
+        event: "bulk_invites_with_expiry_created",
+        teeTimeId,
+        inviteCount: (data || []).length,
+        invites: (data || []).map(inv => ({
+          inviteId: inv.id,
+          inviteeUserId: inv.invitee_user_id,
+          inviteePhone: inv.invitee_phone,
+          inviteeName: inv.invitee_name,
+          status: inv.status,
+          expiresAt: inv.expires_at,
+        })),
+      });
+      
+      logger.info(`Successfully created ${(data || []).length} invites with expiry`);
       return data || [];
     } catch (error) {
+      invitesLogger.error("[INVITE] Error creating bulk invites with expiry", {
+        event: "bulk_invites_with_expiry_error",
+        teeTimeId,
+        error: error?.message,
+        code: error?.code,
+        stack: error?.stack,
+      });
       handleError(error, "createBulkInvitesWithExpiry");
     }
   }

@@ -3,6 +3,7 @@
  */
 const twilio = require("twilio");
 const logger = require("../../config/logger");
+const { twilioLogger } = require("../../config/logger");
 const inviteRepository = require("../../repositories/inviteRepository");
 const { formatDateLocal } = require("../../utils/dateUtils");
 
@@ -117,6 +118,12 @@ const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHour
     try {
         if (!twilioClient) {
             logger.warn(`SMS not sent to ${invite.invitee_phone} - Twilio not configured`);
+            twilioLogger.warn("[TWILIO] Invite SMS skipped - Twilio not configured", {
+                feature: "invite",
+                to: invite.invitee_phone,
+                inviteId: invite.id,
+                inviteLink: `https://teetime.app/invite/${invite.id}`,
+            });
             return false;
         }
 
@@ -131,9 +138,24 @@ const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHour
 
         await inviteRepository.markSmsSent(invite.id);
         logger.info(`SMS invite sent to ${invite.invitee_phone}`);
+        const inviteLink = `https://teetime.app/invite/${invite.id}`;
+        twilioLogger.info("[TWILIO] Invite SMS sent", {
+            feature: "invite",
+            to: invite.invitee_phone,
+            inviteId: invite.id,
+            inviteLink,
+        });
         return true;
     } catch (error) {
         logger.error(`Failed to send SMS invite to ${invite.invitee_phone}:`, error);
+        const inviteLink = `https://teetime.app/invite/${invite.id}`;
+        twilioLogger.warn("[TWILIO] Invite SMS failed", {
+            feature: "invite",
+            to: invite.invitee_phone,
+            inviteId: invite.id,
+            inviteLink,
+            error: error?.message,
+        });
         return false;
     }
 };

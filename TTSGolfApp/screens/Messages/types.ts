@@ -31,6 +31,7 @@ export interface TeeTimeConversationItem {
   participantAvatars?: string[];
   lastMessage: string;
   lastMessageTime: string;
+  unread?: number;
 }
 
 /** Row for "Groups" tab - group thread */

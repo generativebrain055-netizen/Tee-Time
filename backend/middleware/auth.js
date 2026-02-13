@@ -13,10 +13,29 @@ const { AuthenticationError, ErrorCodes } = require("./errorHandler");
  */
 const authenticate = async (req, res, next) => {
   try {
+    // Log authentication attempts for invite respond endpoints
+    if (req.path && req.path.includes("/invites") && req.path.includes("/respond")) {
+      const { invitesLogger } = require("../config/logger");
+      invitesLogger.info("[AUTH] Authentication middleware called for respond endpoint", {
+        event: "auth_middleware_called",
+        method: req.method,
+        path: req.path,
+        hasAuthHeader: !!req.headers.authorization,
+        authHeaderPrefix: req.headers.authorization?.substring(0, 20) || "none",
+      });
+    }
+    
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (req.path && req.path.includes("/invites") && req.path.includes("/respond")) {
+        const { invitesLogger } = require("../config/logger");
+        invitesLogger.error("[AUTH] No token provided for respond endpoint", {
+          event: "auth_no_token",
+          path: req.path,
+        });
+      }
       throw new AuthenticationError(
         "No token provided",
         ErrorCodes.INVALID_TOKEN
@@ -106,8 +125,28 @@ const authenticate = async (req, res, next) => {
       logger.error("Failed to update session activity", err);
     });
 
+    // Log successful authentication for invite respond endpoints
+    if (req.path && req.path.includes("/invites") && req.path.includes("/respond")) {
+      const { invitesLogger } = require("../config/logger");
+      invitesLogger.info("[AUTH] Authentication successful for respond endpoint", {
+        event: "auth_success",
+        path: req.path,
+        userId: user.id,
+      });
+    }
+
     next();
   } catch (error) {
+    // Log authentication failures for invite respond endpoints
+    if (req.path && req.path.includes("/invites") && req.path.includes("/respond")) {
+      const { invitesLogger } = require("../config/logger");
+      invitesLogger.error("[AUTH] Authentication failed for respond endpoint", {
+        event: "auth_failed",
+        path: req.path,
+        error: error.message,
+        code: error.code,
+      });
+    }
     next(error);
   }
 };

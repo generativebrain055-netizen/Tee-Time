@@ -75,49 +75,175 @@ export const apiCall = async <T>(
   retryOnUnauthorized = true,
 ): Promise<T> => {
   const headers = await getAuthHeaders();
-  const response = await fetch(url, {
-    ...options,
-    headers: { ...headers, ...options.headers },
+  
+  // Log request details for debugging
+  logger.info("[api/core] Making API request", {
+    url,
+    method: options.method || "GET",
+    hasBody: !!options.body,
+    hasAuth: !!headers.Authorization,
   });
-
-  // Handle 401 Unauthorized - try to refresh token
-  if (response.status === 401 && retryOnUnauthorized) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      // Retry the request with new token
-      const retryResponse = await fetch(url, {
+  
+  try {
+    // Add timeout to detect connection issues faster
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    let response;
+    try {
+      response = await fetch(url, {
         ...options,
-        headers: {
-          ...options.headers,
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${newToken}`,
-        },
+        headers: { ...headers, ...options.headers },
+        signal: controller.signal,
       });
-      const retryData = await retryResponse.json();
-      if (!retryResponse.ok) {
+      clearTimeout(timeoutId);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === "AbortError") {
+        logger.error("[api/core] Request timeout - backend not responding", {
+          url,
+          timeout: "10s",
+        });
         throw new ApiError(
-          retryData.message || "API request failed",
-          retryResponse.status,
-          retryData.code,
+          "Request timed out. The backend is not responding. Please check:\n" +
+          "1. Backend is running (cd backend && npm run dev)\n" +
+          "2. API_URL is correct in .env\n" +
+          "3. Backend is accessible from your device/simulator",
+          0,
+          "TIMEOUT_ERROR",
         );
       }
-      return retryData;
+      throw fetchError;
     }
-    // Token refresh failed - session manager already handled redirect
-    throw new ApiError("Session expired", 401, "SESSION_EXPIRED");
-  }
+    
+    logger.info("[api/core] API response received", {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+    });
 
-  const data = await response.json();
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && retryOnUnauthorized) {
+      logger.warn("[api/core] Received 401, attempting token refresh", { url });
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        logger.info("[api/core] Token refreshed, retrying request", { url });
+        // Retry the request with new token
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${newToken}`,
+          },
+        });
+        const retryData = await retryResponse.json();
+        if (!retryResponse.ok) {
+          logger.error("[api/core] Retry request failed", {
+            url,
+            status: retryResponse.status,
+            data: retryData,
+          });
+          throw new ApiError(
+            retryData.message || "API request failed",
+            retryResponse.status,
+            retryData.code,
+          );
+        }
+        logger.info("[api/core] Retry request succeeded", { url });
+        return retryData;
+      }
+      // Token refresh failed - session manager already handled redirect
+      logger.error("[api/core] Token refresh failed", { url });
+      throw new ApiError("Session expired", 401, "SESSION_EXPIRED");
+    }
 
-  if (!response.ok) {
+    // Check if response is actually JSON before parsing
+    const contentType = response.headers.get("content-type");
+    let data;
+    
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      logger.error("[api/core] Non-JSON response received", {
+        url,
+        status: response.status,
+        contentType,
+        text: text.substring(0, 200),
+      });
+      throw new ApiError(
+        `Server returned non-JSON response (${response.status}). Check if backend is running.`,
+        response.status,
+        "INVALID_RESPONSE",
+      );
+    }
+
+    if (!response.ok) {
+      logger.error("[api/core] API request failed", {
+        url,
+        status: response.status,
+        data,
+      });
+      throw new ApiError(
+        data.message || "API request failed",
+        response.status,
+        data.code,
+      );
+    }
+
+    logger.info("[api/core] API request succeeded", { url, success: data.success });
+    return data;
+  } catch (error: any) {
+    // Handle network errors
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+      const isLocalhost = apiUrl.includes("localhost") || apiUrl.includes("127.0.0.1");
+      
+      logger.error("[api/core] Network error - request may not have reached server", {
+        url,
+        apiUrl,
+        isLocalhost,
+        error: error.message,
+        message: "Check if backend is running and API_URL is correct",
+      });
+      
+      let errorMessage = "Network error: Could not reach server.\n\n";
+      if (isLocalhost) {
+        errorMessage += "⚠️ iOS Simulator cannot reach 'localhost'.\n";
+        errorMessage += "Please set EXPO_PUBLIC_API_URL in .env to your computer's IP address.\n";
+        errorMessage += "Example: EXPO_PUBLIC_API_URL=http://192.168.1.5:3000\n";
+        errorMessage += "Then restart Expo with: npx expo start -c";
+      } else {
+        errorMessage += "Please check:\n";
+        errorMessage += "1. Backend is running (cd backend && npm run dev)\n";
+        errorMessage += "2. API_URL is correct in .env\n";
+        errorMessage += "3. Your device/simulator can reach the backend";
+      }
+      
+      throw new ApiError(
+        errorMessage,
+        0,
+        "NETWORK_ERROR",
+      );
+    }
+    // Re-throw ApiError instances
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    // Wrap other errors
+    logger.error("[api/core] Unexpected error in API call", {
+      url,
+      error: error.message,
+      stack: error.stack,
+    });
     throw new ApiError(
-      data.message || "API request failed",
-      response.status,
-      data.code,
+      error.message || "An unexpected error occurred",
+      undefined,
+      "UNKNOWN_ERROR",
     );
   }
-
-  return data;
 };
 
 /**

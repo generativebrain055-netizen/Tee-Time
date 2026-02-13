@@ -249,24 +249,33 @@ class RosterRepository {
 
   async searchUsers(query, excludeUserId) {
     try {
-      const searchPattern = `%${query}%`;
+      const q = String(query || "").trim();
+      if (q.length < 2) return [];
+      const escaped = q.replace(/"/g, '""');
+      // PostgREST ilike values must be double-quoted
+      const pattern = `"%${escaped}%"`;
       const { data, error } = await supabaseAdmin
         .from("users")
         .select(
-          "id, phone_number, first_name, last_name, username, avatar_url, handicap"
+          "id, phone_number, first_name, last_name, username, user_profiles(avatar_url, handicap)"
         )
         .neq("id", excludeUserId)
         .is("deleted_at", null)
         .eq("is_active", true)
         .or(
-          `phone_number.ilike.${searchPattern},username.ilike.${searchPattern},first_name.ilike.${searchPattern},last_name.ilike.${searchPattern}`
+          `phone_number.ilike.${pattern},username.ilike.${pattern},first_name.ilike.${pattern},last_name.ilike.${pattern}`
         )
         .limit(20);
 
       if (error) throw error;
-      return data || [];
+      const rows = data || [];
+      return rows.map((row) => {
+        const profile = row.user_profiles?.[0] || row.user_profiles || {};
+        const { user_profiles, ...rest } = row;
+        return { ...rest, avatar_url: profile?.avatar_url, handicap: profile?.handicap };
+      });
     } catch (error) {
-      handleError(error, "searchUsers");
+      logger.error("searchUsers error", error);
       return [];
     }
   }
@@ -577,7 +586,7 @@ class RosterRepository {
           .select("id")
           .eq("user_id", userId)
           .eq("contact_user_id", memberUserId)
-          .single();
+          .maybeSingle();
 
         if (rosterEntry) {
           // Update the roster entry to belong to this group
@@ -643,8 +652,7 @@ class RosterRepository {
         .select(
           `
           *,
-          users (first_name, last_name, username),
-          user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, rounds_played, average_score),
+          users!roster_contact_user_id_fkey (first_name, last_name, username, user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, rounds_played, average_score)),
           roster_groups (name, color)
         `
         )
@@ -652,10 +660,7 @@ class RosterRepository {
 
       switch (sortBy) {
         case "socialRate":
-          query = query.order("user_profiles(social_rate)", {
-            ascending: false,
-            nullsFirst: false,
-          });
+          // Order by nested user_profiles not supported; sort in memory below
           break;
         case "handicap":
           query = query.order("contact_handicap", {
@@ -674,12 +679,12 @@ class RosterRepository {
 
       if (error) throw error;
 
-      return (data || []).map((r) => {
+      let rows = (data || []).map((r) => {
         const user = r.users || {};
-        const profile = r.user_profiles?.[0] || {};
+        const profileRow = user.user_profiles;
+        const profile = Array.isArray(profileRow) ? profileRow[0] : profileRow || {};
         const group = r.roster_groups || {};
         delete r.users;
-        delete r.user_profiles;
         delete r.roster_groups;
 
         return {
@@ -700,6 +705,12 @@ class RosterRepository {
           group_color: group.color,
         };
       });
+
+      if (sortBy === "socialRate") {
+        rows = rows.sort((a, b) => (b.profile_social_rate ?? 0) - (a.profile_social_rate ?? 0));
+      }
+
+      return rows;
     } catch (error) {
       handleError(error, "getGroupMembersForGroup");
     }

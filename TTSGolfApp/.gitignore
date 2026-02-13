@@ -26,6 +26,9 @@ GoogleService-Info.plist
 # Metro
 .metro-health-check*
 
+# Watchman
+.watchman-cookie-*
+
 # debug
 npm-debug.*
 yarn-debug.*

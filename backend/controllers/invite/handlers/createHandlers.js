@@ -6,6 +6,7 @@ const teeTimeRepository = require("../../../repositories/teeTimeRepository");
 const rosterRepository = require("../../../repositories/rosterRepository");
 const notificationService = require("../../../services/notificationService");
 const logger = require("../../../config/logger");
+const { invitesLogger } = require("../../../config/logger");
 const { sendInviteSms } = require("../smsService");
 const { INVITE_TYPES } = require("../constants");
 
@@ -19,6 +20,20 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
   try {
     const userId = req.user.id;
     const { deadline } = req.body; // Get deadline from request if provided
+
+    invitesLogger.info("[INVITE] FCFS invite creation started", {
+      event: "invite_create_start",
+      teeTimeId: teeTime.id,
+      inviterId: userId,
+      inviteeCount: invitees?.length || 0,
+      invitees: invitees?.map(inv => ({
+        hasUserId: !!inv.userId,
+        userId: inv.userId,
+        hasPhone: !!inv.phone,
+        phone: inv.phone,
+        name: inv.name,
+      })),
+    });
 
     // If deadline is provided, use createBulkInvitesWithExpiry
     let createdInvites;
@@ -49,6 +64,19 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
       );
     }
 
+    invitesLogger.info("[INVITE] FCFS invites created in database", {
+      event: "invites_created",
+      teeTimeId: teeTime.id,
+      inviteCount: createdInvites?.length || 0,
+      invites: createdInvites?.map(inv => ({
+        inviteId: inv.id,
+        inviteeUserId: inv.invitee_user_id,
+        inviteePhone: inv.invitee_phone,
+        inviteeName: inv.invitee_name,
+        status: inv.status,
+      })),
+    });
+
     // Notify scheduler new invites exist
     fcfsDeadlineService.triggerUpdate();
 
@@ -56,24 +84,70 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
     for (const invite of createdInvites) {
       if (invite.invitee_user_id) {
         // In-app notification for registered users - include deadline if set
-        await notificationService.notifyTeeTimeInvite(
-          invite.invitee_user_id,
-          {
-            id: teeTime.id,
-            date: teeTime.tee_date,
-            time: teeTime.tee_time,
-            courseName: teeTime.course_name,
-            maxPlayers: teeTime.max_players,
-          },
-          {
-            id: userId,
-            firstName: req.user.firstName,
-            lastName: req.user.lastName,
-          },
-          expiresAt // Pass deadline to notification
-        );
+        try {
+          invitesLogger.info("[INVITE] Sending notification to registered user", {
+            event: "notification_send_start",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            teeTimeId: teeTime.id,
+          });
+
+          const notification = await notificationService.notifyTeeTimeInvite(
+            invite.invitee_user_id,
+            {
+              id: teeTime.id,
+              date: teeTime.tee_date,
+              time: teeTime.tee_time,
+              courseName: teeTime.course_name,
+              maxPlayers: teeTime.max_players,
+            },
+            {
+              id: userId,
+              firstName: req.user.firstName,
+              lastName: req.user.lastName,
+            },
+            expiresAt, // Pass deadline to notification
+            invite.id // Pass inviteId so frontend can respond
+          );
+          
+          if (notification) {
+            invitesLogger.info("[INVITE] Notification sent successfully", {
+              event: "notification_sent",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+              notificationId: notification.id,
+            });
+          } else {
+            invitesLogger.warn("[INVITE] Notification creation returned null", {
+              event: "notification_failed",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+            });
+            logger.warn(`Failed to create notification for invite ${invite.id}, user ${invite.invitee_user_id}`);
+          }
+        } catch (notifError) {
+          invitesLogger.error("[INVITE] Notification send error", {
+            event: "notification_error",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            error: notifError?.message,
+            stack: notifError?.stack,
+          });
+          logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
+        }
       } else if (invite.invitee_phone) {
+        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+          event: "sms_send_start",
+          inviteId: invite.id,
+          inviteePhone: invite.invitee_phone,
+        });
         await sendInviteSms(invite, teeTime, true, null, expiresAt);
+      } else {
+        invitesLogger.warn("[INVITE] Invite has no userId or phone", {
+          event: "invite_no_contact",
+          inviteId: invite.id,
+          inviteeName: invite.invitee_name,
+        });
       }
     }
 
@@ -118,6 +192,23 @@ const createRosterInvites = async (
     const responseWindowMs = (responseWindow || 2) * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + responseWindowMs);
     
+    invitesLogger.info("[INVITE] Roster invite creation started", {
+      event: "invite_create_start",
+      teeTimeId: teeTime.id,
+      inviterId: userId,
+      inviteeCount: invitees?.length || 0,
+      responseWindow,
+      maxPlayers: teeTime.max_players,
+      invitees: invitees?.map(inv => ({
+        hasUserId: !!inv.userId,
+        userId: inv.userId,
+        hasPhone: !!inv.phone,
+        phone: inv.phone,
+        name: inv.name,
+        order: inv.order,
+      })),
+    });
+    
     // Calculate how many initial invites to send (maxPlayers - 1, since creator is already counted)
     const initialInviteCount = Math.max(0, teeTime.max_players - 1);
     
@@ -130,6 +221,17 @@ const createRosterInvites = async (
     // Split into initial and backup invites
     const initialInvitees = inviteesWithPosition.slice(0, initialInviteCount);
     const backupInvitees = inviteesWithPosition.slice(initialInviteCount);
+
+    invitesLogger.info("[INVITE] Split invitees into initial and backup", {
+      event: "invitees_split",
+      initialCount: initialInvitees.length,
+      backupCount: backupInvitees.length,
+      initialInvitees: initialInvitees.map(inv => ({
+        userId: inv.userId,
+        phone: inv.phone,
+        name: inv.name,
+      })),
+    });
 
     // Create initial invites with expiry (these will be sent immediately)
     const initialInvitesData = initialInvitees.map((inv) => ({
@@ -151,39 +253,125 @@ const createRosterInvites = async (
       allInvitesData
     );
 
+    invitesLogger.info("[INVITE] Roster invites created in database", {
+      event: "invites_created",
+      teeTimeId: teeTime.id,
+      totalInvites: createdInvites?.length || 0,
+      invites: createdInvites?.map(inv => ({
+        inviteId: inv.id,
+        inviteeUserId: inv.invitee_user_id,
+        inviteePhone: inv.invitee_phone,
+        inviteeName: inv.invitee_name,
+        status: inv.status,
+        expiresAt: inv.expires_at,
+      })),
+    });
+
     // Separate created invites into initial and backup based on position
+    // Note: position comes from order (1-indexed), so if initialInviteCount is 1, we want position <= 1
+    // initialInviteCount represents how many invites to send initially (e.g., if max_players=2, initialInviteCount=1)
     const initialInvites = createdInvites
-      .filter((inv) => inv.position < initialInviteCount)
-      .sort((a, b) => a.position - b.position);
+      .filter((inv) => {
+        const pos = inv.position || 0;
+        // Position is 1-indexed, so we want positions 1 through initialInviteCount
+        return pos > 0 && pos <= initialInviteCount;
+      })
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
     const backupInvites = createdInvites
-      .filter((inv) => inv.position >= initialInviteCount)
-      .sort((a, b) => a.position - b.position);
+      .filter((inv) => {
+        const pos = inv.position || 0;
+        return pos > initialInviteCount;
+      })
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
+    
+    invitesLogger.info("[INVITE] Separated invites into initial and backup", {
+      event: "invites_separated",
+      totalInvites: createdInvites.length,
+      initialInviteCount,
+      initialInvitesCount: initialInvites.length,
+      backupInvitesCount: backupInvites.length,
+      initialInvitePositions: initialInvites.map(inv => inv.position),
+      backupInvitePositions: backupInvites.map(inv => inv.position),
+      allInvitePositions: createdInvites.map(inv => ({ id: inv.id, position: inv.position })),
+    });
 
     // Notify scheduler new invites exist
     fcfsDeadlineService.triggerUpdate();
 
     // Send notifications ONLY to initial invitees (not backup)
+    invitesLogger.info("[INVITE] Starting notification send for initial invites", {
+      event: "notification_batch_start",
+      initialInviteCount: initialInvites.length,
+    });
+
     for (const invite of initialInvites) {
       if (invite.invitee_user_id) {
         // In-app notification for registered users - include deadline
-        await notificationService.notifyTeeTimeInvite(
-          invite.invitee_user_id,
-          {
-            id: teeTime.id,
-            date: teeTime.tee_date,
-            time: teeTime.tee_time,
-            courseName: teeTime.course_name,
-            maxPlayers: teeTime.max_players,
-          },
-          {
-            id: userId,
-            firstName: req.user.firstName,
-            lastName: req.user.lastName,
-          },
-          invite.expires_at // Pass the deadline
-        );
+        try {
+          invitesLogger.info("[INVITE] Sending notification to registered user", {
+            event: "notification_send_start",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            teeTimeId: teeTime.id,
+            expiresAt: invite.expires_at,
+          });
+
+          const notification = await notificationService.notifyTeeTimeInvite(
+            invite.invitee_user_id,
+            {
+              id: teeTime.id,
+              date: teeTime.tee_date,
+              time: teeTime.tee_time,
+              courseName: teeTime.course_name,
+              maxPlayers: teeTime.max_players,
+            },
+            {
+              id: userId,
+              firstName: req.user.firstName,
+              lastName: req.user.lastName,
+            },
+            invite.expires_at, // Pass the deadline
+            invite.id // Pass inviteId so frontend can respond
+          );
+          
+          if (notification) {
+            invitesLogger.info("[INVITE] Notification sent successfully", {
+              event: "notification_sent",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+              notificationId: notification.id,
+            });
+          } else {
+            invitesLogger.warn("[INVITE] Notification creation returned null", {
+              event: "notification_failed",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+            });
+            logger.warn(`Failed to create notification for invite ${invite.id}, user ${invite.invitee_user_id}`);
+          }
+        } catch (notifError) {
+          invitesLogger.error("[INVITE] Notification send error", {
+            event: "notification_error",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            error: notifError?.message,
+            stack: notifError?.stack,
+          });
+          logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
+        }
       } else if (invite.invitee_phone) {
+        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+          event: "sms_send_start",
+          inviteId: invite.id,
+          inviteePhone: invite.invitee_phone,
+        });
         await sendInviteSms(invite, teeTime, false, responseWindow);
+      } else {
+        invitesLogger.warn("[INVITE] Invite has no userId or phone", {
+          event: "invite_no_contact",
+          inviteId: invite.id,
+          inviteeName: invite.invitee_name,
+        });
       }
     }
 
@@ -244,25 +432,84 @@ const createFromRoster = async (req, res) => {
       invitees
     );
 
+    invitesLogger.info("[INVITE] From-roster invites created", {
+      event: "invites_created",
+      teeTimeId: teeTime.id,
+      inviteCount: createdInvites?.length || 0,
+      invites: createdInvites?.map(inv => ({
+        inviteId: inv.id,
+        inviteeUserId: inv.invitee_user_id,
+        inviteePhone: inv.invitee_phone,
+        inviteeName: inv.invitee_name,
+      })),
+    });
+
     for (const invite of createdInvites) {
       if (invite.invitee_user_id) {
         // In-app notification for registered users
-        await notificationService.notifyTeeTimeInvite(
-          invite.invitee_user_id,
-          {
-            id: teeTime.id,
-            date: teeTime.tee_date,
-            time: teeTime.tee_time,
-            courseName: teeTime.course_name,
-          },
-          {
-            id: userId,
-            firstName: req.user.firstName,
-            lastName: req.user.lastName,
+        try {
+          invitesLogger.info("[INVITE] Sending notification to registered user", {
+            event: "notification_send_start",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            teeTimeId: teeTime.id,
+          });
+
+          const notification = await notificationService.notifyTeeTimeInvite(
+            invite.invitee_user_id,
+            {
+              id: teeTime.id,
+              date: teeTime.tee_date,
+              time: teeTime.tee_time,
+              courseName: teeTime.course_name,
+            },
+            {
+              id: userId,
+              firstName: req.user.firstName,
+              lastName: req.user.lastName,
+            },
+            null, // expiresAt
+            invite.id // Pass inviteId so frontend can respond
+          );
+          
+          if (notification) {
+            invitesLogger.info("[INVITE] Notification sent successfully", {
+              event: "notification_sent",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+              notificationId: notification.id,
+            });
+          } else {
+            invitesLogger.warn("[INVITE] Notification creation returned null", {
+              event: "notification_failed",
+              inviteId: invite.id,
+              inviteeUserId: invite.invitee_user_id,
+            });
+            logger.warn(`Failed to create notification for invite ${invite.id}, user ${invite.invitee_user_id}`);
           }
-        );
+        } catch (notifError) {
+          invitesLogger.error("[INVITE] Notification send error", {
+            event: "notification_error",
+            inviteId: invite.id,
+            inviteeUserId: invite.invitee_user_id,
+            error: notifError?.message,
+            stack: notifError?.stack,
+          });
+          logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
+        }
       } else if (invite.invitee_phone) {
+        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+          event: "sms_send_start",
+          inviteId: invite.id,
+          inviteePhone: invite.invitee_phone,
+        });
         await sendInviteSms(invite, teeTime);
+      } else {
+        invitesLogger.warn("[INVITE] Invite has no userId or phone", {
+          event: "invite_no_contact",
+          inviteId: invite.id,
+          inviteeName: invite.invitee_name,
+        });
       }
     }
 

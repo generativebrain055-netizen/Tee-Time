@@ -399,7 +399,7 @@ const findOrCreateOAuthUser = async ({
     return { user, isNewUser: false };
   }
 
-  // No provider link - create NEW OAuth user
+  // No provider link - try to create NEW OAuth user (or link to existing by email)
   logger.info("Creating new OAuth user", {
     provider,
     providerUserId: providerUserId.substring(0, 8) + "...",
@@ -407,31 +407,79 @@ const findOrCreateOAuthUser = async ({
     emailVerified,
   });
 
-  const newUser = await userRepository.create({
-    phoneNumber: null,
-    email: email && emailVerified && !isPrivateEmail ? email : null,
-    firstName: firstName || null,
-    lastName: lastName || null,
-    username: null,
-    handicap: null,
-    isVerified: true,
-  });
+  const emailToUse = email && emailVerified && !isPrivateEmail ? email : null;
 
-  await authProviderRepository.create({
-    userId: newUser.id,
-    provider,
-    providerUserId,
-    providerEmail: email || null,
-    providerData: {
-      name: `${firstName || ""} ${lastName || ""}`.trim(),
-      picture: picture || null,
-      email_verified: emailVerified,
-      is_private_email: isPrivateEmail,
-    },
-  });
+  try {
+    const newUser = await userRepository.create({
+      phoneNumber: null,
+      email: emailToUse,
+      firstName: firstName || null,
+      lastName: lastName || null,
+      username: null,
+      handicap: null,
+      isVerified: true,
+    });
 
-  logger.info("New OAuth user created", { userId: newUser.id, provider });
-  return { user: newUser, isNewUser: true };
+    await authProviderRepository.create({
+      userId: newUser.id,
+      provider,
+      providerUserId,
+      providerEmail: email || null,
+      providerData: {
+        name: `${firstName || ""} ${lastName || ""}`.trim(),
+        picture: picture || null,
+        email_verified: emailVerified,
+        is_private_email: isPrivateEmail,
+      },
+    });
+
+    logger.info("New OAuth user created", { userId: newUser.id, provider });
+    return { user: newUser, isNewUser: true };
+  } catch (err) {
+    const isDuplicateEmail =
+      err?.code === "23505" &&
+      (err?.constraint === "users_email_key" ||
+        (typeof err?.details === "string" && err.details.includes("users_email_key")) ||
+        (typeof err?.message === "string" && err.message.includes("users_email_key")));
+    if (isDuplicateEmail && emailToUse) {
+      const existingUser = await userRepository.findByEmail(emailToUse);
+      if (existingUser) {
+        try {
+          await authProviderRepository.create({
+            userId: existingUser.id,
+            provider,
+            providerUserId,
+            providerEmail: email || null,
+            providerData: {
+              name: `${firstName || ""} ${lastName || ""}`.trim(),
+              picture: picture || null,
+              email_verified: emailVerified,
+              is_private_email: isPrivateEmail,
+            },
+          });
+          logger.info("OAuth provider linked to existing user by email", {
+            userId: existingUser.id,
+            provider,
+          });
+        } catch (linkErr) {
+          if (linkErr?.code === "23505") {
+            logger.info("OAuth provider already linked to existing user", {
+              userId: existingUser.id,
+              provider,
+            });
+          } else {
+            logger.warn("Failed to link OAuth provider to existing user", {
+              userId: existingUser.id,
+              provider,
+              error: linkErr?.message,
+            });
+          }
+        }
+        return { user: existingUser, isNewUser: false };
+      }
+    }
+    throw err;
+  }
 };
 
 /**

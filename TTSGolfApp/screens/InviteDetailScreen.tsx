@@ -116,29 +116,69 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
     }, [inviteId]);
 
     const handleRespond = async (response: "accepted" | "declined") => {
-        if (!invite) return;
+        if (!invite) {
+            console.warn("🔴 [InviteDetailScreen] No invite object, cannot respond");
+            return;
+        }
         
+        console.log("🔵 [InviteDetailScreen] handleRespond CALLED", { inviteId: invite.id, response });
         setResponding(true);
         try {
+            console.log("🔵 [InviteDetailScreen] About to call inviteApi.respondToInvite", { inviteId: invite.id, response });
+            logger.info("[InviteDetailScreen] Attempting to respond to invite", {
+                inviteId: invite.id,
+                response,
+            });
+            
             const result = await inviteApi.respondToInvite(invite.id, response);
+            
+            console.log("🟢 [InviteDetailScreen] inviteApi.respondToInvite SUCCESS", { inviteId: invite.id, response, result });
+            logger.info("[InviteDetailScreen] Invite response received", {
+                inviteId: invite.id,
+                response,
+                success: result.success,
+            });
+            
             if (result.success) {
+                // Navigate back immediately to remove from view
+                navigation?.goBack();
+                
                 Alert.alert(
                     response === "accepted" ? "Accepted!" : "Declined",
                     response === "accepted"
                         ? "You've been added to the tee time!"
-                        : "You've declined the invite.",
-                    [
-                        {
-                            text: "OK",
-                            onPress: () => {
-                                navigation?.goBack();
-                            },
-                        },
-                    ]
+                        : "You've declined the invite."
                 );
+            } else {
+                console.warn("🟡 [InviteDetailScreen] Response not successful", { inviteId: invite.id, response, result });
+                logger.warn("[InviteDetailScreen] Invite response was not successful", {
+                    inviteId: invite.id,
+                    response,
+                    result,
+                });
+                Alert.alert("Error", "Failed to respond to invite. Please try again.");
             }
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to respond to invite");
+            console.error("🔴 [InviteDetailScreen] ERROR in handleRespond", {
+                inviteId: invite.id,
+                response,
+                error: error.message,
+                code: error.code,
+                statusCode: error.statusCode,
+                stack: error.stack,
+            });
+            logger.error("[InviteDetailScreen] Error responding to invite", {
+                inviteId: invite.id,
+                response,
+                error: error.message,
+                stack: error.stack,
+                code: error.code,
+                statusCode: error.statusCode,
+            });
+            Alert.alert(
+                "Error",
+                error.message || "Failed to respond to invite. Please check your connection and try again."
+            );
         } finally {
             setResponding(false);
         }

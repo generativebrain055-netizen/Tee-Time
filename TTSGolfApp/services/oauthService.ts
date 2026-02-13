@@ -68,11 +68,13 @@ const apiClient = {
       }
 
       if (!response.ok) {
-        throw new OAuthError(
-          data.error || data.message || "Request failed",
-          data.code,
-          response.status,
-        );
+        const msg =
+          data.error ||
+          data.message ||
+          (response.status >= 500
+            ? "Server error. Please try again in a moment."
+            : "Sign-in failed. Please try again.");
+        throw new OAuthError(msg, data.code, response.status);
       }
 
       return data as T;
@@ -80,11 +82,11 @@ const apiClient = {
       if (error instanceof OAuthError) {
         throw error;
       }
-      if (error instanceof TypeError) {
-        throw new NetworkError();
+      if (error instanceof TypeError && (error.message === "Failed to fetch" || error.message?.includes("Network"))) {
+        throw new NetworkError("Connection failed. Please check your network and try again.");
       }
       throw new OAuthError(
-        error instanceof Error ? error.message : "Unknown error occurred",
+        error instanceof Error ? error.message : "Sign-in failed. Please try again.",
       );
     }
   },

@@ -46,7 +46,7 @@ function AppAvatarInner({
   const px = componentTokens.avatar.size[size];
   const colors = useColors();
 
-  if (uri) {
+  if (uri && typeof uri === "string" && uri.trim().length > 0) {
     return <Avatar.Image size={px} source={{ uri }} style={style} />;
   }
 

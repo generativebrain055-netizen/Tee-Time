@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
+const { invitesLogger } = require("../config/logger");
 const deviceRepository = require("../repositories/deviceRepository");
 
 /**
@@ -134,10 +135,28 @@ class NotificationService {
     sendPush = false,
   }) {
     try {
+      if (!userId) {
+        logger.error("createNotification called without userId");
+        invitesLogger.error("[NOTIFICATION] createNotification called without userId", {
+          event: "notification_error",
+          error: "missing_userId",
+        });
+        return null;
+      }
+
       const notificationType = data.type || "general";
       
       // Check if user has enabled in-app notifications for this type
       const inAppEnabled = await this.checkNotificationPreference(userId, notificationType, 'inApp');
+      
+      invitesLogger.info("[NOTIFICATION] Creating notification", {
+        event: "notification_create_start",
+        userId,
+        notificationType,
+        inAppEnabled,
+        title,
+        dataType: data.type,
+      });
       
       let notification = null;
       if (inAppEnabled) {
@@ -156,10 +175,33 @@ class NotificationService {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          logger.error(`Failed to insert notification for user ${userId}, type ${notificationType}:`, error);
+          invitesLogger.error("[NOTIFICATION] Database insert failed", {
+            event: "notification_db_error",
+            userId,
+            notificationType,
+            error: error?.message,
+            code: error?.code,
+          });
+          throw error;
+        }
         notification = notif;
+        logger.debug(`Notification created for user ${userId}, type ${notificationType}, id ${notif?.id}`);
+        invitesLogger.info("[NOTIFICATION] Notification created successfully", {
+          event: "notification_created",
+          userId,
+          notificationId: notif?.id,
+          notificationType,
+        });
       } else {
         logger.debug(`Skipping in-app notification for user ${userId}, type ${notificationType} (disabled)`);
+        invitesLogger.info("[NOTIFICATION] Notification skipped (disabled)", {
+          event: "notification_skipped",
+          userId,
+          notificationType,
+          reason: "user_preference_disabled",
+        });
       }
 
       // Send push notification if requested and enabled
@@ -185,6 +227,13 @@ class NotificationService {
       return notification;
     } catch (error) {
       logger.error("Error creating notification:", error.message);
+      invitesLogger.error("[NOTIFICATION] Error in createNotification", {
+        event: "notification_error",
+        userId,
+        error: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+      });
       // Don't throw - notifications shouldn't break main flow
       return null;
     }
@@ -235,8 +284,13 @@ class NotificationService {
 
   /**
    * Create tee time invite notification
+   * @param {string} userId - User receiving the notification
+   * @param {Object} teeTime - Tee time info
+   * @param {Object} inviter - Inviter info
+   * @param {string|null} expiresAt - Expiry date/time
+   * @param {string|null} inviteId - The invite ID (required for responding)
    */
-  async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null) {
+  async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null, inviteId = null) {
     const inviterName =
       `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
       "Someone";
@@ -265,6 +319,7 @@ class NotificationService {
       body,
       data: {
         type: "tee_time_invite",
+        inviteId: inviteId || null, // Include inviteId so frontend can respond
         teeTimeId: teeTime.id,
         inviterId: inviter.id,
         inviterName,
@@ -531,7 +586,6 @@ class NotificationService {
       day: "numeric",
     });
   }
-}
 
   /**
    * Notify user when someone in their roster posts on Waiver Wire

@@ -78,11 +78,12 @@ export function Avatar({
 }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
 
-  // Simple usage - source and fallback props
+  // Simple usage - source and fallback props (never pass empty uri to Image)
+  const hasValidUri = source && typeof source === "object" && "uri" in source && typeof (source as { uri?: string }).uri === "string" && (source as { uri: string }).uri.trim().length > 0;
   if (source || fallback) {
     return (
       <View className={cn(avatarVariants({ size }), className)} {...props}>
-        {source && !imageError ? (
+        {hasValidUri && !imageError ? (
           <Image
             source={source}
             className="w-full h-full"
@@ -115,6 +116,9 @@ export interface AvatarImageProps {
 }
 
 export function AvatarImage({ source, className, onError }: AvatarImageProps) {
+  const uri = source && typeof source === "object" && "uri" in source ? (source as { uri?: string }).uri : undefined;
+  const hasValidUri = typeof uri === "string" && uri.trim().length > 0;
+  if (!hasValidUri) return null;
   return (
     <Image
       source={source}

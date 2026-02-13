@@ -17,7 +17,7 @@ import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { ConfirmModal } from "../ui/feedback";
 import { Alert } from "react-native";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore } from "../stores";
 import { logger } from "../utils/logger";
 
 // Import tick and cross assets

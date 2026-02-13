@@ -1,19 +1,33 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 5.6 (Multi-Club Support)
--- Last Updated: February 7, 2026
--- 
+-- Version: 5.8 (All SQL Merged)
+-- Last Updated: February 12, 2026
+--
+-- Merged SQL files:
+--   - unified_schema.sql (this file)
+--   - migrations/002_add_zip_code_to_user_profiles.sql (zip_code in user_profiles)
+--   - migrations/003_add_user_availability_policies.sql (RLS policies for user_availability)
+--   - migrations/004_messaging.sql (conversations, messages, etc.)
+--
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables
 -- 2. Creates all tables fresh
--- 3. Includes all migrations (social rate, attendance, profile, QR draft, 
+-- 3. Includes all migrations (social rate, attendance, profile, QR draft,
 --    blocked users, deadline notifications, OAuth providers with multi-strategy
---    lookup and idempotent operations, user availability preferences, 
+--    lookup and idempotent operations, user availability preferences,
 --    onboarding tracking with backend state management, multi-club memberships)
--- 
+--
 -- Run this in Supabase SQL Editor for a clean setup
--- 
+--
+-- CHANGES IN v5.8:
+-- - Merged all schema/migrations/*.sql into this file
+-- - Added user_availability RLS policies (from 003; friends -> friendships)
+--
+-- CHANGES IN v5.7:
+-- - Added conversations, conversation_participants, messages, and message_read_receipts tables
+-- - Added triggers and RLS policies for messaging tables
+--
 -- CHANGES IN v5.6:
 -- - Added clubs JSONB column to user_profiles for multiple club memberships
 -- - Added GIN index on clubs for efficient array searches
@@ -489,6 +503,7 @@ CREATE TABLE tee_times (
     check_in_completed_at TIMESTAMPTZ,
     check_in_completed_by UUID REFERENCES users(id),
     organizer_fill_warning_sent BOOLEAN DEFAULT false,
+    distance_radius DECIMAL(5,2), -- Distance radius in miles for Open invites
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     cancelled_at TIMESTAMPTZ,
@@ -1060,6 +1075,72 @@ COMMENT ON COLUMN onboarding_steps.step_name IS 'Step identifier: profile, avail
 COMMENT ON COLUMN onboarding_steps.data IS 'Step-specific data stored as JSON';
 
 -- ============================================================================
+-- 35. CONVERSATIONS TABLE
+-- ============================================================================
+-- Conversations: direct (1:1), tee_time, or group
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type VARCHAR(20) NOT NULL CHECK (type IN ('direct', 'tee_time', 'group')),
+    tee_time_id UUID REFERENCES tee_times(id) ON DELETE CASCADE,
+    roster_group_id UUID REFERENCES roster_groups(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_conversation_type CHECK (
+        (type = 'direct' AND tee_time_id IS NULL AND roster_group_id IS NULL) OR
+        (type = 'tee_time' AND tee_time_id IS NOT NULL AND roster_group_id IS NULL) OR
+        (type = 'group' AND roster_group_id IS NOT NULL AND tee_time_id IS NULL)
+    )
+);
+
+CREATE INDEX idx_conversations_type ON conversations(type);
+CREATE INDEX idx_conversations_tee_time_id ON conversations(tee_time_id) WHERE tee_time_id IS NOT NULL;
+CREATE INDEX idx_conversations_roster_group_id ON conversations(roster_group_id) WHERE roster_group_id IS NOT NULL;
+
+-- ============================================================================
+-- 36. CONVERSATION_PARTICIPANTS TABLE
+-- ============================================================================
+CREATE TABLE conversation_participants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    left_at TIMESTAMPTZ,
+    last_read_at TIMESTAMPTZ,
+    CONSTRAINT unique_conversation_participant UNIQUE (conversation_id, user_id)
+);
+
+CREATE INDEX idx_conversation_participants_conversation ON conversation_participants(conversation_id);
+CREATE INDEX idx_conversation_participants_user ON conversation_participants(user_id);
+
+-- ============================================================================
+-- 37. MESSAGES TABLE
+-- ============================================================================
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX idx_messages_created_at ON messages(conversation_id, created_at DESC);
+
+-- ============================================================================
+-- 38. MESSAGE_READ_RECEIPTS TABLE
+-- ============================================================================
+CREATE TABLE message_read_receipts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_message_read UNIQUE (message_id, user_id)
+);
+
+CREATE INDEX idx_message_read_receipts_message ON message_read_receipts(message_id);
+CREATE INDEX idx_message_read_receipts_user ON message_read_receipts(user_id);
+
+-- ============================================================================
 -- STEP 5: CREATE TRIGGERS
 -- ============================================================================
 
@@ -1103,6 +1184,9 @@ CREATE TRIGGER update_user_availability_updated_at BEFORE UPDATE ON user_availab
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_onboarding_steps_updated_at BEFORE UPDATE ON onboarding_steps
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
@@ -1321,14 +1405,54 @@ ALTER TABLE qr_scan_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE onboarding_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE message_read_receipts ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- RLS POLICIES (merged from migrations/003_add_user_availability_policies.sql)
+-- ============================================================================
+-- user_availability: users see/edit own; can view friends' availability (via friendships)
+
+DROP POLICY IF EXISTS user_availability_select_own ON user_availability;
+CREATE POLICY user_availability_select_own ON user_availability
+    FOR SELECT
+    USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS user_availability_insert_own ON user_availability;
+CREATE POLICY user_availability_insert_own ON user_availability
+    FOR INSERT
+    WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS user_availability_update_own ON user_availability;
+CREATE POLICY user_availability_update_own ON user_availability
+    FOR UPDATE
+    USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS user_availability_delete_own ON user_availability;
+CREATE POLICY user_availability_delete_own ON user_availability
+    FOR DELETE
+    USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS user_availability_select_friends ON user_availability;
+CREATE POLICY user_availability_select_friends ON user_availability
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM friendships f
+            WHERE (f.user_id = auth.uid() AND f.friend_id = user_availability.user_id)
+               OR (f.friend_id = auth.uid() AND f.user_id = user_availability.user_id)
+        )
+    );
 
 -- ============================================================================
 -- SCHEMA COMPLETE
 -- ============================================================================
--- 
--- Version: 5.5 (Onboarding Tracking)
--- Last Updated: February 6, 2026
--- Total Tables: 34
+--
+-- Version: 5.8 (All SQL Merged)
+-- Last Updated: February 12, 2026
+-- Total Tables: 38
 -- 
 -- Core Tables:
 --   1. users - User accounts (with onboarding tracking fields)
@@ -1374,13 +1498,21 @@ ALTER TABLE onboarding_steps ENABLE ROW LEVEL SECURITY;
 --   32. game_scores - Past game scores linked to tee times
 --   33. user_availability - Weekly availability preferences
 --   34. onboarding_steps - Granular onboarding step tracking
+--   35. conversations - Direct, tee_time, and group conversations
+--   36. conversation_participants - Conversation membership
+--   37. messages - Chat messages
+--   38. message_read_receipts - Read receipts for messages
 --
--- Migrations Included:
+-- Migrations Included (all merged from schema/migrations/*.sql):
+--   - 002: zip_code column on user_profiles
+--   - 003: user_availability RLS policies (select/insert/update/delete own, select friends via friendships)
+--   - 004: conversations, conversation_participants, messages, message_read_receipts
 --   - blocked_users table (user blocking)
 --   - cancellation_confirmed reason in social_rate_logs
 --   - check_in_reminder_sent column in tee_times
 --   - deadline_notification_sent column in invites
 --   - user_availability table (weekly scheduling preferences)
 --   - onboarding tracking (backend state management)
+--   - distance_radius column in tee_times (for Open invites)
 --
 -- ============================================================================

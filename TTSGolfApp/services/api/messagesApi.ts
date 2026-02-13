@@ -24,6 +24,7 @@ export interface ConversationListItem {
     created_at: string;
     sender_id: string;
   } | null;
+  unreadCount?: number;
   created_at: string;
   updated_at: string;
 }
@@ -68,18 +69,31 @@ export const messagesApi = {
       }
     ),
 
-  /** Get messages in a conversation */
+  /** Get messages in a conversation (markRead=true marks conversation as read) */
   getMessages: (
     conversationId: string,
-    options?: { limit?: number; before?: string }
+    options?: { limit?: number; before?: string; markRead?: boolean }
   ) => {
     const q = new URLSearchParams();
     if (options?.limit) q.set("limit", String(options.limit));
     if (options?.before) q.set("before", options.before);
+    if (options?.markRead) q.set("markRead", "true");
     const query = q.toString();
     const url = API_ENDPOINTS.MESSAGES_CONVERSATION_MESSAGES(conversationId) + (query ? `?${query}` : "");
     return apiCall<{ success: boolean; messages: ChatMessage[] }>(url);
   },
+
+  /** Get total and per-conversation unread message counts */
+  getUnreadCount: () =>
+    apiCall<{ success: boolean; total: number; byConversation: Record<string, number> }>(
+      API_ENDPOINTS.MESSAGES_UNREAD_COUNT
+    ),
+
+  /** Mark a conversation as read */
+  markConversationRead: (conversationId: string) =>
+    apiCall<{ success: boolean }>(API_ENDPOINTS.MESSAGES_MARK_READ(conversationId), {
+      method: "POST",
+    }),
 
   /** Send a message */
   sendMessage: (conversationId: string, body: string) =>

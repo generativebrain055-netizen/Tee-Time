@@ -278,7 +278,7 @@ const getStatistics = async () => {
  * Get magic link statistics by purpose
  * @returns {Promise<Array>}
  */
-const logger = require("../../config/logger");
+const logger = require("../config/logger");
 const getStatisticsByPurpose = async () => {
     try {
         // Note: GROUP BY aggregations need PostgreSQL function for better performance

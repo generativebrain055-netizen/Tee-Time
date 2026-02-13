@@ -6,7 +6,7 @@ const sessionService = require("../../services/sessionService");
 const emailService = require("../../services/emailService");
 const twilioService = require("../../services/twilioService");
 const logger = require("../../config/logger");
-const { magicLinksLogger } = require("../../config/logger");
+const { magicLinksLogger, twilioLogger } = require("../../config/logger");
 const { formatUser } = require("../../formatters/userFormatter");
 
 /**
@@ -285,9 +285,16 @@ const requestSmsMagicLink = async (req, res, next) => {
     try {
       await twilioService.sendSMS(e164, smsBody);
 
-      // Log to magic-links.log for testing (simulator can't receive SMS)
+      // Log to magic-links.log and twilio.log for testing (simulator can't receive SMS)
       magicLinksLogger.info(`SMS magic link sent to ${e164}`, {
         phoneNumber: e164,
+        deepLink,
+        webFallback,
+        expiresInMinutes: expiryMinutes,
+      });
+      twilioLogger.info("[TWILIO] Magic link SMS sent", {
+        feature: "magic_link",
+        to: e164,
         deepLink,
         webFallback,
         expiresInMinutes: expiryMinutes,
@@ -303,9 +310,16 @@ const requestSmsMagicLink = async (req, res, next) => {
       logger.error("SMS send failed:", smsError);
 
       if (process.env.NODE_ENV === "development") {
-        // Log to magic-links.log (SMS failed, link for dev/testing)
+        // Log to magic-links.log and twilio.log (SMS failed, link for dev/testing)
         magicLinksLogger.info(`[DEV] SMS failed - magic link for ${e164}`, {
           phoneNumber: e164,
+          deepLink,
+          webFallback,
+          expiresInMinutes: expiryMinutes,
+        });
+        twilioLogger.info("[TWILIO] Magic link SMS failed - dev fallback", {
+          feature: "magic_link",
+          to: e164,
           deepLink,
           webFallback,
           expiresInMinutes: expiryMinutes,
@@ -317,6 +331,7 @@ const requestSmsMagicLink = async (req, res, next) => {
           expiresInMinutes: expiryMinutes,
           mode: "console",
           devToken: token,
+          webFallback,
         });
       }
 
@@ -402,6 +417,13 @@ const requestSmsMagicLinkForLogin = async (req, res, next) => {
         webFallback,
         expiresInMinutes: expiryMinutes,
       });
+      twilioLogger.info("[TWILIO] Magic link (login) SMS sent", {
+        feature: "magic_link_login",
+        to: e164,
+        deepLink,
+        webFallback,
+        expiresInMinutes: expiryMinutes,
+      });
 
       return res.json({
         success: true,
@@ -419,13 +441,21 @@ const requestSmsMagicLinkForLogin = async (req, res, next) => {
           webFallback,
           expiresInMinutes: expiryMinutes,
         });
+        twilioLogger.info("[TWILIO] Magic link (login) SMS failed - dev fallback", {
+          feature: "magic_link_login",
+          to: e164,
+          deepLink,
+          webFallback,
+          expiresInMinutes: expiryMinutes,
+        });
         logger.info(`[DEV] SMS magic link (login) for ${e164}: ${deepLink}`);
         return res.json({
           success: true,
-          message: "Sign-in link generated. Check logs/magic-links.log or server console.",
+          message: "Sign-in link generated. Check logs/magic-links.log or logs/twilio.log or server console.",
           expiresInMinutes: expiryMinutes,
           mode: "console",
           devToken: token,
+          webFallback,
         });
       }
 

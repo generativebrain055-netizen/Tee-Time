@@ -9,6 +9,12 @@ const router = Router();
 router.use(authenticate);
 
 /**
+ * GET /api/messages/unread-count
+ * Returns { total, byConversation: { [id]: number } }
+ */
+router.get("/unread-count", messageController.getUnreadCount);
+
+/**
  * GET /api/messages/conversations
  * Query: type (optional) - direct | tee_time | group
  */
@@ -32,13 +38,24 @@ router.post(
 
 /**
  * GET /api/messages/conversations/:id/messages
- * Query: limit, before (ISO date for cursor)
+ * Query: limit, before (ISO date for cursor), markRead=true
  */
 router.get(
   "/conversations/:id/messages",
   [param("id").isUUID()],
   validateRequest,
   messageController.getMessages
+);
+
+/**
+ * POST /api/messages/conversations/:id/read
+ * Mark conversation as read for current user.
+ */
+router.post(
+  "/conversations/:id/read",
+  [param("id").isUUID()],
+  validateRequest,
+  messageController.markRead
 );
 
 /**

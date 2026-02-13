@@ -52,9 +52,13 @@ async function listConversations(userId, type) {
 
 /**
  * Get messages for a conversation. Returns messages with sender display info.
+ * If options.markRead is true, updates the user's last_read_at for this conversation.
  */
 async function getMessages(conversationId, userId, options = {}) {
   await conversationRepository.ensureParticipant(conversationId, userId);
+  if (options.markRead) {
+    await conversationRepository.markConversationRead(conversationId, userId);
+  }
   const rows = await messageRepository.listByConversation(conversationId, options);
   const senderIds = [...new Set(rows.map((m) => m.sender_id))];
   const senders = await messageRepository.getSendersInfo(senderIds);
@@ -110,9 +114,25 @@ function formatMessageTime(iso) {
   });
 }
 
+/**
+ * Get unread message counts for the current user (total and per conversation).
+ */
+async function getUnreadCounts(userId) {
+  return conversationRepository.getUnreadCounts(userId);
+}
+
+/**
+ * Mark a conversation as read for the current user.
+ */
+async function markConversationRead(conversationId, userId) {
+  return conversationRepository.markConversationRead(conversationId, userId);
+}
+
 module.exports = {
   getOrCreateConversation,
   listConversations,
   getMessages,
   sendMessage,
+  getUnreadCounts,
+  markConversationRead,
 };

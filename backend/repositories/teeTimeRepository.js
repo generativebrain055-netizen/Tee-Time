@@ -128,11 +128,13 @@ class TeeTimeRepository {
       if (creatorError) throw creatorError;
 
       // Get tee times where user is participant
+      // Explicitly include confirmed status participants
       let participantQuery = supabaseAdmin
         .from("tee_time_participants")
         .select(
           `
           tee_time_id,
+          status,
           tee_times!inner (
             *,
             users!tee_times_creator_id_fkey (first_name, last_name)
@@ -140,7 +142,7 @@ class TeeTimeRepository {
         `,
         )
         .eq("user_id", userId)
-        .or("status.is.null,status.neq.cancelled");
+        .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
       if (status) {
         participantQuery = participantQuery.eq("tee_times.status", status);
@@ -172,7 +174,7 @@ class TeeTimeRepository {
             .from("tee_time_participants")
             .select("*", { count: "exact", head: true })
             .eq("tee_time_id", tt.id)
-            .or("status.is.null,status.neq.cancelled");
+            .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
           const user = tt.users || {};
           delete tt.users;
@@ -199,6 +201,9 @@ class TeeTimeRepository {
 
   async getUpcomingTeeTimes(userId, limit = 10) {
     try {
+      const logger = require("../config/logger");
+      const { invitesLogger } = require("../config/logger");
+      
       // Get tee times where user is creator
       const { data: creatorTeeTimes, error: creatorError } = await supabaseAdmin
         .from("tee_times")
@@ -216,13 +221,21 @@ class TeeTimeRepository {
 
       if (creatorError) throw creatorError;
 
+      invitesLogger.debug("[SCHEDULE] Fetched creator tee times", {
+        event: "schedule_creator_tee_times",
+        userId,
+        count: (creatorTeeTimes || []).length,
+      });
+
       // Get tee times where user is participant (can't filter by foreign table date in Supabase)
+      // Include participants with status: null, confirmed, or any status except cancelled
       const { data: participantTeeTimes, error: participantError } =
         await supabaseAdmin
           .from("tee_time_participants")
           .select(
             `
           tee_time_id,
+          status,
           tee_times!inner (
             *,
             users!tee_times_creator_id_fkey (first_name, last_name)
@@ -230,9 +243,29 @@ class TeeTimeRepository {
         `,
           )
           .eq("user_id", userId)
-          .or("status.is.null,status.neq.cancelled");
+          .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
-      if (participantError) throw participantError;
+      if (participantError) {
+        invitesLogger.error("[SCHEDULE] Error fetching participant tee times", {
+          event: "schedule_participant_error",
+          userId,
+          error: participantError?.message,
+        });
+        throw participantError;
+      }
+
+      invitesLogger.info("[SCHEDULE] Fetched participant tee times", {
+        event: "schedule_participant_tee_times",
+        userId,
+        count: (participantTeeTimes || []).length,
+        participantStatuses: (participantTeeTimes || []).map(p => ({
+          teeTimeId: p.tee_time_id,
+          participantStatus: p.status,
+          teeTimeStatus: p.tee_times?.status,
+          teeDate: p.tee_times?.tee_date,
+          teeTime: p.tee_times?.tee_time,
+        })),
+      });
 
       // Combine and deduplicate
       const teeTimeMap = new Map();
@@ -261,7 +294,7 @@ class TeeTimeRepository {
             .from("tee_time_participants")
             .select("*", { count: "exact", head: true })
             .eq("tee_time_id", tt.id)
-            .or("status.is.null,status.neq.cancelled");
+            .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
           const user = tt.users || {};
           delete tt.users;
@@ -282,7 +315,17 @@ class TeeTimeRepository {
         return a.tee_time.localeCompare(b.tee_time);
       });
 
-      return sorted.slice(0, limit);
+      const result = sorted.slice(0, limit);
+      
+      invitesLogger.info("[SCHEDULE] Returning upcoming tee times", {
+        event: "schedule_upcoming_result",
+        userId,
+        limit,
+        resultCount: result.length,
+        teeTimeIds: result.map(tt => tt.id),
+      });
+
+      return result;
     } catch (error) {
       handleError(error, "getUpcomingTeeTimes");
     }
@@ -503,7 +546,7 @@ class TeeTimeRepository {
         .from("tee_time_participants")
         .select("*", { count: "exact", head: true })
         .eq("tee_time_id", teeTimeId)
-        .or("status.is.null,status.neq.cancelled");
+        .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
       if (error) throw error;
       return count || 0;
@@ -520,7 +563,7 @@ class TeeTimeRepository {
         .select("*")
         .eq("tee_time_id", teeTimeId)
         .eq("user_id", userId)
-        .or("status.is.null,status.neq.cancelled")
+        .or("status.is.null,status.eq.confirmed,status.neq.cancelled")
         .maybeSingle();
 
       if (error && error.code !== "PGRST116") throw error;
@@ -571,7 +614,7 @@ class TeeTimeRepository {
         `,
           )
           .eq("user_id", userId)
-          .or("status.is.null,status.neq.cancelled")
+          .or("status.is.null,status.eq.confirmed,status.neq.cancelled")
           .gte("tee_times.tee_date", startDate)
           .lte("tee_times.tee_date", endDate);
 
@@ -596,7 +639,7 @@ class TeeTimeRepository {
             .from("tee_time_participants")
             .select("*", { count: "exact", head: true })
             .eq("tee_time_id", tt.id)
-            .or("status.is.null,status.neq.cancelled");
+            .or("status.is.null,status.eq.confirmed,status.neq.cancelled");
 
           return { ...tt, participant_count: count || 0 };
         }),
@@ -667,48 +710,78 @@ class TeeTimeRepository {
     const { filter = "all", limit = 20, offset = 0 } = options;
 
     try {
-      let query = supabaseAdmin
-        .from("tee_times")
-        .select(
-          `
+      // Fetch as creator and as participant in two queries to avoid PostgREST .or() on relations
+      const today = new Date().toISOString().split("T")[0];
+      const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+      const offsetNum = Math.max(parseInt(offset, 10) || 0, 0);
+
+      const selectFields = `
           id, course_name, course_location, tee_date, tee_time, status,
           creator_id, max_players,
-          users!inner (first_name, last_name),
-          user_profiles (avatar_url),
+          users!tee_times_creator_id_fkey (first_name, last_name, user_profiles (avatar_url)),
           tee_time_participants!left (user_id, status),
           tee_time_attendance!left (status),
           game_scores!left (score, holes_played)
-        `,
-        )
-        .or(
-          `creator_id.eq.${userId},tee_time_participants.user_id.eq.${userId}`,
-        );
+        `;
 
-      if (filter === "upcoming") {
-        query = query
-          .gte("tee_date", new Date().toISOString().split("T")[0])
-          .not("status", "in", "('cancelled','completed')");
-      } else if (filter === "completed") {
-        query = query.eq("status", "completed");
-      } else if (filter === "cancelled") {
-        query = query.eq("status", "cancelled");
+      const creatorRes = await supabaseAdmin
+        .from("tee_times")
+        .select(selectFields)
+        .eq("creator_id", userId);
+
+      if (creatorRes.error) throw creatorRes.error;
+
+      const { data: participantRows } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("tee_time_id")
+        .eq("user_id", userId);
+
+      const participantTeeTimeIds = [...new Set((participantRows || []).map((r) => r.tee_time_id).filter(Boolean))];
+      let participantRes = { data: [] };
+      if (participantTeeTimeIds.length > 0) {
+        participantRes = await supabaseAdmin
+          .from("tee_times")
+          .select(selectFields)
+          .in("id", participantTeeTimeIds);
+        if (participantRes.error) throw participantRes.error;
       }
 
-      query = query
-        .order("tee_date", { ascending: false })
-        .order("tee_time", { ascending: false })
-        .range(offset, offset + limit - 1);
+      const byId = new Map();
+      for (const tt of creatorRes.data || []) {
+        byId.set(tt.id, tt);
+      }
+      for (const tt of participantRes.data || []) {
+        if (!byId.has(tt.id)) byId.set(tt.id, tt);
+      }
 
-      const { data, error } = await query;
+      let list = Array.from(byId.values());
 
-      if (error) throw error;
+      if (filter === "upcoming") {
+        list = list.filter(
+          (tt) => tt.tee_date >= today && !["cancelled", "completed"].includes(tt.status)
+        );
+      } else if (filter === "completed") {
+        list = list.filter((tt) => tt.status === "completed");
+      } else if (filter === "cancelled") {
+        list = list.filter((tt) => tt.status === "cancelled");
+      }
 
-      return (data || []).map((tt) => {
+      list.sort((a, b) => {
+        const d = (b.tee_date || "").localeCompare(a.tee_date || "");
+        if (d !== 0) return d;
+        return (b.tee_time || "").localeCompare(a.tee_time || "");
+      });
+
+      const paginated = list.slice(offsetNum, offsetNum + limitNum);
+
+      return paginated.map((tt) => {
         const user = tt.users || {};
-        const profile = tt.user_profiles?.[0] || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData) ? profileData[0] || {} : profileData || {};
         const participant = tt.tee_time_participants?.[0] || {};
         const attendance = tt.tee_time_attendance?.[0] || {};
         const gameScore = tt.game_scores?.[0] || {};
+        const participants = tt.tee_time_participants || [];
 
         return {
           id: tt.id,
@@ -726,11 +799,13 @@ class TeeTimeRepository {
           attendance_status: attendance.status,
           game_score: gameScore.score,
           holes_played: gameScore.holes_played,
+          participant_count: participants.length,
           user_role: tt.creator_id === userId ? "organizer" : "participant",
         };
       });
     } catch (error) {
-      handleError(error, "getTeeTimeHistory");
+      logger.error("getTeeTimeHistory error", error);
+      return [];
     }
   }
 
@@ -757,7 +832,7 @@ class TeeTimeRepository {
         .from("tee_time_participants")
         .select("tee_times!inner(id, course_name, course_location, tee_date, tee_time, status, max_players)")
         .eq("user_id", userId)
-        .or("status.is.null,status.neq.cancelled")
+        .or("status.is.null,status.eq.confirmed,status.neq.cancelled")
         .limit(limit * 2);
 
       const participantTeeTimes = (asParticipant || [])

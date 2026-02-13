@@ -79,6 +79,7 @@ router.get("/sent", inviteController.getSentInvites);
  * @route   PUT /api/invites/:id/respond
  * @desc    Respond to an invite (accept/decline/maybe)
  * @access  Private
+ * IMPORTANT: This route must come BEFORE /:id route to avoid route conflicts
  */
 router.put(
   "/:id/respond",
@@ -92,6 +93,22 @@ router.put(
       .isLength({ max: 500 })
       .withMessage("Message too long"),
   ],
+  (req, res, next) => {
+    // Log request before validation - this confirms the route handler was reached
+    const { invitesLogger } = require("../config/logger");
+    invitesLogger.info("[INVITE] Request received at respond endpoint route handler", {
+      event: "respond_endpoint_route_handler",
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+      inviteId: req.params.id,
+      userId: req.user?.id,
+      response: req.body?.response,
+      hasMessage: !!req.body?.message,
+      bodyKeys: Object.keys(req.body || {}),
+    });
+    next();
+  },
   validateRequest,
   inviteController.respondToInvite,
 );

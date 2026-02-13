@@ -2,7 +2,7 @@
 -- Migration: Add User Availability RLS Policies
 -- Description: Adds RLS policies for user_availability table
 -- Date: 2026-02-08
--- Note: Table already exists in unified_schema.sql, this adds missing policies
+-- MERGED INTO: backend/schema/unified_schema.sql (v5.8); uses friendships not friends
 -- ============================================================================
 
 -- RLS Policies for user_availability

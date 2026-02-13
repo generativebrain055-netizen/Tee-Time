@@ -55,7 +55,8 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
                         firstName: teeTime.first_name || '',
                         lastName: teeTime.last_name || '',
                     },
-                    expiresAt
+                    expiresAt,
+                    nextInvite.id // Pass inviteId so frontend can respond
                 );
             } else if (nextInvite.invitee_phone) {
                 await sendInviteSms(nextInvite, teeTime, false, responseWindowHours);
@@ -74,11 +75,29 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
  * Handle invite acceptance
  */
 const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
+    const { invitesLogger } = require("../../../config/logger");
+    
+    invitesLogger.info("[INVITE] handleAcceptance called", {
+        event: "handle_acceptance_start",
+        inviteId: invite.id,
+        userId,
+        teeTimeId: teeTime.id,
+        participantCount,
+        inviteType: teeTime.invite_type,
+    });
+    
     // Use atomic acceptance to prevent race conditions
     const user = await userRepository.findById(userId);
     const userName = `${user.first_name} ${user.last_name}`;
     
     logger.info(`Processing acceptance for invite ${invite.id}, user ${userId}, teeTime ${teeTime.id}`);
+    invitesLogger.info("[INVITE] Calling acceptInviteAtomic", {
+        event: "handle_acceptance_calling_atomic",
+        inviteId: invite.id,
+        userId,
+        userName,
+        inviteType: teeTime.invite_type,
+    });
     
     const result = await inviteRepository.acceptInviteAtomic(
         invite.id,
@@ -88,6 +107,14 @@ const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
     );
 
     logger.info(`Atomic acceptance result:`, result);
+    invitesLogger.info("[INVITE] acceptInviteAtomic result", {
+        event: "handle_acceptance_atomic_result",
+        inviteId: invite.id,
+        userId,
+        success: result.success,
+        reason: result.reason,
+        status: result.status,
+    });
 
     if (!result.success) {
         if (result.reason === 'full') {

@@ -210,6 +210,18 @@ const errorHandler = (err, req, res, next) => {
  * 404 Not Found Handler
  */
 const notFoundHandler = (req, res, next) => {
+  // Log 404s for invite respond endpoints to help debug
+  if (req.path && req.path.includes("/invites") && req.path.includes("/respond")) {
+    const { invitesLogger } = require("../config/logger");
+    invitesLogger.error("[404] Route not found for respond endpoint", {
+      event: "route_not_found",
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+      url: req.url,
+      params: req.params,
+    });
+  }
   const error = new NotFoundError(`Route ${req.originalUrl} not found`);
   next(error);
 };

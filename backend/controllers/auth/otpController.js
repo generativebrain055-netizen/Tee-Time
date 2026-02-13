@@ -5,6 +5,7 @@ const teeTimeRepository = require("../../repositories/teeTimeRepository");
 const twilioService = require("../../services/twilioService");
 const sessionService = require("../../services/sessionService");
 const logger = require("../../config/logger");
+const { twilioLogger } = require("../../config/logger");
 
 /**
  * OTP Controller
@@ -40,8 +41,14 @@ const requestOTP = async (req, res, next) => {
       }
     }
 
-    // Send OTP via Twilio
+    // Send OTP via Twilio (twilioService logs to logs/twilio.log)
     const sendResult = await twilioService.sendOTP(phoneNumber);
+    twilioLogger.info("[TWILIO] OTP request completed", {
+      feature: "otp",
+      to: phoneNumber,
+      purpose,
+      mode: sendResult.mode,
+    });
 
     // If using manual method, store the OTP hash
     if (sendResult.otp) {

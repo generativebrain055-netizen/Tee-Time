@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Messaging: conversations, participants, messages
--- Run after unified_schema (requires users, roster_groups, tee_times).
+-- MERGED INTO: backend/schema/unified_schema.sql (v5.7+). Standalone run after users, roster_groups, tee_times.
 -- ============================================================================
 
 -- Conversations: direct (1:1), tee_time, or group

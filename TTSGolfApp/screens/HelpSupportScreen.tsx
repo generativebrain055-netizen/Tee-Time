@@ -350,6 +350,7 @@ export default function HelpSupportScreen({ navigation }: any) {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
+                                </View>
                             </TouchableOpacity>
                         </KeyboardAvoidingView>
                     </TouchableOpacity>

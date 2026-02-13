@@ -1,6 +1,7 @@
 const twilio = require("twilio");
 const crypto = require("crypto");
 const logger = require("../config/logger");
+const { twilioLogger } = require("../config/logger");
 
 /**
  * Twilio Service
@@ -48,9 +49,11 @@ const initializeTwilioClient = () => {
       }
 
       logger.info("[TWILIO INIT] Successfully initialized with API Key!");
+      twilioLogger.info("[TWILIO INIT] Initialized with API Key", { verify: !!verifyServiceSid });
       return { client, verify };
     } catch (error) {
       logger.error("Failed to initialize Twilio with API Key:", error);
+      twilioLogger.warn("[TWILIO INIT] API Key init failed", { error: error?.message });
       return { client: null, verify: null };
     }
   }
@@ -58,6 +61,7 @@ const initializeTwilioClient = () => {
   // Fallback to Auth Token authentication
   if (!accountSid || !authToken) {
     logger.warn("Twilio credentials not configured - SMS features will be disabled");
+    twilioLogger.warn("[TWILIO INIT] Not configured - no credentials");
     return { client: null, verify: null };
   }
 
@@ -76,9 +80,11 @@ const initializeTwilioClient = () => {
     }
 
     logger.info("[TWILIO INIT] Successfully initialized with Auth Token!");
+    twilioLogger.info("[TWILIO INIT] Initialized with Auth Token", { verify: !!verifyServiceSid });
     return { client, verify };
   } catch (error) {
     logger.error("Failed to initialize Twilio client:", error);
+    twilioLogger.warn("[TWILIO INIT] Auth Token init failed", { error: error?.message });
     return { client: null, verify: null };
   }
 };
@@ -108,6 +114,12 @@ const sendOTP = async (phoneNumber) => {
       });
 
       logger.info(`OTP sent via Verify API to ${phoneNumber}. Status: ${verification.status}`);
+      twilioLogger.info("[TWILIO] OTP sent via Verify API", {
+        feature: "otp",
+        to: phoneNumber,
+        status: verification.status,
+        sid: verification.sid,
+      });
       return {
         success: true,
         mode: "verify_api",
@@ -116,10 +128,20 @@ const sendOTP = async (phoneNumber) => {
       };
     } catch (error) {
       logger.error(`Twilio Verify API error for ${phoneNumber}:`, error);
+      twilioLogger.warn("[TWILIO] OTP Verify API error", {
+        feature: "otp",
+        to: phoneNumber,
+        error: error?.message,
+      });
 
       if (process.env.NODE_ENV === "development") {
         const otp = generateOTP();
         logger.info(`[VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
+        twilioLogger.info("[TWILIO] OTP dev fallback (Verify API failed)", {
+          feature: "otp",
+          to: phoneNumber,
+          mode: "console_fallback",
+        });
         return { success: true, mode: "console_fallback", otp };
       }
 
@@ -145,12 +167,27 @@ const sendOTP = async (phoneNumber) => {
       });
 
       logger.info(`OTP sent via Messages API to ${phoneNumber}. SID: ${message.sid}`);
+      twilioLogger.info("[TWILIO] OTP sent via Messages API", {
+        feature: "otp",
+        to: phoneNumber,
+        sid: message.sid,
+      });
       return { success: true, mode: "messages_api", sid: message.sid, otp };
     } catch (error) {
       logger.error(`Twilio Messages API error for ${phoneNumber}:`, error);
+      twilioLogger.warn("[TWILIO] OTP Messages API error", {
+        feature: "otp",
+        to: phoneNumber,
+        error: error?.message,
+      });
 
       if (process.env.NODE_ENV === "development") {
         logger.info(`[MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
+        twilioLogger.info("[TWILIO] OTP dev fallback (Messages API failed)", {
+          feature: "otp",
+          to: phoneNumber,
+          mode: "console_fallback",
+        });
         return { success: true, mode: "console_fallback", otp };
       }
 
@@ -161,6 +198,7 @@ const sendOTP = async (phoneNumber) => {
   // Method 3: Development mode - log OTP to console
   const otp = generateOTP();
   logger.info(`[DEVELOPMENT MODE] OTP for ${phoneNumber}: ${otp}`);
+  twilioLogger.info("[TWILIO] OTP dev mode (no Twilio)", { feature: "otp", to: phoneNumber, mode: "console" });
   return { success: true, mode: "console", otp };
 };
 
@@ -179,9 +217,19 @@ const verifyOTP = async (phoneNumber, otp) => {
     });
 
     logger.info(`OTP verification for ${phoneNumber}. Status: ${verificationCheck.status}`);
+    twilioLogger.info("[TWILIO] OTP verified", {
+      feature: "otp_verify",
+      to: phoneNumber,
+      status: verificationCheck.status,
+    });
     return verificationCheck.status === "approved";
   } catch (error) {
     logger.error(`Twilio Verify check error for ${phoneNumber}:`, error);
+    twilioLogger.warn("[TWILIO] OTP verify error", {
+      feature: "otp_verify",
+      to: phoneNumber,
+      error: error?.message,
+    });
     return null; // Will fallback to manual verification
   }
 };
@@ -192,11 +240,21 @@ const verifyOTP = async (phoneNumber, otp) => {
 const sendSMS = async (phoneNumber, message) => {
   if (!twilioClient) {
     logger.info(`[SMS - DEV MODE] to ${phoneNumber}: ${message}`);
+    twilioLogger.info("[TWILIO] SMS dev mode (no Twilio)", {
+      feature: "sms",
+      to: phoneNumber,
+      mode: "console",
+      bodyPreview: message.slice(0, 80),
+    });
     return { success: true, mode: "console" };
   }
 
   const fromNumber = process.env.TWILIO_FROM_NUMBER;
   if (!fromNumber) {
+    twilioLogger.warn("[TWILIO] SMS skipped - TWILIO_FROM_NUMBER not configured", {
+      feature: "sms",
+      to: phoneNumber,
+    });
     throw new Error("TWILIO_FROM_NUMBER not configured");
   }
 
@@ -208,12 +266,30 @@ const sendSMS = async (phoneNumber, message) => {
     });
 
     logger.info(`SMS sent to ${phoneNumber}. SID: ${result.sid}`);
+    twilioLogger.info("[TWILIO] SMS sent", {
+      feature: "sms",
+      to: phoneNumber,
+      sid: result.sid,
+      bodyPreview: message.slice(0, 80),
+    });
     return { success: true, mode: "sms", sid: result.sid };
   } catch (error) {
     logger.error(`Twilio SMS error for ${phoneNumber}:`, error);
+    twilioLogger.warn("[TWILIO] SMS send failed", {
+      feature: "sms",
+      to: phoneNumber,
+      error: error?.message,
+      bodyPreview: message.slice(0, 80),
+    });
 
     if (process.env.NODE_ENV === "development") {
       logger.info(`[SMS FAILED - FALLBACK] to ${phoneNumber}: ${message}`);
+      twilioLogger.info("[TWILIO] SMS dev fallback (send failed)", {
+        feature: "sms",
+        to: phoneNumber,
+        mode: "console_fallback",
+        bodyPreview: message.slice(0, 80),
+      });
       return { success: true, mode: "console_fallback" };
     }
 

@@ -13,7 +13,14 @@ import {
     StyleSheet,
 } from "react-native";
 import { MapPin, Navigation, Check } from "lucide-react-native";
-import * as Location from "expo-location";
+import {
+    isLocationAvailable,
+    requestForegroundPermissionsAsync,
+    getCurrentPositionAsync,
+    reverseGeocodeAsync,
+    Accuracy,
+    LOCATION_UNAVAILABLE,
+} from "../utils/safeLocation";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { profileApi } from "../services/api";
@@ -37,9 +44,18 @@ export default function LocationSettingsScreen({ navigation }: any) {
         }
     }, [profile]);
 
+    const locationAvailable = isLocationAvailable();
+
     const requestLocationPermission = useCallback(async () => {
+        if (!locationAvailable) {
+            Alert.alert(
+                "Location Unavailable",
+                "Location is not available in this build. Rebuild the app with Expo (expo prebuild && npx expo run:ios) to enable location features."
+            );
+            return false;
+        }
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
+            const { status } = await requestForegroundPermissionsAsync();
             if (status !== "granted") {
                 Alert.alert(
                     "Location Permission Required",
@@ -49,12 +65,19 @@ export default function LocationSettingsScreen({ navigation }: any) {
                 return false;
             }
             return true;
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.message === LOCATION_UNAVAILABLE) {
+                Alert.alert(
+                    "Location Unavailable",
+                    "Location is not available in this build. Rebuild the app to enable location."
+                );
+                return false;
+            }
             logger.error("[LocationSettingsScreen] Permission error", error);
             Alert.alert("Error", "Failed to request location permission");
             return false;
         }
-    }, []);
+    }, [locationAvailable]);
 
     const getCurrentLocation = useCallback(async () => {
         const hasPermission = await requestLocationPermission();
@@ -62,8 +85,8 @@ export default function LocationSettingsScreen({ navigation }: any) {
 
         setLoading(true);
         try {
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
+            const location = await getCurrentPositionAsync({
+                accuracy: Accuracy.Balanced,
             });
 
             const { latitude, longitude } = location.coords;
@@ -71,7 +94,7 @@ export default function LocationSettingsScreen({ navigation }: any) {
 
             // Reverse geocode to get location name
             try {
-                const addresses = await Location.reverseGeocodeAsync({
+                const addresses = await reverseGeocodeAsync({
                     latitude,
                     longitude,
                 });
@@ -87,7 +110,14 @@ export default function LocationSettingsScreen({ navigation }: any) {
                 logger.warn("[LocationSettingsScreen] Geocoding failed", geocodeError);
                 setLocationName("Current Location");
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.message === LOCATION_UNAVAILABLE) {
+                Alert.alert(
+                    "Location Unavailable",
+                    "Location is not available in this build. Rebuild the app to enable location."
+                );
+                return;
+            }
             logger.error("[LocationSettingsScreen] Location error", error);
             Alert.alert("Error", "Failed to get your current location");
         } finally {
@@ -155,12 +185,20 @@ export default function LocationSettingsScreen({ navigation }: any) {
                     </Text>
                 </View>
 
+                {!locationAvailable && (
+                    <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+                            Location is not available in this build. Rebuild the app (expo prebuild then run:ios) to enable location features.
+                        </Text>
+                    </View>
+                )}
+
                 {/* Get Current Location */}
                 <View style={[styles.actionCard, { backgroundColor: colors.surface }]}>
                     <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                        style={[styles.actionButton, { backgroundColor: colors.primary, opacity: locationAvailable ? 1 : 0.6 }]}
                         onPress={getCurrentLocation}
-                        disabled={loading}
+                        disabled={loading || !locationAvailable}
                         activeOpacity={0.8}
                     >
                         {loading ? (

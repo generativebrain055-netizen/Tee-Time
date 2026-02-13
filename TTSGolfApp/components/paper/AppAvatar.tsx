@@ -29,7 +29,10 @@ function AppAvatarInner({
 }: AppAvatarProps) {
   switch (type) {
     case "image":
-      return <Avatar.Image size={size} source={source!} style={style} />;
+      if (source?.uri && source.uri.trim().length > 0) {
+        return <Avatar.Image size={size} source={source} style={style} />;
+      }
+      return <Avatar.Icon size={size} icon="account" style={style} />;
     case "icon":
       return <Avatar.Icon size={size} icon={icon} style={style} />;
     case "text":

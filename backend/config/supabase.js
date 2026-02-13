@@ -1,6 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
-const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+const logger = require("./logger");
+
+// Expect process.env to be already loaded by server.js (backend/.env). Standalone scripts must load dotenv before requiring this file.
 
 /**
  * Supabase Client Configuration
@@ -43,7 +44,7 @@ const testConnection = async () => {
       .from("users")
       .select("count")
       .limit(1);
-    
+
     if (error) throw error;
     logger.info("[SUPABASE] Connection successful");
     return true;
@@ -58,13 +59,13 @@ const testConnection = async () => {
  * @param {Object} error - Supabase error object
  * @param {string} operation - Description of the operation
  */
-const logger = require("./logger");
 const handleError = (error, operation) => {
   logger.error(`Supabase error during ${operation}`, error);
   const err = new Error(error.message || `Database error during ${operation}`);
   err.code = error.code;
   err.details = error.details;
   err.hint = error.hint;
+  err.constraint = error.constraint;
   throw err;
 };
 

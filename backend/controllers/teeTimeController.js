@@ -190,13 +190,17 @@ class TeeTimeController {
    */
   async getHistory(req, res) {
     try {
+      if (!req.user?.id) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
       const { filter = "all", limit = 20, offset = 0 } = req.query;
       const history = await teeTimeService.getHistory(req.user.id, {
         filter,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit: parseInt(limit, 10) || 20,
+        offset: parseInt(offset, 10) || 0,
       });
-      res.json({ success: true, history: history.map(formatHistoryEntry) });
+      const list = Array.isArray(history) ? history : [];
+      res.json({ success: true, history: list.map(formatHistoryEntry) });
     } catch (error) {
       logger.error("Get tee time history error:", error);
       res

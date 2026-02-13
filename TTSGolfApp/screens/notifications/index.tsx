@@ -49,7 +49,16 @@ export default function NotificationsScreen({ navigation }: any) {
         try {
             const response = await notificationApi.getNotifications({ limit: 100 });
             if (response.success) {
-                setNotifications(response.notifications);
+                // Filter out notifications that have been responded to
+                const filteredNotifications = response.notifications.filter(n => {
+                    const notifData = n.data || {};
+                    // Don't show tee_time_invite notifications that have been responded to
+                    if (notifData.type === "tee_time_invite" && notifData.responded === true) {
+                        return false;
+                    }
+                    return true;
+                });
+                setNotifications(filteredNotifications);
             }
         } catch (error) {
             logger.error('[NotificationsScreen] Error loading notifications', error);
@@ -118,40 +127,94 @@ export default function NotificationsScreen({ navigation }: any) {
     }, [navigation]);
 
     const handleAccept = async (notificationId: string, type: string, data?: any) => {
+        console.log("🔵 [NotificationsScreen] handleAccept CALLED", { notificationId, type, data });
+        // Remove notification from UI immediately for better UX
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        
         try {
-            if (type.includes('friend')) {
+            // Check data.type instead of type (type is channel like "in_app", data.type is notification type)
+            const dataType = data?.type || '';
+            console.log("🔵 [NotificationsScreen] Checking notification type", { dataType, type, hasInviteId: !!data?.inviteId });
+            
+            if (dataType.includes('friend') || type.includes('friend')) {
                 const requestId = data?.requestId || notificationId;
+                console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
                 await friendApi.respondToRequest(requestId, "accepted");
-            } else if (type.includes('tee_time')) {
-                await inviteApi.respondToInvite(notificationId, "accepted");
+            } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
+                // Use inviteId from notification data, not notificationId
+                const inviteId = data?.inviteId || notificationId;
+                console.log("🔵 [NotificationsScreen] Calling inviteApi.respondToInvite", { inviteId, notificationId, dataType, data });
+                if (!data?.inviteId) {
+                    console.warn("🟡 [NotificationsScreen] No inviteId in notification data, using notificationId as fallback", { notificationId, data });
+                    logger.warn('[NotificationsScreen] No inviteId in notification data, using notificationId as fallback', { notificationId, data });
+                }
+                await inviteApi.respondToInvite(inviteId, "accepted");
+                console.log("🟢 [NotificationsScreen] inviteApi.respondToInvite completed");
+                
+                // Mark notification as responded in backend
+                try {
+                    await notificationApi.markAsResponded(notificationId);
+                    console.log("🟢 [NotificationsScreen] Notification marked as responded", { notificationId });
+                } catch (markError) {
+                    console.warn("🟡 [NotificationsScreen] Failed to mark notification as responded", { notificationId, error: markError });
+                }
+            } else {
+                console.warn("🟡 [NotificationsScreen] Unknown notification type, cannot handle", { notificationId, type, dataType, data });
             }
-            // Update local state immediately to reflect change
-            setNotifications(prev => prev.map(n => 
-                n.id === notificationId 
-                    ? { ...n, status: 'accepted', data: { ...n.data, responded: true } }
-                    : n
-            ));
-        } catch (error) {
+            
+            // Refresh notifications list to ensure UI is in sync
+            await fetchNotifications();
+        } catch (error: any) {
+            console.error("🔴 [NotificationsScreen] Accept error", { notificationId, type, dataType: data?.type, error: error.message, stack: error.stack });
             logger.error('[NotificationsScreen] Accept error', error);
+            // Refresh notifications on error to restore state
+            await fetchNotifications();
         }
     };
 
     const handleDecline = async (notificationId: string, type: string, data?: any) => {
+        console.log("🔵 [NotificationsScreen] handleDecline CALLED", { notificationId, type, data });
+        // Remove notification from UI immediately for better UX
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        
         try {
-            if (type.includes('friend')) {
+            // Check data.type instead of type (type is channel like "in_app", data.type is notification type)
+            const dataType = data?.type || '';
+            console.log("🔵 [NotificationsScreen] Checking notification type", { dataType, type, hasInviteId: !!data?.inviteId });
+            
+            if (dataType.includes('friend') || type.includes('friend')) {
                 const requestId = data?.requestId || notificationId;
+                console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
                 await friendApi.respondToRequest(requestId, "declined");
-            } else if (type.includes('tee_time')) {
-                await inviteApi.respondToInvite(notificationId, "declined");
+            } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
+                // Use inviteId from notification data, not notificationId
+                const inviteId = data?.inviteId || notificationId;
+                console.log("🔵 [NotificationsScreen] Calling inviteApi.respondToInvite", { inviteId, notificationId, dataType, data });
+                if (!data?.inviteId) {
+                    console.warn("🟡 [NotificationsScreen] No inviteId in notification data, using notificationId as fallback", { notificationId, data });
+                    logger.warn('[NotificationsScreen] No inviteId in notification data, using notificationId as fallback', { notificationId, data });
+                }
+                await inviteApi.respondToInvite(inviteId, "declined");
+                console.log("🟢 [NotificationsScreen] inviteApi.respondToInvite completed");
+                
+                // Mark notification as responded in backend
+                try {
+                    await notificationApi.markAsResponded(notificationId);
+                    console.log("🟢 [NotificationsScreen] Notification marked as responded", { notificationId });
+                } catch (markError) {
+                    console.warn("🟡 [NotificationsScreen] Failed to mark notification as responded", { notificationId, error: markError });
+                }
+            } else {
+                console.warn("🟡 [NotificationsScreen] Unknown notification type, cannot handle", { notificationId, type, dataType, data });
             }
-            // Update local state immediately to reflect change
-            setNotifications(prev => prev.map(n => 
-                n.id === notificationId 
-                    ? { ...n, status: 'declined', data: { ...n.data, responded: true } }
-                    : n
-            ));
-        } catch (error) {
+            
+            // Refresh notifications list to ensure UI is in sync
+            await fetchNotifications();
+        } catch (error: any) {
+            console.error("🔴 [NotificationsScreen] Decline error", { notificationId, type, dataType: data?.type, error: error.message, stack: error.stack });
             logger.error('[NotificationsScreen] Decline error', error);
+            // Refresh notifications on error to restore state
+            await fetchNotifications();
         }
     };
 

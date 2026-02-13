@@ -2,6 +2,7 @@
 -- Migration: Add zip_code column to user_profiles
 -- Description: Adds zip_code field for onboarding location data
 -- Date: 2026-02-08
+-- MERGED INTO: backend/schema/unified_schema.sql (v5.8)
 -- ============================================================================
 
 -- Add zip_code column to user_profiles

@@ -22,7 +22,10 @@
         "NSCameraUsageDescription": "This app uses the camera to scan QR codes and take profile photos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select profile photos.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to find nearby golf courses.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       },
       "usesAppleSignIn": true
     },
@@ -43,6 +46,8 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-apple-authentication",
+      "expo-location",
+      "./plugins/withIosNoEmptyDsym.js",
       [
         "@react-native-google-signin/google-signin",
         {

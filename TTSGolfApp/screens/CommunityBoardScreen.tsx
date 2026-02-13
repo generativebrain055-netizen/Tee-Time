@@ -23,8 +23,12 @@ import {
 import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { teeTimeApi } from "../services/api";
-import { useAuthStore } from "../store/authStore";
-import * as Location from "expo-location";
+import { useAuthStore } from "../stores";
+import {
+    requestForegroundPermissionsAsync,
+    getCurrentPositionAsync,
+    LOCATION_UNAVAILABLE,
+} from "../utils/safeLocation";
 import { GolfCourseAutocomplete } from "../components/GolfCourseAutocomplete";
 import { CustomDatePicker } from "../ui/feedback";
 
@@ -103,9 +107,9 @@ export default function CommunityBoardScreen({ navigation }: any) {
 
     const requestLocationPermission = async () => {
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
+            const { status } = await requestForegroundPermissionsAsync();
             if (status === "granted") {
-                const location = await Location.getCurrentPositionAsync({});
+                const location = await getCurrentPositionAsync({});
                 setUserLocation({
                     lat: location.coords.latitude,
                     lng: location.coords.longitude,
@@ -117,7 +121,11 @@ export default function CommunityBoardScreen({ navigation }: any) {
                     [{ text: "OK" }]
                 );
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.message === LOCATION_UNAVAILABLE) {
+                logger.warn("[CommunityBoardScreen] Location native module not available");
+                return;
+            }
             logger.error("[CommunityBoardScreen] Location error", error);
             Alert.alert("Error", "Failed to get location");
         }

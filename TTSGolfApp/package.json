@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "setup:api": "node scripts/setup-api-url.js",
+    "start:with-backend": "node scripts/start-with-backend.js",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -44,6 +46,7 @@
     "expo-font": "~14.0.11",
     "expo-image-picker": "^17.0.10",
     "expo-linear-gradient": "~15.0.8",
+    "expo-location": "~18.0.7",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "^15.0.10",
     "firebase": "^12.8.0",

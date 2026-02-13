@@ -33,9 +33,13 @@ import {
 import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { rosterApi, TimeSlot, WaiverWireEntry } from "../services/api";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore } from "../stores";
 import { spacing, fontSize, radii, palette } from "../ui/theme/tokens";
-import * as Location from "expo-location";
+import {
+    requestForegroundPermissionsAsync,
+    getCurrentPositionAsync,
+    LOCATION_UNAVAILABLE,
+} from "../utils/safeLocation";
 
 const TIME_SLOTS: { key: TimeSlot; label: string }[] = [
     { key: 'morning', label: 'Morning' },
@@ -89,15 +93,19 @@ export default function WaiverWireScreen({ navigation }: any) {
 
     const requestLocationPermission = async () => {
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
+            const { status } = await requestForegroundPermissionsAsync();
             if (status === "granted") {
-                const location = await Location.getCurrentPositionAsync({});
+                const location = await getCurrentPositionAsync({});
                 setUserLocation({
                     lat: location.coords.latitude,
                     lng: location.coords.longitude,
                 });
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.message === LOCATION_UNAVAILABLE) {
+                logger.warn("[WaiverWireScreen] Location native module not available");
+                return;
+            }
             logger.error("[WaiverWireScreen] Location error", error);
         }
     };

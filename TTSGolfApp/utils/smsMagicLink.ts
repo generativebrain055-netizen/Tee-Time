@@ -8,6 +8,9 @@ import { getDeviceInfoForApi } from "./deviceInfo";
 export interface RequestSmsMagicLinkResult {
   success: boolean;
   error?: string;
+  /** In development when SMS is not sent, backend returns a link to open for testing */
+  mode?: "sms" | "console";
+  webFallback?: string;
 }
 
 export interface VerifySmsMagicLinkResult {
@@ -56,7 +59,11 @@ export async function requestSmsMagicLink(
       throw new Error(data.message || "Unable to send verification link.");
     }
 
-    return { success: true };
+    return {
+      success: true,
+      mode: data.mode,
+      webFallback: data.webFallback,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unable to send verification link.";
     return { success: false, error: msg };
@@ -103,9 +110,20 @@ export async function requestSmsMagicLinkForLogin(
       throw new Error(msg);
     }
 
-    return { success: true };
+    return {
+      success: true,
+      mode: data.mode,
+      webFallback: data.webFallback,
+    };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unable to send sign-in link.";
+    const raw = err instanceof Error ? err.message : "Unable to send sign-in link.";
+    const isNetwork =
+      raw === "Failed to fetch" ||
+      raw === "Network request failed" ||
+      /network|connection|refused|ECONNREFUSED/i.test(raw);
+    const msg = isNetwork
+      ? "Cannot connect to server. Check that the backend is running and your app’s API URL (EXPO_PUBLIC_API_URL) is correct."
+      : raw;
     return { success: false, error: msg };
   }
 }

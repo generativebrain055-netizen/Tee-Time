@@ -44,7 +44,7 @@ async function getOrCreateConversation(req, res) {
 
 /**
  * GET /api/messages/conversations/:id/messages
- * List messages in a conversation. Query: ?limit=50&before=ISO date (optional pagination)
+ * List messages in a conversation. Query: ?limit=50&before=ISO date&markRead=true (optional)
  */
 async function getMessages(req, res) {
   try {
@@ -52,9 +52,11 @@ async function getMessages(req, res) {
     const { id: conversationId } = req.params;
     const limit = parseInt(req.query.limit, 10) || 50;
     const before = req.query.before; // ISO string for cursor
+    const markRead = req.query.markRead === "true" || req.query.markRead === "1";
     const messages = await messageService.getMessages(conversationId, userId, {
       limit,
       before,
+      markRead,
     });
     return res.json({ success: true, messages });
   } catch (error) {
@@ -83,9 +85,42 @@ async function sendMessage(req, res) {
   }
 }
 
+/**
+ * GET /api/messages/unread-count
+ * Returns { total, byConversation: { [conversationId]: number } }
+ */
+async function getUnreadCount(req, res) {
+  try {
+    const userId = req.user.id;
+    const counts = await messageService.getUnreadCounts(userId);
+    return res.json({ success: true, ...counts });
+  } catch (error) {
+    logger.error("Get unread count error:", error);
+    return res.status(500).json({ success: false, message: "Failed to get unread count" });
+  }
+}
+
+/**
+ * POST /api/messages/conversations/:id/read
+ * Mark conversation as read for the current user.
+ */
+async function markRead(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId } = req.params;
+    await messageService.markConversationRead(conversationId, userId);
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error("Mark read error:", error);
+    return res.status(500).json({ success: false, message: "Failed to mark as read" });
+  }
+}
+
 module.exports = {
   listConversations,
   getOrCreateConversation,
   getMessages,
   sendMessage,
+  getUnreadCount,
+  markRead,
 };

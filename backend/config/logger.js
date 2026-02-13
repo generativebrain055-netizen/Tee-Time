@@ -125,5 +125,55 @@ const magicLinksLogger = winston.createLogger({
   ],
 });
 
+/**
+ * Twilio logger - writes to logs/twilio.log for all Twilio usage (SMS, OTP, magic links, invites).
+ * Includes links and payloads for debugging. Keep this file out of version control (*.log).
+ */
+const twilioLogFormat = winston.format.combine(
+  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  winston.format.printf(({ timestamp, message, ...meta }) => {
+    const metaStr = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+    return `${timestamp} ${message}${metaStr}`;
+  })
+);
+
+const twilioLogger = winston.createLogger({
+  level: "info",
+  format: twilioLogFormat,
+  transports: [
+    new winston.transports.File({
+      filename: path.join(__dirname, "../logs/twilio.log"),
+      maxsize: 5242880,
+      maxFiles: 3,
+    }),
+  ],
+});
+
+/**
+ * Invites logger - writes to logs/invites.log for all invite-related events.
+ * Tracks invite creation, notifications, responses, and errors. Keep this file out of version control (*.log).
+ */
+const invitesLogFormat = winston.format.combine(
+  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  winston.format.printf(({ timestamp, message, ...meta }) => {
+    const metaStr = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+    return `${timestamp} ${message}${metaStr}`;
+  })
+);
+
+const invitesLogger = winston.createLogger({
+  level: "info",
+  format: invitesLogFormat,
+  transports: [
+    new winston.transports.File({
+      filename: path.join(__dirname, "../logs/invites.log"),
+      maxsize: 5242880,
+      maxFiles: 3,
+    }),
+  ],
+});
+
 module.exports = logger;
 module.exports.magicLinksLogger = magicLinksLogger;
+module.exports.twilioLogger = twilioLogger;
+module.exports.invitesLogger = invitesLogger;

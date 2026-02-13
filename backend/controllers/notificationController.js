@@ -36,17 +36,28 @@ class NotificationController {
         return res.status(500).json({ success: false, message: "Failed to get notifications" });
       }
 
-      const notifications = (data || []).map(n => ({
-        id: n.id,
-        type: n.type,
-        channel: n.channel,
-        title: n.title,
-        body: n.body,
-        data: n.data || {},
-        isRead: !!n.read_at,
-        readAt: n.read_at,
-        createdAt: n.created_at
-      }));
+      // Filter out notifications that have been responded to (for tee_time_invite types)
+      const notifications = (data || [])
+        .filter(n => {
+          const notifData = n.data || {};
+          // Don't show tee_time_invite notifications that have been responded to
+          if (notifData.type === "tee_time_invite" && notifData.responded === true) {
+            return false;
+          }
+          return true;
+        })
+        .map(n => ({
+          id: n.id,
+          type: n.type,
+          channel: n.channel,
+          title: n.title,
+          body: n.body,
+          data: n.data || {},
+          isRead: !!n.read_at,
+          readAt: n.read_at,
+          createdAt: n.created_at,
+          status: n.status
+        }));
 
       res.json({ success: true, notifications });
     } catch (error) {

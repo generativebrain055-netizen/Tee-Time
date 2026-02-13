@@ -103,8 +103,11 @@ class RosterController {
   // GET /api/roster/search?q=query
   async searchUsers(req, res) {
     try {
+      if (!req.user?.id) {
+        return error(res, 'Unauthorized', 401);
+      }
       const users = await rosterService.searchUsers(req.query.q, req.user.id);
-      const formatted = users.map(formatter.formatUserSearchResult);
+      const formatted = (users || []).map((u) => formatter.formatUserSearchResult(u));
       success(res, { users: formatted });
     } catch (err) {
       handleServiceError(res, err, 'Failed to search users');

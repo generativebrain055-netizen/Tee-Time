@@ -6,6 +6,16 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
+function logError(message: string, data?: unknown) {
+  try {
+    const { logger } = require('../../utils/logger');
+    if (logger && typeof logger.error === 'function') logger.error(message, data);
+    else console.error(message, data);
+  } catch {
+    console.error(message, data);
+  }
+}
+
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
@@ -36,7 +46,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    logger.error('[ErrorBoundary] Caught an error', { error, errorInfo });
+    logError('[ErrorBoundary] Caught an error', { error, errorInfo });
+    if (__DEV__) {
+      console.error('[APP ERROR]', error?.message || error, error?.stack);
+      if (errorInfo?.componentStack) console.error('[APP ERROR] Component stack:', errorInfo.componentStack);
+    }
     this.setState({
       error,
       errorInfo,

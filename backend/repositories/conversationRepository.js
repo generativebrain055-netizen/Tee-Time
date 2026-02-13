@@ -122,12 +122,16 @@ async function listForUser(userId, options = {}) {
 
   const { data: participantRows } = await supabaseAdmin
     .from("conversation_participants")
-    .select("conversation_id")
+    .select("conversation_id, last_read_at")
     .eq("user_id", userId);
 
   if (!participantRows || participantRows.length === 0) return [];
 
   const convIds = participantRows.map((r) => r.conversation_id);
+  const lastReadByConv = {};
+  for (const r of participantRows) {
+    lastReadByConv[r.conversation_id] = r.last_read_at;
+  }
 
   let query = supabaseAdmin
     .from("conversations")
@@ -145,7 +149,16 @@ async function listForUser(userId, options = {}) {
   for (const conv of conversations || []) {
     const lastMessage = await getLastMessage(conv.id);
     const meta = await getConversationMeta(conv, userId, lastMessage);
-    result.push({ ...conv, ...meta, lastMessage: meta.lastMessagePreview });
+    const unreadCount = await getUnreadCountForConversation(
+      conv.id,
+      lastReadByConv[conv.id]
+    );
+    result.push({
+      ...conv,
+      ...meta,
+      lastMessage: meta.lastMessagePreview,
+      unreadCount,
+    });
   }
 
   result.sort((a, b) => {
@@ -164,7 +177,7 @@ async function getLastMessage(conversationId) {
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
   return data;
 }
 
@@ -389,6 +402,58 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
   return existing || { id: conversationId, type: "tee_time", created_at: new Date().toISOString() };
 }
 
+/**
+ * Count unread messages in a conversation for a user (messages after last_read_at).
+ */
+async function getUnreadCountForConversation(conversationId, lastReadAt) {
+  let query = supabaseAdmin
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId);
+  if (lastReadAt) {
+    query = query.gt("created_at", lastReadAt);
+  }
+  const { count, error } = await query;
+  if (error) return 0;
+  return count ?? 0;
+}
+
+/**
+ * Get total and per-conversation unread counts for a user.
+ */
+async function getUnreadCounts(userId) {
+  const { data: participantRows } = await supabaseAdmin
+    .from("conversation_participants")
+    .select("conversation_id, last_read_at")
+    .eq("user_id", userId);
+  if (!participantRows || participantRows.length === 0) {
+    return { total: 0, byConversation: {} };
+  }
+  const byConversation = {};
+  let total = 0;
+  for (const r of participantRows) {
+    const count = await getUnreadCountForConversation(
+      r.conversation_id,
+      r.last_read_at
+    );
+    byConversation[r.conversation_id] = count;
+    total += count;
+  }
+  return { total, byConversation };
+}
+
+/**
+ * Mark a conversation as read for a user (set last_read_at to now).
+ */
+async function markConversationRead(conversationId, userId) {
+  const { error } = await supabaseAdmin
+    .from("conversation_participants")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId);
+  if (error) handleError(error, "markConversationRead");
+}
+
 module.exports = {
   getOrCreateDirectConversation,
   getOrCreateTeeTimeConversation,
@@ -397,4 +462,7 @@ module.exports = {
   getById,
   ensureParticipant,
   createTeeTimeConversationWithParticipants,
+  getUnreadCountForConversation,
+  getUnreadCounts,
+  markConversationRead,
 };

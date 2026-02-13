@@ -128,9 +128,13 @@ const googleSignIn = async (req, res, next) => {
       error: error.message,
       stack: error.stack,
     });
+    const message =
+      error.message?.includes("token") || error.message?.includes("expired")
+        ? "Sign-in session expired. Please try again."
+        : error.message || "Google sign-in failed. Please try again.";
     return res.status(400).json({
       success: false,
-      error: error.message || "Google authentication failed",
+      error: message,
     });
   }
 };
@@ -447,9 +451,13 @@ const googleSignInWithCode = async (req, res, next) => {
       error: error.message,
       stack: error.stack,
     });
+    const message =
+      error.message?.includes("token") || error.message?.includes("expired") || error.message?.includes("redirect")
+        ? "Sign-in failed. Please try again."
+        : error.message || "Google sign-in failed. Please try again.";
     return res.status(400).json({
       success: false,
-      error: error.message || "Google authentication failed",
+      error: message,
     });
   }
 };
@@ -537,9 +545,13 @@ const googleSignInWithAccessToken = async (req, res, next) => {
       error: error.message,
       stack: error.stack,
     });
+    const message =
+      error.message?.includes("token") || error.message?.includes("expired")
+        ? "Sign-in session expired. Please try again."
+        : error.message || "Google sign-in failed. Please try again.";
     return res.status(400).json({
       success: false,
-      error: error.message || "Google authentication failed",
+      error: message,
     });
   }
 };
@@ -654,9 +666,13 @@ const appleSignIn = async (req, res, next) => {
       error: error.message,
       stack: error.stack,
     });
+    const message =
+      error.message?.includes("token") || error.message?.includes("expired")
+        ? "Sign-in session expired. Please try again."
+        : error.message || "Apple sign-in failed. Please try again.";
     return res.status(400).json({
       success: false,
-      error: error.message || "Apple authentication failed",
+      error: message,
     });
   }
 };

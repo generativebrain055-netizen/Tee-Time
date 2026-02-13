@@ -21,6 +21,8 @@ export const useLoginFlow = (navigation: any) => {
     const [hasError, setHasError] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    /** In dev when SMS is not sent, backend returns a link to open for testing */
+    const [devWebFallback, setDevWebFallback] = useState<string | null>(null);
 
     // Refs
     const phoneInputRef = useRef<RNTextInput>(null);
@@ -125,6 +127,8 @@ export const useLoginFlow = (navigation: any) => {
         setLoading(false);
         if (result.success) {
             logger.info("[LoginFlow] Magic link sent successfully", { isResend });
+            if (result.mode === "console" && result.webFallback) setDevWebFallback(result.webFallback);
+            else setDevWebFallback(null);
             if (!isResend) animateStepChange(() => setCurrentStep("magicLinkSent"));
             setResendTimer(60); // 60s before resend
         } else {
@@ -194,5 +198,6 @@ export const useLoginFlow = (navigation: any) => {
         handleResendMagicLink,
         handleBack,
         clearPhoneInput,
+        devWebFallback,
     };
 };

@@ -37,7 +37,7 @@ function mapToAllItem(c: ConversationListItem): AllConversationItem {
     avatar: c.avatarUrl ?? undefined,
     lastMessage: c.lastMessage?.body ?? "Start a conversation",
     lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
-    unread: 0,
+    unread: c.unreadCount ?? 0,
   };
 }
 
@@ -58,6 +58,7 @@ function mapToTeeTimeItem(c: ConversationListItem): TeeTimeConversationItem {
     participantAvatars: avatars,
     lastMessage: c.lastMessage?.body ?? "No messages yet",
     lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
+    unread: c.unreadCount ?? 0,
   };
 }
 
@@ -73,7 +74,7 @@ function mapToGroupItem(c: ConversationListItem): GroupConversationItem {
     color: getAvatarColor(c.id),
     lastMessage: c.lastMessage?.body ?? "No messages yet",
     lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
-    unread: 0,
+    unread: c.unreadCount ?? 0,
     participantCount: count ?? undefined,
     participantAvatars: avatars.length > 0 ? avatars : undefined,
   };
@@ -158,7 +159,14 @@ const TeeTimeRow = memo(
         <View style={styles.rowContent}>
           <View style={styles.rowTitleRow}>
             <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.rowTime}>{item.lastMessageTime}</Text>
+            {item.lastMessageTime ? (
+              <Text style={[styles.rowTime, item.unread != null && item.unread > 0 ? styles.rowTimeUnread : null]}>{item.lastMessageTime}</Text>
+            ) : null}
+            {item.unread != null && item.unread > 0 ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{item.unread}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.rowPreview} numberOfLines={1}>{item.lastMessage}</Text>
         </View>
@@ -528,9 +536,9 @@ function MessagesScreen({ navigation }: any) {
     );
   }, [loading]);
 
-  const unreadAllCount = allItems.filter((i) => i.unread && i.unread > 0).length;
+  const totalUnreadAll = allItems.reduce((s, i) => s + (i.unread ?? 0), 0);
   const tabLabel = (tab: MessageTab) =>
-    tab === "All" && unreadAllCount > 0 ? `All (${unreadAllCount})` : tab;
+    tab === "All" && totalUnreadAll > 0 ? `All (${totalUnreadAll})` : tab;
 
   return (
     <ScreenShell>

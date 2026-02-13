@@ -63,6 +63,8 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  /** In dev when SMS is not sent, backend returns a link to open for testing */
+  const [devWebFallback, setDevWebFallback] = useState<string | null>(null);
 
   const maskedPhone = initialPhone ? maskPhoneDisplay(initialPhone) : "";
 
@@ -108,6 +110,8 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
       setIsSending(false);
       if (!result.success) {
         setSendError(result.error || "Failed to send verification link.");
+      } else if (result.mode === "console" && result.webFallback) {
+        setDevWebFallback(result.webFallback);
       }
     });
   }, [initialPhone]);
@@ -140,10 +144,13 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
     if (!initialPhone || isSending) return;
     setIsSending(true);
     setSendError(null);
+    setDevWebFallback(null);
     const result = await requestSmsMagicLink(initialPhone);
     setIsSending(false);
     if (!result.success) {
       setSendError(result.error || "Failed to send.");
+    } else if (result.mode === "console" && result.webFallback) {
+      setDevWebFallback(result.webFallback);
     }
   };
 
@@ -205,6 +212,14 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
               {"\n\n"}Tap the link in your SMS to verify your phone number.
             </Text>
             {sendError && <Text style={styles.errorText}>{sendError}</Text>}
+            {devWebFallback ? (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(devWebFallback)}
+                style={[styles.primaryBtn, { marginTop: 24, paddingVertical: 12, paddingHorizontal: 20 }]}
+              >
+                <Text style={styles.primaryBtnText}>Open verification link (dev)</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               onPress={handleResend}
               disabled={isSending}

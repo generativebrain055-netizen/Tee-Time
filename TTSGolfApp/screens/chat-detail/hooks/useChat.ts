@@ -49,7 +49,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
         const cid = convRes.conversation.id;
         setConversationId(cid);
 
-        const msgRes = await messagesApi.getMessages(cid);
+        const msgRes = await messagesApi.getMessages(cid, { markRead: true });
         if (cancelled) return;
         const list = msgRes.success && msgRes.messages ? msgRes.messages : [];
 
@@ -76,6 +76,27 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     chatInfo?.teeTimeId,
     chatInfo?.groupId,
   ]);
+
+  // Poll for new messages so the other person's messages appear without reopening
+  useEffect(() => {
+    if (!conversationId) return;
+    const interval = setInterval(async () => {
+      try {
+        const msgRes = await messagesApi.getMessages(conversationId);
+        if (msgRes.success && msgRes.messages) {
+          setState((prev) => {
+            const prevIds = new Set(prev.messages.map((m) => m.id));
+            const hasNew = msgRes.messages!.some((m) => !prevIds.has(m.id));
+            if (!hasNew) return prev;
+            return { ...prev, messages: msgRes.messages as ChatMessage[] };
+          });
+        }
+      } catch {
+        // ignore poll errors
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [conversationId]);
 
   useEffect(() => {
     setTimeout(() => {

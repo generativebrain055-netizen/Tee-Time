@@ -1,4 +1,5 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
+const rosterRepository = require("./rosterRepository");
 
 class FriendRepository {
   // Send friend request
@@ -40,9 +41,11 @@ class FriendRepository {
     }
   }
 
-  // Get pending requests received
+      // Get pending requests received
   async getPendingRequests(userId) {
     try {
+      const logger = require("../config/logger");
+      
       const { data, error } = await supabaseAdmin
         .from("friend_requests")
         .select(
@@ -62,6 +65,20 @@ class FriendRepository {
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
+      if (error) {
+        logger.error("Error fetching pending friend requests", {
+          userId,
+          error,
+        });
+        throw error;
+      }
+
+      logger.debug("Fetched pending friend requests", {
+        userId,
+        count: (data || []).length,
+        requestIds: (data || []).map(r => r.id),
+      });
+
       if (error) throw error;
 
       return (data || []).map((fr) => {
@@ -74,7 +91,8 @@ class FriendRepository {
         delete user.user_profiles;
         delete fr.users;
 
-        return { ...fr, ...user, ...profile };
+        // Preserve friend_requests.id so accept/decline always use request id, not sender id
+        return { ...fr, ...user, ...profile, id: fr.id };
       });
     } catch (error) {
       handleError(error, "getPendingRequests");
@@ -115,7 +133,7 @@ class FriendRepository {
         delete user.user_profiles;
         delete fr.users;
 
-        return { ...fr, ...user, ...profile };
+        return { ...fr, ...user, ...profile, id: fr.id };
       });
     } catch (error) {
       handleError(error, "getSentRequests");
@@ -125,6 +143,14 @@ class FriendRepository {
   // Respond to friend request - COMPLEX: needs transaction
   async respondToRequest(requestId, receiverId, status) {
     try {
+      const logger = require("../config/logger");
+      
+      logger.info("Responding to friend request", {
+        requestId,
+        receiverId,
+        status,
+      });
+
       // Update request status
       const { data: request, error: updateError } = await supabaseAdmin
         .from("friend_requests")
@@ -138,10 +164,33 @@ class FriendRepository {
         .select()
         .single();
 
-      if (updateError) throw updateError;
-      if (!request) throw new Error("Request not found or already responded");
+      if (updateError) {
+        logger.error("Error updating friend request status", {
+          requestId,
+          receiverId,
+          status,
+          error: updateError,
+        });
+        throw updateError;
+      }
+      
+      if (!request) {
+        logger.warn("Friend request not found or already responded", {
+          requestId,
+          receiverId,
+          status,
+        });
+        throw new Error("Request not found or already responded");
+      }
 
-      // If accepted, create bidirectional friendship
+      logger.info("Friend request status updated successfully", {
+        requestId,
+        receiverId,
+        status,
+        senderId: request.sender_id,
+      });
+
+      // If accepted, create bidirectional friendship and add to roster
       if (status === "accepted") {
         const { error: friendshipError } = await supabaseAdmin
           .from("friendships")
@@ -152,6 +201,47 @@ class FriendRepository {
 
         if (friendshipError && friendshipError.code !== "23505")
           throw friendshipError;
+
+        // Add each user to the other's roster if not already present
+        try {
+          // Check if sender is already in receiver's roster
+          const { data: receiverRosterEntry } = await supabaseAdmin
+            .from("roster")
+            .select("id")
+            .eq("user_id", request.receiver_id)
+            .eq("contact_user_id", request.sender_id)
+            .maybeSingle();
+
+          if (!receiverRosterEntry) {
+            await rosterRepository.addToRoster(request.receiver_id, {
+              contactUserId: request.sender_id,
+            });
+          }
+
+          // Check if receiver is already in sender's roster
+          const { data: senderRosterEntry } = await supabaseAdmin
+            .from("roster")
+            .select("id")
+            .eq("user_id", request.sender_id)
+            .eq("contact_user_id", request.receiver_id)
+            .maybeSingle();
+
+          if (!senderRosterEntry) {
+            await rosterRepository.addToRoster(request.sender_id, {
+              contactUserId: request.receiver_id,
+            });
+          }
+        } catch (rosterError) {
+          // Log but don't fail the friend request acceptance if roster add fails
+          // (e.g., duplicate key or other non-critical error)
+          const logger = require("../config/logger");
+          logger.warn("Failed to add friend to roster after accepting request", {
+            requestId,
+            senderId: request.sender_id,
+            receiverId: request.receiver_id,
+            error: rosterError?.message,
+          });
+        }
       }
 
       return request;
@@ -193,7 +283,10 @@ class FriendRepository {
                         id, first_name, last_name, username,
                         user_profiles (
                             handicap, avatar_url, location, home_course,
-                            preferred_tee_time, walk_or_ride, rounds_played, social_rate
+                            preferred_tee_time, walk_or_ride, rounds_played, 
+                            social_rate, average_score, bio, clubs,
+                            driver, irons, putter, ball, playing_partner_preference,
+                            drink_of_choice
                         )
                     )
                 `
@@ -206,12 +299,18 @@ class FriendRepository {
       return (data || []).map((f) => {
         const user = f.users || {};
         const profileData = user.user_profiles;
-        const profile = Array.isArray(profileData)
-          ? profileData[0] || {}
-          : profileData || {};
+        
+        // Handle profile data - Supabase can return it as array or object
+        let profile = {};
+        if (profileData) {
+          if (Array.isArray(profileData)) {
+            profile = profileData[0] || {};
+          } else {
+            profile = profileData;
+          }
+        }
 
-        delete user.user_profiles;
-
+        // Ensure all profile fields are included, even if null
         return {
           friendship_id: f.id,
           friends_since: f.created_at,
@@ -219,7 +318,24 @@ class FriendRepository {
           first_name: user.first_name,
           last_name: user.last_name,
           username: user.username,
-          ...profile,
+          // Profile fields - explicitly include all fields
+          handicap: profile.handicap || null,
+          avatar_url: profile.avatar_url || null,
+          location: profile.location || null,
+          home_course: profile.home_course || null,
+          preferred_tee_time: profile.preferred_tee_time || null,
+          walk_or_ride: profile.walk_or_ride || null,
+          rounds_played: profile.rounds_played || null,
+          social_rate: profile.social_rate || null,
+          average_score: profile.average_score || null,
+          bio: profile.bio || null,
+          clubs: profile.clubs || null,
+          driver: profile.driver || null,
+          irons: profile.irons || null,
+          putter: profile.putter || null,
+          ball: profile.ball || null,
+          playing_partner_preference: profile.playing_partner_preference || null,
+          drink_of_choice: profile.drink_of_choice || null,
         };
       });
     } catch (error) {

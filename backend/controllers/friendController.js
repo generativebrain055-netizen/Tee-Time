@@ -172,6 +172,15 @@ class FriendController {
                 walkOrRide: f.walk_or_ride,
                 roundsPlayed: f.rounds_played,
                 socialRate: f.social_rate,
+                averageScore: f.average_score,
+                bio: f.bio,
+                clubs: f.clubs,
+                driver: f.driver,
+                irons: f.irons,
+                putter: f.putter,
+                ball: f.ball,
+                playingPartnerPreference: f.playing_partner_preference,
+                drinkOfChoice: f.drink_of_choice,
                 friendsSince: f.friends_since
             }));
 

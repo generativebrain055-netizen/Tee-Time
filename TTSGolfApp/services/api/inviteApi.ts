@@ -6,6 +6,7 @@
 
 import { API_ENDPOINTS } from "../../config/api";
 import { apiCall } from "./core";
+import { logger } from "../../utils/logger";
 import type { Invite, InviteResponse, InviteResponseType } from "./types";
 
 export interface CreateInviteRequest {
@@ -81,18 +82,105 @@ export const inviteApi = {
   /**
    * Respond to invite
    */
-  respondToInvite: (
+  respondToInvite: async (
     inviteId: string,
     response: InviteResponseType,
     message?: string,
-  ) =>
-    apiCall<{ success: boolean }>(
-      `${API_ENDPOINTS.INVITES}/${inviteId}/respond`,
-      {
+  ) => {
+    const url = `${API_ENDPOINTS.INVITES}/${inviteId}/respond`;
+    
+    // Validate inviteId
+    if (!inviteId || typeof inviteId !== 'string') {
+      const error = new Error("Invalid invite ID");
+      logger.error("[inviteApi] respondToInvite - invalid inviteId", {
+        inviteId,
+        type: typeof inviteId,
+      });
+      throw error;
+    }
+    
+    console.log("🔵 [inviteApi] respondToInvite CALLED", {
+      inviteId,
+      response,
+      url,
+      fullUrl: url,
+      hasMessage: !!message,
+    });
+    
+    logger.info("[inviteApi] respondToInvite called", {
+      inviteId,
+      response,
+      url,
+      hasMessage: !!message,
+      fullUrl: url,
+    });
+    
+    try {
+      console.log("🔵 [inviteApi] About to call apiCall with PUT request", {
+        url,
         method: "PUT",
-        body: JSON.stringify({ response, message }),
-      },
-    ),
+        body: { response, message },
+      });
+      
+      const result = await apiCall<{ success: boolean }>(
+        url,
+        {
+          method: "PUT",
+          body: JSON.stringify({ response, message }),
+        },
+      );
+      
+      console.log("🟢 [inviteApi] respondToInvite SUCCESS", {
+        inviteId,
+        response,
+        success: result.success,
+        result,
+      });
+      
+      logger.info("[inviteApi] respondToInvite success", {
+        inviteId,
+        response,
+        success: result.success,
+      });
+      
+      return result;
+    } catch (error: any) {
+      console.error("🔴 [inviteApi] respondToInvite ERROR", {
+        inviteId,
+        response,
+        url,
+        fullUrl: url,
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        name: error.name,
+        stack: error.stack,
+      });
+      
+      logger.error("[inviteApi] respondToInvite error", {
+        inviteId,
+        response,
+        url,
+        fullUrl: url,
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        name: error.name,
+      });
+      
+      // Provide more helpful error message
+      if (error.code === "NETWORK_ERROR" || error.statusCode === 0 || error.code === "TIMEOUT_ERROR") {
+        throw new Error(
+          "Cannot connect to server. Please check:\n" +
+          "1. Backend is running (cd backend && npm run dev)\n" +
+          "2. EXPO_PUBLIC_API_URL in .env is set to your computer's IP (not localhost)\n" +
+          "3. Your device/simulator can reach the backend"
+        );
+      }
+      
+      throw error;
+    }
+  },
 
   /**
    * Get response history for an invite

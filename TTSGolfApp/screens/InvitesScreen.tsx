@@ -76,20 +76,67 @@ export default function InvitesScreen({ navigation }: any) {
     }, []);
 
     const handleRespond = async (inviteId: string, response: "accepted" | "declined") => {
+        console.log("🔵 [InvitesScreen] handleRespond CALLED", { inviteId, response });
         setResponding(inviteId);
         try {
+            console.log("🔵 [InvitesScreen] About to call inviteApi.respondToInvite", { inviteId, response });
+            logger.info("[InvitesScreen] Attempting to respond to invite", {
+                inviteId,
+                response,
+            });
+            
             const result = await inviteApi.respondToInvite(inviteId, response);
+            
+            console.log("🟢 [InvitesScreen] inviteApi.respondToInvite SUCCESS", { inviteId, response, result });
+            logger.info("[InvitesScreen] Invite response received", {
+                inviteId,
+                response,
+                success: result.success,
+            });
+            
             if (result.success) {
+                // Remove invite from pending list
                 setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+                
+                // Refresh invites list to ensure UI is updated
+                await loadInvites();
+                
                 Alert.alert(
                     response === "accepted" ? "Accepted!" : "Declined",
                     response === "accepted"
                         ? "You've been added to the tee time!"
                         : "You've declined the invite."
                 );
+            } else {
+                console.warn("🟡 [InvitesScreen] Response not successful", { inviteId, response, result });
+                logger.warn("[InvitesScreen] Invite response was not successful", {
+                    inviteId,
+                    response,
+                    result,
+                });
+                Alert.alert("Error", "Failed to respond to invite. Please try again.");
             }
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to respond to invite");
+            console.error("🔴 [InvitesScreen] ERROR in handleRespond", {
+                inviteId,
+                response,
+                error: error.message,
+                code: error.code,
+                statusCode: error.statusCode,
+                stack: error.stack,
+            });
+            logger.error("[InvitesScreen] Error responding to invite", {
+                inviteId,
+                response,
+                error: error.message,
+                stack: error.stack,
+                code: error.code,
+                statusCode: error.statusCode,
+            });
+            Alert.alert(
+                "Error",
+                error.message || "Failed to respond to invite. Please check your connection and try again."
+            );
         } finally {
             setResponding(null);
         }

@@ -1,15 +1,19 @@
 /**
  * Firebase Configuration
  * Initializes Firebase for authentication and other services
+ * React Native: uses @firebase/auth (RN build) for initializeAuth + getReactNativePersistence
  */
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { logger } from '../utils/logger';
-import { getAuth, Auth } from 'firebase/auth';
-// React Native persistence: use subpath import if available (firebase v10+)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const authReactNative = require('firebase/auth/react-native');
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Use @firebase/auth React Native build (has initializeAuth + getReactNativePersistence)
+import {
+  getAuth,
+  initializeAuth,
+  getReactNativePersistence,
+  Auth,
+} from '@firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -42,8 +46,8 @@ try {
     
     // Initialize Auth with AsyncStorage persistence (React Native)
     try {
-      auth = authReactNative.initializeAuth(app, {
-        persistence: authReactNative.getReactNativePersistence(AsyncStorage),
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
       });
     } catch (authError: any) {
       // Auth might already be initialized, try to get it

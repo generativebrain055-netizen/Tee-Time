@@ -31,6 +31,7 @@ const OAuthPhoneEntryModule = lazy(() => import("./screens/onboarding/OAuthPhone
 const OAuthMagicLinkVerificationModule = lazy(() => import("./screens/onboarding/OAuthMagicLinkVerificationScreen"));
 const OAuthProfileCompletionModule = lazy(() => import("./screens/onboarding/OAuthProfileCompletionScreen"));
 const AvailabilityOnboardingModule = lazy(() => import("./screens/onboarding/AvailabilityOnboardingScreen"));
+const ComposeMessageScreen = lazy(() => import("./screens/ComposeMessageScreen"));
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
 import MessagesScreen from "./screens/Messages";
@@ -614,10 +615,12 @@ export default function App(): React.ReactElement {
         );
       case "ComposeMessage":
         return (
-          <ComposeMessageScreen
-            key={`compose-message-${screenKey}`}
-            navigation={navigation as any}
-          />
+          <Suspense fallback={null}>
+            <ComposeMessageScreen
+              key={`compose-message-${screenKey}`}
+              navigation={navigation as any}
+            />
+          </Suspense>
         );
       default:
         return (

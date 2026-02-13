@@ -11,6 +11,7 @@ import {
   Keyboard,
   StyleSheet,
   TouchableWithoutFeedback,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -51,6 +52,7 @@ export default function LoginScreen({ navigation }: Props) {
     handleResendMagicLink,
     handleBack,
     clearPhoneInput,
+    devWebFallback,
   } = useLoginFlow(navigation);
 
   return (
@@ -95,6 +97,11 @@ export default function LoginScreen({ navigation }: Props) {
                   onClear={clearPhoneInput}
                   errorMessage={error}
                 />
+                {error && error.includes("Cannot connect to server") ? (
+                  <Text style={styles.connectionHint}>
+                    Run in Terminal: cd TTSGolfApp && npm run start:with-backend
+                  </Text>
+                ) : null}
                 <TouchableOpacity
                   style={[
                     styles.nextButton,
@@ -190,6 +197,15 @@ export default function LoginScreen({ navigation }: Props) {
                   <Text style={[styles.subtitle, { color: "#EF4444", marginBottom: 16 }]}>
                     {error}
                   </Text>
+                ) : null}
+                {devWebFallback ? (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(devWebFallback)}
+                    style={[styles.nextButton, { marginBottom: 16, height: 48 }]}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.nextButtonText}>Open sign-in link (dev)</Text>
+                  </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity
                   onPress={handleResendMagicLink}
@@ -338,5 +354,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#16A34A",
+  },
+  connectionHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 8,
   },
 });

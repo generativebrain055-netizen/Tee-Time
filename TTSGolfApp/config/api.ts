@@ -3,9 +3,18 @@
  * TypeScript version with proper typing
  */
 
-// Get API URL from environment variable or use default
-// Android emulator: use 10.0.2.2 to access host machine's localhost
-const API_BASE_URL: string = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:3000";
+import { Platform } from "react-native";
+
+// Environment wins. If not set: Android emulator uses 10.0.2.2 (host), iOS uses localhost.
+// For iOS simulator or physical device you MUST set EXPO_PUBLIC_API_URL in .env to your
+// computer's IP (e.g. http://192.168.1.5:3000). localhost from device/simulator is not your Mac.
+function getDefaultApiUrl(): string {
+  if (Platform.OS === "android") return "http://10.0.2.2:3000";
+  return "http://localhost:3000";
+}
+
+const API_BASE_URL: string =
+  process.env.EXPO_PUBLIC_API_URL || getDefaultApiUrl();
 
 /**
  * Get the API base URL
@@ -18,6 +27,13 @@ const getApiUrl = (): string => {
  * The base API URL
  */
 export const API_URL: string = getApiUrl();
+
+// Dev-only: remind that localhost from simulator/device is not your computer
+if (__DEV__ && (API_URL.includes("localhost") || API_URL.includes("127.0.0.1"))) {
+  console.warn(
+    `[API] Backend: ${API_URL}. On simulator/device, set EXPO_PUBLIC_API_URL in .env to your computer's IP (e.g. http://192.168.1.5:3000), then: npx expo start -c`
+  );
+}
 
 /**
  * API endpoint paths interface
@@ -156,10 +172,13 @@ export const API_ENDPOINTS: ApiEndpoints = {
   DRAFT_HISTORY: `${API_URL}/api/draft/history`,
   // Messages
   MESSAGES_CONVERSATIONS: `${API_URL}/api/messages/conversations`,
+  MESSAGES_UNREAD_COUNT: `${API_URL}/api/messages/unread-count`,
   MESSAGES_CONVERSATION_MESSAGES: (id: string) =>
     `${API_URL}/api/messages/conversations/${id}/messages`,
   MESSAGES_SEND_MESSAGE: (id: string) =>
     `${API_URL}/api/messages/conversations/${id}/messages`,
+  MESSAGES_MARK_READ: (id: string) =>
+    `${API_URL}/api/messages/conversations/${id}/read`,
   // Health
   HEALTH: `${API_URL}/health`,
 };
