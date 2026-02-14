@@ -7,6 +7,8 @@
 const rosterRepository = require("../repositories/rosterRepository");
 const userRepository = require("../repositories/userRepository");
 const rosterNotificationService = require("./rosterNotificationService");
+const notificationService = require("./notificationService");
+const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
@@ -71,12 +73,28 @@ async function addToRoster(userId, contactData) {
     );
   }
 
-  const entry = await rosterRepository.addToRoster(userId, {
-    contactUserId,
-    contactPhone,
-    contactName,
-    contactEmail,
-  });
+  let entry;
+  try {
+    entry = await rosterRepository.addToRoster(userId, {
+      contactUserId,
+      contactPhone,
+      contactName,
+      contactEmail,
+    });
+  } catch (err) {
+    // Unique constraint (e.g. race with another request) → treat as already in roster
+    const isDuplicate =
+      err.code === "23505" ||
+      (err.constraint && String(err.constraint).includes("roster")) ||
+      (err.message && String(err.message).toLowerCase().includes("unique"));
+    if (isDuplicate) {
+      throw new RosterServiceError(
+        "Contact already in roster",
+        "DUPLICATE_CONTACT",
+      );
+    }
+    throw err;
+  }
 
   // Side effect: Send notification (fire and forget)
   if (contactUserId) {
@@ -307,6 +325,125 @@ async function addMembersToGroup(userId, groupId, memberUserIds) {
 }
 
 /**
+ * Send group invitations to users (Figma 1269-977). Invitees receive a "Group request" notification
+ * and can Accept/Decline. Does not add them to the group until they accept.
+ */
+async function inviteToGroup(userId, groupId, memberUserIds) {
+  const group = await rosterRepository.getGroupWithAccess(userId, groupId);
+  if (!group) {
+    throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+  const groupName = group.name || "Group";
+  const inviter = await userRepository.findById(userId);
+  if (!inviter) {
+    throw new RosterServiceError("Inviter not found", "NOT_FOUND", 404);
+  }
+  let sent = 0;
+  for (const inviteeUserId of memberUserIds) {
+    if (inviteeUserId === userId) continue;
+    try {
+      await notificationService.notifyGroupInvite(inviteeUserId, inviter, groupId, groupName);
+      sent++;
+    } catch (err) {
+      logger.error("Failed to send group invite notification", { inviteeUserId, groupId, error: err.message });
+    }
+  }
+  return { sent, groupId, groupName };
+}
+
+/**
+ * Accept a group invitation (notification). Adds current user to inviter's roster in that group
+ * and notifies the inviter: "Your group invitation to [name] has been accepted".
+ */
+async function acceptGroupInvite(acceptingUserId, notificationId) {
+  const { data: notification, error: fetchError } = await supabaseAdmin
+    .from("notifications")
+    .select("id, user_id, data")
+    .eq("id", notificationId)
+    .eq("user_id", acceptingUserId)
+    .single();
+
+  if (fetchError || !notification) {
+    throw new RosterServiceError("Notification not found", "NOT_FOUND", 404);
+  }
+
+  const data = notification.data || {};
+  if (data.type !== "group_invite") {
+    throw new RosterServiceError("Not a group invitation", "INVALID_TYPE", 400);
+  }
+  if (data.responded) {
+    throw new RosterServiceError("Invitation already responded", "ALREADY_RESPONDED", 400);
+  }
+
+  const inviterId = data.inviterId;
+  const groupId = data.groupId;
+  if (!inviterId || !groupId) {
+    throw new RosterServiceError("Invalid invitation data", "INVALID_DATA", 400);
+  }
+
+  // Add accepting user to inviter's roster in this group
+  await rosterRepository.addMembersToGroup(inviterId, groupId, [acceptingUserId]);
+
+  // Inviter activity notification: "Your group invitation to Mark Spencer has been accepted"
+  const acceptingUser = await userRepository.findById(acceptingUserId);
+  const inviteeName =
+    (acceptingUser && `${acceptingUser.first_name || ""} ${acceptingUser.last_name || ""}`.trim()) ||
+    "this user";
+  await notificationService.notifyGroupInviteAccepted(inviterId, inviteeName);
+
+  // Mark notification as responded
+  const updatedData = { ...data, responded: true };
+  await supabaseAdmin
+    .from("notifications")
+    .update({
+      data: updatedData,
+      read_at: new Date().toISOString(),
+      status: "read",
+    })
+    .eq("id", notificationId)
+    .eq("user_id", acceptingUserId);
+
+  return { success: true, groupId, groupName: data.groupName || null };
+}
+
+/**
+ * Decline a group invitation (mark as responded, no add to group).
+ */
+async function declineGroupInvite(acceptingUserId, notificationId) {
+  const { data: notification, error: fetchError } = await supabaseAdmin
+    .from("notifications")
+    .select("id, user_id, data")
+    .eq("id", notificationId)
+    .eq("user_id", acceptingUserId)
+    .single();
+
+  if (fetchError || !notification) {
+    throw new RosterServiceError("Notification not found", "NOT_FOUND", 404);
+  }
+
+  const data = notification.data || {};
+  if (data.type !== "group_invite") {
+    throw new RosterServiceError("Not a group invitation", "INVALID_TYPE", 400);
+  }
+  if (data.responded) {
+    throw new RosterServiceError("Invitation already responded", "ALREADY_RESPONDED", 400);
+  }
+
+  const updatedData = { ...data, responded: true, declined: true };
+  await supabaseAdmin
+    .from("notifications")
+    .update({
+      data: updatedData,
+      read_at: new Date().toISOString(),
+      status: "read",
+    })
+    .eq("id", notificationId)
+    .eq("user_id", acceptingUserId);
+
+  return { success: true, declined: true };
+}
+
+/**
  * Leave a group (remove current user's roster entries from group) (Figma 1075-927: removing yourself)
  * @throws {RosterServiceError} If group not found
  */
@@ -506,6 +643,9 @@ module.exports = {
   deleteGroup,
   getGroupMembers,
   addMembersToGroup,
+  inviteToGroup,
+  acceptGroupInvite,
+  declineGroupInvite,
   leaveGroup,
   updateMemberGroup,
   moveMember,

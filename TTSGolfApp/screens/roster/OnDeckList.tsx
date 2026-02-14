@@ -7,14 +7,12 @@ import {
     Image,
     RefreshControl,
     ActivityIndicator,
-    TextInput,
     Alert,
 } from "react-native";
-import { Plus, MessageCircle, Search, X } from "lucide-react-native";
+import { Plus, MessageCircle, Search } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
-import { useDebounce } from "../../hooks";
 
 interface OnDeckListProps {
     navigation: any;
@@ -42,12 +40,13 @@ const formatLastPlayed = (dateStr: string): string => {
     return date.toLocaleDateString();
 };
 
-const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster }: { 
+const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, adding }: { 
     item: any; 
     navigation: any; 
     colors: any; 
     theme: any;
     onAddToRoster?: (item: any) => void;
+    adding?: boolean;
 }) => {
     const handlePress = () => {
         const userId = item.contact?.userId || item.id;
@@ -113,10 +112,8 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster }: {
 
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <TouchableOpacity 
-                    onPress={(e) => {
-                        e.stopPropagation();
-                        // Handle add to roster action
-                    }}
+                    onPress={handleAddToRoster}
+                    disabled={adding}
                     style={{
                         width: 40,
                         height: 40,
@@ -129,7 +126,11 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster }: {
                     }}
                     activeOpacity={0.7}
                 >
-                    <Plus size={20} color="#111827" strokeWidth={2} />
+                    {adding ? (
+                        <ActivityIndicator size="small" color="#111827" />
+                    ) : (
+                        <Plus size={20} color="#111827" strokeWidth={2} />
+                    )}
                 </TouchableOpacity>
                 <TouchableOpacity 
                     onPress={(e) => {
@@ -159,13 +160,9 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
     const colors = useColors();
     const theme = useTheme();
     const [onDeck, setOnDeck] = useState<any[]>([]);
-    const [filteredOnDeck, setFilteredOnDeck] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [searchText, setSearchText] = useState("");
     const [addingId, setAddingId] = useState<string | null>(null);
-    
-    const debouncedSearch = useDebounce(searchText, 300);
 
     const loadOnDeck = useCallback(async () => {
         try {
@@ -173,71 +170,31 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
             if (response.success) {
                 const data = response.onDeck || [];
                 setOnDeck(data);
-                setFilteredOnDeck(data);
             }
         } catch (error) {
             logger.error("[OnDeckList] Failed to load on-deck", error);
             setOnDeck([]);
-            setFilteredOnDeck([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
     
-    // Filter on-deck list based on search
-    useEffect(() => {
-        if (!debouncedSearch || debouncedSearch.trim() === "") {
-            setFilteredOnDeck(onDeck);
-            return;
-        }
-        
-        const searchLower = debouncedSearch.toLowerCase();
-        const filtered = onDeck.filter((item) => {
-            const contact = item.contact || item;
-            const name = contact.name || `${contact.firstName || ""} ${contact.lastName || ""}`.trim();
-            const username = contact.username || "";
-            
-            return (
-                name.toLowerCase().includes(searchLower) ||
-                username.toLowerCase().includes(searchLower) ||
-                contact.phone?.includes(searchLower)
-            );
-        });
-        
-        setFilteredOnDeck(filtered);
-    }, [debouncedSearch, onDeck]);
-    
     const handleAddToRoster = useCallback(async (item: any) => {
         const contact = item.contact || item;
         const name = contact.name || `${contact.firstName || ""} ${contact.lastName || ""}`.trim();
-        
+
         setAddingId(item.id);
         try {
-            const payload: any = {};
-            
-            if (contact.userId) {
-                payload.contactUserId = contact.userId;
-            } else if (contact.phone) {
-                payload.contactPhone = contact.phone;
-            }
-            
-            if (contact.name) {
-                payload.contactName = contact.name;
-            }
-            
-            if (contact.email) {
-                payload.contactEmail = contact.email;
-            }
-            
-            const response = await rosterApi.addToRoster(payload);
-            
-            if (response.success) {
-                logger.info("[OnDeckList] Added to roster", { rosterId: response.entry?.id });
-                Alert.alert("Success", `${name} has been added to your roster`);
-                // Reload on-deck list (they'll be removed from on-deck when added to roster)
-                await loadOnDeck();
-            }
+            // On Deck users are already roster entries; move them to main Roster (Figma 1025-389, 1025-539)
+            const rosterRes = await rosterApi.getRoster();
+            const rosterLength = (rosterRes.success && rosterRes.roster) ? rosterRes.roster.length : 0;
+            await rosterApi.moveMember(item.id, {
+                isOnDeck: false,
+                newPosition: rosterLength,
+            });
+            logger.info("[OnDeckList] Moved to roster", { rosterId: item.id });
+            await loadOnDeck();
         } catch (error: any) {
             logger.error("[OnDeckList] Failed to add to roster", error);
             const errorMessage = error.message || "Failed to add to roster. Please try again.";
@@ -264,113 +221,8 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
         );
     }
 
-    if (onDeck.length === 0 && !loading) {
-        return (
-            <ScrollView 
-                style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-                contentContainerStyle={{ flex: 1 }}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={colors.primary}
-                    />
-                }
-            >
-                <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 }}>
-                    <Text style={{ 
-                        fontFamily: theme.fontFamily.bold, 
-                        fontSize: 20, 
-                        color: "#111827",
-                        marginBottom: 12,
-                        textAlign: "center",
-                    }}>
-                        Backup players
-                    </Text>
-                    <Text style={{ 
-                        fontFamily: theme.fontFamily.regular, 
-                        fontSize: 15, 
-                        color: "#6B7280",
-                        textAlign: "center",
-                        lineHeight: 22,
-                        marginBottom: 24,
-                    }}>
-                        Golfing buddies who are not part of your core Roster; out-of-town friends, occasional players, or last-minute fills. Promote them to your Roster at anytime or invite them directly via Manual Invite.
-                    </Text>
-                    <TouchableOpacity
-                        style={{
-                            backgroundColor: colors.primary,
-                            paddingHorizontal: 32,
-                            paddingVertical: 14,
-                            borderRadius: 10,
-                        }}
-                        onPress={() => navigation?.navigate('FindPlayers')}
-                    >
-                        <Text style={{ 
-                            fontFamily: theme.fontFamily.semiBold,
-                            fontSize: 15, 
-                            color: "#FFFFFF",
-                        }}>
-                            Find players
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        );
-    }
-
     return (
         <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
-            {/* Search Bar */}
-            <View style={{ paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-                <View style={{ position: "relative" }}>
-                    <View style={{ position: "absolute", left: 12, top: "50%", transform: [{ translateY: -10 }], zIndex: 1 }}>
-                        <Search size={18} color="#9CA3AF" strokeWidth={2} />
-                    </View>
-                    <TextInput
-                        placeholder="Search on-deck players"
-                        value={searchText}
-                        onChangeText={setSearchText}
-                        style={{
-                            width: "100%",
-                            backgroundColor: "#F9FAFB",
-                            borderWidth: 1,
-                            borderColor: "#E5E7EB",
-                            borderRadius: 12,
-                            paddingVertical: 12,
-                            paddingHorizontal: 16,
-                            paddingLeft: 40,
-                            paddingRight: searchText.length > 0 ? 40 : 16,
-                            fontSize: 15,
-                            fontFamily: theme.fontFamily.regular,
-                            color: "#111827",
-                        }}
-                        placeholderTextColor="#9CA3AF"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-                    {searchText.length > 0 && (
-                        <TouchableOpacity
-                            onPress={() => setSearchText("")}
-                            style={{
-                                position: "absolute",
-                                right: 12,
-                                top: "50%",
-                                transform: [{ translateY: -10 }],
-                                width: 20,
-                                height: 20,
-                                borderRadius: 10,
-                                backgroundColor: "#D1D5DB",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                        >
-                            <X size={14} color="#FFFFFF" strokeWidth={2.5} />
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-            
             <ScrollView
                 style={{ flex: 1 }}
                 showsVerticalScrollIndicator={false}
@@ -381,9 +233,34 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                         tintColor={colors.primary}
                     />
                 }
+                keyboardShouldPersistTaps="handled"
             >
-                {filteredOnDeck.length === 0 && !loading ? (
-                    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, paddingTop: 60 }}>
+                {onDeck.length > 0 ? (
+                    <>
+                        <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 }}>
+                            <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 13, color: "#6B7280" }}>
+                                {onDeck.length} {onDeck.length === 1 ? "player" : "players"} on deck
+                            </Text>
+                        </View>
+                        {onDeck.map((item, index) => (
+                            <React.Fragment key={item.id || index}>
+                                <OnDeckItem 
+                                    item={item} 
+                                    navigation={navigation} 
+                                    colors={colors} 
+                                    theme={theme}
+                                    onAddToRoster={handleAddToRoster}
+                                    adding={addingId === item.id}
+                                />
+                                {index < onDeck.length - 1 && (
+                                    <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 76 }} />
+                                )}
+                            </React.Fragment>
+                        ))}
+                        <View style={{ height: 100 }} />
+                    </>
+                ) : (
+                    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, paddingTop: 60, minHeight: 280 }}>
                         <Search size={56} color="#D1D5DB" strokeWidth={1.5} />
                         <Text style={{
                             fontFamily: theme.fontFamily.semiBold,
@@ -392,7 +269,7 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                             marginTop: 20,
                             textAlign: "center",
                         }}>
-                            {searchText ? "No players found" : "No backup players"}
+                            No backup players
                         </Text>
                         <Text style={{
                             fontFamily: theme.fontFamily.regular,
@@ -401,27 +278,23 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                             marginTop: 8,
                             textAlign: "center",
                         }}>
-                            {searchText ? "Try a different search" : "Add players to your on-deck list"}
+                            Add players to your on-deck list
                         </Text>
+                        <TouchableOpacity
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingHorizontal: 32,
+                                paddingVertical: 14,
+                                borderRadius: 10,
+                                marginTop: 24,
+                            }}
+                            onPress={() => navigation?.navigate("FindPlayers")}
+                        >
+                            <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#FFFFFF" }}>
+                                Find players
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-                ) : (
-                    <>
-                        {filteredOnDeck.map((item, index) => (
-                            <React.Fragment key={item.id || index}>
-                                <OnDeckItem 
-                                    item={item} 
-                                    navigation={navigation} 
-                                    colors={colors} 
-                                    theme={theme}
-                                    onAddToRoster={handleAddToRoster}
-                                />
-                                {index < filteredOnDeck.length - 1 && (
-                                    <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 76 }} />
-                                )}
-                            </React.Fragment>
-                        ))}
-                        <View style={{ height: 100 }} />
-                    </>
                 )}
             </ScrollView>
         </View>

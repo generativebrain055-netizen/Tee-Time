@@ -41,41 +41,22 @@ export const profileApi = {
 
   /**
    * Upload avatar image to Supabase Storage
-   * Supports both file URI (from camera/gallery) and base64 data
+   * Expects base64 data URL (e.g. data:image/jpeg;base64,...) as returned by image picker with base64: true
    */
-  uploadAvatar: async (imageUri: string): Promise<AvatarUploadResponse> => {
+  uploadAvatar: async (profilePhotoBase64: string): Promise<AvatarUploadResponse> => {
     const headers = await getAuthHeaders();
-    
-    // Create form data for file upload
-    const formData = new FormData();
-    
-    // Get file extension and mime type
-    const uriParts = imageUri.split(".");
-    const fileExtension = uriParts[uriParts.length - 1].toLowerCase();
-    const mimeType = fileExtension === "png" ? "image/png" : "image/jpeg";
-    
-    // Append file to form data
-    formData.append("avatar", {
-      uri: imageUri,
-      type: mimeType,
-      name: `avatar.${fileExtension}`,
-    } as unknown as Blob);
-    
-    const response = await fetch(`${API_URL}/auth/profile/avatar`, {
+    const response = await fetch(`${API_URL}/auth/upload-avatar`, {
       method: "POST",
       headers: {
         ...headers,
-        "Content-Type": "multipart/form-data",
+        "Content-Type": "application/json",
       },
-      body: formData,
+      body: JSON.stringify({ profilePhotoBase64 }),
     });
-    
     const data = await response.json();
-    
     if (!response.ok) {
       throw new Error(data.message || "Failed to upload avatar");
     }
-    
     return data;
   },
 

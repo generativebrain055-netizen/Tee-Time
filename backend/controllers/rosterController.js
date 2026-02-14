@@ -221,6 +221,48 @@ class RosterController {
     }
   }
 
+  // POST /api/roster/groups/:id/invite (Figma 1269-977: send group invite notifications; invitees accept/decline)
+  async inviteToGroup(req, res) {
+    try {
+      const { memberUserIds } = req.body;
+      if (!Array.isArray(memberUserIds) || memberUserIds.length === 0) {
+        return error(res, "memberUserIds must be a non-empty array", 400);
+      }
+      const result = await rosterService.inviteToGroup(req.user.id, req.params.id, memberUserIds);
+      success(res, result);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to send group invitations');
+    }
+  }
+
+  // POST /api/roster/groups/accept-invite (accept group invitation from notification)
+  async acceptGroupInvite(req, res) {
+    try {
+      const { notificationId } = req.body;
+      if (!notificationId) {
+        return error(res, "notificationId is required", 400);
+      }
+      const result = await rosterService.acceptGroupInvite(req.user.id, notificationId);
+      success(res, result);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to accept group invitation');
+    }
+  }
+
+  // POST /api/roster/groups/decline-invite
+  async declineGroupInvite(req, res) {
+    try {
+      const { notificationId } = req.body;
+      if (!notificationId) {
+        return error(res, "notificationId is required", 400);
+      }
+      const result = await rosterService.declineGroupInvite(req.user.id, notificationId);
+      success(res, result);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to decline group invitation');
+    }
+  }
+
   // POST /api/roster/groups/:id/leave (Figma 1075-927: removing yourself)
   async leaveGroup(req, res) {
     try {
@@ -353,6 +395,9 @@ module.exports = {
   deleteGroup: controller.deleteGroup.bind(controller),
   getGroupMembers: controller.getGroupMembers.bind(controller),
   addMembersToGroup: controller.addMembersToGroup.bind(controller),
+  inviteToGroup: controller.inviteToGroup.bind(controller),
+  acceptGroupInvite: controller.acceptGroupInvite.bind(controller),
+  declineGroupInvite: controller.declineGroupInvite.bind(controller),
   leaveGroup: controller.leaveGroup.bind(controller),
   updateMemberGroup: controller.updateMemberGroup.bind(controller),
   moveMember: controller.moveMember.bind(controller),

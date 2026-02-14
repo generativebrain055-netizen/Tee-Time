@@ -2,7 +2,7 @@
  * TeeTime Detail Screen - Pixel Perfect iOS Design
  * Shows tee time details, participant list, and status
  */
-import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import {
     View,
     Text,
@@ -12,7 +12,7 @@ import {
     RefreshControl,
     Image,
 } from "react-native";
-import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle } from "lucide-react-native";
+import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck } from "lucide-react-native";
 import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { ConfirmModal } from "../ui/feedback";
@@ -100,6 +100,27 @@ const formatTime = (timeStr: string): string => {
     
     return `${hour12}:${minutes} ${ampm}`;
 };
+
+/**
+ * Check if we're in the check-in window (Figma 437-321).
+ * Backend: 30 minutes before tee time to 60 minutes after, on the day of the tee time.
+ */
+function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
+    const teeDate = new Date(y, (m ?? 1) - 1, d ?? 1);
+    if (today.getTime() !== teeDate.getTime()) return false;
+
+    const [teeH = 0, teeM = 0, teeS = 0] = teeTimeStr.split(':').map(Number);
+    const teeMinutes = teeH * 60 + teeM + teeS / 60;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const minutesUntilTeeTime = teeMinutes - currentMinutes;
+
+    if (minutesUntilTeeTime > 30) return false;
+    if (minutesUntilTeeTime < -60) return false;
+    return true;
+}
 
 const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, onSkip, canSkip }: { 
     participant: Participant; 
@@ -233,6 +254,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const [isLeaving, setIsLeaving] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const hasNavigatedToCheckIn = useRef(false);
 
     // Update current time every second for real-time countdown
     useEffect(() => {
@@ -375,12 +397,26 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     // Check if current user is the organizer
     const isOrganizer = useMemo(() => {
         if (!teeTime || !currentUserId) return false;
-        // Check creator ID from tee time data (most reliable)
         if (teeTime.creator?.id === currentUserId) return true;
-        // Fallback: check if any participant is marked as creator
         const creator = teeTime.participants.find(p => p.isCreator);
         return creator?.userId === currentUserId;
     }, [teeTime, currentUserId]);
+
+    // Check if we're in the check-in window (tee time is "now") — Figma 437-321
+    const inCheckInWindow = useMemo(() => {
+        if (!teeTime?.teeDate || !teeTime?.teeTime) return false;
+        return isInCheckInWindow(teeTime.teeDate, teeTime.teeTime);
+    }, [teeTime]);
+
+    // When tee time is now and user is organizer, show Check-In screen (Figma 437-321)
+    useEffect(() => {
+        if (!teeTime || !isOrganizer || !inCheckInWindow || hasNavigatedToCheckIn.current) return;
+        hasNavigatedToCheckIn.current = true;
+        navigation?.navigate("CheckIn", {
+            teeTimeId: teeTime.id,
+            courseName: teeTime.courseName,
+        });
+    }, [teeTime, isOrganizer, inCheckInWindow, navigation]);
 
     // Check if current user is a participant
     const isParticipant = useMemo(() => {
@@ -644,6 +680,19 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     <>
                         <View className="h-2.5 bg-gray-50" />
                         <View className="bg-white px-6 py-5">
+                            {isOrganizer && inCheckInWindow && (
+                                <TouchableOpacity
+                                    className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"
+                                    style={{ backgroundColor: '#16A34A', borderWidth: 0 }}
+                                    onPress={() => navigation?.navigate("CheckIn", { teeTimeId, courseName: teeTime.courseName })}
+                                    activeOpacity={0.7}
+                                >
+                                    <ClipboardCheck size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                    <Text className="font-jakarta-semibold text-base text-white">
+                                        Check-In
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
                             {isOrganizer && (
                                 <TouchableOpacity
                                     className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"

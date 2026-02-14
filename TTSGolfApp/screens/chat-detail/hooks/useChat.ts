@@ -108,6 +108,10 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     setState((prev) => ({ ...prev, messageText: text }));
   }, []);
 
+  const appendToMessageText = useCallback((suffix: string) => {
+    setState((prev) => ({ ...prev, messageText: prev.messageText + suffix }));
+  }, []);
+
   const setShowMenu = useCallback((show: boolean) => {
     setState((prev) => ({ ...prev, showMenu: show }));
   }, []);
@@ -131,12 +135,34 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     }
   }, [state.messageText, conversationId]);
 
+  const handleSendImage = useCallback(
+    async (imageBase64: string, caption?: string) => {
+      if (!conversationId) return;
+      try {
+        const res = await messagesApi.sendMessage(
+          conversationId,
+          caption?.trim() ?? "",
+          imageBase64
+        );
+        if (res.success && res.message) {
+          const m = res.message as ChatMessage;
+          setState((prev) => ({ ...prev, messages: [...prev.messages, m] }));
+        }
+      } catch (err) {
+        logger.warn("[useChat] Send image error", err);
+      }
+    },
+    [conversationId]
+  );
+
   return {
     ...state,
     conversationId,
     scrollViewRef,
     setMessageText,
+    appendToMessageText,
     setShowMenu,
     handleSend,
+    handleSendImage,
   };
 };

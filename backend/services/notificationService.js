@@ -356,6 +356,44 @@ class NotificationService {
   }
 
   /**
+   * Notify a user they have been invited to a roster group (Figma 1269-977).
+   * Invitee sees "Group request" card with Accept/Decline.
+   */
+  async notifyGroupInvite(inviteeUserId, inviter, groupId, groupName) {
+    const inviterName =
+      `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() || "Someone";
+    return this.createNotification({
+      userId: inviteeUserId,
+      title: "Group invitation",
+      body: `${inviterName} invited you to join the group "${groupName || "Group"}"`,
+      data: {
+        type: "group_invite",
+        groupId,
+        groupName: groupName || null,
+        inviterId: inviter.id,
+        inviterName,
+        inviterAvatar: inviter.avatarUrl || inviter.avatar_url || null,
+      },
+    });
+  }
+
+  /**
+   * Notify the group inviter that their invitation was accepted (activity notification).
+   */
+  async notifyGroupInviteAccepted(inviterUserId, inviteeName) {
+    const body = `Your group invitation to ${inviteeName || "this user"} has been accepted`;
+    return this.createNotification({
+      userId: inviterUserId,
+      title: "Group invitation accepted",
+      body,
+      data: {
+        type: "group_invite_accepted",
+        inviteeName: inviteeName || null,
+      },
+    });
+  }
+
+  /**
    * Create roster add notification
    */
   async notifyAddedToRoster(userId, adder) {

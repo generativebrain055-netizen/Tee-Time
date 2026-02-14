@@ -12,11 +12,16 @@ import {
 } from "react-native";
 import { MessageCircle, MoreVertical, Trash2 } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
-import { rosterApi } from "../../services/api";
+import { rosterApi, messagesApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 interface RosterListProps {
     navigation: any;
+    removeMode?: boolean;
+    onEnterRemoveMode?: () => void;
+    onExitRemoveMode?: () => void;
+    /** When this value changes (e.g. after Done), scroll list to top to show normal roster screen. */
+    scrollToTopTrigger?: number;
 }
 
 const getInitials = (firstName: string, lastName: string): string => {
@@ -44,7 +49,7 @@ const formatLastPlayed = (dateStr: string): string => {
     return `${month}/${day}/${year}`;
 };
 
-const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isEditMode }: { 
+const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isEditMode, onLongPressItem }: { 
     item: any; 
     index: number; 
     navigation: any;
@@ -52,24 +57,58 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
     theme: any;
     onRemove?: (rosterId: string) => void;
     isEditMode?: boolean;
+    onLongPressItem?: () => void;
 }) => {
     const [showMenu, setShowMenu] = useState(false);
+    const contact = item.contact || item;
+    const userId = contact.userId;
     
     const handlePress = () => {
         if (isEditMode) return;
-        const userId = item.contact?.userId || item.id;
-        navigation?.navigate("FriendProfile", { userId });
+        navigation?.navigate("FriendProfile", { userId: userId || item.id });
     };
     
     const handleLongPress = () => {
-        setShowMenu(true);
+        if (isEditMode) return;
+        onLongPressItem?.();
     };
     
-    const handleRemove = () => {
+    const handleMessage = useCallback(async (e: any) => {
+        e?.stopPropagation();
+        if (isEditMode) return;
+        if (!userId) {
+            Alert.alert("Message", "This contact is not a registered user and cannot be messaged.");
+            return;
+        }
+        try {
+            const convRes = await messagesApi.getOrCreateConversation({ recipientId: userId });
+            if (convRes.success && convRes.conversation) {
+                const name = contact.name || [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+                navigation?.navigate("ChatDetail", {
+                    chatInfo: {
+                        conversationId: convRes.conversation.id,
+                        recipientId: userId,
+                        id: userId,
+                        name: name || "Unknown",
+                        subtitle: "Direct message",
+                        img: contact.avatar,
+                        isGroup: false,
+                    },
+                });
+            }
+        } catch (err) {
+            logger.error("[SimpleRosterList] Failed to open conversation", err);
+            Alert.alert("Error", "Could not open conversation.");
+        }
+    }, [userId, contact, isEditMode, navigation]);
+    
+    const handleRemoveFromList = () => {
         setShowMenu(false);
-        const contact = item.contact || item;
+        if (isEditMode) {
+            onRemove?.(item.id);
+            return;
+        }
         const name = contact.name || `${contact.firstName || ""} ${contact.lastName || ""}`.trim();
-        
         Alert.alert(
             "Remove from Roster",
             `Remove ${name} from your roster? They will no longer be auto-invited to your tee times.`,
@@ -78,16 +117,13 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                 {
                     text: "Remove",
                     style: "destructive",
-                    onPress: () => {
-                        onRemove?.(item.id);
-                    },
+                    onPress: () => onRemove?.(item.id),
                 },
             ]
         );
     };
     
-    // Extract contact data (handle both roster API format and flat format)
-    const contact = item.contact || item;
+    // Use contact from top of component (item.contact || item)
     const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
     const lastName = contact.name?.split(" ").slice(1).join(" ") || contact.lastName || "";
     const avatar = contact.avatar || item.avatar;
@@ -159,40 +195,59 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
             </View>
 
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <TouchableOpacity 
-                    onPress={(e) => {
-                        e.stopPropagation();
-                        setShowMenu(true);
-                    }}
-                    style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        backgroundColor: "#F3F4F6",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}
-                    activeOpacity={0.7}
-                >
-                    <MoreVertical size={18} color="#6B7280" strokeWidth={2} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                    onPress={(e) => {
-                        e.stopPropagation();
-                        // Handle message action
-                    }}
-                    style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        backgroundColor: "#DBEAFE",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}
-                    activeOpacity={0.7}
-                >
-                    <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
-                </TouchableOpacity>
+                {isEditMode ? (
+                    <TouchableOpacity 
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            onRemove?.(item.id);
+                        }}
+                        style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: "#FEE2E2",
+                            alignItems: "center",
+                            justifyContent: "center",
+                        }}
+                        activeOpacity={0.7}
+                    >
+                        <Trash2 size={18} color="#EF4444" strokeWidth={2} />
+                    </TouchableOpacity>
+                ) : (
+                    <>
+                        <TouchableOpacity 
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                setShowMenu(true);
+                            }}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: "#F3F4F6",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <MoreVertical size={18} color="#6B7280" strokeWidth={2} />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            onPress={handleMessage}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: "#DBEAFE",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
+                        </TouchableOpacity>
+                    </>
+                )}
             </View>
         </TouchableOpacity>
         
@@ -229,7 +284,7 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                         elevation: 8,
                     }}>
                         <TouchableOpacity
-                            onPress={handleRemove}
+                            onPress={handleRemoveFromList}
                             style={{
                                 flexDirection: "row",
                                 alignItems: "center",
@@ -258,13 +313,18 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
 
 RosterItem.displayName = "RosterItem";
 
-export default function SimpleRosterList({ navigation }: RosterListProps) {
+type UndoState = { userId: string; name: string } | null;
+
+export default function SimpleRosterList({ navigation, removeMode = false, onEnterRemoveMode, onExitRemoveMode, scrollToTopTrigger = 0 }: RosterListProps) {
     const colors = useColors();
     const theme = useTheme();
+    const scrollRef = React.useRef<ScrollView | null>(null);
     const [roster, setRoster] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const [undoState, setUndoState] = useState<UndoState>(null);
+    const undoTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadRoster = useCallback(async () => {
         try {
@@ -285,25 +345,69 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
         loadRoster();
     }, [loadRoster]);
 
+    useEffect(() => {
+        return () => {
+            if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (scrollToTopTrigger > 0 && scrollRef.current) {
+            scrollRef.current.scrollTo({ y: 0, animated: true });
+        }
+    }, [scrollToTopTrigger]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await loadRoster();
     }, [loadRoster]);
 
+    const showUndoSnackbar = useCallback((userId: string, name: string) => {
+        if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+        setUndoState({ userId, name });
+        undoTimeoutRef.current = setTimeout(() => {
+            setUndoState(null);
+            undoTimeoutRef.current = null;
+        }, 5000);
+    }, []);
+
+    const handleUndo = useCallback(async () => {
+        if (!undoState) return;
+        if (undoTimeoutRef.current) {
+            clearTimeout(undoTimeoutRef.current);
+            undoTimeoutRef.current = null;
+        }
+        try {
+            await rosterApi.addToRoster({ contactUserId: undoState.userId });
+            setUndoState(null);
+            await loadRoster();
+        } catch (err) {
+            logger.error("[SimpleRosterList] Undo add to roster failed", err);
+            Alert.alert("Error", "Could not add back to roster.");
+        }
+    }, [undoState, loadRoster]);
+
     const handleRemove = useCallback(async (rosterId: string) => {
+        const item = roster.find((r) => r.id === rosterId);
+        const contact = item?.contact || item;
+        const userId = contact?.userId;
+        const name = contact?.name || [contact?.firstName, contact?.lastName].filter(Boolean).join(" ").trim() || "Contact";
+
         setRemovingId(rosterId);
         try {
             await rosterApi.removeFromRoster(rosterId);
             logger.info("[SimpleRosterList] Removed from roster", { rosterId });
-            // Reload roster to reflect changes
             await loadRoster();
+            if (removeMode && userId) {
+                showUndoSnackbar(userId, name);
+            }
         } catch (error) {
             logger.error("[SimpleRosterList] Failed to remove from roster", error);
             Alert.alert("Error", "Failed to remove from roster. Please try again.");
         } finally {
             setRemovingId(null);
         }
-    }, [loadRoster]);
+    }, [loadRoster, roster, removeMode, showUndoSnackbar]);
 
     if (loading) {
         return (
@@ -369,33 +473,75 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
     }
 
     return (
-        <ScrollView
-            style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-                <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    tintColor={colors.primary}
-                />
-            }
-        >
-            {roster.map((item, index) => (
-                <React.Fragment key={item.id || index}>
-                    <RosterItem 
-                        item={item} 
-                        index={index} 
-                        navigation={navigation} 
-                        colors={colors} 
-                        theme={theme}
-                        onRemove={handleRemove}
+        <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+            <ScrollView
+                ref={scrollRef}
+                style={{ flex: 1 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.primary}
                     />
-                    {index < roster.length - 1 && (
-                        <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />
-                    )}
-                </React.Fragment>
-            ))}
-            <View style={{ height: 100 }} />
-        </ScrollView>
+                }
+            >
+                {roster.map((item, index) => (
+                    <React.Fragment key={item.id || index}>
+                        <RosterItem 
+                            item={item} 
+                            index={index} 
+                            navigation={navigation} 
+                            colors={colors} 
+                            theme={theme}
+                            onRemove={handleRemove}
+                            isEditMode={removeMode}
+                            onLongPressItem={onEnterRemoveMode}
+                        />
+                        {index < roster.length - 1 && (
+                            <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />
+                        )}
+                    </React.Fragment>
+                ))}
+                <View style={{ height: 100 }} />
+            </ScrollView>
+
+            {/* Removed from roster - Undo snackbar (Figma 795-2173, 795-2326) */}
+            {undoState && (
+                <View
+                    style={{
+                        position: "absolute",
+                        left: 16,
+                        right: 16,
+                        bottom: 24,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        backgroundColor: "#111827",
+                        borderRadius: 12,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 8,
+                        elevation: 8,
+                    }}
+                >
+                    <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 15, color: "#FFFFFF", flex: 1 }}>
+                        Removed from roster
+                    </Text>
+                    <TouchableOpacity
+                        onPress={handleUndo}
+                        style={{ paddingVertical: 4, paddingHorizontal: 12 }}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#60A5FA" }}>
+                            Undo
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
     );
 }

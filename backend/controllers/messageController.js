@@ -1,4 +1,5 @@
 const messageService = require("../services/messageService");
+const chatImageUploadService = require("../services/chatImageUploadService");
 const logger = require("../config/logger");
 
 /**
@@ -67,17 +68,48 @@ async function getMessages(req, res) {
 
 /**
  * POST /api/messages/conversations/:id/messages
- * Send a message. Body: { body: string }
+ * Send a message. Body: { body?: string, imageBase64?: string }
+ * At least one of body (non-empty) or imageBase64 is required. Image is uploaded to storage and URL stored.
  */
 async function sendMessage(req, res) {
   try {
     const userId = req.user.id;
     const { id: conversationId } = req.params;
-    const { body } = req.body;
-    if (!body || typeof body !== "string" || !body.trim()) {
-      return res.status(400).json({ success: false, message: "Message body is required" });
+    const { body = "", imageBase64 } = req.body;
+
+    const hasText = typeof body === "string" && body.trim().length > 0;
+    const hasImage = typeof imageBase64 === "string" && imageBase64.length > 0;
+
+    if (!hasText && !hasImage) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide message body and/or image (imageBase64)",
+      });
     }
-    const message = await messageService.sendMessage(conversationId, userId, body);
+
+    let imageUrl = null;
+    if (hasImage) {
+      try {
+        imageUrl = await chatImageUploadService.uploadChatImage(
+          imageBase64,
+          conversationId,
+          userId
+        );
+      } catch (uploadErr) {
+        logger.error("Chat image upload error:", uploadErr);
+        return res.status(400).json({
+          success: false,
+          message: uploadErr.message || "Failed to upload image",
+        });
+      }
+    }
+
+    const message = await messageService.sendMessage(
+      conversationId,
+      userId,
+      (body || "").trim(),
+      imageUrl
+    );
     return res.status(201).json({ success: true, message });
   } catch (error) {
     logger.error("Send message error:", error);

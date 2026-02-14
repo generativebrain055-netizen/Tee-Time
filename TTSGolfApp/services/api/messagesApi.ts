@@ -36,6 +36,7 @@ export interface ChatMessage {
   senderName: string;
   senderImg: string;
   message: string;
+  imageUrl?: string | null;
   time: string;
   createdAt: string;
   isMe: boolean;
@@ -95,13 +96,19 @@ export const messagesApi = {
       method: "POST",
     }),
 
-  /** Send a message */
-  sendMessage: (conversationId: string, body: string) =>
+  /** Send a message (text and/or image). For image-only, pass body as "" and imageBase64. */
+  sendMessage: (
+    conversationId: string,
+    body: string,
+    imageBase64?: string
+  ) =>
     apiCall<{ success: boolean; message: ChatMessage }>(
       API_ENDPOINTS.MESSAGES_SEND_MESSAGE(conversationId),
       {
         method: "POST",
-        body: JSON.stringify({ body }),
+        body: JSON.stringify(
+          imageBase64 ? { body: body.trim(), imageBase64 } : { body: body.trim() }
+        ),
       }
     ),
 };

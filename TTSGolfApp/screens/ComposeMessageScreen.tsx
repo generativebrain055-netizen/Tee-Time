@@ -1,6 +1,7 @@
 /**
  * Compose Message Screen (Figma "Composing a new message")
- * Recipient picker to start a new conversation
+ * Recipient picker: multi-select for group message, single tap for direct.
+ * Next button creates group conversation when multiple users selected.
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
@@ -12,10 +13,11 @@ import {
   Image,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { Search, Check } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
-import { friendApi } from "../services/api";
+import { friendApi, messagesApi, rosterApi } from "../services/api";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { useColors } from "../ui/theme/ThemeContext";
 import { logger } from "../utils/logger";
@@ -33,8 +35,9 @@ export default function ComposeMessageScreen({ navigation }: any) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     loadFriends();
@@ -69,19 +72,25 @@ export default function ComposeMessageScreen({ navigation }: any) {
     }
   };
 
-  const handleSelectFriend = useCallback(
-    async (friendId: string) => {
-      setSelectedFriendId(friendId);
+  const toggleFriend = useCallback((friendId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(friendId)) next.delete(friendId);
+      else next.add(friendId);
+      return next;
+    });
+  }, []);
+
+  const handleNext = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    if (ids.length === 1) {
+      const friendId = ids[0];
       const friend = friends.find((f) => f.id === friendId);
       if (!friend) return;
-
       try {
-        // Create or get conversation
-        const { messagesApi } = await import("../services/api");
-        const convRes = await messagesApi.getOrCreateConversation({
-          recipientId: friendId,
-        });
-
+        const convRes = await messagesApi.getOrCreateConversation({ recipientId: friendId });
         if (convRes.success && convRes.conversation) {
           navigation?.navigate("ChatDetail", {
             chatInfo: {
@@ -97,20 +106,77 @@ export default function ComposeMessageScreen({ navigation }: any) {
         }
       } catch (error) {
         logger.error("[ComposeMessageScreen] Failed to create conversation", error);
+        Alert.alert("Error", "Could not start conversation. Please try again.");
       }
-    },
-    [friends, navigation],
-  );
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const groupName = `Group ${Date.now()}`;
+      const createRes = await rosterApi.createGroup({
+        name: groupName,
+        memberIds: ids,
+      });
+      if (!createRes.success || !createRes.group) {
+        Alert.alert("Error", "Could not create group. Please try again.");
+        return;
+      }
+      const groupId = createRes.group.id;
+      const convRes = await messagesApi.getOrCreateConversation({ rosterGroupId: groupId });
+      if (!convRes.success || !convRes.conversation) {
+        Alert.alert("Error", "Group created but could not open chat. Please try again.");
+        return;
+      }
+      const conv = convRes.conversation;
+      navigation?.navigate("ChatDetail", {
+        chatInfo: {
+          conversationId: conv.id,
+          groupId,
+          id: groupId,
+          name: conv.title ?? "Group",
+          subtitle: "Group",
+          isGroup: true,
+          participantCount: conv.participantCount ?? ids.length + 1,
+          participantAvatars: conv.participantAvatars,
+        },
+      });
+    } catch (error: any) {
+      logger.error("[ComposeMessageScreen] Failed to create group message", error);
+      Alert.alert("Error", error?.message ?? "Could not create group chat. Please try again.");
+    } finally {
+      setCreating(false);
+    }
+  }, [selectedIds, friends, navigation]);
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
   };
 
   const displayFriends = useMemo(() => filteredFriends, [filteredFriends]);
+  const hasSelection = selectedIds.size > 0;
 
   return (
     <ScreenShell>
-      <AppHeader title="New message" onBack={() => navigation?.goBack()} />
+      <AppHeader
+        title="New message"
+        onBack={() => navigation?.goBack()}
+        rightComponent={
+          hasSelection ? (
+            <TouchableOpacity
+              onPress={creating ? undefined : handleNext}
+              disabled={creating}
+              style={styles.nextButton}
+            >
+              {creating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.nextLabel, { color: colors.primary }]}>Next</Text>
+              )}
+            </TouchableOpacity>
+          ) : null
+        }
+      />
 
       <View style={styles.container}>
         <View style={[styles.searchBar, { backgroundColor: colors.surfaceSecondary }]}>
@@ -139,12 +205,12 @@ export default function ComposeMessageScreen({ navigation }: any) {
         ) : (
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
             {displayFriends.map((friend) => {
-              const isSelected = selectedFriendId === friend.id;
+              const isSelected = selectedIds.has(friend.id);
               return (
                 <TouchableOpacity
                   key={friend.id}
                   style={[styles.friendRow, { borderBottomColor: colors.border }]}
-                  onPress={() => handleSelectFriend(friend.id)}
+                  onPress={() => toggleFriend(friend.id)}
                   activeOpacity={0.7}
                 >
                   {friend.avatar ? (
@@ -265,5 +331,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     alignItems: "center",
     justifyContent: "center",
+  },
+  nextButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    minWidth: 56,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  nextLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: fontSize.base,
   },
 });

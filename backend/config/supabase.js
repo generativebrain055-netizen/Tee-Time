@@ -60,7 +60,13 @@ const testConnection = async () => {
  * @param {string} operation - Description of the operation
  */
 const handleError = (error, operation) => {
-  logger.error(`Supabase error during ${operation}`, error);
+  logger.error(`Supabase error during ${operation}`, {
+    message: error?.message,
+    code: error?.code,
+    hint: error?.hint,
+    details: error?.details,
+    constraint: error?.constraint,
+  });
   const err = new Error(error.message || `Database error during ${operation}`);
   err.code = error.code;
   err.details = error.details;

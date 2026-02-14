@@ -571,6 +571,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         <StepComponent
           onNext={handleNext}
           onBack={handleBack}
+          onOAuthSuccess={handleOAuthSuccess}
           initialPhone={userData.phoneNumber}
           initialData={userData as OnboardingData}
           initialEmail={userData.email}

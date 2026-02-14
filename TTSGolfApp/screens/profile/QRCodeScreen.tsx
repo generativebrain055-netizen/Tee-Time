@@ -7,8 +7,9 @@ import {
     Alert,
     Share,
     Dimensions,
+    Image,
 } from "react-native";
-import { RefreshCw, Share2 } from "lucide-react-native";
+import { RefreshCw, Share2, ScanLine } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ScreenShell, AppHeader } from "../../ui";
 import { useColors } from "../../ui/theme/ThemeContext";
@@ -17,6 +18,9 @@ import { logger } from "../../utils/logger";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const QR_SIZE = Math.min(SCREEN_WIDTH * 0.65, 260);
+/** TeeTime icon in center of QR code (Figma 266-3025) - overlay so it always shows */
+const QR_LOGO_SIZE = Math.round(QR_SIZE * 0.22);
+const TeeTimeLogo = require("../../assets/compact-logo.png");
 
 interface Props {
     navigation: any;
@@ -90,6 +94,10 @@ export default function QRCodeScreen({ navigation }: Props) {
         }
     }, [qrData]);
 
+    const handleScan = useCallback(() => {
+        navigation?.navigate("ScanQR");
+    }, [navigation]);
+
     return (
         <ScreenShell>
             {/* Header */}
@@ -111,17 +119,37 @@ export default function QRCodeScreen({ navigation }: Props) {
                         </View>
                     ) : qrData ? (
                         <View className="bg-white rounded-[20px] p-5 items-center justify-center shadow-lg">
-                            <QRCode
-                                value={qrData}
-                                size={QR_SIZE}
-                                color={colors.textPrimary}
-                                backgroundColor={colors.surface}
-                                logo={undefined}
-                                logoSize={50}
-                                logoBackgroundColor={colors.surface}
-                                quietZone={10}
-                                ecl="M"
-                            />
+                            <View style={{ position: "relative", width: QR_SIZE, height: QR_SIZE }}>
+                                <QRCode
+                                    value={qrData}
+                                    size={QR_SIZE}
+                                    color={colors.textPrimary}
+                                    backgroundColor={colors.surface}
+                                    quietZone={10}
+                                    ecl="M"
+                                />
+                                {/* TeeTime icon centered on QR (Figma 266-3025) - overlay so it always displays */}
+                                <View
+                                    style={{
+                                        position: "absolute",
+                                        left: (QR_SIZE - QR_LOGO_SIZE) / 2,
+                                        top: (QR_SIZE - QR_LOGO_SIZE) / 2,
+                                        width: QR_LOGO_SIZE,
+                                        height: QR_LOGO_SIZE,
+                                        borderRadius: QR_LOGO_SIZE / 2,
+                                        backgroundColor: colors.surface,
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    <Image
+                                        source={TeeTimeLogo}
+                                        style={{ width: QR_LOGO_SIZE * 0.7, height: QR_LOGO_SIZE * 0.7 }}
+                                        resizeMode="contain"
+                                    />
+                                </View>
+                            </View>
                         </View>
                     ) : (
                         <View className="bg-white rounded-[20px] items-center justify-center shadow-lg" style={{ width: QR_SIZE + 40, height: QR_SIZE + 40 }}>
@@ -134,6 +162,17 @@ export default function QRCodeScreen({ navigation }: Props) {
                 </View>
 
                 <Text className="text-xs text-gray-500 mb-5">Version {version}</Text>
+
+                {/* Scan button - Figma 266-3053: navigate to Scan screen */}
+                <TouchableOpacity
+                    className="flex-row items-center justify-center w-full py-4 rounded-xl mb-6 gap-2"
+                    style={{ backgroundColor: colors.primary }}
+                    onPress={handleScan}
+                    activeOpacity={0.8}
+                >
+                    <ScanLine size={22} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text className="text-[16px] font-semibold text-white">Scan</Text>
+                </TouchableOpacity>
 
                 {/* Actions */}
                 <View className="flex-row gap-4 mb-6">

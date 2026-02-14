@@ -60,13 +60,14 @@ router.post(
 
 /**
  * POST /api/messages/conversations/:id/messages
- * Body: { body: string }
+ * Body: { body?: string, imageBase64?: string } — at least one required
  */
 router.post(
   "/conversations/:id/messages",
   [
     param("id").isUUID(),
-    body("body").trim().notEmpty().isLength({ max: 10000 }),
+    body("body").optional().isString().isLength({ max: 10000 }),
+    body("imageBase64").optional().isString(),
   ],
   validateRequest,
   messageController.sendMessage

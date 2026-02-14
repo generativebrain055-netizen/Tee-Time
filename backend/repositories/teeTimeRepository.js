@@ -901,7 +901,21 @@ class TeeTimeRepository {
       return this.updateStatus(teeTimeId, "completed");
     }
 
+    const inviteType = teeTime.invite_type || "roster";
+    const maxPlayers = teeTime.max_players || 4;
+
     try {
+      // FCFS / open: confirm when all spots are filled (participant count >= max_players)
+      if (inviteType === "fcfs" || inviteType === "open") {
+        const participantCount = await this.getParticipantCount(teeTimeId);
+        if (participantCount >= maxPlayers) {
+          logger.info(`FCFS/open tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`);
+          return this.updateStatus(teeTimeId, "confirmed");
+        }
+        return null;
+      }
+
+      // Roster / manual: confirm when no pending invites and at least one accepted
       const { data: invites, error } = await supabaseAdmin
         .from("invites")
         .select("status")

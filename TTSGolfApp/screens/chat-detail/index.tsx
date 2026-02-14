@@ -6,6 +6,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useChat } from "./hooks/useChat";
@@ -35,8 +36,10 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         loading,
         scrollViewRef,
         setMessageText,
+        appendToMessageText,
         setShowMenu,
         handleSend,
+        handleSendImage,
     } = useChat(chatInfo);
 
     const [participants, setParticipants] = useState<string[]>([]);
@@ -100,6 +103,24 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         }
     }, [navigation, chatInfo.isGroup, chatInfo.groupId]);
 
+    const handlePickImage = useCallback(
+        (uri: string, base64?: string) => {
+            if (base64) {
+                handleSendImage(base64);
+            } else {
+                Alert.alert("Photo selected", "Could not load image. Try another photo.");
+            }
+        },
+        [handleSendImage]
+    );
+
+    const handleEmojiSelected = useCallback(
+        (emoji: string) => {
+            appendToMessageText(emoji);
+        },
+        [appendToMessageText]
+    );
+
     // Add the header press handler to chatInfo
     const chatInfoWithHandler = {
         ...chatInfo,
@@ -137,9 +158,13 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                         messages.map((message) => <MessageBubble key={message.id} message={message} />)
                     )}
                 </ScrollView>
-                <MessageInput value={messageText} onChangeText={setMessageText} onSend={handleSend} />
+                <MessageInput value={messageText} onChangeText={setMessageText} onSend={handleSend} onPickImage={handlePickImage} onEmojiSelected={handleEmojiSelected} />
             </KeyboardAvoidingView>
-            <ChatActionsMenu visible={showMenu} onClose={handleMenuClose} onCreateGroup={handleCreateGroup} />
+            <ChatActionsMenu
+                visible={showMenu}
+                onClose={handleMenuClose}
+                onCreateGroup={chatInfo.teeTimeId ? handleCreateGroup : undefined}
+            />
         </View>
     );
 }

@@ -50,12 +50,14 @@ function AppleLogo({ size = 20 }: { size?: number }) {
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-// Figma: fill #F7F7F7, stroke #E5E7EB
+// Figma: fill #F7F7F7, stroke #E5E7EB (node 1269-2903)
 const FIGMA_BG = "#F7F7F7";
 const FIGMA_BORDER = "#E5E7EB";
 const FIGMA_BUTTON_HEIGHT = 53;
 const FIGMA_RADIUS = 8;
 const ICON_SIZE = 24;
+/** Apple icon size per Figma 1269-2903 – larger than default for visual balance */
+const APPLE_ICON_SIZE = 28;
 
 // ============================================================================
 // Helper Functions
@@ -119,7 +121,11 @@ export function OAuthButtons({
             needsPhoneVerification: true,
             providerData: data.providerData,
           };
-          onSuccess(successData);
+          if (typeof onSuccess === "function") {
+            onSuccess(successData);
+          } else {
+            logger.warn("[Firebase] onSuccess is not a function, skipping callback");
+          }
           return;
         }
 
@@ -166,11 +172,17 @@ export function OAuthButtons({
           }
 
           logger.debug("[Firebase] Calling onSuccess with:", JSON.stringify(successData, null, 2));
-          onSuccess(successData);
+          if (typeof onSuccess === "function") {
+            onSuccess(successData);
+          } else {
+            logger.warn("[Firebase] onSuccess is not a function, skipping callback");
+          }
         }
       } catch (error) {
         logger.error("[Firebase] Backend verification error:", error);
-        onError(formatOAuthError(error));
+        if (typeof onError === "function") {
+          onError(formatOAuthError(error));
+        }
       }
     },
     [onSuccess, onError],
@@ -302,7 +314,11 @@ export function OAuthButtons({
           needsPhoneVerification: true,
           providerData: (data as { providerData?: OAuthProviderData }).providerData,
         };
-        onSuccess(successData);
+        if (typeof onSuccess === "function") {
+          onSuccess(successData);
+        } else {
+          logger.warn("[Firebase] onSuccess is not a function, skipping callback");
+        }
         return;
       }
 
@@ -334,14 +350,20 @@ export function OAuthButtons({
           };
         }
 
-        onSuccess(successData);
+        if (typeof onSuccess === "function") {
+          onSuccess(successData);
+        } else {
+          logger.warn("[Firebase] onSuccess is not a function, skipping callback");
+        }
       }
     } catch (error) {
       if (isUserCancellation(error)) {
         return;
       }
       logger.error("[Firebase] Apple Sign-In Error:", error);
-      onError(formatOAuthError(error));
+      if (typeof onError === "function") {
+        onError(formatOAuthError(error));
+      }
     } finally {
       setIsAppleLoading(false);
     }
@@ -355,8 +377,8 @@ export function OAuthButtons({
         activeOpacity={0.8}
         disabled={disabled || isAppleLoading}
       >
-        <View style={styles.iconLeft}>
-          <AppleLogo size={ICON_SIZE} />
+        <View style={[styles.iconLeft, { width: APPLE_ICON_SIZE, height: APPLE_ICON_SIZE }]}>
+          <AppleLogo size={APPLE_ICON_SIZE} />
         </View>
         <Text style={styles.figmaButtonText}>
           {isAppleLoading ? "Signing in..." : "Continue with Apple"}

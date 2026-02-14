@@ -22,6 +22,14 @@ interface FindPlayersScreenProps {
   navigation: any;
 }
 
+type ExtendedUser = DiscoveredUser & {
+  inRoster?: boolean;
+  addingToRoster?: boolean;
+  onDeck?: boolean;
+  firstName?: string;
+  lastName?: string;
+};
+
 const getInitials = (firstName: string, lastName: string): string => {
   return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
 };
@@ -95,34 +103,22 @@ const Avatar: React.FC<{ user: DiscoveredUser | ExtendedUser; size?: 'sm' | 'md'
 };
 
 const UserListItem: React.FC<{
-  user: DiscoveredUser;
+  user: ExtendedUser;
   onPress: () => void;
   onAddPress: (e: any) => void;
 }> = ({ user, onPress, onAddPress }) => {
   const getButtonStyle = () => {
+    if (user.onDeck) {
+      return { text: 'On deck', bg: '#DCFCE7', textColor: '#16A34A', disabled: true, icon: Check };
+    }
     switch (user.friendshipStatus) {
       case 'friend':
-        return {
-          text: 'Friends',
-          bg: '#F3F4F6',
-          textColor: '#6B7280',
-          disabled: true,
-        };
+        return { text: 'Friends', bg: '#F3F4F6', textColor: '#6B7280', disabled: true, icon: null as any };
       case 'requested':
       case 'pending':
-        return {
-          text: 'Pending',
-          bg: '#F3F4F6',
-          textColor: '#6B7280',
-          disabled: true,
-        };
+        return { text: 'Pending', bg: '#F3F4F6', textColor: '#6B7280', disabled: true, icon: null as any };
       default:
-        return {
-          text: '+ Add',
-          bg: '#FFFFFF',
-          textColor: '#374151',
-          disabled: false,
-        };
+        return { text: '+ Add', bg: '#FFFFFF', textColor: '#374151', disabled: !!user.addingToRoster, icon: UserPlus };
     }
   };
 
@@ -214,28 +210,38 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
   const [addingToRosterIds, setAddingToRosterIds] = useState<Set<string>>(new Set());
   const [rosterUserIds, setRosterUserIds] = useState<Set<string>>(new Set());
+  const [onDeckUserIds, setOnDeckUserIds] = useState<Set<string>>(new Set());
   
   const debouncedSearch = useDebounce(searchText, 300);
   
-  // Load roster to check which users are already in roster
+  // Load roster and on-deck to know who is in roster / on deck
   useEffect(() => {
-    const loadRoster = async () => {
+    const load = async () => {
       try {
-        const response = await rosterApi.getRoster();
-        if (response.success && response.roster) {
+        const [rosterRes, onDeckRes] = await Promise.all([
+          rosterApi.getRoster(),
+          rosterApi.getOnDeck(),
+        ]);
+        if (rosterRes.success && rosterRes.roster) {
           const userIds = new Set<string>();
-          response.roster.forEach((item: any) => {
-            if (item.contact?.userId) {
-              userIds.add(item.contact.userId);
-            }
+          rosterRes.roster.forEach((item: any) => {
+            if (item.contact?.userId) userIds.add(item.contact.userId);
           });
           setRosterUserIds(userIds);
         }
+        if (onDeckRes.success && onDeckRes.onDeck) {
+          const deckIds = new Set<string>();
+          (onDeckRes.onDeck as any[]).forEach((item: any) => {
+            const uid = item.contact?.userId || item.userId;
+            if (uid) deckIds.add(uid);
+          });
+          setOnDeckUserIds(deckIds);
+        }
       } catch (error) {
-        logger.error("[FindPlayersScreen] Failed to load roster", error);
+        logger.error("[FindPlayersScreen] Failed to load roster/on-deck", error);
       }
     };
-    loadRoster();
+    load();
   }, []);
 
   const handleBack = useCallback(() => {
@@ -252,27 +258,26 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     try {
       const response = await rosterApi.searchUsers(query.trim());
       if (response.success && response.users) {
-        // Mark users that are already in roster and normalize name format
-        const usersWithRosterStatus = (response.users as any[]).map((user: any) => {
-          // Backend returns 'name' as single string, but frontend expects firstName/lastName
-          let firstName = user.firstName || '';
-          let lastName = user.lastName || '';
-          
-          if (!firstName && !lastName && user.name) {
-            // Parse name string into firstName and lastName
-            const nameParts = user.name.trim().split(/\s+/);
-            firstName = nameParts[0] || '';
-            lastName = nameParts.slice(1).join(' ') || '';
-          }
-          
-          return {
-            ...user,
-            firstName,
-            lastName,
-            inRoster: rosterUserIds.has(user.id),
-            addingToRoster: addingToRosterIds.has(user.id),
-          };
-        });
+        // Normalize name format, mark roster/on-deck status, and exclude users already on roster
+        const usersWithRosterStatus = (response.users as any[])
+          .filter((user: any) => !rosterUserIds.has(user.id))
+          .map((user: any) => {
+            let firstName = user.firstName || '';
+            let lastName = user.lastName || '';
+            if (!firstName && !lastName && user.name) {
+              const nameParts = user.name.trim().split(/\s+/);
+              firstName = nameParts[0] || '';
+              lastName = nameParts.slice(1).join(' ') || '';
+            }
+            return {
+              ...user,
+              firstName,
+              lastName,
+              inRoster: false,
+              addingToRoster: addingToRosterIds.has(user.id),
+              onDeck: onDeckUserIds.has(user.id),
+            };
+          });
         setUsers(usersWithRosterStatus);
       } else {
         setUsers([]);
@@ -284,7 +289,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     } finally {
       setLoading(false);
     }
-  }, [rosterUserIds, addingToRosterIds]);
+  }, [rosterUserIds, addingToRosterIds, onDeckUserIds]);
 
   useEffect(() => {
     if (debouncedSearch !== null && debouncedSearch.trim().length >= 2) {
@@ -294,64 +299,62 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     }
   }, [debouncedSearch, searchUsers]);
 
-  const handleAddToRoster = useCallback(async (e: any, user: ExtendedUser) => {
+  /** Add person to on-deck (add to roster if needed, then move to on-deck). Show confirmation with "View On Deck". */
+  const handleAddToOnDeck = useCallback(async (e: any, user: ExtendedUser) => {
     e.stopPropagation();
-    
-    if (user.inRoster || user.addingToRoster) return;
+    if (user.onDeck || user.addingToRoster) return;
 
     setAddingToRosterIds(prev => new Set(prev).add(user.id));
-    
     try {
+      const onDeckRes = await rosterApi.getOnDeck();
+      const onDeckList = (onDeckRes.success && onDeckRes.onDeck) ? onDeckRes.onDeck : [];
+      const newPosition = onDeckList.length;
+
+      let rosterEntryId: string | null = null;
       const payload: any = {};
-      
-      if (user.id) {
-        payload.contactUserId = user.id;
+      if (user.id) payload.contactUserId = user.id;
+      if (user.name) payload.contactName = user.name;
+      else if (user.firstName || user.lastName) payload.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+      if (user.email) payload.contactEmail = user.email;
+      if (user.phone) payload.contactPhone = user.phone;
+
+      try {
+        const addRes = await rosterApi.addToRoster(payload);
+        if (addRes.success && addRes.entry?.id) rosterEntryId = addRes.entry.id;
+      } catch (addErr: any) {
+        if (addErr?.message?.toLowerCase?.().includes('already in roster')) {
+          const rosterRes = await rosterApi.getRoster();
+          const roster = (rosterRes.success && rosterRes.roster) ? rosterRes.roster : [];
+          const entry = roster.find((r: any) => (r.contact?.userId === user.id));
+          if (entry?.id) rosterEntryId = entry.id;
+        }
+        if (!rosterEntryId) throw addErr;
       }
-      
-      // Handle both name formats (single string or firstName/lastName)
-      if (user.name) {
-        payload.contactName = user.name;
-      } else if (user.firstName || user.lastName) {
-        payload.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
-      }
-      
-      if (user.email) {
-        payload.contactEmail = user.email;
-      }
-      
-      if (user.phone) {
-        payload.contactPhone = user.phone;
-      }
-      
-      const response = await rosterApi.addToRoster(payload);
-      
-      if (response.success) {
-        logger.info('[FindPlayersScreen] Added to roster', { userId: user.id });
-        // Update user's status locally
-        setUsers(prevUsers =>
-          prevUsers.map(u =>
-            u.id === user.id
-              ? { ...u, inRoster: true, addingToRoster: false }
-              : u
-          )
-        );
-        // Add to roster set
+
+      if (rosterEntryId) {
+        await rosterApi.moveMember(rosterEntryId, { isOnDeck: true, newPosition });
+        setOnDeckUserIds(prev => new Set(prev).add(user.id));
         setRosterUserIds(prev => new Set(prev).add(user.id));
+        setUsers(prev => prev.map(u =>
+          u.id === user.id ? { ...u, inRoster: true, onDeck: true, addingToRoster: false } : u
+        ));
         const userName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User';
-        Alert.alert('Success', `${userName} has been added to your roster`);
+        Alert.alert(
+          'Added to on-deck',
+          `${userName} has been added to your on-deck list.`,
+          [
+            { text: 'View On Deck', onPress: () => navigation?.goBack?.() },
+            { text: 'OK' },
+          ]
+        );
       }
     } catch (error: any) {
-      logger.error('[FindPlayersScreen] Add to roster error:', error);
-      const errorMessage = error.message || 'Failed to add to roster. Please try again.';
-      Alert.alert('Error', errorMessage);
+      logger.error('[FindPlayersScreen] Add to on-deck error:', error);
+      Alert.alert('Error', error?.message || 'Failed to add to on-deck. Please try again.');
     } finally {
-      setAddingToRosterIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(user.id);
-        return newSet;
-      });
+      setAddingToRosterIds(prev => { const s = new Set(prev); s.delete(user.id); return s; });
     }
-  }, []);
+  }, [navigation]);
 
   const handleUserPress = useCallback((user: ExtendedUser) => {
     navigation?.navigate('FriendProfile', { userId: user.id, user });
@@ -366,9 +369,9 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     <UserListItem
       user={item}
       onPress={() => handleUserPress(item)}
-      onAddPress={(e) => handleAddToRoster(e, item)}
+      onAddPress={(e) => handleAddToOnDeck(e, item)}
     />
-  ), [handleUserPress, handleAddToRoster]);
+  ), [handleUserPress, handleAddToOnDeck]);
 
   const keyExtractor = useCallback((item: ExtendedUser) => item.id, []);
 

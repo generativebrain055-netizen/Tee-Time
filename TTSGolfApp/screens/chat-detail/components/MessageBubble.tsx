@@ -23,9 +23,18 @@ export const MessageBubble = memo(({ message }: MessageBubbleProps) => (
           : [styles.bubbleOther, FIGMA.bubbleOtherRadius],
       ]}
     >
-      <Text style={[styles.body, message.isMe ? styles.bodySent : styles.bodyOther]}>
-        {message.message}
-      </Text>
+      {message.imageUrl ? (
+        <Image
+          source={{ uri: message.imageUrl }}
+          style={styles.image}
+          resizeMode="cover"
+        />
+      ) : null}
+      {message.message ? (
+        <Text style={[styles.body, message.isMe ? styles.bodySent : styles.bodyOther]}>
+          {message.message}
+        </Text>
+      ) : null}
       <Text style={[styles.time, message.isMe ? styles.timeSent : styles.timeOther]}>
         {message.time}
       </Text>
@@ -58,6 +67,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 10,
+  },
+  image: {
+    width: 200,
+    maxWidth: "100%",
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
   },
   bubbleSent: {
     backgroundColor: COLORS.myMessageBg,

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Ale
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
-import { rosterApi, MemberProfile, friendApi } from "../../services/api";
+import { rosterApi, MemberProfile, friendApi, messagesApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 interface RosterPerson {
@@ -28,9 +28,10 @@ interface PersonDetailProps {
     person: RosterPerson;
     onBack: () => void;
     onRemoved?: () => void;
+    navigation?: any;
 }
 
-export default function PersonDetail({ person, onBack, onRemoved }: PersonDetailProps) {
+export default function PersonDetail({ person, onBack, onRemoved, navigation }: PersonDetailProps) {
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [history, setHistory] = useState<PlayingHistory[]>([]);
     const [loading, setLoading] = useState(true);
@@ -121,10 +122,32 @@ export default function PersonDetail({ person, onBack, onRemoved }: PersonDetail
         Alert.alert("Invite", "Navigate to create tee time (to be implemented)");
     }, []);
 
-    const handleMessage = useCallback(() => {
-        // Navigate to chat
-        Alert.alert("Message", "Navigate to chat (to be implemented)");
-    }, []);
+    const handleMessage = useCallback(async () => {
+        const userId = profile?.contact?.userId;
+        if (!userId) {
+            Alert.alert("Message", "This contact is not a registered user and cannot be messaged.");
+            return;
+        }
+        try {
+            const convRes = await messagesApi.getOrCreateConversation({ recipientId: userId });
+            if (convRes.success && convRes.conversation && navigation) {
+                navigation.navigate("ChatDetail", {
+                    chatInfo: {
+                        conversationId: convRes.conversation.id,
+                        recipientId: userId,
+                        id: userId,
+                        name: person.name,
+                        subtitle: "Direct message",
+                        img: profile?.contact?.avatar,
+                        isGroup: false,
+                    },
+                });
+            }
+        } catch (err) {
+            logger.error("[PersonDetail] Failed to open conversation", err);
+            Alert.alert("Error", "Could not open conversation.");
+        }
+    }, [profile?.contact?.userId, profile?.contact?.avatar, person.name, navigation]);
 
 
     const StatCard = ({ icon: Icon, label, value, color = COLORS.primary }: any) => (

@@ -238,6 +238,11 @@ const startServer = async () => {
     avatarUploadService.ensureBucketExists().catch((e) => {
       logger.warn("Avatar bucket check skipped:", e.message);
     });
+    // Ensure chat-images bucket exists for chat image messages
+    const chatImageUploadService = require("./services/chatImageUploadService");
+    chatImageUploadService.ensureBucketExists().catch((e) => {
+      logger.warn("Chat images bucket check skipped:", e.message);
+    });
 
     // Load golf clubs from CSV (non-blocking)
     clubsService.loadClubs().catch((e) => {

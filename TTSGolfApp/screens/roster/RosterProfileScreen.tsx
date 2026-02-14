@@ -21,6 +21,7 @@ export default function RosterProfileScreen({ navigation, route }: RosterProfile
     return (
         <PersonDetail
             person={person}
+            navigation={navigation}
             onBack={() => navigation.goBack()}
             onRemoved={() => {
                 // Optionally refresh the roster list

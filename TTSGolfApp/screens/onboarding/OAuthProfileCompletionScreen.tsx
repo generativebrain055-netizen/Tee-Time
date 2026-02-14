@@ -67,6 +67,7 @@ export function OAuthProfileCompletionScreen({
     providerData?.last_name || providerData?.lastName || ""
   );
   const [profileImage, setProfileImage] = useState<string | null>(oauthPicture);
+  const [profileImageBase64, setProfileImageBase64] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
@@ -96,10 +97,13 @@ export function OAuthProfileCompletionScreen({
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.8,
+              base64: true,
             });
 
             if (!result.canceled && result.assets[0]) {
-              setProfileImage(result.assets[0].uri);
+              const asset = result.assets[0];
+              setProfileImage(asset.uri);
+              setProfileImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
             }
           },
         },
@@ -120,10 +124,13 @@ export function OAuthProfileCompletionScreen({
               allowsEditing: true,
               aspect: [1, 1],
               quality: 0.8,
+              base64: true,
             });
 
             if (!result.canceled && result.assets[0]) {
-              setProfileImage(result.assets[0].uri);
+              const asset = result.assets[0];
+              setProfileImage(asset.uri);
+              setProfileImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
             }
           },
         },
@@ -185,10 +192,10 @@ export function OAuthProfileCompletionScreen({
       });
 
       // Upload profile image if user selected one (different from OAuth picture)
-      if (profileImage && profileImage !== oauthPicture) {
+      if (profileImageBase64 && profileImage && profileImage !== oauthPicture) {
         try {
           setIsUploadingImage(true);
-          await profileApi.uploadAvatar(profileImage);
+          await profileApi.uploadAvatar(profileImageBase64);
           logger.info("[OAuthProfileCompletion] Profile picture uploaded");
         } catch (imageError) {
           logger.error("[OAuthProfileCompletion] Image upload error", imageError);

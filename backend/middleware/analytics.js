@@ -37,11 +37,11 @@ const logEvent = async (eventData) => {
       });
 
     if (error) {
-      logger.error("Failed to log analytics event:", error.message);
+      logger.error("Failed to log analytics event", { errorMessage: error?.message || String(error), code: error?.code });
     }
   } catch (error) {
-    // Don't throw errors for analytics failures
-    logger.error("Failed to log analytics event:", error.message);
+    // Don't throw errors for analytics failures (log plain object to avoid Winston serializing Error oddly)
+    logger.error("Failed to log analytics event", { errorMessage: error?.message || String(error), code: error?.code });
   }
 };
 
@@ -78,7 +78,7 @@ const logAuthEvent = (eventName) => {
             sessionId: req.session?.id,
           });
         } catch (error) {
-          logger.error("Error logging auth event:", error.message);
+          logger.error("Error logging auth event", { errorMessage: error?.message || String(error) });
         }
       });
 
@@ -123,7 +123,7 @@ const logApiRequest = async (req, res, next) => {
           sessionId: req.session?.id,
         });
       } catch (error) {
-        logger.error("Error logging API request:", error.message);
+        logger.error("Error logging API request", { errorMessage: error?.message || String(error) });
       }
     });
 
@@ -180,7 +180,7 @@ const getAnalyticsStats = async (filters = {}) => {
   const { data, error } = await query.limit(100);
 
   if (error) {
-    logger.error("Error getting analytics stats:", error.message);
+    logger.error("Error getting analytics stats", { errorMessage: error?.message || String(error) });
     return [];
   }
 

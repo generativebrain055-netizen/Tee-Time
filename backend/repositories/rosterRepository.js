@@ -326,10 +326,10 @@ class RosterRepository {
         query = query.eq("contact_phone", contactPhone);
       }
 
-      const { data, error } = await query;
+      const { count, error } = await query;
 
       if (error) throw error;
-      return data !== null;
+      return (count ?? 0) > 0;
     } catch (error) {
       handleError(error, "isInRoster");
     }

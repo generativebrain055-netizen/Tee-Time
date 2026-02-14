@@ -70,6 +70,7 @@ async function getMessages(conversationId, userId, options = {}) {
     senderName: senders[m.sender_id]?.name || "Unknown",
     senderImg: senders[m.sender_id]?.avatarUrl || "",
     message: m.body,
+    imageUrl: m.image_url || null,
     time: formatMessageTime(m.created_at),
     createdAt: m.created_at,
     isMe: m.sender_id === userId,
@@ -78,10 +79,11 @@ async function getMessages(conversationId, userId, options = {}) {
 
 /**
  * Send a message in a conversation.
+ * @param {string} [imageUrl] - Optional public URL of attached image
  */
-async function sendMessage(conversationId, userId, body) {
+async function sendMessage(conversationId, userId, body, imageUrl = null) {
   await conversationRepository.ensureParticipant(conversationId, userId);
-  const msg = await messageRepository.create(conversationId, userId, body);
+  const msg = await messageRepository.create(conversationId, userId, body, imageUrl);
   const senders = await messageRepository.getSendersInfo([userId]);
   return {
     id: msg.id,
@@ -90,6 +92,7 @@ async function sendMessage(conversationId, userId, body) {
     senderName: senders[userId]?.name || "You",
     senderImg: senders[userId]?.avatarUrl || "",
     message: msg.body,
+    imageUrl: msg.image_url || null,
     time: formatMessageTime(msg.created_at),
     createdAt: msg.created_at,
     isMe: true,

@@ -9,7 +9,7 @@ async function listByConversation(conversationId, options = {}) {
   const limit = Math.min(options.limit || 50, 100);
   let query = supabaseAdmin
     .from("messages")
-    .select("id, conversation_id, sender_id, body, created_at")
+    .select("id, conversation_id, sender_id, body, image_url, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(limit);
@@ -25,16 +25,18 @@ async function listByConversation(conversationId, options = {}) {
 
 /**
  * Add a message and update conversation.updated_at.
+ * @param {string} [imageUrl] - Optional public URL of attached image
  */
-async function create(conversationId, senderId, body) {
+async function create(conversationId, senderId, body, imageUrl = null) {
   const { data: msg, error: msgError } = await supabaseAdmin
     .from("messages")
     .insert({
       conversation_id: conversationId,
       sender_id: senderId,
       body: (body || "").trim(),
+      image_url: imageUrl || null,
     })
-    .select("id, conversation_id, sender_id, body, created_at")
+    .select("id, conversation_id, sender_id, body, image_url, created_at")
     .single();
 
   if (msgError) handleError(msgError, "createMessage");

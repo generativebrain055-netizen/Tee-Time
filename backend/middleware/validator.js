@@ -13,6 +13,7 @@ const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
+    const errorList = errors.array();
     // Log validation errors for invite responses
     if (req.path?.includes('/invites') && req.path?.includes('/respond')) {
       const { invitesLogger } = require("../config/logger");
@@ -21,12 +22,19 @@ const validateRequest = (req, res, next) => {
         path: req.path,
         inviteId: req.params?.id,
         userId: req.user?.id,
-        errors: errors.array(),
+        errors: errorList,
         body: req.body,
       });
     }
-    
-    const formattedErrors = errors.array().reduce((acc, error) => {
+    // Log validation failures for all routes (path + field errors) so logs are actionable
+    const logger = require("../config/logger");
+    logger.warn("Validation failed", {
+      path: req.path,
+      method: req.method,
+      fields: errorList.map((e) => ({ path: e.path || e.param, msg: e.msg })),
+    });
+
+    const formattedErrors = errorList.reduce((acc, error) => {
       acc[error.path || error.param] = error.msg;
       return acc;
     }, {});

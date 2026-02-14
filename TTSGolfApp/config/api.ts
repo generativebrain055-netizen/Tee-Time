@@ -103,6 +103,8 @@ export interface ApiEndpoints {
   MESSAGES_CONVERSATIONS: string;
   MESSAGES_CONVERSATION_MESSAGES: (id: string) => string;
   MESSAGES_SEND_MESSAGE: (id: string) => string;
+  MESSAGES_UNREAD_COUNT: string;
+  MESSAGES_MARK_READ: (id: string) => string;
   // Health
   HEALTH: string;
 }

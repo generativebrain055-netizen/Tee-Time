@@ -75,7 +75,9 @@ class InviteManagementService {
             id: teeTime.creator_id,
             firstName: teeTime.first_name,
             lastName: teeTime.last_name,
-          }
+          },
+          expiresAt,
+          nextInvite.id
         );
       } else if (nextInvite.invitee_phone) {
         await sendInviteSms(nextInvite, teeTime, false, responseWindow);
@@ -207,7 +209,9 @@ class InviteManagementService {
               id: organizerId,
               firstName: teeTime.first_name,
               lastName: teeTime.last_name,
-            }
+            },
+            invite.expires_at || deadline,
+            invite.id
           );
         } else if (invite.invitee_phone) {
           await sendInviteSms(invite, teeTime, true); // FCFS message

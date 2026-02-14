@@ -114,6 +114,30 @@ router.put(
 router.get("/groups", rosterController.getGroups);
 
 /**
+ * @route   POST /api/roster/groups/accept-invite
+ * @desc    Accept a group invitation (from notification, Figma 1269-977)
+ * @access  Private
+ */
+router.post(
+  "/groups/accept-invite",
+  [body("notificationId").isUUID().withMessage("notificationId must be a valid UUID")],
+  validateRequest,
+  rosterController.acceptGroupInvite,
+);
+
+/**
+ * @route   POST /api/roster/groups/decline-invite
+ * @desc    Decline a group invitation
+ * @access  Private
+ */
+router.post(
+  "/groups/decline-invite",
+  [body("notificationId").isUUID().withMessage("notificationId must be a valid UUID")],
+  validateRequest,
+  rosterController.declineGroupInvite,
+);
+
+/**
  * @route   GET /api/roster/groups/:id
  * @desc    Get a single roster group by ID
  * @access  Private
@@ -179,6 +203,25 @@ router.post(
   ],
   validateRequest,
   rosterController.addMembersToGroup,
+);
+
+/**
+ * @route   POST /api/roster/groups/:id/invite
+ * @desc    Send group invitations (invitees get notification Figma 1269-977, Accept/Decline)
+ * @access  Private
+ */
+router.post(
+  "/groups/:id/invite",
+  [
+    body("memberUserIds")
+      .isArray({ min: 1 })
+      .withMessage("memberUserIds must be a non-empty array"),
+    body("memberUserIds.*")
+      .isUUID()
+      .withMessage("Each memberUserIds item must be a valid UUID"),
+  ],
+  validateRequest,
+  rosterController.inviteToGroup,
 );
 
 /**

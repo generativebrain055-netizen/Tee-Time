@@ -537,8 +537,14 @@ function MessagesScreen({ navigation }: any) {
   }, [loading]);
 
   const totalUnreadAll = allItems.reduce((s, i) => s + (i.unread ?? 0), 0);
-  const tabLabel = (tab: MessageTab) =>
-    tab === "All" && totalUnreadAll > 0 ? `All (${totalUnreadAll})` : tab;
+  const totalUnreadTeeTimes = teeTimeItems.reduce((s, i) => s + (i.unread ?? 0), 0);
+  const totalUnreadGroups = groupItems.reduce((s, i) => s + (i.unread ?? 0), 0);
+  const tabLabel = (tab: MessageTab) => {
+    if (tab === "All" && totalUnreadAll > 0) return `All (${totalUnreadAll})`;
+    if (tab === "Tee Times" && totalUnreadTeeTimes > 0) return `Tee Times (${totalUnreadTeeTimes})`;
+    if (tab === "Groups" && totalUnreadGroups > 0) return `Groups (${totalUnreadGroups})`;
+    return tab;
+  };
 
   return (
     <ScreenShell>

@@ -9,7 +9,7 @@ import {
     TextInput,
     StyleSheet,
 } from "react-native";
-import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search, Phone, Plus } from "lucide-react-native";
+import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search, Phone, Plus, ChevronRight, ArrowLeft } from "lucide-react-native";
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend } from "../../services/api";
 
@@ -46,6 +46,14 @@ const SORT_OPTIONS = [
     { value: "recently_played", label: "Recently Played" },
 ];
 
+export interface SavedRosterFilter {
+    id: string;
+    name: string;
+    clubs: string[];
+    sort: string;
+    indicatedAvailable: boolean;
+}
+
 export default function RosterInviteStep({
     friends,
     responseWindow,
@@ -67,6 +75,9 @@ export default function RosterInviteStep({
     const [showPhoneInput, setShowPhoneInput] = useState(false);
     const [phoneNumber, setPhoneNumber] = useState("");
     const [phoneName, setPhoneName] = useState("");
+    const [savedFilters, setSavedFilters] = useState<SavedRosterFilter[]>([]);
+    const [showCreateFilter, setShowCreateFilter] = useState(false);
+    const [newFilterName, setNewFilterName] = useState("");
 
     // Extract unique club names from friends
     const availableClubs = React.useMemo(() => {
@@ -172,16 +183,35 @@ export default function RosterInviteStep({
     };
 
     const applyFilters = () => {
-        // Update ordered players based on filtered results
-        // This ensures the parent component knows which players are selected
         const filteredIds = filteredAndSortedFriends.map(f => f.id);
         onReorderPlayers(filteredIds);
         setShowFilterModal(false);
     };
 
-    const saveSearch = () => {
-        // Save search logic here
-        setShowFilterModal(false);
+    const openSaveSearch = () => {
+        setNewFilterName("");
+        setShowCreateFilter(true);
+    };
+
+    const saveNewFilter = () => {
+        const name = newFilterName.trim();
+        if (!name) return;
+        const newFilter: SavedRosterFilter = {
+            id: `filter_${Date.now()}`,
+            name,
+            clubs: [...selectedClubs],
+            sort: selectedSort,
+            indicatedAvailable,
+        };
+        setSavedFilters((prev) => [...prev, newFilter]);
+        setNewFilterName("");
+        setShowCreateFilter(false);
+    };
+
+    const applySavedFilter = (filter: SavedRosterFilter) => {
+        setSelectedClubs(filter.clubs);
+        setSelectedSort(filter.sort);
+        setIndicatedAvailable(filter.indicatedAvailable);
     };
 
     return (
@@ -652,7 +682,10 @@ export default function RosterInviteStep({
                 visible={showFilterModal}
                 animationType="slide"
                 transparent={true}
-                onRequestClose={() => setShowFilterModal(false)}
+                onRequestClose={() => {
+                    setShowCreateFilter(false);
+                    setShowFilterModal(false);
+                }}
             >
                 <View style={{
                     flex: 1,
@@ -667,7 +700,66 @@ export default function RosterInviteStep({
                         paddingBottom: 40,
                         maxHeight: '90%',
                     }}>
-                        {/* Header */}
+                        {/* Create filter view (Figma 565-1135, 565-1269) */}
+                        {showCreateFilter ? (
+                            <>
+                                <View style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 20,
+                                    paddingBottom: 16,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: '#F3F4F6',
+                                }}>
+                                    <TouchableOpacity onPress={() => setShowCreateFilter(false)} style={{ padding: 4 }} activeOpacity={0.7}>
+                                        <ArrowLeft size={24} color="#6B7280" strokeWidth={2} />
+                                    </TouchableOpacity>
+                                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: '#111827', marginLeft: 12 }}>
+                                        Create filter
+                                    </Text>
+                                </View>
+                                <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
+                                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#6B7280', marginBottom: 8 }}>
+                                        Filter name
+                                    </Text>
+                                    <TextInput
+                                        placeholder="e.g. Weekend players"
+                                        value={newFilterName}
+                                        onChangeText={setNewFilterName}
+                                        style={{
+                                            backgroundColor: '#F9FAFB',
+                                            borderWidth: 1,
+                                            borderColor: '#E5E7EB',
+                                            borderRadius: 12,
+                                            paddingVertical: 14,
+                                            paddingHorizontal: 16,
+                                            fontSize: 16,
+                                            fontFamily: 'Inter_400Regular',
+                                            color: '#111827',
+                                        }}
+                                        placeholderTextColor="#9CA3AF"
+                                    />
+                                    <TouchableOpacity
+                                        onPress={saveNewFilter}
+                                        disabled={!newFilterName.trim()}
+                                        style={{
+                                            marginTop: 24,
+                                            paddingVertical: 14,
+                                            borderRadius: 12,
+                                            backgroundColor: newFilterName.trim() ? '#22C55E' : '#D1D5DB',
+                                            alignItems: 'center',
+                                        }}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' }}>
+                                            Save
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        ) : (
+                            <>
+                        {/* Header (Figma 565-351) */}
                         <View style={{
                             flexDirection: 'row',
                             alignItems: 'center',
@@ -707,7 +799,37 @@ export default function RosterInviteStep({
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20 }}>
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20 }} keyboardShouldPersistTaps="handled">
+                            {/* Saved searches (Figma 565-1269) */}
+                            {savedFilters.length > 0 && (
+                                <View style={{ marginBottom: 24 }}>
+                                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: '#111827', marginBottom: 12 }}>
+                                        Saved searches
+                                    </Text>
+                                    {savedFilters.map((filter) => (
+                                        <TouchableOpacity
+                                            key={filter.id}
+                                            onPress={() => applySavedFilter(filter)}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                paddingVertical: 14,
+                                                paddingHorizontal: 16,
+                                                backgroundColor: '#F9FAFB',
+                                                borderRadius: 12,
+                                                marginBottom: 8,
+                                            }}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#111827' }}>
+                                                {filter.name}
+                                            </Text>
+                                            <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
                             {/* Sort Dropdown */}
                             {showSortDropdown && (
                                 <View style={{
@@ -903,7 +1025,7 @@ export default function RosterInviteStep({
                                     backgroundColor: '#FFFFFF',
                                     alignItems: 'center',
                                 }}
-                                onPress={saveSearch}
+                                onPress={openSaveSearch}
                                 activeOpacity={0.7}
                             >
                                 <Text style={{
@@ -934,6 +1056,8 @@ export default function RosterInviteStep({
                                 </Text>
                             </TouchableOpacity>
                         </View>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>

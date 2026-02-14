@@ -90,15 +90,15 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
 
         setAddingMembers(true);
         try {
-            // Use new batch API (Figma 1075-927: Inviting people to group)
-            const res = await rosterApi.addMembersToGroup(groupId, selectedFriends);
+            // Send group invitations (Figma 1269-977): invitees receive notification with Accept/Decline
+            const res = await rosterApi.inviteToGroup(groupId, selectedFriends);
             if (res.success) {
                 setShowAddModal(false);
-                Alert.alert("Success", `Added ${res.addedCount} member(s) to the group`);
+                Alert.alert("Invitations sent", `Sent ${res.sent} invitation(s). They'll receive a group request to accept.`);
                 loadGroupData();
             }
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to add members");
+            Alert.alert("Error", error.message || "Failed to send invitations");
         } finally {
             setAddingMembers(false);
         }

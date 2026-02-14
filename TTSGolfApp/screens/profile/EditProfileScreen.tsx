@@ -10,7 +10,9 @@ import {
     Platform,
     Alert,
     Modal,
+    InteractionManager,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { ChevronDown, Trash2, Camera, X, MapPin } from "lucide-react-native";
 import { Avatar } from "../../components/common";
 import { ScreenShell, AppHeader } from "../../ui";
@@ -214,6 +216,8 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
     const [showPhotoModal, setShowPhotoModal] = useState(false);
+    const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [showAddClubModal, setShowAddClubModal] = useState(false);
     const [clubSearch, setClubSearch] = useState("");
     const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -300,6 +304,82 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     const handleChangePhoto = useCallback(() => {
         setShowPhotoModal(true);
     }, []);
+
+    const handleTakePhoto = useCallback(() => {
+        setShowPhotoModal(false);
+        InteractionManager.runAfterInteractions(() => {
+            (async () => {
+                try {
+                    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                    if (status !== "granted") {
+                        Alert.alert("Permission Required", "Camera access is needed to take a photo.");
+                        return;
+                    }
+                    const result = await ImagePicker.launchCameraAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                        base64: true,
+                    });
+                    if (result.canceled || !result.assets[0]) return;
+                    const asset = result.assets[0];
+                    const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
+                    if (!dataUrl) return;
+                    setUploadingAvatar(true);
+                    const data = await profileApi.uploadAvatar(dataUrl);
+                    if (data.success && data.avatarUrl) {
+                        setLocalAvatarUri(data.avatarUrl);
+                        updateContextProfile({ avatarUrl: data.avatarUrl });
+                        await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                    }
+                } catch (error: any) {
+                    logger.error("[EditProfileScreen] Take photo / upload error", error);
+                    Alert.alert("Error", error?.message || "Failed to take or upload photo.");
+                } finally {
+                    setUploadingAvatar(false);
+                }
+            })();
+        });
+    }, [updateContextProfile]);
+
+    const handleChooseFromLibrary = useCallback(() => {
+        setShowPhotoModal(false);
+        InteractionManager.runAfterInteractions(() => {
+            (async () => {
+                try {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== "granted") {
+                        Alert.alert("Permission Required", "Photo library access is needed to choose a photo.");
+                        return;
+                    }
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                        base64: true,
+                    });
+                    if (result.canceled || !result.assets[0]) return;
+                    const asset = result.assets[0];
+                    const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
+                    if (!dataUrl) return;
+                    setUploadingAvatar(true);
+                    const data = await profileApi.uploadAvatar(dataUrl);
+                    if (data.success && data.avatarUrl) {
+                        setLocalAvatarUri(data.avatarUrl);
+                        updateContextProfile({ avatarUrl: data.avatarUrl });
+                        await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                    }
+                } catch (error: any) {
+                    logger.error("[EditProfileScreen] Library pick / upload error", error);
+                    Alert.alert("Error", error?.message || "Failed to choose or upload photo.");
+                } finally {
+                    setUploadingAvatar(false);
+                }
+            })();
+        });
+    }, [updateContextProfile]);
 
     const handleRemoveClub = useCallback((index: number) => {
         setClubs(prev => prev.filter((_, i) => i !== index));
@@ -397,12 +477,19 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                                 Profile Photo
                             </Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Avatar
-                                    uri={initialProfile.avatarUrl}
-                                    size={64}
-                                    showCameraButton={false}
-                                />
-                                <TouchableOpacity onPress={handleChangePhoto} style={{ marginLeft: 16 }}>
+                                <View>
+                                    <Avatar
+                                        uri={localAvatarUri ?? initialProfile?.avatarUrl}
+                                        size={64}
+                                        showCameraButton={false}
+                                    />
+                                    {uploadingAvatar && (
+                                        <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.3)", borderRadius: 32 }}>
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        </View>
+                                    )}
+                                </View>
+                                <TouchableOpacity onPress={handleChangePhoto} disabled={uploadingAvatar} style={{ marginLeft: 16 }}>
                                     <Text style={{
                                         fontFamily: 'Inter_600SemiBold',
                                         fontSize: 15,
@@ -682,14 +769,8 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 visible={showPhotoModal}
                 title="Change Photo"
                 message="Choose an option"
-                onConfirm={() => {
-                    setShowPhotoModal(false);
-                    logger.debug("[EditProfileScreen] Camera option selected");
-                }}
-                onCancel={() => {
-                    setShowPhotoModal(false);
-                    logger.debug("[EditProfileScreen] Library option selected");
-                }}
+                onConfirm={handleTakePhoto}
+                onCancel={handleChooseFromLibrary}
                 confirmText="Take Photo"
                 cancelText="Choose from Library"
             />

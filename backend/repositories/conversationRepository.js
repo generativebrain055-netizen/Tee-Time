@@ -87,6 +87,7 @@ async function getOrCreateTeeTimeConversation(userId, teeTimeId) {
 
 /**
  * Get or create a group conversation. One conversation per roster_group.
+ * When creating new, adds all roster group members (owner + contacts in group) to conversation_participants.
  */
 async function getOrCreateGroupConversation(userId, rosterGroupId) {
   const { data: existing } = await supabaseAdmin
@@ -105,12 +106,31 @@ async function getOrCreateGroupConversation(userId, rosterGroupId) {
     .single();
 
   if (error) handleError(error, "createGroupConversation");
+
+  // Add group owner (creator) and all roster members in this group to conversation_participants
+  const { data: group } = await supabaseAdmin
+    .from("roster_groups")
+    .select("user_id")
+    .eq("id", rosterGroupId)
+    .single();
+  const ownerId = group?.user_id || userId;
+
+  const { data: rosterRows } = await supabaseAdmin
+    .from("roster")
+    .select("contact_user_id")
+    .eq("group_id", rosterGroupId)
+    .eq("user_id", ownerId);
+  const memberIds = (rosterRows || []).map((r) => r.contact_user_id).filter(Boolean);
+  const allParticipantIds = [ownerId, ...memberIds];
+  const participantRows = allParticipantIds.map((uid) => ({
+    conversation_id: newConv.id,
+    user_id: uid,
+  }));
+
   await supabaseAdmin
     .from("conversation_participants")
-    .upsert(
-      { conversation_id: newConv.id, user_id: userId },
-      { onConflict: "conversation_id,user_id" }
-    );
+    .upsert(participantRows, { onConflict: "conversation_id,user_id" });
+
   return newConv;
 }
 
@@ -151,6 +171,7 @@ async function listForUser(userId, options = {}) {
     const meta = await getConversationMeta(conv, userId, lastMessage);
     const unreadCount = await getUnreadCountForConversation(
       conv.id,
+      userId,
       lastReadByConv[conv.id]
     );
     result.push({
@@ -403,13 +424,16 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
 }
 
 /**
- * Count unread messages in a conversation for a user (messages after last_read_at).
+ * Count unread messages in a conversation for a user.
+ * Only counts messages from others (sender_id != userId) after last_read_at.
+ * Messages sent by the user are not counted as unread for the user.
  */
-async function getUnreadCountForConversation(conversationId, lastReadAt) {
+async function getUnreadCountForConversation(conversationId, userId, lastReadAt) {
   let query = supabaseAdmin
     .from("messages")
     .select("*", { count: "exact", head: true })
-    .eq("conversation_id", conversationId);
+    .eq("conversation_id", conversationId)
+    .neq("sender_id", userId);
   if (lastReadAt) {
     query = query.gt("created_at", lastReadAt);
   }
@@ -434,6 +458,7 @@ async function getUnreadCounts(userId) {
   for (const r of participantRows) {
     const count = await getUnreadCountForConversation(
       r.conversation_id,
+      userId,
       r.last_read_at
     );
     byConversation[r.conversation_id] = count;

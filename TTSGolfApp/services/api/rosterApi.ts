@@ -220,6 +220,42 @@ export const rosterApi = {
     ),
 
   /**
+   * Send group invitations (invitees receive notification Figma 1269-977, Accept/Decline)
+   */
+  inviteToGroup: (groupId: string, memberUserIds: string[]) =>
+    apiCall<{ success: boolean; sent: number; groupId: string; groupName?: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/${groupId}/invite`,
+      {
+        method: "POST",
+        body: JSON.stringify({ memberUserIds }),
+      },
+    ),
+
+  /**
+   * Accept a group invitation (from notification)
+   */
+  acceptGroupInvite: (notificationId: string) =>
+    apiCall<{ success: boolean; groupId: string; groupName?: string }>(
+      `${API_ENDPOINTS.ROSTER}/groups/accept-invite`,
+      {
+        method: "POST",
+        body: JSON.stringify({ notificationId }),
+      },
+    ),
+
+  /**
+   * Decline a group invitation
+   */
+  declineGroupInvite: (notificationId: string) =>
+    apiCall<{ success: boolean; declined: boolean }>(
+      `${API_ENDPOINTS.ROSTER}/groups/decline-invite`,
+      {
+        method: "POST",
+        body: JSON.stringify({ notificationId }),
+      },
+    ),
+
+  /**
    * Leave a group (Figma 1075-927: removing yourself)
    */
   leaveGroup: (groupId: string) =>

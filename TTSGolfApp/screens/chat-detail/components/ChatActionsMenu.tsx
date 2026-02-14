@@ -13,31 +13,40 @@ interface ChatActionsMenuProps {
 }
 
 export const ChatActionsMenu = memo(({ visible, onClose, onCreateGroup }: ChatActionsMenuProps) => (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-            <View style={styles.sheet}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Chat actions</Text>
-                    <TouchableOpacity onPress={onClose} hitSlop={8}>
-                        <X size={24} color={COLORS.textMain} />
+            {/* Prevent overlay onPress when tapping inside the sheet (Figma 1269-2434) */}
+            <TouchableOpacity style={styles.sheet} activeOpacity={1} onPress={() => {}}>
+                <View style={styles.sheetContent}>
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Chat actions</Text>
+                        <TouchableOpacity onPress={onClose} hitSlop={8}>
+                            <X size={24} color={COLORS.textMain} />
+                        </TouchableOpacity>
+                    </View>
+                    {onCreateGroup ? (
+                        <TouchableOpacity
+                            style={styles.option}
+                            onPress={() => {
+                                onClose();
+                                onCreateGroup();
+                            }}
+                        >
+                            <Users size={20} color={COLORS.textMain} strokeWidth={2} />
+                            <Text style={styles.optionText}>Create group</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    {onCreateGroup ? <View style={styles.separator} /> : null}
+                    <TouchableOpacity style={styles.option}>
+                        <Text style={styles.optionText}>Mute</Text>
                     </TouchableOpacity>
+                    <View style={styles.separator} />
+                    <TouchableOpacity style={styles.option}>
+                        <Text style={styles.optionDanger}>Delete chat</Text>
+                    </TouchableOpacity>
+                    <View style={styles.bottomSafe} />
                 </View>
-                {onCreateGroup ? (
-                    <TouchableOpacity style={styles.option} onPress={() => { onClose(); onCreateGroup(); }}>
-                        <Users size={20} color={COLORS.textMain} strokeWidth={2} />
-                        <Text style={styles.optionText}>Create group</Text>
-                    </TouchableOpacity>
-                ) : null}
-                {onCreateGroup ? <View style={styles.separator} /> : null}
-                <TouchableOpacity style={styles.option}>
-                    <Text style={styles.optionText}>Mute</Text>
-                </TouchableOpacity>
-                <View style={styles.separator} />
-                <TouchableOpacity style={styles.option}>
-                    <Text style={styles.optionDanger}>Delete chat</Text>
-                </TouchableOpacity>
-                <View style={styles.bottomSafe} />
-            </View>
+            </TouchableOpacity>
         </TouchableOpacity>
     </Modal>
 ));
@@ -48,11 +57,14 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(0,0,0,0.5)",
         justifyContent: "flex-end",
     },
-    sheet: {
-        backgroundColor: COLORS.white,
-        borderTopLeftRadius: FIGMA_SHEET_RADIUS,
-        borderTopRightRadius: FIGMA_SHEET_RADIUS,
-    },
+  sheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: FIGMA_SHEET_RADIUS,
+    borderTopRightRadius: FIGMA_SHEET_RADIUS,
+  },
+  sheetContent: {
+    width: "100%",
+  },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",

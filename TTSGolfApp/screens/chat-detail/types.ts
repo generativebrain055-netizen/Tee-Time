@@ -4,6 +4,8 @@ export interface ChatMessage {
   senderName: string;
   senderImg: string;
   message: string;
+  /** Public URL of image attachment when message includes a photo */
+  imageUrl?: string | null;
   time: string;
   isMe: boolean;
 }
