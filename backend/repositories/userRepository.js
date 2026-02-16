@@ -179,6 +179,7 @@ const create = async (userData) => {
     preferredTeeTime,
     walkOrRide,
     playingPartnerPreference,
+    drinkOfChoice,
     zipCode,
     avatarUrl,
   } = userData;
@@ -220,6 +221,7 @@ const create = async (userData) => {
         preferred_tee_time: preferredTeeTime || null,
         walk_or_ride: walkOrRide || null,
         playing_partner_preference: playingPartnerPreference || null,
+        drink_of_choice: drinkOfChoice || null,
         zip_code: zipCode || null,
         avatar_url: avatarUrl || null,
       });
@@ -236,6 +238,7 @@ const create = async (userData) => {
       preferred_tee_time: preferredTeeTime,
       walk_or_ride: walkOrRide,
       playing_partner_preference: playingPartnerPreference,
+      drink_of_choice: drinkOfChoice || null,
       zip_code: zipCode || null,
       avatar_url: avatarUrl || null,
     };

@@ -22,8 +22,9 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const [imageUri, setImageUri] = useState<string | undefined>(
-    initialData.picture || initialData.avatar
+    initialData.picture || initialData.avatar || (initialData as { profilePhotoUri?: string }).profilePhotoUri
   );
+  const [imageBase64, setImageBase64] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
 
   const requestCameraPermission = async () => {
@@ -53,10 +54,13 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setImageUri(asset.uri);
+        setImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : undefined);
       }
     } catch (error) {
       const { logger } = require("../../utils/logger");
@@ -84,10 +88,13 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setImageUri(asset.uri);
+        setImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : undefined);
       }
     } catch (error) {
       const { logger } = require("../../utils/logger");
@@ -102,6 +109,8 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
     onNext({
       avatar: imageUri,
       picture: imageUri,
+      profilePhotoUri: imageUri,
+      profilePhotoBase64: imageBase64 || undefined,
     });
   };
 
@@ -109,6 +118,8 @@ export const ProfileImagePage: React.FC<ProfileImagePageProps> = ({
     onNext({
       avatar: undefined,
       picture: undefined,
+      profilePhotoUri: undefined,
+      profilePhotoBase64: undefined,
     });
   };
 

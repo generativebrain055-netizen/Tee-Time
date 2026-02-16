@@ -31,9 +31,10 @@ function Header({ onNotificationPress, onSearchPress, userName }: HeaderProps) {
     const fetchUnreadCount = async () => {
       try {
         const response = await notificationApi.getUnreadCount();
-        if (response.success) setUnreadCount(response.count ?? 0);
+        const count = response.success && typeof response.count === "number" ? response.count : 0;
+        setUnreadCount(count);
       } catch {
-        // Non-critical
+        setUnreadCount(0);
       }
     };
     fetchUnreadCount();
@@ -78,12 +79,12 @@ function Header({ onNotificationPress, onSearchPress, userName }: HeaderProps) {
             activeOpacity={0.7}
           >
             <Bell size={24} color={colorTokens.text.primary} strokeWidth={2} />
-            {unreadCount > 0 && (
+            {Number(unreadCount) > 0 ? (
               <View
                 className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border border-white"
                 style={{ borderWidth: 1.5 }}
               />
-            )}
+            ) : null}
           </TouchableOpacity>
         </View>
       </MotiView>

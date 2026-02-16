@@ -95,6 +95,7 @@ const registerUser = async (req, res, next) => {
       preferredTeeTime,
       walkOrRide,
       playingPartnerPreference,
+      drinkOfChoice,
       zipCode,
       avatarUrl,
       profilePhotoBase64,
@@ -189,6 +190,7 @@ const registerUser = async (req, res, next) => {
       preferredTeeTime: preferredTeeTime || null,
       walkOrRide: walkOrRide || null,
       playingPartnerPreference: playingPartnerPreference || null,
+      drinkOfChoice: drinkOfChoice || null,
       zipCode: zipCode || null,
       avatarUrl: resolvedAvatarUrl,
     });

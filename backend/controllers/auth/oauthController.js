@@ -858,6 +858,10 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     zipCode,
     avatarUrl,
     profilePhotoBase64,
+    preferredTeeTime,
+    walkOrRide,
+    playingPartnerPreference,
+    drinkOfChoice,
   } = req.body;
 
   let resolvedAvatarUrl = avatarUrl || null;
@@ -931,9 +935,13 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     isVerified: true,
     location: location || null,
     homeCourse: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null),
-    clubs: clubsArray, // Save clubs array
+    clubs: clubsArray,
     zipCode: zipCode || null,
     avatarUrl: resolvedAvatarUrl,
+    preferredTeeTime: preferredTeeTime || null,
+    walkOrRide: walkOrRide || null,
+    playingPartnerPreference: playingPartnerPreference || null,
+    drinkOfChoice: drinkOfChoice || null,
   });
 
   // Link OAuth provider
