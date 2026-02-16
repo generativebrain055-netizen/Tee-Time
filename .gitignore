@@ -16,6 +16,7 @@
 !.env.example
 !backend/.env.example
 !TTSGolfApp/.env.example
+!admin-web/.env.example
 
 # ============================================================================
 # Sensitive Files & Credentials
@@ -108,6 +109,12 @@ backend/node_modules/
 backend/logs/
 backend/config/keys/
 backend/dist/
+
+# ============================================================================
+# Admin Web
+# ============================================================================
+admin-web/node_modules/
+admin-web/dist/
 
 # ============================================================================
 # Mobile App Specific (React Native / Expo)

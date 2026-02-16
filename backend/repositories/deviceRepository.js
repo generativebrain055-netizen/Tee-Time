@@ -417,6 +417,26 @@ const findSuspiciousDevices = async (maxDevicesPerUser = 10) => {
     }
 };
 
+/**
+ * Get all push tokens (for admin broadcast). Only non-blocked devices with a token.
+ * @returns {Promise<string[]>}
+ */
+const getAllPushTokens = async () => {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("push_token")
+            .eq("is_blocked", false)
+            .not("push_token", "is", null);
+
+        if (error) throw error;
+        const tokens = (data || []).map((d) => d.push_token).filter(Boolean);
+        return [...new Set(tokens)]; // dedupe
+    } catch (error) {
+        handleError(error, "getAllPushTokens");
+    }
+};
+
 module.exports = {
     upsert,
     findByFingerprint,
@@ -433,4 +453,5 @@ module.exports = {
     getDeviceTypeDistribution,
     getOsDistribution,
     findSuspiciousDevices,
+    getAllPushTokens,
 };

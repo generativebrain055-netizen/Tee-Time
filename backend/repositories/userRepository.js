@@ -651,6 +651,99 @@ const getPublicProfile = async (userId) => {
   }
 };
 
+/**
+ * Admin: search users by phone number or name (first_name, last_name, username)
+ * @param {string} q - search term
+ * @param {number} limit - max results (default 50)
+ * @returns {Promise<Array>}
+ */
+const searchByPhoneOrName = async (q, limit = 50) => {
+  try {
+    const safeLimit = Math.min(limit, 100);
+    const selectFields = `
+        id, phone_number, email, username, first_name, last_name,
+        is_active, is_verified, is_locked, created_at,
+        user_profiles (social_rate, handicap, avatar_url)
+      `;
+    const baseQuery = () =>
+      supabaseAdmin
+        .from("users")
+        .select(selectFields)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(safeLimit);
+
+    const sanitized = typeof q === "string" ? String(q).trim().replace(/%/g, "").replace(/,/g, "") : "";
+    if (!sanitized) {
+      const { data, error } = await baseQuery();
+      if (error) throw error;
+      return (data || []).map((row) => {
+        const profile = row.user_profiles?.[0] || row.user_profiles || {};
+        const { user_profiles, ...user } = row;
+        return { ...user, social_rate: profile.social_rate, handicap: profile.handicap, avatar_url: profile.avatar_url };
+      });
+    }
+
+    const term = `%${sanitized}%`;
+    const orFilter = `phone_number.ilike.${term},email.ilike.${term},username.ilike.${term},first_name.ilike.${term},last_name.ilike.${term}`;
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select(selectFields)
+      .is("deleted_at", null)
+      .or(orFilter)
+      .order("created_at", { ascending: false })
+      .limit(safeLimit);
+
+    if (error) throw error;
+    return (data || []).map((row) => {
+      const profile = row.user_profiles?.[0] || row.user_profiles || {};
+      const { user_profiles, ...user } = row;
+      return { ...user, social_rate: profile.social_rate, handicap: profile.handicap, avatar_url: profile.avatar_url };
+    });
+  } catch (error) {
+    handleError(error, "searchByPhoneOrName");
+  }
+};
+
+/**
+ * Admin: set user active flag (suspend/unsuspend)
+ * @param {string} userId
+ * @param {boolean} isActive
+ */
+const setActive = async (userId, isActive) => {
+  try {
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ is_active: !!isActive })
+      .eq("id", userId)
+      .is("deleted_at", null);
+    if (error) throw error;
+    return findById(userId);
+  } catch (error) {
+    handleError(error, "setActive");
+  }
+};
+
+/**
+ * Admin: lock user (ban) - set is_active false and is_locked true with long lock
+ * @param {string} userId
+ * @param {string} [reason]
+ */
+const setLocked = async (userId) => {
+  try {
+    const lockedUntil = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString(); // ~100 years
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ is_active: false, is_locked: true, locked_until: lockedUntil })
+      .eq("id", userId)
+      .is("deleted_at", null);
+    if (error) throw error;
+    return findById(userId);
+  } catch (error) {
+    handleError(error, "setLocked");
+  }
+};
+
 module.exports = {
   findByPhoneNumber,
   findByEmail,
@@ -670,4 +763,7 @@ module.exports = {
   emailExists,
   getStatistics,
   getPublicProfile,
+  searchByPhoneOrName,
+  setActive,
+  setLocked,
 };

@@ -147,6 +147,45 @@ const verifyRefreshToken = (token) => {
 };
 
 /**
+ * Generate JWT for super admin portal (separate audience from user tokens)
+ * @param {Object} payload - Token payload (e.g. { sub: 'admin', role: 'super_admin' })
+ * @param {string} expiresIn - Expiration time (e.g., '8h', '1d')
+ * @returns {string} JWT token
+ */
+const generateAdminToken = (payload = {}, expiresIn = "8h") => {
+  const secret = process.env.JWT_SECRET || "default-secret-change-this";
+  return jwt.sign(
+    { ...payload, role: "super_admin" },
+    secret,
+    {
+      expiresIn,
+      issuer: "tts-golf-app",
+      audience: "tts-golf-admin",
+    }
+  );
+};
+
+/**
+ * Verify super admin JWT
+ * @param {string} token - JWT token
+ * @returns {Object} Decoded payload
+ * @throws {Error} If token is invalid or expired
+ */
+const verifyAdminToken = (token) => {
+  const secret = process.env.JWT_SECRET || "default-secret-change-this";
+  const decoded = jwt.verify(token, secret, {
+    issuer: "tts-golf-app",
+    audience: "tts-golf-admin",
+  });
+  if (decoded.role !== "super_admin") {
+    const err = new Error("Invalid admin token");
+    err.name = "AuthenticationError";
+    throw err;
+  }
+  return decoded;
+};
+
+/**
  * Generate a unique session ID
  * @returns {string} UUID v4
  */
@@ -220,6 +259,8 @@ module.exports = {
   generateRefreshToken,
   verifyAccessToken,
   verifyRefreshToken,
+  generateAdminToken,
+  verifyAdminToken,
   generateSessionId,
   generateDeviceFingerprint,
   createHMAC,
