@@ -7,6 +7,8 @@ export { MagicLinkPage } from "./MagicLinkPage";
 export { NamePage } from "./NamePage";
 export { EmailPage } from "./EmailPage";
 export { ProfileImagePage } from "./ProfileImagePage";
+export { ZipCodePage } from "./ZipCodePage";
+export { PhotoZipPage } from "./PhotoZipPage";
 export { LocationPage } from "./LocationPage";
 export { ClubPage } from "./ClubPage";
 export { HandicapPage } from "./HandicapPage";
@@ -20,6 +22,8 @@ export type {
   NamePageProps,
   EmailPageProps,
   ProfileImagePageProps,
+  ZipCodePageProps,
+  PhotoZipPageProps,
   LocationPageProps,
   ClubPageProps,
   HandicapPageProps,

@@ -35,17 +35,19 @@ export interface Club {
 }
 
 export interface UserPreferences {
-  playerCount: number | string;
   playStyle: "walk" | "ride" | "either";
   timeOfDay?: string[];
   preferredTimes?: string[];
+  playingPartnerPreference?: string;
+  drinkOfChoice?: string;
 }
 
 // Preferences Data Type for onboarding
 export interface PreferencesData {
   preferredTimes?: string[];
-  playerCount?: number | string;
   playStyle?: "walk" | "ride" | "either";
+  playingPartnerPreference?: string; // golf vibe
+  drinkOfChoice?: string;
 }
 
 // Onboarding Types
@@ -119,6 +121,10 @@ export interface PreferencesPageProps extends OnboardingPageProps {
 export interface PhotoZipPageProps extends OnboardingPageProps {
   initialData?: { profilePhotoUri?: string; zipCode?: string };
   initialProfilePhotoUri?: string;
+  initialZipCode?: string;
+}
+
+export interface ZipCodePageProps extends OnboardingPageProps {
   initialZipCode?: string;
 }
 

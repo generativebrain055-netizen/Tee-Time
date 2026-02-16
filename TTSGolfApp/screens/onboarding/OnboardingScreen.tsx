@@ -17,11 +17,11 @@ import { logger } from "../../utils/logger";
 
 // Import all step components
 import { SignUpOptionsPage } from "./SignUpOptionsPage";
-import { PhoneVerificationPage } from "./PhoneVerificationPage";
 import { MagicLinkPage } from "./MagicLinkPage";
 import { NamePage } from "./NamePage";
 import { EmailPage } from "./EmailPage";
-import { PhotoZipPage } from "./PhotoZipPage";
+import { ProfileImagePage } from "./ProfileImagePage";
+import { ZipCodePage } from "./ZipCodePage";
 import { LocationPage } from "./LocationPage";
 import { ClubPage } from "./ClubPage";
 import { HandicapPage } from "./HandicapPage";
@@ -90,12 +90,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 }) => {
   const oauthData = route?.params?.oauthData;
 
-  // Determine starting step for OAuth users
+  // Determine starting step for OAuth users (no phone step; skip to name)
   const getInitialStepIndex = () => {
-    if (!oauthData) return 0; // Start at signup options for non-OAuth
-    // OAuth: skip signup options, go to phone (step 1)
-    logger.debug("[OnboardingScreen] OAuth user detected, starting at step 1 (Phone)");
-    return 1;
+    if (!oauthData) return 0; // Start at SignUpOptions for non-OAuth
+    // OAuth: skip signup options, magic link; start at name (step 2)
+    logger.debug("[OnboardingScreen] OAuth user detected, starting at step 2 (Name)");
+    return 2;
   };
 
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(
@@ -122,16 +122,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
     // Calculate next step index
     let nextStepIndex = currentStepIndex + 1;
-
-    // From SignUpOptionsPage: user chose phone, skip standalone PHONE step
-    if (
-      currentStep === ONBOARDING_STEPS.SIGNUP_OPTIONS &&
-      data.phoneNumber &&
-      STEP_ORDER[nextStepIndex] === ONBOARDING_STEPS.PHONE
-    ) {
-      logger.debug("[OnboardingScreen] Skipping PHONE step, going to MAGIC_LINK");
-      nextStepIndex++;
-    }
 
     // For OAuth users, skip the magic link step (they're already authenticated)
     if (
@@ -195,8 +185,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       if (!finalData.preferences) {
         missingFields.push("Preferences");
       } else {
-        if (!finalData.preferences.playerCount)
-          missingFields.push("Preferred player count");
         if (!finalData.preferences.playStyle)
           missingFields.push("Walk/Ride preference");
         if (
@@ -205,6 +193,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         ) {
           missingFields.push("Preferred time of day");
         }
+        if (!finalData.preferences.playingPartnerPreference)
+          missingFields.push("Golf vibe");
       }
     }
 
@@ -245,22 +235,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         return timeMap[times[0]] || "any";
       };
 
-      const mapGroupSize = (count: string | undefined): string => {
-        if (!count) return "any";
-        const sizeMap: Record<string, string> = {
-          "1": "solo",
-          "2": "twosome",
-          "3": "threesome",
-          "4": "foursome",
-          solo: "solo",
-          twosome: "twosome",
-          threesome: "threesome",
-          foursome: "foursome",
-          any: "any",
-        };
-        return sizeMap[count] || "any";
-      };
-
       // Format clubs array for backend (support multiple clubs)
       const clubsArray = Array.isArray(finalData.clubs) && finalData.clubs.length > 0
         ? finalData.clubs.map(club => ({
@@ -294,9 +268,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           finalData.preferences?.preferredTimes,
         ),
         walkOrRide: finalData.preferences?.playStyle || "either",
-        playingPartnerPreference: mapGroupSize(
-          finalData.preferences?.playerCount != null ? String(finalData.preferences.playerCount) : undefined,
-        ),
+        playingPartnerPreference: finalData.preferences?.playingPartnerPreference || null,
+        drinkOfChoice: finalData.preferences?.drinkOfChoice || null,
       };
 
       logger.debug("[OnboardingScreen] Registration request", {
@@ -373,7 +346,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           handicap: finalData.handicap != null ? parseInt(String(finalData.handicap), 10) : null,
           location: finalData.location?.name || null,
           homeCourse: oauthClubsArray.length > 0 ? oauthClubsArray[0].name : null,
-          clubs: oauthClubsArray, // Send clubs array
+          clubs: oauthClubsArray,
+          preferredTeeTime: finalData.preferences?.preferredTimes?.length ? mapPreferredTime(finalData.preferences.preferredTimes) : null,
+          walkOrRide: finalData.preferences?.playStyle || null,
+          playingPartnerPreference: finalData.preferences?.playingPartnerPreference || null,
+          drinkOfChoice: finalData.preferences?.drinkOfChoice || null,
         };
 
         logger.debug("[OnboardingScreen] OAuth request body prepared", {
@@ -517,16 +494,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     switch (step) {
       case ONBOARDING_STEPS.SIGNUP_OPTIONS:
         return SignUpOptionsPage as unknown as StepComponent;
-      case ONBOARDING_STEPS.PHONE:
-        return PhoneVerificationPage as unknown as StepComponent;
       case ONBOARDING_STEPS.MAGIC_LINK:
         return MagicLinkPage as unknown as StepComponent;
       case ONBOARDING_STEPS.NAME:
         return NamePage as unknown as StepComponent;
       case ONBOARDING_STEPS.EMAIL:
         return EmailPage as unknown as StepComponent;
-      case ONBOARDING_STEPS.PHOTO_ZIP:
-        return PhotoZipPage as unknown as StepComponent;
+      case ONBOARDING_STEPS.PROFILE_IMAGE:
+        return ProfileImagePage as unknown as StepComponent;
+      case ONBOARDING_STEPS.ZIP_CODE:
+        return ZipCodePage as unknown as StepComponent;
       case ONBOARDING_STEPS.LOCATION:
         return LocationPage as unknown as StepComponent;
       case ONBOARDING_STEPS.CLUB:

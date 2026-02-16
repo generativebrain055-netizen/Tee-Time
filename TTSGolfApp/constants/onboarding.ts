@@ -16,6 +16,7 @@ export const ONBOARDING_STEPS = {
   EMAIL: "email",
   PROFILE_IMAGE: "profile_image",
   PHOTO_ZIP: "photo_zip",
+  ZIP_CODE: "zip_code",
   LOCATION: "location",
   CLUB: "club",
   HANDICAP: "handicap",
@@ -30,18 +31,17 @@ export type OnboardingStep =
   (typeof ONBOARDING_STEPS)[keyof typeof ONBOARDING_STEPS];
 
 /**
- * Order of steps in the onboarding flow
- * Magic link step comes right after phone for verification
+ * Order of steps in the onboarding flow (phone signup).
+ * After email: photo upload (url-1 151-297) → zip code (url-2 703-448) → next (url-3 151-325).
+ * Photo and zip are separate screens; no combined photo+zip step.
  */
 export const STEP_ORDER: OnboardingStep[] = [
-  ONBOARDING_STEPS.WELCOME,
   ONBOARDING_STEPS.SIGNUP_OPTIONS,
-  ONBOARDING_STEPS.PHONE,
   ONBOARDING_STEPS.MAGIC_LINK,
   ONBOARDING_STEPS.NAME,
   ONBOARDING_STEPS.EMAIL,
   ONBOARDING_STEPS.PROFILE_IMAGE,
-  ONBOARDING_STEPS.PHOTO_ZIP,
+  ONBOARDING_STEPS.ZIP_CODE,
   ONBOARDING_STEPS.LOCATION,
   ONBOARDING_STEPS.CLUB,
   ONBOARDING_STEPS.HANDICAP,

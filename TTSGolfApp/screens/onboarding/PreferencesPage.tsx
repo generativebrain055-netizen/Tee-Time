@@ -6,6 +6,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -32,12 +33,11 @@ const PLAY_STYLE_OPTIONS: DropdownOption[] = [
   { label: "Either", value: "either" },
 ];
 
-const PARTNER_COUNT_OPTIONS: DropdownOption[] = [
-  { label: "Solo (1 player)", value: "solo" },
-  { label: "Twosome (2 players)", value: "twosome" },
-  { label: "Threesome (3 players)", value: "threesome" },
-  { label: "Foursome (4 players)", value: "foursome" },
-  { label: "Any group size", value: "any" },
+const GOLF_VIBE_OPTIONS: DropdownOption[] = [
+  { label: "Weekend warrior", value: "weekend_warrior" },
+  { label: "Competitive player", value: "competitive" },
+  { label: "Casual golfer", value: "casual" },
+  { label: "Scratch golfer", value: "scratch" },
 ];
 
 
@@ -157,11 +157,14 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   const [playStyle, setPlayStyle] = useState<string>(
     initialPreferences.playStyle || ""
   );
-  const [partnerCount, setPartnerCount] = useState<string>(
-    String(initialPreferences.playerCount || "")
+  const [golfVibe, setGolfVibe] = useState<string>(
+    initialPreferences.playingPartnerPreference || ""
+  );
+  const [drinkOfChoice, setDrinkOfChoice] = useState<string>(
+    initialPreferences.drinkOfChoice || ""
   );
 
-  const isValid = preferredTime !== "" && playStyle !== "" && partnerCount !== "";
+  const isValid = preferredTime !== "" && playStyle !== "" && golfVibe !== "";
 
   const handleNext = useCallback((): void => {
     // Validation handled by button disabled state
@@ -173,11 +176,12 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     const preferencesData: PreferencesData = {
       playStyle: playStyle as "walk" | "ride" | "either",
       preferredTimes: preferredTime.split(","),
-      playerCount: partnerCount,
+      playingPartnerPreference: golfVibe,
+      drinkOfChoice: drinkOfChoice.trim() || undefined,
     };
 
     onNext({ preferences: preferencesData });
-  }, [isValid, playStyle, preferredTime, partnerCount, onNext]);
+  }, [isValid, playStyle, preferredTime, golfVibe, drinkOfChoice, onNext]);
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
@@ -203,13 +207,14 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             <Text className="text-[28px] font-bold text-gray-900 mb-2">Playing preferences</Text>
             <Text className="text-[15px] text-gray-500 leading-[22px] mb-8">Tell us how you like to play</Text>
 
+            {/* Order: url-3 → url-4 → url-5 → url-6 → url-7 → url-8 → url-9 (Figma flow) */}
             <Dropdown
               label="What time of day do you like to play?"
               value={preferredTime}
               options={TIME_OPTIONS}
               onSelect={setPreferredTime}
               placeholder="Select time..."
-              zIndex={103}
+              zIndex={105}
             />
 
             <Dropdown
@@ -218,17 +223,28 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
               options={PLAY_STYLE_OPTIONS}
               onSelect={setPlayStyle}
               placeholder="Select preference..."
-              zIndex={102}
+              zIndex={104}
             />
 
             <Dropdown
-              label="Preferred group size"
-              value={partnerCount}
-              options={PARTNER_COUNT_OPTIONS}
-              onSelect={setPartnerCount}
-              placeholder="Select group size..."
-              zIndex={101}
+              label="What's your golf vibe?"
+              value={golfVibe}
+              options={GOLF_VIBE_OPTIONS}
+              onSelect={setGolfVibe}
+              placeholder="Select..."
+              zIndex={103}
             />
+
+            <View className="mb-6" style={{ zIndex: 1 }}>
+              <Text className="text-[15px] font-medium text-gray-900 mb-[10px]">What's your drink of choice?</Text>
+              <TextInput
+                className="h-14 bg-white rounded-md border border-gray-200 px-4 text-base text-gray-900"
+                placeholder="e.g. Transfusion"
+                placeholderTextColor="#9CA3AF"
+                value={drinkOfChoice}
+                onChangeText={setDrinkOfChoice}
+              />
+            </View>
           </ScrollView>
 
           <View className="pb-8">
