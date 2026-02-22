@@ -70,7 +70,7 @@ export const NamePage: React.FC<NamePageProps> = ({
                     className={`h-14 bg-white border-2 rounded-md px-4 text-base text-gray-900 ${
                       firstNameFocused ? 'border-green-500' : 'border-gray-200'
                     }`}
-                    placeholder="Blake"
+                    placeholder="John"
                     placeholderTextColor={COLORS.textPlaceholder}
                     value={firstName}
                     onChangeText={setFirstName}
@@ -90,7 +90,7 @@ export const NamePage: React.FC<NamePageProps> = ({
                     className={`h-14 bg-white border-2 rounded-md px-4 text-base text-gray-900 ${
                       lastNameFocused ? 'border-green-500' : 'border-gray-200'
                     }`}
-                    placeholder="Hylen"
+                    placeholder="Doe"
                     placeholderTextColor={COLORS.textPlaceholder}
                     value={lastName}
                     onChangeText={setLastName}

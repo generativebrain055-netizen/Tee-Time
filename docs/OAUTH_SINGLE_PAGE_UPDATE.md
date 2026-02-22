@@ -52,14 +52,14 @@ Navigate to Availability Onboarding
 - **First Name Input**:
   - Pre-filled from OAuth provider data
   - Shows "Pre-filled" badge if from OAuth
-  - Placeholder: "Blake"
+  - Placeholder: "John"
   - Auto-capitalize words
   - Required field (red asterisk)
 
 - **Last Name Input**:
   - Pre-filled from OAuth provider data
   - Shows "Pre-filled" badge if from OAuth
-  - Placeholder: "Hylen"
+  - Placeholder: "Doe"
   - Auto-capitalize words
   - Required field (red asterisk)
 
