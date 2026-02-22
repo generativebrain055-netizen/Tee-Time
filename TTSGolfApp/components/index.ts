@@ -25,3 +25,12 @@ export {
 // Golf Course Autocomplete
 export { default as GolfCourseAutocomplete } from "./GolfCourseAutocomplete";
 export type { GolfCourse } from "./GolfCourseAutocomplete";
+
+// Ad container (Figma: sign up / login screen)
+export {
+  AdContainerPlaceholder,
+  AD_CONTAINER_HEIGHT,
+  AD_CONTAINER_PADDING_H,
+  AD_CONTAINER_MARGIN_TOP,
+  AD_CONTAINER_MARGIN_BOTTOM,
+} from "./AdContainerPlaceholder";

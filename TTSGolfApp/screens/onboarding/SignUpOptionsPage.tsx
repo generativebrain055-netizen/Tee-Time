@@ -15,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, X } from "lucide-react-native";
 import CountryPicker, { Country, COUNTRIES } from "../../components/CountryPicker";
 import { OAuthButtons } from "../../components/auth/OAuthButtons";
+import { AdContainerPlaceholder } from "../../components/AdContainerPlaceholder";
 import type { OAuthSuccessData } from "../../types/oauth";
 
 // Figma sign-up screen colors
@@ -178,6 +179,9 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
                 }}
               />
             </View>
+
+            {/* Ad container area (Figma: designated position for ad) */}
+            <AdContainerPlaceholder />
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

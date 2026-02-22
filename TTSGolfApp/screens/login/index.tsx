@@ -21,7 +21,7 @@ import { useLoginFlow } from "./hooks/useLoginFlow";
 import { PhoneInput } from "./components";
 import { LOGIN_COLORS } from "./constants";
 import { maskPhoneDisplay } from "../../utils/smsMagicLink";
-import { OAuthButtons } from "../../components";
+import { OAuthButtons, AdContainerPlaceholder } from "../../components";
 import { logger } from "../../utils/logger";
 
 interface Props {
@@ -227,13 +227,14 @@ export default function LoginScreen({ navigation }: Props) {
           </Animated.View>
         </View>
 
-        {/* Bottom Section - Fixed at bottom */}
+        {/* Bottom Section - Ad container (Figma) + fixed at bottom */}
         <View
           style={[
             styles.bottomSection,
             { paddingBottom: Math.max(insets.bottom, 16) + 16 },
           ]}
         >
+          <AdContainerPlaceholder />
           {currentStep === "magicLinkSent" && (
             <TouchableOpacity
               style={[styles.nextButton, styles.nextButtonDisabled]}
