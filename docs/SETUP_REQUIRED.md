@@ -63,6 +63,16 @@ You mentioned you have these files in the root. Please confirm their exact locat
 4. Find your OAuth 2.0 Client IDs
 5. Copy the Web Client ID and iOS Client ID
 
+### Backend: Google Sign-In (Firebase Admin)
+For the backend to verify Google ID tokens, set **Firebase Admin** credentials:
+
+1. Firebase Console → Project Settings → Service accounts → Generate new private key.
+2. Save the JSON file somewhere safe (e.g. `backend/config/firebase-service-account.json`).
+3. In `backend/.env` set:
+   - `GOOGLE_APPLICATION_CREDENTIALS=./config/firebase-service-account.json` (path relative to backend root), or the full path to the JSON file.
+
+Without this, Google OAuth will fail with a credential/configuration error when signing in.
+
 ### Backend API URL
 - If running locally: Use your computer's local IP address
   - Windows: Run `ipconfig` in CMD, look for IPv4 Address

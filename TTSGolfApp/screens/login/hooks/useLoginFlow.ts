@@ -199,5 +199,6 @@ export const useLoginFlow = (navigation: any) => {
         handleBack,
         clearPhoneInput,
         devWebFallback,
+        setError,
     };
 };

@@ -57,9 +57,18 @@ const verifyGoogleToken = async (idToken) => {
   } catch (error) {
     logger.error("Firebase token verification failed:", {
       error: error.message,
+      code: error.code,
       stack: error.stack,
     });
-    throw new Error("Invalid Google token: " + error.message);
+    // Helpful message when Firebase Admin has no credentials (e.g. missing GOOGLE_APPLICATION_CREDENTIALS)
+    const isCredentialError =
+      error.code === "auth/invalid-credential" ||
+      error.message?.includes("credential") ||
+      error.message?.includes("Could not load the default credentials");
+    const message = isCredentialError
+      ? "Google Sign-In is misconfigured on the server. Set GOOGLE_APPLICATION_CREDENTIALS to your Firebase service account JSON path."
+      : "Invalid Google token: " + error.message;
+    throw new Error(message);
   }
 };
 

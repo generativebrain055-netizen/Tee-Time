@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TeeTime Social",
+    "name": "Tee Time",
     "slug": "TTSGolfApp",
     "scheme": "teetimesocial",
     "version": "1.0.7",
@@ -25,7 +25,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "CFBundleDisplayName": "Tee Time"
       },
       "usesAppleSignIn": true
     },

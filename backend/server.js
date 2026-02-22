@@ -86,12 +86,17 @@ const PORT = process.env.PORT || 3000;
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration (ALLOWED_ORIGINS only used in production)
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)
+  : [];
 app.use(
   cors({
     origin:
       process.env.NODE_ENV === "production"
-        ? process.env.ALLOWED_ORIGINS?.split(",")
+        ? allowedOrigins.length
+          ? allowedOrigins
+          : "*"
         : "*",
     credentials: true,
   }),

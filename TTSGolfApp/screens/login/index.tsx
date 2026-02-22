@@ -53,6 +53,7 @@ export default function LoginScreen({ navigation }: Props) {
     handleBack,
     clearPhoneInput,
     devWebFallback,
+    setError,
   } = useLoginFlow(navigation);
 
   return (
@@ -182,9 +183,6 @@ export default function LoginScreen({ navigation }: Props) {
                       logger.debug("[LoginScreen] No user data, navigating to Home");
                       navigation.replace("Home");
                     }
-                  }}
-                  onError={(error) => {
-                    logger.error("[LoginScreen] OAuth error", error);
                   }}
                 />
               </View>
