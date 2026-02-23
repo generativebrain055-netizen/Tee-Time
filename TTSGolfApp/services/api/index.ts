@@ -35,6 +35,7 @@ export { draftApi } from "./draftApi";
 export { availabilityApi } from "./availabilityApi";
 export { messagesApi } from "./messagesApi";
 export { searchApi } from "./searchApi";
+export { supportApi } from "./supportApi";
 export { default as onboardingApi } from "./onboardingApi";
 
 // Types

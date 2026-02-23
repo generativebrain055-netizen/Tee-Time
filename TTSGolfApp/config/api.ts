@@ -107,6 +107,8 @@ export interface ApiEndpoints {
   MESSAGES_MARK_READ: (id: string) => string;
   // Health
   HEALTH: string;
+  // Support
+  SUPPORT_EMAIL: string;
 }
 
 /**
@@ -183,4 +185,6 @@ export const API_ENDPOINTS: ApiEndpoints = {
     `${API_URL}/api/messages/conversations/${id}/read`,
   // Health
   HEALTH: `${API_URL}/health`,
+  // Support
+  SUPPORT_EMAIL: `${API_URL}/api/support/email`,
 };

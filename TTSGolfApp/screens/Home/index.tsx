@@ -154,7 +154,6 @@ function HomePage({ navigation }: any) {
         <Header
           onNotificationPress={handleNotifications}
           onSearchPress={handleSearch}
-          userName={user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : undefined}
         />
         <QuickActions
           onCreateTeeTime={handleCreateTeeTime}

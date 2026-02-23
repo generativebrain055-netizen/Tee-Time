@@ -85,7 +85,7 @@ export default function PrivacySecurityScreen({ navigation }: any) {
 
         try {
             await profileApi.updatePrivacySettings(newSettings);
-            await fetchProfile(); // Refresh profile
+            await fetchProfile(true); // Force refresh so context and UI show persisted values
         } catch (error: any) {
             // Revert on error
             setPrivacySettings(privacySettings);

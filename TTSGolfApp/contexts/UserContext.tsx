@@ -10,6 +10,19 @@ interface UserPreferences {
   drinkOfChoice?: string;
 }
 
+interface NotificationPreferences {
+  email?: boolean;
+  sms?: boolean;
+  push?: boolean;
+  types?: { [key: string]: { push?: boolean; inApp?: boolean } };
+}
+
+interface PrivacySettings {
+  showHandicap?: boolean;
+  showLocation?: boolean;
+  showPhone?: boolean;
+}
+
 interface UserProfile {
   id: string;
   firstName: string;
@@ -25,6 +38,8 @@ interface UserProfile {
   roundsPlayed?: number;
   clubs?: Array<{ id?: string; name: string; location?: string; type?: string }>;
   preferences?: UserPreferences;
+  notificationPreferences?: NotificationPreferences;
+  privacySettings?: PrivacySettings;
 }
 
 interface UserContextType {
@@ -139,6 +154,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           socialRate: response.user.socialRate,
           roundsPlayed: response.user.roundsPlayed,
           preferences: response.user.preferences,
+          notificationPreferences: response.user.notificationPreferences,
+          privacySettings: response.user.privacySettings,
         };
 
         logger.debug('[UserContext] Setting profile with clubs', userProfile.clubs);

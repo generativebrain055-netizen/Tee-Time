@@ -276,19 +276,10 @@ export default function EditProfileScreen({ navigation, route }: Props) {
 
             logger.debug('[EditProfileScreen] Update response', response);
 
-            if (response.success) {
-                logger.info('[EditProfileScreen] Update successful, updating context');
-                updateContextProfile({
-                    phoneNumber: phoneNumber || undefined,
-                    handicap: handicap ? parseInt(handicap) : undefined,
-                    preferences: {
-                        preferredTeeTime,
-                        walkOrRide,
-                        playingPartnerPreference: golfVibe,
-                        drinkOfChoice,
-                    },
-                    clubs: Array.isArray(clubs) ? clubs.map(c => ({ id: c.id, name: c.name, location: c.location || '' })) : [],
-                });
+            if (response.success && response.user) {
+                logger.info('[EditProfileScreen] Update successful, syncing context with server response');
+                // Update context from server response so UI always reflects what was persisted in DB
+                updateContextProfile(response.user as Parameters<typeof updateContextProfile>[0]);
 
                 setShowSuccessModal(true);
             }

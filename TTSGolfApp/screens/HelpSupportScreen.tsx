@@ -16,7 +16,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from "react-native";
-import { Mail, ChevronDown, ChevronUp, HelpCircle, Bug, MessageSquare } from "lucide-react-native";
+import { Mail, ChevronDown, ChevronUp, HelpCircle } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
@@ -72,54 +72,51 @@ const FAQ_DATA = [
     },
 ];
 
+const COMPANY_SUPPORT_EMAIL = "support@teetimesocial.com";
+
 export default function HelpSupportScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-    const [feedbackType, setFeedbackType] = useState<'bug' | 'feedback'>('bug');
-    const [feedbackText, setFeedbackText] = useState('');
-    const [submitting, setSubmitting] = useState(false);
+    const [showEmailModal, setShowEmailModal] = useState(false);
+    const [emailSubject, setEmailSubject] = useState("");
+    const [emailBody, setEmailBody] = useState("");
+    const [emailSending, setEmailSending] = useState(false);
 
-    const handleSendEmail = () => {
-        Linking.openURL("mailto:support@teetimesocial.com?subject=Support Request");
+    const handleSendEmailPress = () => {
+        setEmailSubject("");
+        setEmailBody("");
+        setShowEmailModal(true);
     };
 
     const toggleFAQ = (index: number) => {
         setExpandedIndex(expandedIndex === index ? null : index);
     };
 
-    const handleReportBug = () => {
-        setFeedbackType('bug');
-        setFeedbackText('');
-        setShowFeedbackModal(true);
-    };
-
-    const handleSendFeedback = () => {
-        setFeedbackType('feedback');
-        setFeedbackText('');
-        setShowFeedbackModal(true);
-    };
-
-    const submitFeedback = async () => {
-        if (!feedbackText.trim()) {
-            Alert.alert("Error", "Please enter your feedback");
+    const sendEmailToSupport = async () => {
+        const subject = (emailSubject || "Support Request").trim();
+        const body = emailBody.trim();
+        if (!body) {
+            Alert.alert("Error", "Please enter your message.");
             return;
         }
-
-        setSubmitting(true);
+        setEmailSending(true);
         try {
-            const subject = feedbackType === 'bug' ? 'Bug Report' : 'Feedback';
-            const body = `Type: ${subject}\n\n${feedbackText.trim()}`;
-            const mailtoUrl = `mailto:support@teetimesocial.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const mailtoUrl = `mailto:${COMPANY_SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const canOpen = await Linking.canOpenURL(mailtoUrl);
+            if (!canOpen) {
+                Alert.alert("Error", "Unable to open email app. Please email us at " + COMPANY_SUPPORT_EMAIL);
+                return;
+            }
             await Linking.openURL(mailtoUrl);
-            setShowFeedbackModal(false);
-            setFeedbackText('');
-            Alert.alert("Success", "Your feedback has been sent. Thank you!");
+            setShowEmailModal(false);
+            setEmailSubject("");
+            setEmailBody("");
+            Alert.alert("Success", "Your email app will open. Send the email to contact support.");
         } catch (error) {
-            Alert.alert("Error", "Failed to send feedback. Please try again.");
+            Alert.alert("Error", "Failed to open email. Please try again.");
         } finally {
-            setSubmitting(false);
+            setEmailSending(false);
         }
     };
 
@@ -163,7 +160,7 @@ export default function HelpSupportScreen({ navigation }: any) {
                             </Text>
                         </View>
                         <TouchableOpacity
-                            onPress={handleSendEmail}
+                            onPress={handleSendEmailPress}
                             style={[styles.emailButton, { backgroundColor: colors.primary }]}
                             activeOpacity={0.8}
                         >
@@ -172,48 +169,6 @@ export default function HelpSupportScreen({ navigation }: any) {
                             </Text>
                         </TouchableOpacity>
                     </View>
-
-                    {/* Report Bug */}
-                    <TouchableOpacity
-                        style={[styles.feedbackRow, { backgroundColor: colors.surfaceSecondary }]}
-                        onPress={handleReportBug}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.contactContent}>
-                            <View style={[styles.contactIcon, { backgroundColor: '#FEE2E2' }]}>
-                                <Bug size={24} color="#EF4444" strokeWidth={2} />
-                            </View>
-                            <View style={styles.feedbackContent}>
-                                <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
-                                    Report a Bug
-                                </Text>
-                                <Text style={[styles.feedbackSubtitle, { color: colors.textSecondary }]}>
-                                    Found an issue? Let us know
-                                </Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-
-                    {/* Send Feedback */}
-                    <TouchableOpacity
-                        style={[styles.feedbackRow, { backgroundColor: colors.surfaceSecondary, marginTop: spacing.sm }]}
-                        onPress={handleSendFeedback}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.contactContent}>
-                            <View style={[styles.contactIcon, { backgroundColor: '#DBEAFE' }]}>
-                                <MessageSquare size={24} color={colors.primary} strokeWidth={2} />
-                            </View>
-                            <View style={styles.feedbackContent}>
-                                <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
-                                    Send Feedback
-                                </Text>
-                                <Text style={[styles.feedbackSubtitle, { color: colors.textSecondary }]}>
-                                    Share your thoughts and suggestions
-                                </Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
                 </View>
 
                 {/* FAQ Section */}
@@ -261,22 +216,22 @@ export default function HelpSupportScreen({ navigation }: any) {
                     ))}
                 </View>
 
-                {/* Feedback Modal */}
+                {/* Email compose modal */}
                 <Modal
-                    visible={showFeedbackModal}
+                    visible={showEmailModal}
                     transparent
                     animationType="fade"
                     onRequestClose={() => {
-                        setShowFeedbackModal(false);
-                        setFeedbackText('');
+                        setShowEmailModal(false);
+                        setEmailSubject(""); setEmailBody("");
                     }}
                 >
                     <TouchableOpacity
                         style={styles.modalOverlay}
                         activeOpacity={1}
                         onPress={() => {
-                            setShowFeedbackModal(false);
-                            setFeedbackText('');
+                            setShowEmailModal(false);
+                            setEmailSubject(""); setEmailBody("");
                         }}
                     >
                         <KeyboardAvoidingView
@@ -290,12 +245,12 @@ export default function HelpSupportScreen({ navigation }: any) {
                                 <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
                             <View style={styles.modalHeader}>
                                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                                    {feedbackType === 'bug' ? 'Report a Bug' : 'Send Feedback'}
+                                    Email Support
                                 </Text>
                                 <TouchableOpacity
                                     onPress={() => {
-                                        setShowFeedbackModal(false);
-                                        setFeedbackText('');
+                                        setShowEmailModal(false);
+                                        setEmailSubject(""); setEmailBody("");
                                     }}
                                     style={styles.closeButton}
                                 >
@@ -306,9 +261,7 @@ export default function HelpSupportScreen({ navigation }: any) {
                             </View>
 
                             <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-                                {feedbackType === 'bug' 
-                                    ? 'Please describe the bug you encountered. Include steps to reproduce if possible.'
-                                    : 'We\'d love to hear your thoughts! Share your feedback or suggestions.'}
+                                Your message will be sent to our support team. Subject is optional.
                             </Text>
 
                             <TextInput
@@ -317,8 +270,8 @@ export default function HelpSupportScreen({ navigation }: any) {
                                     color: colors.textPrimary,
                                     borderColor: colors.border,
                                 }]}
-                                value={feedbackText}
-                                onChangeText={setFeedbackText}
+                                value={emailBody}
+                                onChangeText={setEmailBody}
                                 placeholder="Enter your feedback..."
                                 placeholderTextColor={colors.textMuted}
                                 multiline
@@ -330,8 +283,8 @@ export default function HelpSupportScreen({ navigation }: any) {
                                 <TouchableOpacity
                                     style={[styles.cancelButton, { borderColor: colors.border }]}
                                     onPress={() => {
-                                        setShowFeedbackModal(false);
-                                        setFeedbackText('');
+                                        setShowEmailModal(false);
+                                        setEmailSubject(""); setEmailBody("");
                                     }}
                                     activeOpacity={0.7}
                                 >
@@ -341,12 +294,12 @@ export default function HelpSupportScreen({ navigation }: any) {
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.submitButton, { backgroundColor: colors.primary }]}
-                                    onPress={submitFeedback}
-                                    disabled={submitting || !feedbackText.trim()}
+                                    onPress={sendEmailToSupport}
+                                    disabled={emailSending || !emailBody.trim()}
                                     activeOpacity={0.8}
                                 >
                                     <Text style={[styles.submitButtonText, { color: colors.surface }]}>
-                                        {submitting ? 'Sending...' : 'Send'}
+                                        {emailSending ? 'Sending...' : 'Send'}
                                     </Text>
                                 </TouchableOpacity>
                             </View>
@@ -461,22 +414,6 @@ const styles = StyleSheet.create({
         fontFamily: fontFamily.regular,
         fontSize: fontSize.sm,
         lineHeight: fontSize.base * 1.5,
-    },
-    feedbackRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderRadius: radii.md,
-        padding: spacing.md,
-    },
-    feedbackContent: {
-        flex: 1,
-        marginLeft: spacing.md,
-    },
-    feedbackSubtitle: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.xs,
-        marginTop: spacing['2xs'],
     },
     modalOverlay: {
         flex: 1,

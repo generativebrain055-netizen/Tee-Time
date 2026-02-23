@@ -35,9 +35,9 @@ export default function SettingsScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
 
-    // Fetch profile on mount if not cached
+    // Refetch profile when screen mounts so displayed settings reflect persisted DB state
     useEffect(() => {
-        fetchProfile();
+        fetchProfile(true);
     }, [fetchProfile]);
 
 

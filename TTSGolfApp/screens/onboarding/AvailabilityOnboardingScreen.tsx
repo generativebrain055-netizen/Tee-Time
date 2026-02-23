@@ -137,8 +137,8 @@ export default function AvailabilityOnboardingScreen({
   }, []);
 
   const handleSkip = useCallback(() => {
-    // Availability is REQUIRED - no skip allowed
-    // User must complete this step
+    // Dismiss without saving any availability; user can set it later from settings
+    navigation?.replace('Home');
   }, [navigation]);
 
   const handleSave = useCallback(async () => {
@@ -161,7 +161,13 @@ export default function AvailabilityOnboardingScreen({
       });
 
       // Save to backend
-      await availabilityApi.saveUserAvailability(availabilityData);
+      const result = await availabilityApi.saveUserAvailability(availabilityData);
+
+      // Handle backend returning success: false (e.g. 200 with failure body)
+      if (result && (result as { success?: boolean }).success === false) {
+        const msg = (result as { message?: string }).message || 'Failed to save availability.';
+        throw new Error(msg);
+      }
 
       setShowSuccess(true);
       setTimeout(() => {
@@ -172,7 +178,7 @@ export default function AvailabilityOnboardingScreen({
       logger.error('[AvailabilityOnboarding] Save availability error', error);
       const message =
         error?.message ||
-        (error?.response?.data?.error || error?.response?.data?.message) ||
+        (error?.response?.data?.message ?? error?.response?.data?.error) ||
         'Failed to save availability. Please try again.';
       Alert.alert('Error', message);
     } finally {
@@ -211,7 +217,16 @@ export default function AvailabilityOnboardingScreen({
       >
         <StatusBar style="dark" />
         <View className="flex-1 p-6 relative">
-          {/* Skip button removed - availability is required */}
+          {/* Skip - dismiss without saving availability */}
+          <View className="absolute top-0 right-6 z-10">
+            <TouchableOpacity
+              onPress={handleSkip}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
+            >
+              <Text className="text-gray-500 font-semibold text-sm">Skip</Text>
+            </TouchableOpacity>
+          </View>
 
           <View className="flex-1 flex-col items-center justify-center mt-20">
             <View className="w-24 h-24 bg-green-50 rounded-md flex items-center justify-center mb-8">
@@ -474,7 +489,7 @@ export default function AvailabilityOnboardingScreen({
           {saving ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text className="text-white font-bold text-base">Save Availability</Text>
+            <Text className="text-white font-bold text-base">Confirm</Text>
           )}
         </TouchableOpacity>
       </View>

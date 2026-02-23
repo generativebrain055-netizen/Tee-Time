@@ -95,7 +95,57 @@ const sendMagicLinkEmail = async ({ email, token, purpose }) => {
   }
 };
 
+/**
+ * Send support/contact email from app (from sendgrid_from_email to sendgrid_to_email)
+ * @param {Object} params - { subject, body, userEmail? }
+ * @returns {Promise<Object>} { success, message? }
+ */
+const sendSupportEmail = async ({ subject, body, userEmail }) => {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  const toEmail = process.env.SENDGRID_TO_EMAIL;
+
+  if (!fromEmail || !toEmail) {
+    logger.warn("SENDGRID_FROM_EMAIL or SENDGRID_TO_EMAIL not set. Support email skipped.");
+    return { success: false, message: "Support email not configured." };
+  }
+
+  if (!isConfigured()) {
+    logger.warn("SendGrid API key not configured. Support email logged to console.");
+    logger.info(`\n📧 [SUPPORT EMAIL] to ${toEmail}\nSubject: ${subject}\nFrom user: ${userEmail || "unknown"}\n\n${body}\n`);
+    return { success: true, mode: "console" };
+  }
+
+  initializeSendGrid();
+
+  const fromName = process.env.SENDGRID_FROM_NAME || "TeeTime Golf App";
+  const text = (userEmail ? `From: ${userEmail}\n\n` : "") + body;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      ${userEmail ? `<p><strong>From user:</strong> ${userEmail}</p>` : ""}
+      <p style="white-space: pre-wrap;">${body.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+    </div>
+  `;
+
+  const msg = {
+    to: toEmail,
+    from: { email: fromEmail, name: fromName },
+    subject: subject || "Support Request",
+    text,
+    html,
+  };
+
+  try {
+    await sgMail.send(msg);
+    logger.info(`Support email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    logger.error("SendGrid support email error:", error);
+    throw error;
+  }
+};
+
 module.exports = {
   isConfigured,
   sendMagicLinkEmail,
+  sendSupportEmail,
 };

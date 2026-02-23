@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabaseAdmin } = require('../config/supabase');
 const logger = require('../config/logger');
 
 // Onboarding Service - Backend is source of truth for completion state
@@ -6,7 +6,7 @@ const logger = require('../config/logger');
 // Get user's complete onboarding status
 const getOnboardingStatus = async (userId) => {
     try {
-        const { data: user, error } = await supabase
+        const { data: user, error } = await supabaseAdmin
             .from('users')
             .select(`
                 id,
@@ -63,7 +63,7 @@ const getOnboardingStatus = async (userId) => {
 // Mark profile setup as completed
 const markProfileCompleted = async (userId) => {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('users')
             .update({
                 profile_completed: true,
@@ -84,7 +84,7 @@ const markProfileCompleted = async (userId) => {
 // Mark availability as completed
 const markAvailabilityCompleted = async (userId) => {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('users')
             .update({
                 availability_completed: true,
@@ -127,7 +127,7 @@ const checkOnboardingRequired = async (userId) => {
 // Record individual step completion with optional data
 const recordStepCompletion = async (userId, stepName, data = {}) => {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('onboarding_steps')
             .upsert({
                 user_id: userId,
@@ -151,7 +151,7 @@ const recordStepCompletion = async (userId, stepName, data = {}) => {
 // Record step skip (only for optional steps like club name)
 const recordStepSkip = async (userId, stepName) => {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('onboarding_steps')
             .upsert({
                 user_id: userId,
@@ -174,7 +174,7 @@ const recordStepSkip = async (userId, stepName) => {
 // Get detailed step history for user
 const getOnboardingSteps = async (userId) => {
     try {
-        const { data: steps, error } = await supabase
+        const { data: steps, error } = await supabaseAdmin
             .from('onboarding_steps')
             .select('*')
             .eq('user_id', userId)

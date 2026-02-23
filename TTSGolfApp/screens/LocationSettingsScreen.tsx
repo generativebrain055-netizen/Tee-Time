@@ -31,7 +31,7 @@ import { logger } from "../utils/logger";
 export default function LocationSettingsScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
-    const { profile, fetchProfile } = useUser();
+    const { profile, fetchProfile, updateProfile } = useUser();
     const [loading, setLoading] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -149,7 +149,7 @@ export default function LocationSettingsScreen({ navigation }: any) {
         } finally {
             setUpdating(false);
         }
-    }, [currentLocation, locationName, fetchProfile]);
+    }, [currentLocation, locationName, fetchProfile, updateProfile]);
 
     return (
         <ScreenShell>

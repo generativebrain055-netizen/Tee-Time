@@ -129,7 +129,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             };
             
             await profileApi.updateNotificationPreferences(preferences);
-            await fetchProfile(); // Refresh profile
+            await fetchProfile(true); // Force refresh so context and UI show persisted values
         } catch (error: any) {
             // Revert on error
             setSettings(settings);
@@ -179,7 +179,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             };
             
             await profileApi.updateNotificationPreferences(preferences);
-            await fetchProfile(); // Refresh profile
+            await fetchProfile(true); // Force refresh so context and UI show persisted values
         } catch (error: any) {
             // Revert on error
             setTypeSettings(typeSettings);

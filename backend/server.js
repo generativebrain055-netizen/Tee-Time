@@ -79,6 +79,7 @@ const notificationRoutes = require("./routes/notifications");
 const draftRoutes = require("./routes/draft");
 const messageRoutes = require("./routes/messages");
 const adminRoutes = require("./routes/admin");
+const supportRoutes = require("./routes/support");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -201,6 +202,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/draft", draftRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/support", supportRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
