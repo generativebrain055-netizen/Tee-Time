@@ -114,10 +114,6 @@ function HomePage({ navigation }: any) {
     navigation?.navigate("Notifications");
   }, [navigation]);
 
-  const handleSearch = useCallback(() => {
-    navigation?.navigate("GlobalSearch");
-  }, [navigation]);
-
   const handleCreateTeeTime = useCallback(() => {
     navigation?.navigate("CreateTeeTime");
   }, [navigation]);
@@ -151,10 +147,7 @@ function HomePage({ navigation }: any) {
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-        <Header
-          onNotificationPress={handleNotifications}
-          onSearchPress={handleSearch}
-        />
+        <Header onNotificationPress={handleNotifications} />
         <QuickActions
           onCreateTeeTime={handleCreateTeeTime}
           onInviteViaLink={handleInviteViaLink}

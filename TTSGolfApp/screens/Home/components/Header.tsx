@@ -1,6 +1,6 @@
 import React, { memo, useEffect } from "react";
 import { View, TouchableOpacity, Image, StyleSheet } from "react-native";
-import { Bell, Search } from "lucide-react-native";
+import { Bell } from "lucide-react-native";
 import { MotiView } from "moti";
 import { notificationApi } from "../../../services/api";
 import { transitions } from "../../../theme/animations";
@@ -46,15 +46,6 @@ function Header({ onNotificationPress, onSearchPress }: HeaderProps) {
           />
         </View>
         <View style={styles.headerActions}>
-          {onSearchPress && (
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={onSearchPress}
-              activeOpacity={0.7}
-            >
-              <Search size={24} color={colorTokens.text.primary} strokeWidth={2} />
-            </TouchableOpacity>
-            )}
           <TouchableOpacity
             style={styles.iconButton}
             onPress={onNotificationPress}
