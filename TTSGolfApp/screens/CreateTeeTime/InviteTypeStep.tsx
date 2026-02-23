@@ -1,9 +1,9 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import { Clock, Zap, List, Globe } from "lucide-react-native";
+import { Clock, Zap, List } from "lucide-react-native";
 import { COLORS } from "./constants";
 
-export type InviteType = "roster" | "fcfs" | "manual" | "open";
+export type InviteType = "roster" | "fcfs" | "manual";
 
 interface InviteTypeStepProps {
     inviteType: InviteType;
@@ -34,14 +34,6 @@ const OPTIONS = [
         icon: List,
         iconBg: "#F3E8FF",
         iconColor: "#9333EA",
-    },
-    {
-        type: "open" as const,
-        title: "Open Invite",
-        desc: "Post to the community board for anyone within your distance radius to join.",
-        icon: Globe,
-        iconBg: "#D1FAE5",
-        iconColor: "#10B981",
     },
 ];
 

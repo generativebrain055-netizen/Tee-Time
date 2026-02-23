@@ -27,7 +27,6 @@ import FCFSInviteStep from "./FCFSInviteStep";
 import ReviewFCFSInviteStep from "./ReviewFCFSInviteStep";
 import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
-import OpenInviteStep from "./OpenInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
 
@@ -57,7 +56,10 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Form state - Step 1
+  // Step 1 - Invite Type (Roster or First Come First Served)
+  const [inviteType, setInviteType] = useState<InviteType>("roster");
+
+  // Form state - Step 2 (Details: date, time, course, group size)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("10:00 AM");
   const [location, setLocation] = useState("");
@@ -69,9 +71,6 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-
-  // Step 2 - Invite Type
-  const [inviteType, setInviteType] = useState<InviteType>("roster");
 
   // Data
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -294,6 +293,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
   const handleContinue = async () => {
     if (step === 1) {
+      // Step 1: Select Invite Type → go to Step 2 (Invite Details) with no validation
+      setStep(2);
+    } else if (step === 2) {
       if (!selectedDate || !location) {
         Alert.alert("Missing Info", "Please fill in date and location");
         return;
@@ -320,8 +322,6 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         return;
       }
 
-      setStep(2);
-    } else if (step === 2) {
       setStep(3);
     } else if (step === 3) {
       // For all invite types, go to review step
@@ -636,8 +636,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   };
 
   const getHeaderTitle = () => {
-    if (step === 1) return "Invite Details";
-    if (step === 2) return "Select Invite Type";
+    if (step === 1) return "Select Invite Type";
+    if (step === 2) return "Invite Details";
     if (step === 3) {
       if (inviteType === "roster") return "Set Up Roster Invite";
       if (inviteType === "fcfs") return "First Come First Serve";
@@ -657,8 +657,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   };
 
   const canContinue = () => {
-    if (step === 1) return selectedDate && location;
-    if (step === 2) return true;
+    if (step === 1) return true;
+    if (step === 2) return selectedDate && location;
     if (step === 3) {
       if (inviteType === "roster") return orderedPlayers.length > 0;
       if (inviteType === "fcfs") {
@@ -683,6 +683,10 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
       {/* Content */}
       {step === 1 && (
+        <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
+      )}
+
+      {step === 2 && (
         <InviteDetailsStep
           selectedDate={selectedDate}
           selectedTime={selectedTime}
@@ -701,10 +705,6 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           }}
           onGroupSizeChange={setGroupSize}
         />
-      )}
-
-      {step === 2 && (
-        <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
       )}
 
       {step === 3 && inviteType === "roster" && (
@@ -760,15 +760,6 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             setFcfsSelectedPlayers([]);
           }}
           groupMembers={groupMembers}
-        />
-      )}
-
-      {step === 3 && inviteType === "open" && (
-        <OpenInviteStep
-          distance={openDistance}
-          onDistanceChange={setOpenDistance}
-          creatorName={user ? `${user.firstName} ${user.lastName}`.trim() : undefined}
-          creatorAvatarUrl={user?.avatar ?? user?.avatarUrl ?? undefined}
         />
       )}
 
