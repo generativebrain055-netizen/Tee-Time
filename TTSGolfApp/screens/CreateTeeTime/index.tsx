@@ -280,6 +280,15 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     return `${y}-${m}-${d}`;
   };
 
+  /** M/D/Y display format for invite flow (Figma) */
+  const formatDateMDY = (date: Date | null) => {
+    if (!date) return "";
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    const y = date.getFullYear();
+    return `${m}/${d}/${y}`;
+  };
+
   const formatTimeForApi = (time: string) => {
     const match = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!match) return "10:00";
@@ -827,7 +836,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           onRemovePlayer={(playerId) => {
             setSelectedPlayers(prev => prev.filter(id => id !== playerId));
           }}
-          teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+          teeDate={formatDateMDY(selectedDate)}
           teeTime={selectedTime}
           courseName={location.split(',')[0]?.trim() || ''}
         />

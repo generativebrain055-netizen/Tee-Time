@@ -21,12 +21,13 @@ interface InviteDetailsStepProps {
     onGroupSizeChange: (size: number) => void;
 }
 
+/** Display date in M/D/Y format (e.g. 12/25/2025) per Figma */
 const formatDateDisplay = (date: Date | null) => {
-    if (!date) return "YYYY-MM-DD";
+    if (!date) return "M/D/YYYY";
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
     const y = date.getFullYear();
-    const m = (date.getMonth() + 1).toString().padStart(2, "0");
-    const d = date.getDate().toString().padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return `${m}/${d}/${y}`;
 };
 
 export default function InviteDetailsStep({
