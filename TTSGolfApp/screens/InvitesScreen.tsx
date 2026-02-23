@@ -22,6 +22,8 @@ import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme/ThemeContext";
 import { inviteApi, Invite } from "../services/api";
+import { AdsSection } from "./Home/components";
+import { DEFAULT_AD_SLOTS } from "./Home/constants";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -433,6 +435,7 @@ export default function InvitesScreen({ navigation }: any) {
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
             >
+                <AdsSection title="Sponsored" slots={DEFAULT_AD_SLOTS} />
                 {loading ? (
                     <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
                 ) : activeTab === "pending" ? (

@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { MotiView } from "moti";
 import { WeekDay } from "../types";
@@ -16,6 +16,11 @@ interface WeekCalendarProps {
 }
 
 const toDateString = (d: Date) => d.toDateString();
+
+/** Fixed row heights so layout does not shift when selected or when schedule dot is shown */
+const WEEKDAY_ROW_HEIGHT = 20;
+const DAY_NUMBER_ROW_HEIGHT = 28;
+const UNDERLINE_ROW_HEIGHT = 10;
 
 const DayColumn = memo(
   ({
@@ -43,16 +48,28 @@ const DayColumn = memo(
           isSelected && styles.dayPillSelected,
         ]}
       >
-        <Text style={[styles.dayName, isSelected && styles.dayNameSelected]}>
-          {day.dayName}
-        </Text>
-        <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
-          {day.dayNumber}
-        </Text>
+        <View style={[styles.weekdayRow, { height: WEEKDAY_ROW_HEIGHT }]}>
+          <Text
+            style={[styles.dayName, isSelected && styles.dayNameSelected]}
+            numberOfLines={1}
+          >
+            {day.dayName}
+          </Text>
+        </View>
+        <View style={[styles.dayNumberRow, { height: DAY_NUMBER_ROW_HEIGHT }]}>
+          <Text
+            style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}
+            numberOfLines={1}
+          >
+            {day.dayNumber}
+          </Text>
+        </View>
       </TouchableOpacity>
-      {!isSelected && day.hasEvent && (
-        <View style={styles.dayDot} />
-      )}
+      <View style={[styles.underlineRow, { height: UNDERLINE_ROW_HEIGHT }]}>
+        {!isSelected && day.hasEvent ? (
+          <View style={styles.dayDot} />
+        ) : null}
+      </View>
     </MotiView>
   )
 );
@@ -82,11 +99,7 @@ function WeekCalendar({
       </View>
       <View style={[styles.card, shadows.sm]}>
         <View style={styles.daysContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.daysScrollContent}
-          >
+          <View style={styles.daysRow}>
             {weekDays.map((day, index) => {
               const isSelected =
                 selectedKey !== null && toDateString(day.date) === selectedKey;
@@ -100,7 +113,7 @@ function WeekCalendar({
                 />
               );
             })}
-          </ScrollView>
+          </View>
         </View>
         {children && (
           <>
@@ -156,36 +169,50 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
   },
-  daysScrollContent: {
+  daysRow: {
     flexDirection: "row",
+    alignItems: "stretch",
     justifyContent: "space-between",
-    alignItems: "center",
     paddingVertical: spacing.xs,
-    minWidth: "100%",
+    width: "100%",
   },
   dayColumnWrap: {
-    alignItems: "center",
-    justifyContent: "center",
     flex: 1,
-    minWidth: 48,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    minHeight: WEEKDAY_ROW_HEIGHT + DAY_NUMBER_ROW_HEIGHT + UNDERLINE_ROW_HEIGHT + spacing.md * 2,
   },
   dayPill: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
     borderRadius: radii.sm,
-    minWidth: 48,
-    width: 48,
+    width: "100%",
   },
   dayPillSelected: {
     backgroundColor: palette.green500,
+  },
+  weekdayRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  dayNumberRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  underlineRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
   },
   dayName: {
     fontFamily: "Inter_400Regular",
     fontSize: fontSize.sm,
     color: palette.gray400,
-    marginBottom: spacing.xs,
   },
   dayNameSelected: {
     fontFamily: "Inter_600SemiBold",
@@ -204,7 +231,6 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: palette.green500,
     borderRadius: 1,
-    marginTop: spacing.xs,
   },
   cardDivider: {
     height: 1,

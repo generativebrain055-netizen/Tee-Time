@@ -25,6 +25,8 @@ import type {
 import { getInitials, formatRelativeTime } from "./utils";
 import { getAvatarColor } from "../../utils/formatting";
 import { logger } from "../../utils/logger";
+import { AdsSection } from "../Home/components";
+import { DEFAULT_AD_SLOTS } from "../Home/constants";
 
 const TABS: MessageTab[] = ["All", "Tee Times", "Groups"];
 
@@ -589,6 +591,7 @@ function MessagesScreen({ navigation }: any) {
           data={currentList}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          ListHeaderComponent={<AdsSection title="Sponsored" slots={DEFAULT_AD_SLOTS} />}
           ListEmptyComponent={listEmpty}
           contentContainerStyle={
             currentList.length === 0 ? { flex: 1 } : { paddingBottom: 100 }
