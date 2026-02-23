@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     backgroundColor: "#FFFFFF",
   },
-  logo: { width: 72, height: 72, resizeMode: "contain" },
+  logo: { width: 96, height: 96, resizeMode: "contain" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   iconButton: {
     padding: spacing.sm,
