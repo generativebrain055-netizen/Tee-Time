@@ -131,8 +131,13 @@ export default function RosterScreen({ navigation, route }: any) {
                 );
             }
             return (
-                <TouchableOpacity style={{ padding: 4 }} onPress={() => setAddModalVisible(true)}>
-                    <Plus size={24} color="#111827" strokeWidth={2} />
+                <TouchableOpacity
+                    style={{ paddingHorizontal: 4, paddingVertical: 4 }}
+                    onPress={() => setRemoveMode(true)}
+                >
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>
+                        Edit
+                    </Text>
                 </TouchableOpacity>
             );
         }
