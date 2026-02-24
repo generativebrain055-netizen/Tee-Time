@@ -8,9 +8,8 @@ import {
     RefreshControl,
     ActivityIndicator,
     Alert,
-    Modal,
 } from "react-native";
-import { MessageCircle, MoreVertical, Trash2 } from "lucide-react-native";
+import { MessageCircle, Trash2 } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { rosterApi, messagesApi } from "../../services/api";
 import { logger } from "../../utils/logger";
@@ -59,7 +58,6 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
     isEditMode?: boolean;
     onLongPressItem?: () => void;
 }) => {
-    const [showMenu, setShowMenu] = useState(false);
     const contact = item.contact || item;
     const userId = contact.userId;
     
@@ -101,27 +99,6 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
             Alert.alert("Error", "Could not open conversation.");
         }
     }, [userId, contact, isEditMode, navigation]);
-    
-    const handleRemoveFromList = () => {
-        setShowMenu(false);
-        if (isEditMode) {
-            onRemove?.(item.id);
-            return;
-        }
-        const name = contact.name || `${contact.firstName || ""} ${contact.lastName || ""}`.trim();
-        Alert.alert(
-            "Remove from Roster",
-            `Remove ${name} from your roster? They will no longer be auto-invited to your tee times.`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Remove",
-                    style: "destructive",
-                    onPress: () => onRemove?.(item.id),
-                },
-            ]
-        );
-    };
     
     // Use contact from top of component (item.contact || item)
     const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
@@ -214,25 +191,7 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                         <Trash2 size={18} color="#EF4444" strokeWidth={2} />
                     </TouchableOpacity>
                 ) : (
-                    <>
-                        <TouchableOpacity 
-                            onPress={(e) => {
-                                e.stopPropagation();
-                                setShowMenu(true);
-                            }}
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 20,
-                                backgroundColor: "#F3F4F6",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                            activeOpacity={0.7}
-                        >
-                            <MoreVertical size={18} color="#6B7280" strokeWidth={2} />
-                        </TouchableOpacity>
-                        <TouchableOpacity 
+                    <TouchableOpacity 
                             onPress={handleMessage}
                             style={{
                                 width: 40,
@@ -246,67 +205,9 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                         >
                             <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
                         </TouchableOpacity>
-                    </>
                 )}
             </View>
         </TouchableOpacity>
-        
-        {/* Action Menu Modal */}
-        <Modal
-            visible={showMenu}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowMenu(false)}
-        >
-            <TouchableOpacity 
-                style={{
-                    flex: 1,
-                    backgroundColor: "rgba(0,0,0,0.5)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                }}
-                activeOpacity={1}
-                onPress={() => setShowMenu(false)}
-            >
-                <TouchableOpacity
-                    activeOpacity={1}
-                    onPress={(e) => e.stopPropagation()}
-                >
-                    <View style={{
-                        backgroundColor: "#FFFFFF",
-                        borderRadius: 16,
-                        padding: 8,
-                        minWidth: 200,
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 8,
-                        elevation: 8,
-                    }}>
-                        <TouchableOpacity
-                            onPress={handleRemoveFromList}
-                            style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                padding: 12,
-                                borderRadius: 8,
-                            }}
-                            activeOpacity={0.7}
-                        >
-                            <Trash2 size={20} color="#EF4444" strokeWidth={2} />
-                            <Text style={{
-                                fontFamily: theme.fontFamily.semiBold,
-                                fontSize: 15,
-                                color: "#EF4444",
-                                marginLeft: 12,
-                            }}>
-                                Remove from Roster
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </TouchableOpacity>
-        </Modal>
         </>
     );
 });
