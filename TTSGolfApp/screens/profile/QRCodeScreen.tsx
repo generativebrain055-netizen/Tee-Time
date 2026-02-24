@@ -200,17 +200,6 @@ export default function QRCodeScreen({ navigation }: Props) {
                         </Text>
                     </TouchableOpacity>
                 </View>
-
-                {/* Info */}
-                <View className="bg-white rounded-md p-5 w-full">
-                    <Text className="text-base font-bold text-gray-900 mb-3">How it works</Text>
-                    <Text className="text-sm text-gray-500 leading-[22px]">
-                        • Share your QR code with other golfers{"\n"}
-                        • They scan it using the "Scan to Draft" feature{"\n"}
-                        • You'll be added to their On-Deck list{"\n"}
-                        • You'll receive a notification when someone adds you
-                    </Text>
-                </View>
             </View>
         </ScreenShell>
     );

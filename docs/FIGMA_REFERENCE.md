@@ -12,6 +12,31 @@ This document summarizes the **Tee Time Social** Figma file (file key: `E42NRKun
 
 ---
 
+## Getting data from Figma
+
+To pull the latest file structure and nodes from the Figma API:
+
+1. **Create a Figma personal access token**  
+   Figma → Settings → Account → **Personal access tokens** → Generate new token (use scope that includes reading file content).
+
+2. **Run the fetch script** (from the repo root):
+
+   ```bash
+   FIGMA_ACCESS_TOKEN=your_token node scripts/figma-get-file.js
+   ```
+
+   This writes the full file JSON to **`docs/figma-file-export.json`**.
+
+   To print the JSON to stdout instead:
+
+   ```bash
+   FIGMA_ACCESS_TOKEN=your_token node scripts/figma-get-file.js --stdout
+   ```
+
+   To use a different file, set `FIGMA_FILE_KEY` (default is the Tee Time Social file key above).
+
+---
+
 ## Full schedule view – month (565-*)
 
 **Label in file:** “Full schedule view - month (ready for dev)”

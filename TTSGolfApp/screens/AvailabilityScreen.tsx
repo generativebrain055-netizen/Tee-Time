@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { ChevronRight, ChevronDown, CheckCircle, Check } from "lucide-react-native";
 import { availabilityApi, type DayOfWeek, type TimeSlotType } from "../services/api/availabilityApi";
-import { friendApi, rosterApi } from "../services/api";
+import { rosterApi } from "../services/api";
 import { ScreenShell, AppBottomNav } from "../ui";
 
 // Types
@@ -220,7 +220,7 @@ function AvailabilityScreen({ navigation }: any) {
     const [needsUpdate, setNeedsUpdate] = useState(false);
     const [userAvailability, setUserAvailability] = useState<{ dayOfWeek: DayOfWeek; timeSlot: TimeSlotType }[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [filterType, setFilterType] = useState<'friends' | 'roster' | 'onDeck' | 'groups'>('friends');
+    const [filterType, setFilterType] = useState<'roster' | 'onDeck' | 'groups'>('roster');
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<TimeSlotData | null>(null);
@@ -280,21 +280,9 @@ function AvailabilityScreen({ navigation }: any) {
                 setNeedsUpdate(true);
             }
 
-            // 2. Fetch friends list based on filter
+            // 2. Fetch list based on filter (Roster, On Deck, or Groups)
             let friendsList: any[] = [];
-            
-            if (filterType === 'friends') {
-                // Fetch from friendships table
-                const friendsResponse = await friendApi.getFriends();
-                if (friendsResponse.success && friendsResponse.friends) {
-                    friendsList = friendsResponse.friends.map((friend: any) => ({
-                        id: friend.id,
-                        firstName: friend.firstName,
-                        lastName: friend.lastName,
-                        avatar: friend.avatar,
-                    }));
-                }
-            } else if (filterType === 'roster') {
+            if (filterType === 'roster') {
                 const rosterResponse = await rosterApi.getRoster();
                 if (rosterResponse.success && rosterResponse.roster) {
                     friendsList = rosterResponse.roster
@@ -434,15 +422,14 @@ function AvailabilityScreen({ navigation }: any) {
 
     const getFilterLabel = () => {
         switch (filterType) {
-            case 'friends': return 'My Friends';
             case 'roster': return 'Roster';
             case 'onDeck': return 'On Deck';
             case 'groups': return 'Groups';
-            default: return 'My Friends';
+            default: return 'Roster';
         }
     };
 
-    const handleFilterSelect = (filter: 'friends' | 'roster' | 'onDeck' | 'groups') => {
+    const handleFilterSelect = (filter: 'roster' | 'onDeck' | 'groups') => {
         setFilterType(filter);
         setShowFilterModal(false);
     };
@@ -708,30 +695,6 @@ function AvailabilityScreen({ navigation }: any) {
                             elevation: 5,
                             overflow: 'hidden',
                         }}>
-                            <TouchableOpacity
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    paddingHorizontal: 16,
-                                    paddingVertical: 12,
-                                    borderBottomWidth: 1,
-                                    borderBottomColor: '#F3F4F6',
-                                }}
-                                onPress={() => handleFilterSelect('friends')}
-                            >
-                                <Text style={{
-                                    fontFamily: 'Inter_400Regular',
-                                    fontSize: 14,
-                                    color: '#111827',
-                                }}>
-                                    My Friends
-                                </Text>
-                                {filterType === 'friends' && (
-                                    <Check size={16} color="#22C55E" strokeWidth={2.5} />
-                                )}
-                            </TouchableOpacity>
-
                             <TouchableOpacity
                                 style={{
                                     flexDirection: 'row',

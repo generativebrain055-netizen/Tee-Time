@@ -48,6 +48,12 @@
       "@react-native-community/datetimepicker",
       "expo-apple-authentication",
       "expo-location",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "This app uses the camera to scan QR codes and take profile photos."
+        }
+      ],
       "./plugins/withIosNoEmptyDsym.js",
       [
         "@react-native-google-signin/google-signin",

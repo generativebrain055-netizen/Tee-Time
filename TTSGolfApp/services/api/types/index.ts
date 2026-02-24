@@ -97,6 +97,7 @@ export interface UserProfile {
   privacySettings?: PrivacySettings;
   roundsPlayed?: number;
   averageScore?: number;
+  createdAt?: string;
 }
 
 export interface NotificationPreferences {

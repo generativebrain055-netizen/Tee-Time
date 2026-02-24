@@ -9,6 +9,7 @@ import {
     Image,
     Dimensions,
     Animated,
+    StyleSheet,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -35,12 +36,27 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
+    const [cameraMounted, setCameraMounted] = useState(false);
     const [lastDetection, setLastDetection] = useState<string>("");
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
 
     // Animated scan line
     const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+    // Request camera permission when screen opens if not already granted
+    useEffect(() => {
+        if (permission && !permission.granted && permission.canAskAgain) {
+            requestPermission();
+        }
+    }, [permission?.granted, permission?.canAskAgain, requestPermission]);
+
+    // Delay mounting CameraView until after layout (fixes black screen on many devices)
+    useEffect(() => {
+        if (!permission?.granted) return;
+        const t = setTimeout(() => setCameraMounted(true), 200);
+        return () => clearTimeout(t);
+    }, [permission?.granted]);
 
     useEffect(() => {
         // Animate scan line
@@ -160,10 +176,12 @@ export default function ScanQRScreen({ navigation }: Props) {
         resetScanner();
     }, [resetScanner]);
 
+    const GRAY_BG = "#374151";
+
     // Permission handling
     if (!permission) {
         return (
-            <View className="flex-1 bg-black justify-center items-center">
+            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center" }}>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text className="text-white mt-4 text-sm">Checking camera permission...</Text>
             </View>
@@ -172,10 +190,10 @@ export default function ScanQRScreen({ navigation }: Props) {
 
     if (!permission.granted) {
         return (
-            <View className="flex-1 bg-black justify-center items-center px-8">
+            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
                 <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
                 <Text className="text-xl font-bold text-white mb-2">Camera Access Required</Text>
-                <Text className="text-[15px] text-white/70 text-center mb-8 leading-[22px]">
+                <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
                     To scan QR codes, we need access to your camera.
                 </Text>
                 <TouchableOpacity className="bg-blue-600 px-8 py-3.5 rounded-md mb-4" onPress={requestPermission}>
@@ -294,7 +312,7 @@ export default function ScanQRScreen({ navigation }: Props) {
 
             {/* Confirm Modal */}
             <Modal visible={showConfirmModal} transparent animationType="fade">
-                <View className="flex-1 bg-black/80 justify-center items-center px-6">
+                <View style={{ flex: 1, backgroundColor: "rgba(55, 65, 81, 0.9)", justifyContent: "center", alignItems: "center", paddingHorizontal: 24 }}>
                     <View className="bg-white rounded-md p-7 w-full max-w-[360px] items-center">
                         <View className="items-center mb-6">
                             {scannedUser?.avatar ? (
@@ -364,3 +382,30 @@ export default function ScanQRScreen({ navigation }: Props) {
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: "#000",
+    },
+    cameraPlaceholder: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#000",
+    },
+    cameraPlaceholderText: {
+        color: "rgba(255,255,255,0.8)",
+        fontSize: 14,
+        marginTop: 12,
+    },
+    camera: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT,
+    },
+});

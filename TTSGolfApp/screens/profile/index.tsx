@@ -8,14 +8,24 @@ import {
     ActivityIndicator,
     Modal,
     TextInput,
+    Share,
+    Alert,
+    Dimensions,
 } from "react-native";
-import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin } from "lucide-react-native";
+import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin, ScanLine } from "lucide-react-native";
+import QRCode from "react-native-qrcode-svg";
 import { ScreenShell, ContentArea, AppHeader, AppBottomNav } from "../../ui";
 import { ConfirmModal } from "../../ui/feedback";
 import { Skeleton } from "../../ui/feedback/Skeleton";
-import { teeTimeApi, TeeTime, profileApi, TeeTimeHistoryEntry } from "../../services/api";
+import { teeTimeApi, TeeTime, profileApi, TeeTimeHistoryEntry, draftApi } from "../../services/api";
 import { useUser } from "../../contexts";
 import { logger } from "../../utils/logger";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const QR_MODAL_SIZE = Math.min(SCREEN_WIDTH * 0.55, 240);
+const QR_LOGO_SIZE = Math.round(QR_MODAL_SIZE * 0.34);
+const TeeTimeLogo = require("../../assets/compact-logo.png");
 
 const getInitials = (firstName?: string, lastName?: string): string => {
     return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -23,6 +33,18 @@ const getInitials = (firstName?: string, lastName?: string): string => {
 
 const getFullName = (firstName?: string, lastName?: string): string => {
     return `${firstName || ""} ${lastName || ""}`.trim() || "User";
+};
+
+const getMemberSinceText = (createdAt?: string): string => {
+    if (!createdAt) return "Member";
+    try {
+        const d = new Date(createdAt);
+        const month = d.toLocaleString("en-US", { month: "long" });
+        const year = d.getFullYear();
+        return `Member since ${month} ${year}`;
+    } catch {
+        return "Member";
+    }
 };
 
 const formatScore = (score?: number | string): string => {
@@ -62,11 +84,17 @@ const getGroupSizeDisplay = (pref?: string): string => {
 };
 
 export default function ProfileScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
     const { profile, loading: profileLoading, fetchProfile } = useUser();
     const [refreshing, setRefreshing] = useState(false);
     const [recentRounds, setRecentRounds] = useState<TeeTimeHistoryEntry[]>([]);
     const [roundsLoading, setRoundsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(false);
+    const [qrModalLoading, setQrModalLoading] = useState(false);
+    const [qrData, setQrData] = useState<string | null>(null);
+    const [qrVersion, setQrVersion] = useState(1);
+    const [qrRegenerating, setQrRegenerating] = useState(false);
 
     // Fetch profile on mount if not cached
     useEffect(() => {
@@ -120,7 +148,81 @@ export default function ProfileScreen({ navigation }: any) {
     }, [navigation, profile]);
 
     const handleDraftViaQR = useCallback(() => {
-        navigation?.navigate("QRCode");
+        setShowQRModal(true);
+    }, []);
+
+    const fetchQRForModal = useCallback(async () => {
+        try {
+            setQrModalLoading(true);
+            const response = await draftApi.getQRCode();
+            if (response.success && response.qrCode) {
+                setQrData(response.qrCode.data);
+                setQrVersion(response.qrCode.version);
+            } else {
+                setQrData(null);
+            }
+        } catch (error: any) {
+            logger.error("[ProfileScreen] QR fetch error", error);
+            setQrData(null);
+        } finally {
+            setQrModalLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (showQRModal) {
+            fetchQRForModal();
+        } else {
+            setQrData(null);
+        }
+    }, [showQRModal, fetchQRForModal]);
+
+    const closeQRModal = useCallback(() => setShowQRModal(false), []);
+
+    const handleQRShare = useCallback(async () => {
+        if (!qrData) return;
+        try {
+            await Share.share({
+                message: `Scan my TeeTime QR code to add me to your roster!\n\nCode: ${qrData}`,
+                title: "My TeeTime QR Code",
+            });
+        } catch (error) {
+            logger.error("[ProfileScreen] QR share error", error);
+        }
+    }, [qrData]);
+
+    const handleQRRegenerate = useCallback(() => {
+        Alert.alert(
+            "Regenerate QR Code",
+            "This will invalidate your current QR code. Anyone who scanned your old code won't be able to use it. Continue?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Regenerate",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setQrRegenerating(true);
+                            const response = await draftApi.regenerateQRCode();
+                            if (response.success && response.qrCode) {
+                                setQrData(response.qrCode.data);
+                                setQrVersion(response.qrCode.version);
+                                Alert.alert("Success", "QR code regenerated successfully!");
+                            }
+                        } catch (error: any) {
+                            Alert.alert("Error", error.message || "Failed to regenerate QR code");
+                        } finally {
+                            setQrRegenerating(false);
+                        }
+                    },
+                },
+            ]
+        );
+    }, []);
+
+    const handleQRScan = useCallback(() => {
+        setShowQRModal(false);
+        navigation?.navigate("ScanQR");
     }, [navigation]);
 
     const handleSettings = useCallback(() => {
@@ -152,6 +254,7 @@ export default function ProfileScreen({ navigation }: any) {
     }
 
     return (
+        <>
         <ScreenShell>
             <AppHeader
                 title="Profile"
@@ -675,5 +778,106 @@ export default function ProfileScreen({ navigation }: any) {
 
             <AppBottomNav activeTab="Profile" navigation={navigation} />
         </ScreenShell>
+
+        <Modal visible={showQRModal} transparent animationType="slide">
+            <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end", alignItems: "center" }}>
+                <View style={{
+                    width: "100%",
+                    height: SCREEN_HEIGHT * (4 / 5),
+                    backgroundColor: "#FFFFFF",
+                    borderTopLeftRadius: 20,
+                    borderTopRightRadius: 20,
+                    paddingTop: 12,
+                    paddingBottom: Math.max(insets.bottom, 24),
+                    paddingHorizontal: 24,
+                    alignItems: "center",
+                }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 12 }}>
+                        <View style={{ width: 32 }} />
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#1F2937" }} numberOfLines={1}>
+                            {profile?.username?.trim() || fullName}
+                        </Text>
+                        <TouchableOpacity onPress={closeQRModal} hitSlop={12} style={{ padding: 4 }}>
+                            <X size={24} color="#4B5563" strokeWidth={2} />
+                        </TouchableOpacity>
+                    </View>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: "#747474", textAlign: "center", marginBottom: 20 }}>
+                        {getMemberSinceText(profile?.createdAt)}
+                    </Text>
+
+                    {qrModalLoading ? (
+                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
+                            <ActivityIndicator size="large" color="#5EBC68" />
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginTop: 12 }}>Generating QR Code...</Text>
+                        </View>
+                    ) : qrData ? (
+                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
+                            <View style={{ width: QR_MODAL_SIZE, height: QR_MODAL_SIZE, backgroundColor: "#FFFFFF", borderRadius: 4, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
+                                <QRCode
+                                    value={qrData}
+                                    size={QR_MODAL_SIZE}
+                                    color="#111827"
+                                    backgroundColor="#FFFFFF"
+                                    quietZone={0}
+                                    ecl="M"
+                                    logo={TeeTimeLogo}
+                                    logoSize={QR_LOGO_SIZE}
+                                    logoBackgroundColor="#FFFFFF"
+                                    logoBorderRadius={Math.round(QR_LOGO_SIZE / 2)}
+                                />
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginBottom: 12 }}>Failed to load QR code</Text>
+                            <TouchableOpacity onPress={fetchQRForModal} style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#5EBC68", borderRadius: 10 }}>
+                                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFFFFF" }}>Tap to retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    <View style={{ flexDirection: "row", gap: 12, width: "100%", maxWidth: 320 }}>
+                        <TouchableOpacity
+                            onPress={handleQRScan}
+                            activeOpacity={0.8}
+                            style={{
+                                flex: 1,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                paddingVertical: 14,
+                                borderRadius: 10,
+                                backgroundColor: "#E9E9E9",
+                                gap: 8,
+                            }}
+                        >
+                            <ScanLine size={20} color="#6E6E6E" strokeWidth={2.5} />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#6E6E6E" }}>Scan</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleQRShare}
+                            disabled={!qrData}
+                            activeOpacity={0.8}
+                            style={{
+                                flex: 1,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                paddingVertical: 14,
+                                borderRadius: 8,
+                                backgroundColor: "#FFFFFF",
+                                borderWidth: 1,
+                                borderColor: "#E5E5E5",
+                                gap: 8,
+                            }}
+                        >
+                            <QrCode size={18} color="#1F2937" />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#1F2937" }}>My Code</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    </>
     );
 }
