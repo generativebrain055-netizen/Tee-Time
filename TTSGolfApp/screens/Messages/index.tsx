@@ -89,7 +89,10 @@ const FIGMA_ROW_PADDING_LEFT = 19;
 const FIGMA_AVATAR_TO_TEXT_GAP = 13;
 const FIGMA_SEPARATOR_MARGIN_LEFT = FIGMA_ROW_PADDING_LEFT + FIGMA_AVATAR_SIZE + FIGMA_AVATAR_TO_TEXT_GAP; // 86
 const FIGMA_TAB_BAR_BG = "#F8F8F8";
-const FIGMA_TAB_PILL_RADIUS = 26.5; // 53/2
+/** Figma: tab pill height 53px, radius 26.5 (53/2) */
+const FIGMA_TAB_PILL_HEIGHT = 53;
+const FIGMA_TAB_PILL_RADIUS = 26.5;
+const FIGMA_TAB_PILL_PADDING_H = 20;
 const FIGMA_GROUP_AVATAR_BLUE = "#2563EB";
 const FIGMA_TEE_TIME_AVATAR_SIZE = 36;
 
@@ -357,8 +360,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tabPill: {
-    paddingVertical: 3,
-    paddingHorizontal: 14,
+    minHeight: FIGMA_TAB_PILL_HEIGHT,
+    paddingVertical: (FIGMA_TAB_PILL_HEIGHT - 22) / 2,
+    paddingHorizontal: FIGMA_TAB_PILL_PADDING_H,
     borderRadius: FIGMA_TAB_PILL_RADIUS,
     alignItems: "center",
     justifyContent: "center",
