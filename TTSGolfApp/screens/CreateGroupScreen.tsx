@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
     View,
     Text,
@@ -41,10 +41,32 @@ const GROUP_COLORS = [
     "#14B8A6",
 ];
 
+const FIGMA = {
+    primaryGreen: "#5EBC68",
+    cancelBg: "#F0F0F0",
+    cancelText: "#565656",
+    checkboxBorder: "#D3D3D3",
+    nameColor: "#000000",
+    sectionTitle: "#1F2937",
+    groupNameLabel: "#848484",
+    groupNameValue: "#2E2E2E",
+    groupAvatarEmpty: "#ECECEC",
+    searchBorder: "#E5E7EB",
+    footerBorder: "#F3F3F3",
+    inputRadius: 12,
+    avatarList: 44,
+    checkboxSize: 20,
+    footerButtonHeight: 46,
+    buttonRadius: 8,
+    groupAvatarSize: 58,
+    groupNameCardHeight: 84,
+} as const;
+
 export default function CreateGroupScreen({ navigation, route }: any) {
     const colors = useColors();
     const theme = useTheme();
     const initialParticipantIds = route?.params?.initialParticipantIds as string[] | undefined;
+    const [step, setStep] = useState<"players" | "details">("players");
     const [groupName, setGroupName] = useState("");
     const [groupColor, setGroupColor] = useState(GROUP_COLORS[0]);
     const [friends, setFriends] = useState<Friend[]>([]);
@@ -57,6 +79,25 @@ export default function CreateGroupScreen({ navigation, route }: any) {
     const [showSearchResults, setShowSearchResults] = useState(false);
     
     const debouncedSearch = useDebounce(searchText, 300);
+
+    const getGroupInitials = useCallback((name: string): string => {
+        if (!name || !name.trim()) return "";
+        return name.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    }, []);
+
+    const selectedPeopleList = useMemo(() => {
+        const list: { id: string; firstName: string; lastName: string; avatar?: string }[] = [];
+        selectedFriends.forEach((id) => {
+            const f = friends.find((x) => x.id === id);
+            if (f) {
+                list.push({ id, firstName: f.firstName, lastName: f.lastName, avatar: f.avatar });
+                return;
+            }
+            const u = searchUsers.find((x) => x.id === id);
+            if (u) list.push({ id, firstName: u.firstName ?? "", lastName: u.lastName ?? "", avatar: u.avatar });
+        });
+        return list;
+    }, [selectedFriends, friends, searchUsers]);
 
     useEffect(() => {
         loadFriends();
@@ -190,128 +231,66 @@ export default function CreateGroupScreen({ navigation, route }: any) {
     return (
         <ScreenShell>
             <AppHeader
-                title="Group details"
-                onBack={() => navigation?.goBack()}
+                title={step === "players" ? "Invite Players" : "Group details"}
+                onBack={step === "details" ? () => setStep("players") : () => navigation?.goBack()}
             />
 
             <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-                {/* Group Name Input */}
-                <View
-                    style={{
-                        backgroundColor: "#FFFFFF",
-                        paddingHorizontal: 20,
-                        paddingVertical: 16,
-                        marginHorizontal: 20,
-                        marginTop: 16,
-                        marginBottom: 8,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: "#E5E7EB",
-                    }}
-                >
-                    <TextInput
-                        value={groupName}
-                        onChangeText={setGroupName}
-                        placeholder="Group name"
-                        placeholderTextColor="#9CA3AF"
-                        style={{
-                            fontFamily: theme.fontFamily.regular,
-                            fontSize: 16,
-                            color: "#111827",
-                            paddingVertical: 8,
-                        }}
-                        maxLength={50}
-                    />
-                </View>
-
-                {/* Color Selection */}
-                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
-                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#1F2937", marginBottom: 12 }}>
-                        Color
-                    </Text>
-                    <View style={{ flexDirection: "row", gap: 12 }}>
-                        {GROUP_COLORS.map((color) => (
-                            <TouchableOpacity
-                                key={color}
-                                onPress={() => setGroupColor(color)}
-                                style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 18,
-                                    backgroundColor: color,
-                                    borderWidth: groupColor === color ? 3 : 0,
-                                    borderColor: "#111827",
-                                }}
-                            />
-                        ))}
-                    </View>
-                </View>
-
-                {/* Search Bar */}
-                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
-                    <View style={{ position: "relative" }}>
-                        <View style={{ position: "absolute", left: 12, top: "50%", transform: [{ translateY: -9 }], zIndex: 1 }}>
-                            <Search size={18} color="#9CA3AF" strokeWidth={2} />
-                        </View>
+                {step === "players" ? (
+                    <>
+                {/* Step 1: Search - Figma 48px height, "Search players" #A9A9A9 */}
+                <View style={{ marginHorizontal: 20, marginBottom: 12 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", height: 48, paddingHorizontal: 18, gap: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: FIGMA.searchBorder, borderRadius: FIGMA.inputRadius }}>
+                        <Search size={18} color="#9E9E9E" strokeWidth={2} />
                         <TextInput
-                            placeholder="Search friends or players..."
+                            placeholder="Search players"
                             value={searchText}
                             onChangeText={setSearchText}
-                            style={{
-                                width: "100%",
-                                backgroundColor: "#F9FAFB",
-                                borderWidth: 1,
-                                borderColor: "#E5E7EB",
-                                borderRadius: 8,
-                                paddingVertical: 10,
-                                paddingHorizontal: 16,
-                                paddingLeft: 40,
-                                paddingRight: searchText.length > 0 ? 40 : 16,
-                                fontSize: 15,
-                                fontFamily: theme.fontFamily.regular,
-                                color: "#111827",
-                            }}
-                            placeholderTextColor="#9CA3AF"
+                            style={{ flex: 1, fontFamily: theme.fontFamily.medium, fontSize: 14, lineHeight: 28, color: "#000000", paddingVertical: 0 }}
+                            placeholderTextColor="#A9A9A9"
                             autoCapitalize="none"
                             autoCorrect={false}
                         />
                         {searchText.length > 0 && (
-                            <TouchableOpacity
-                                style={{ position: "absolute", right: 12, top: "50%", transform: [{ translateY: -9 }] }}
-                                onPress={() => setSearchText("")}
-                            >
-                                <X size={18} color="#9CA3AF" strokeWidth={2} />
+                            <TouchableOpacity onPress={() => setSearchText("")} hitSlop={8}>
+                                <X size={18} color="#9E9E9E" strokeWidth={2} />
                             </TouchableOpacity>
                         )}
                     </View>
                 </View>
 
-                {/* Figma 1269-2434: Group members (N) section */}
-                <View style={{ backgroundColor: "#FFFFFF", paddingTop: 16, marginTop: 8 }}>
-                    <Text
-                        style={{
-                            fontFamily: theme.fontFamily.semiBold,
-                            fontSize: 15,
-                            color: "#1F2937",
-                            paddingHorizontal: 20,
-                            marginBottom: 4,
-                        }}
-                    >
-                        Group members ({selectedFriends.size})
+                {/* Horizontal selected members - 48px avatars, X to remove, 13px truncated names */}
+                {selectedPeopleList.length > 0 ? (
+                    <View style={{ marginBottom: 16 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+                            {selectedPeopleList.map((p) => (
+                                <TouchableOpacity key={p.id} onPress={() => toggleFriend(p.id)} style={{ alignItems: "center", width: 56, marginRight: 16 }}>
+                                    <View style={{ position: "relative" }}>
+                                        {p.avatar ? (
+                                            <Image source={{ uri: p.avatar }} style={{ width: 48, height: 48, borderRadius: 24 }} />
+                                        ) : (
+                                            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#E3E4E7", alignItems: "center", justifyContent: "center" }}>
+                                                <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 14, color: "#6B7280" }}>{getInitials(p.firstName, p.lastName)}</Text>
+                                            </View>
+                                        )}
+                                        <View style={{ position: "absolute", right: -4, top: -4, width: 18, height: 18, borderRadius: 9, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E4E4E4", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 7.6, elevation: 4 }}>
+                                            <X size={10} color="#2F2F2F" strokeWidth={2} />
+                                        </View>
+                                    </View>
+                                    <Text style={{ fontFamily: theme.fontFamily.medium, fontSize: 13, lineHeight: 22, color: "#000000", marginTop: 4 }} numberOfLines={1}>
+                                        {`${p.firstName} ${p.lastName}`.trim() || "—"}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                ) : null}
+
+                {/* Your players - section title and list */}
+                <View style={{ backgroundColor: "#FFFFFF", paddingTop: 8, paddingBottom: 16 }}>
+                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 28, color: FIGMA.sectionTitle, paddingHorizontal: 20, marginBottom: 4 }}>
+                        Your players
                     </Text>
-                    {selectedFriends.size > 0 ? (
-                        <Text
-                            style={{
-                                fontFamily: theme.fontFamily.regular,
-                                fontSize: 14,
-                                color: "#374151",
-                                paddingHorizontal: 20,
-                                marginBottom: 12,
-                            }}
-                        >
-                            We'll invite these members to join the group
-                        </Text>
-                    ) : null}
 
                     {loading ? (
                         <View style={{ paddingVertical: 40, alignItems: "center" }}>
@@ -448,62 +427,15 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                                     }}
                                 >
                                     {friend.avatar ? (
-                                        <Image
-                                            source={{ uri: friend.avatar }}
-                                            style={{
-                                                width: 48,
-                                                height: 48,
-                                                borderRadius: 24,
-                                            }}
-                                        />
+                                        <Image source={{ uri: friend.avatar }} style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2 }} />
                                     ) : (
-                                        <View
-                                            style={{
-                                                width: 48,
-                                                height: 48,
-                                                borderRadius: 24,
-                                                backgroundColor: "#E5E7EB",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontFamily: theme.fontFamily.semiBold,
-                                                    fontSize: 16,
-                                                    color: "#6B7280",
-                                                }}
-                                            >
-                                                {getInitials(friend.firstName, friend.lastName)}
-                                            </Text>
+                                        <View style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2, backgroundColor: "#E3E4E7", alignItems: "center", justifyContent: "center" }}>
+                                            <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>{getInitials(friend.firstName, friend.lastName)}</Text>
                                         </View>
                                     )}
-
-                                    <Text
-                                        style={{
-                                            flex: 1,
-                                            marginLeft: 12,
-                                            fontFamily: theme.fontFamily.medium,
-                                            fontSize: 16,
-                                            color: "#111827",
-                                        }}
-                                    >
-                                        {friend.firstName} {friend.lastName}
-                                    </Text>
-
-                                    <View
-                                        style={{
-                                            width: 24,
-                                            height: 24,
-                                            borderRadius: 12,
-                                            borderWidth: 2,
-                                            borderColor: isSelected ? colors.primary : "#D1D5DB",
-                                            backgroundColor: isSelected ? colors.primary : "#FFFFFF",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                        }}
-                                    >
-                                        {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                                    <Text style={{ flex: 1, marginLeft: 12, fontFamily: theme.fontFamily.medium, fontSize: 15, lineHeight: 22, color: FIGMA.nameColor }}>{friend.firstName} {friend.lastName}</Text>
+                                    <View style={{ width: FIGMA.checkboxSize, height: FIGMA.checkboxSize, borderRadius: FIGMA.checkboxSize / 2, borderWidth: 1, borderColor: isSelected ? FIGMA.primaryGreen : FIGMA.checkboxBorder, backgroundColor: isSelected ? FIGMA.primaryGreen : "transparent", alignItems: "center", justifyContent: "center" }}>
+                                        {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
                                     </View>
                                 </TouchableOpacity>
                             );
@@ -511,33 +443,97 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                     )}
                 </View>
 
-                {/* Figma 1269-2434: Create group button (Primary Green, 8px radius) */}
+                {/* Figma: Cancel #F0F0F0 #565656, Next #5EBC68 46px height, "Next (N)" when N>0 */}
+                <View style={{ flexDirection: "row", paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 }}>
+                    <TouchableOpacity
+                        onPress={() => navigation?.goBack()}
+                        style={{ flex: 1, height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: FIGMA.cancelBg, alignItems: "center", justifyContent: "center" }}
+                    >
+                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 22, color: FIGMA.cancelText }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => setStep("details")}
+                        disabled={selectedFriends.size === 0}
+                        style={{ flex: 1, height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: selectedFriends.size === 0 ? "#9CA3AF" : FIGMA.primaryGreen, alignItems: "center", justifyContent: "center", opacity: selectedFriends.size === 0 ? 0.5 : 1 }}
+                    >
+                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 22, color: "#FFFFFF" }}>
+                            {selectedFriends.size > 0 ? `Next (${selectedFriends.size})` : "Next"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+                    </>
+                ) : (
+                    <>
+                {/* Step 2: Group details - name and color */}
+                <View
+                    style={{
+                        backgroundColor: "#FFFFFF",
+                        paddingHorizontal: 20,
+                        paddingVertical: 16,
+                        marginHorizontal: 20,
+                        marginTop: 16,
+                        marginBottom: 8,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: "#E5E7EB",
+                    }}
+                >
+                    <TextInput
+                        value={groupName}
+                        onChangeText={setGroupName}
+                        placeholder="Group name"
+                        placeholderTextColor="#9CA3AF"
+                        style={{
+                            fontFamily: theme.fontFamily.regular,
+                            fontSize: 16,
+                            color: "#111827",
+                            paddingVertical: 8,
+                        }}
+                        maxLength={50}
+                    />
+                </View>
+
+                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
+                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#1F2937", marginBottom: 12 }}>
+                        Color
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 12 }}>
+                        {GROUP_COLORS.map((color) => (
+                            <TouchableOpacity
+                                key={color}
+                                onPress={() => setGroupColor(color)}
+                                style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 18,
+                                    backgroundColor: color,
+                                    borderWidth: groupColor === color ? 3 : 0,
+                                    borderColor: "#111827",
+                                }}
+                            />
+                        ))}
+                    </View>
+                </View>
+
                 <View style={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }}>
                     <TouchableOpacity
                         onPress={handleCreate}
                         disabled={creating || !groupName.trim() || selectedFriends.size === 0}
                         style={{
-                            backgroundColor:
-                                creating || !groupName.trim() || selectedFriends.size === 0
-                                    ? "#9CA3AF"
-                                    : colors.primary ?? "#5EBC68",
+                            backgroundColor: (creating || !groupName.trim() || selectedFriends.size === 0) ? "#9CA3AF" : (colors.primary ?? "#5EBC68"),
                             borderRadius: 8,
                             paddingVertical: 16,
                             alignItems: "center",
                             justifyContent: "center",
                         }}
                     >
-                        <Text
-                            style={{
-                                fontFamily: theme.fontFamily.semiBold,
-                                fontSize: 16,
-                                color: "#FFFFFF",
-                            }}
-                        >
+                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>
                             {creating ? "Creating..." : "Create group"}
                         </Text>
                     </TouchableOpacity>
                 </View>
+                    </>
+                )}
             </ScrollView>
         </ScreenShell>
     );

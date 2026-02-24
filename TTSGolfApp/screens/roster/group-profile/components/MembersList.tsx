@@ -7,32 +7,31 @@ import { getMemberInitials } from "../utils";
 
 interface MemberCardProps {
     member: RosterContact;
+    displayName?: string;
     isOwner?: boolean;
     onPress: () => void;
     onRemove: () => void;
     onBlock: () => void;
 }
 
-const MemberCard = memo(({ member, isOwner, onPress, onRemove, onBlock }: MemberCardProps) => {
+const MemberCard = memo(({ member, displayName: displayNameProp, isOwner, onPress, onRemove, onBlock }: MemberCardProps) => {
     const [showMenu, setShowMenu] = useState(false);
     const name = member.contact?.name || "Unknown";
+    const displayName = displayNameProp ?? name;
     const initials = getMemberInitials(name);
 
     return (
         <>
-            <TouchableOpacity className="flex-row items-center rounded-md p-3 mb-2" style={{ backgroundColor: COLORS.white }} onPress={onPress}>
+            <TouchableOpacity style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, marginBottom: 8 }} onPress={onPress}>
                 {member.contact?.avatar ? (
-                    <Image source={{ uri: member.contact.avatar }} className="w-11 h-11 rounded-full mr-3" />
+                    <Image source={{ uri: member.contact.avatar }} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 16 }} />
                 ) : (
-                    <View className="w-11 h-11 rounded-full bg-gray-200 justify-center items-center mr-3">
-                        <Text className="text-sm font-semibold" style={{ color: COLORS.textSub }}>{initials}</Text>
+                    <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: "#E5E7EB", alignItems: "center", justifyContent: "center", marginRight: 16 }}>
+                        <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 14, color: COLORS.textSub }}>{initials}</Text>
                     </View>
                 )}
-                <View className="flex-1">
-                    <Text className="text-[15px] font-semibold mb-0.5" style={{ color: COLORS.textMain }} numberOfLines={1}>{name}</Text>
-                    {member.contact?.handicap != null && (
-                        <Text className="text-[13px]" style={{ color: COLORS.textSub }}>Handicap: {member.contact.handicap}</Text>
-                    )}
+                <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 16, lineHeight: 19, color: "#000000" }} numberOfLines={1}>{displayName}</Text>
                 </View>
                 {isOwner !== false ? (
                     <TouchableOpacity
@@ -110,6 +109,7 @@ const MemberCard = memo(({ member, isOwner, onPress, onRemove, onBlock }: Member
 
 interface Props {
     members: RosterContact[];
+    currentUserId?: string | null;
     isOwner?: boolean;
     onAddPress: () => void;
     onMemberPress: (member: RosterContact) => void;
@@ -117,50 +117,41 @@ interface Props {
     onBlockMember?: (member: RosterContact) => void;
 }
 
-const MembersList = memo(({ members, isOwner, onAddPress, onMemberPress, onRemoveMember, onBlockMember }: Props) => (
-    <View className="px-5 mb-6">
-        <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-base font-bold" style={{ color: COLORS.textMain }}>Members ({members.length})</Text>
-            {isOwner !== false && (
-                <TouchableOpacity onPress={onAddPress}>
-                    <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>Add</Text>
-                </TouchableOpacity>
-            )}
-        </View>
-
+const MembersList = memo(({ members, currentUserId, isOwner, onAddPress, onMemberPress, onRemoveMember, onBlockMember }: Props) => (
+    <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+        <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 18, lineHeight: 20, color: "#000000", marginBottom: 12 }}>People</Text>
         {isOwner !== false && (
-            <TouchableOpacity className="flex-row items-center gap-3 py-3 mb-2" onPress={onAddPress}>
-                <View className="w-11 h-11 rounded-full border-[1.5px] border-dashed justify-center items-center" style={{ borderColor: COLORS.primary }}>
-                    <UserPlus size={18} color={COLORS.primary} />
+            <TouchableOpacity onPress={onAddPress} style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+                <View style={{ width: 24, height: 24, marginRight: 8, alignItems: "center", justifyContent: "center" }}>
+                    <UserPlus size={20} color="#2563EB" strokeWidth={2} />
                 </View>
-                <Text className="text-[15px] font-medium" style={{ color: COLORS.primary }}>Add people to group</Text>
+                <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 16, lineHeight: 20, color: "#2563EB" }}>Invite people to group</Text>
             </TouchableOpacity>
         )}
 
         {members.length > 0 ? (
-            members.slice(0, 5).map((member) => (
-                <MemberCard
-                    key={member.id}
-                    member={member}
-                    isOwner={isOwner}
-                    onPress={() => onMemberPress(member)}
-                    onRemove={() => onRemoveMember?.(member)}
-                    onBlock={() => onBlockMember?.(member)}
-                />
-            ))
+            members.map((member) => {
+                const isYou = member.contact?.userId === currentUserId;
+                const displayName = isYou ? "You" : `${member.contact?.name || "Unknown"} (pending)`;
+                return (
+                    <MemberCard
+                        key={member.id}
+                        member={member}
+                        displayName={displayName}
+                        isOwner={isOwner}
+                        onPress={() => onMemberPress(member)}
+                        onRemove={() => onRemoveMember?.(member)}
+                        onBlock={() => onBlockMember?.(member)}
+                    />
+                );
+            })
         ) : (
-            <View className="rounded-md p-6 items-center" style={{ backgroundColor: COLORS.white }}>
-                <Text className="text-sm font-medium" style={{ color: COLORS.textSub }}>No members yet</Text>
-                <Text className="text-[13px] mt-1" style={{ color: COLORS.textSub }}>Add friends to this group</Text>
+            <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter", fontWeight: "400", fontSize: 14, color: COLORS.textSub }}>No members yet</Text>
             </View>
-        )}
-
-        {members.length > 5 && (
-            <TouchableOpacity className="items-center py-3">
-                <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>View all {members.length} members</Text>
-            </TouchableOpacity>
         )}
     </View>
 ));
+
 
 export default MembersList;

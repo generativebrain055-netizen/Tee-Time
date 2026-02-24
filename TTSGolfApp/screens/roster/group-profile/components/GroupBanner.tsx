@@ -1,12 +1,11 @@
 import React, { memo } from "react";
-import { View, Text, ImageBackground, TouchableOpacity } from "react-native";
-import { ArrowLeft, Settings } from "lucide-react-native";
+import { View, Text, TouchableOpacity } from "react-native";
+import { ArrowLeft, MoreVertical, Pencil } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
-
-const DEFAULT_BANNER = "https://images.unsplash.com/photo-1587174486073-ae5e5cff23aa?w=800&q=80";
 
 interface Props {
     initials: string;
+    name: string;
     color?: string;
     topInset: number;
     isOwner?: boolean;
@@ -14,34 +13,46 @@ interface Props {
     onSettings: () => void;
 }
 
-const GroupBanner = memo(({ initials, color, topInset, isOwner, onBack, onSettings }: Props) => (
-    <View className="relative mb-[50px]">
-        <ImageBackground
-            source={{ uri: DEFAULT_BANNER }}
-            className="h-[180px] w-full"
-            imageStyle={{ resizeMode: "cover" }}
-        >
-            <View className="flex-1 bg-black/20" style={{ paddingTop: topInset }}>
-                <View className="flex-row justify-between px-4 pt-2">
-                    <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 justify-center items-center" onPress={onBack}>
-                        <ArrowLeft size={22} color={COLORS.white} />
-                    </TouchableOpacity>
+const GroupBanner = memo(({ initials, name, color, topInset, isOwner, onBack, onSettings }: Props) => (
+    <View style={{ paddingTop: topInset, paddingBottom: 24, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#E5E5E5" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 16 }}>
+            <TouchableOpacity onPress={onBack} style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}>
+                <ArrowLeft size={20} color="#4B5563" strokeWidth={2} />
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+                <View style={{ position: "relative" }}>
+                    <View
+                        style={{
+                            width: 92,
+                            height: 92,
+                            borderRadius: 46,
+                            backgroundColor: color || COLORS.primary,
+                            alignItems: "center",
+                            justifyContent: "center",
+                        }}
+                    >
+                        <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 32, lineHeight: 28, color: "#FFFFFF", letterSpacing: 0.03 }}>
+                            {initials}
+                        </Text>
+                    </View>
                     {isOwner !== false && (
-                        <TouchableOpacity className="w-10 h-10 rounded-full bg-black/30 justify-center items-center" onPress={onSettings}>
-                            <Settings size={22} color={COLORS.white} />
-                        </TouchableOpacity>
+                        <View style={{ position: "absolute", right: -4, bottom: -4, width: 21.6, height: 21.6, borderRadius: 10.8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4.8 }, shadowOpacity: 0.1, shadowRadius: 6.3, elevation: 4 }}>
+                            <Pencil size={12} color="#6A6A6A" strokeWidth={1.4} />
+                        </View>
                     )}
                 </View>
             </View>
-        </ImageBackground>
-
-        <View className="absolute -bottom-[45px] self-center">
-            <View className="w-[100px] h-[100px] rounded-full justify-center items-center border-4" style={{ backgroundColor: (color || COLORS.primary) + "30", borderColor: COLORS.white }}>
-                <Text className="text-[32px] font-bold" style={{ color: color || COLORS.primary }}>
-                    {initials}
-                </Text>
-            </View>
+            {isOwner !== false ? (
+                <TouchableOpacity onPress={onSettings} style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}>
+                    <MoreVertical size={20} color="#474747" strokeWidth={2} />
+                </TouchableOpacity>
+            ) : (
+                <View style={{ width: 36, height: 36 }} />
+            )}
         </View>
+        <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 22, lineHeight: 20, color: "#000000", textAlign: "center" }} numberOfLines={1}>
+            {name}
+        </Text>
     </View>
 ));
 

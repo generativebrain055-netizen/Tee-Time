@@ -28,24 +28,15 @@ interface Props {
 }
 
 const TeeTimesList = memo(({ teeTimes, onAddTeeTime }: Props) => (
-    <View className="px-5 mb-6">
-        <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-base font-bold" style={{ color: COLORS.textMain }}>Upcoming tee times</Text>
-            <TouchableOpacity>
-                <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>See all</Text>
-            </TouchableOpacity>
-        </View>
-
+    <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+        <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 18, lineHeight: 20, color: "#000000", marginBottom: 12 }}>Upcoming tee time</Text>
         {teeTimes.length > 0 ? (
             teeTimes.map((teeTime) => (
                 <TeeTimeCard key={teeTime.id} teeTime={teeTime} />
             ))
         ) : (
-            <View className="rounded-md p-6 items-center" style={{ backgroundColor: COLORS.white }}>
-                <Text className="text-sm font-medium" style={{ color: COLORS.textSub }}>No upcoming tee times</Text>
-                <TouchableOpacity className="mt-3 px-4 py-2 rounded-md" style={{ backgroundColor: COLORS.primary }} onPress={onAddTeeTime}>
-                    <Text className="text-sm font-semibold" style={{ color: COLORS.white }}>Create one now</Text>
-                </TouchableOpacity>
+            <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter", fontWeight: "400", fontSize: 14, lineHeight: 24, color: "#6C6C6C" }}>No upcoming tee times</Text>
             </View>
         )}
     </View>

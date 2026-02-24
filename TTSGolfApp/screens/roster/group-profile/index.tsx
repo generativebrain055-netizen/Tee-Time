@@ -160,6 +160,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
             >
                 <GroupBanner
                     initials={groupInitials}
+                    name={group.name}
                     color={group.color}
                     topInset={insets.top}
                     isOwner={group.isOwner}
@@ -167,15 +168,15 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     onSettings={handleSettings}
                 />
 
+                <GroupActions
+                    onChat={handleGroupChat}
+                    onInvitePeople={openAddPeopleModal}
+                />
+
                 <GroupInfo
                     name={group.name}
                     description={group.description}
                     memberCount={members.length}
-                />
-
-                <GroupActions
-                    onChat={handleGroupChat}
-                    onAddTeeTime={handleAddTeeTime}
                 />
 
                 <GroupStats
@@ -188,6 +189,8 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     teeTimes={upcomingTeeTimes}
                     onAddTeeTime={handleAddTeeTime}
                 />
+
+                <View style={{ height: 6, backgroundColor: "#F3F3F3" }} />
 
                 <MembersList
                     members={members}
