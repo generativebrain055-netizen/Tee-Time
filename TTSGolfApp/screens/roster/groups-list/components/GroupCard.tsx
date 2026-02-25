@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import { Users, Edit2, Trash2 } from "lucide-react-native";
+import { Users, Edit2, Trash2, Calendar } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { RosterGroup } from "../../../../services/api";
 
@@ -11,7 +11,9 @@ interface GroupCardProps {
     onDelete: () => void;
 }
 
-export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardProps) => (
+export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardProps) => {
+    const upcomingCount = group.upcomingTeeTimeCount ?? 0;
+    return (
     <TouchableOpacity className="flex-row items-center bg-white rounded-md p-4 my-2 border border-gray-100 shadow-sm" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 }} onPress={onPress}>
         <View className="w-12 h-12 rounded-full justify-center items-center" style={{ backgroundColor: group.color + "20" }}>
             <Text className="text-base font-bold" style={{ color: group.color }}>
@@ -27,11 +29,19 @@ export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardPr
                     </View>
                 )}
             </View>
-            <View className="flex-row items-center mt-1">
+            <View className="flex-row items-center mt-1 gap-3">
                 <View className="flex-row items-center gap-1">
                     <Users size={12} color={COLORS.textSub} />
                     <Text className="text-xs text-gray-500">{group.memberCount} members</Text>
                 </View>
+                {upcomingCount > 0 && (
+                    <View className="flex-row items-center gap-1">
+                        <Calendar size={12} color={COLORS.textSub} />
+                        <Text className="text-xs text-gray-500">
+                            {upcomingCount} upcoming tee time{upcomingCount !== 1 ? "s" : ""}
+                        </Text>
+                    </View>
+                )}
             </View>
         </View>
         {group.isOwner !== false && (

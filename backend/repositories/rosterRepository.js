@@ -348,9 +348,57 @@ class RosterRepository {
 
       if (error) throw error;
 
-      // Get member counts for each group
+      const today = new Date().toISOString().split("T")[0];
+
+      // Upcoming tee time count per group: fetch upcoming tee time IDs (user as creator), participants, and roster group membership
+      let upcomingTeeTimeIds = [];
+      try {
+        const { data: upcomingRows } = await supabaseAdmin
+          .from("tee_times")
+          .select("id")
+          .eq("creator_id", userId)
+          .gte("tee_date", today)
+          .in("status", ["pending", "confirmed"]);
+        upcomingTeeTimeIds = (upcomingRows || []).map((r) => r.id);
+      } catch (_) {}
+
+      let participantsByTeeTime = [];
+      if (upcomingTeeTimeIds.length > 0) {
+        const { data: participants } = await supabaseAdmin
+          .from("tee_time_participants")
+          .select("tee_time_id, user_id")
+          .in("tee_time_id", upcomingTeeTimeIds);
+        participantsByTeeTime = participants || [];
+      }
+
+      const { data: rosterGroupMembers } = await supabaseAdmin
+        .from("roster")
+        .select("group_id, contact_user_id")
+        .eq("user_id", userId)
+        .not("group_id", "is", null);
+      const groupMemberUserIds = {};
+      (rosterGroupMembers || []).forEach((r) => {
+        if (!groupMemberUserIds[r.group_id]) groupMemberUserIds[r.group_id] = new Set();
+        if (r.contact_user_id) groupMemberUserIds[r.group_id].add(r.contact_user_id);
+      });
+
+      // Only show groups where the user still has at least one roster entry (exclude left groups)
+      const groupIdsUserIsIn = new Set((rosterGroupMembers || []).map((r) => r.group_id));
+      const dataFiltered = (data || []).filter((g) => groupIdsUserIsIn.has(g.id));
+
+      const upcomingCountByGroup = {};
+      Object.keys(groupMemberUserIds || {}).forEach((gid) => {
+        const userIds = groupMemberUserIds[gid];
+        const teeTimeIds = new Set();
+        participantsByTeeTime.forEach((p) => {
+          if (userIds.has(p.user_id)) teeTimeIds.add(p.tee_time_id);
+        });
+        upcomingCountByGroup[gid] = teeTimeIds.size;
+      });
+
+      // Get member counts for each group and attach upcoming_tee_time_count
       const groupsWithCounts = await Promise.all(
-        (data || []).map(async (group) => {
+        dataFiltered.map(async (group) => {
           const { count: memberCount } = await supabaseAdmin
             .from("roster")
             .select("*", { count: "exact", head: true })
@@ -366,6 +414,7 @@ class RosterRepository {
             ...group,
             member_count: memberCount || 0,
             on_deck_count: onDeckCount || 0,
+            upcoming_tee_time_count: upcomingCountByGroup[group.id] ?? 0,
             is_owner: true,
           };
         })

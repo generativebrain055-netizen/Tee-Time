@@ -274,7 +274,7 @@ export default function ProfileScreen({ navigation }: any) {
                 {/* Cover Image */}
                 <View style={{ height: 140, backgroundColor: '#4CAF50' }}>
                     <Image
-                        source={{ uri: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800' }}
+                        source={require('../../assets/profile-cover.png')}
                         style={{ width: '100%', height: '100%' }}
                         resizeMode="cover"
                     />

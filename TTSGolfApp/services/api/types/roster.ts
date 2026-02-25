@@ -28,6 +28,8 @@ export interface RosterGroup {
   position: number;
   memberCount: number;
   onDeckCount: number;
+  /** Number of upcoming tee times that have at least one participant in this group */
+  upcomingTeeTimeCount?: number;
   autoInvite: boolean;
   maxMembers: number;
   isDefault: boolean;

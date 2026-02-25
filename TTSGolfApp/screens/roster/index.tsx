@@ -162,7 +162,7 @@ export default function RosterScreen({ navigation, route }: any) {
         <ScreenShell>
             {/* Header */}
             <AppHeader 
-                title="Roster" 
+                title={activeTab}
                 onBack={() => navigation?.goBack()} 
                 rightComponent={renderRightAction()}
             />

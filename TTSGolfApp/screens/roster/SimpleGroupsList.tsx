@@ -16,6 +16,7 @@ import { logger } from "../../utils/logger";
 interface SimpleGroupsListProps {
     onGroupClick: (groupId: string) => void;
     navigation?: any;
+    refreshTrigger?: number | null;
 }
 
 const getInitials = (name: string): string => {
@@ -95,7 +96,7 @@ const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress
 
 GroupItem.displayName = "GroupItem";
 
-export default function SimpleGroupsList({ onGroupClick, navigation }: SimpleGroupsListProps) {
+export default function SimpleGroupsList({ onGroupClick, navigation, refreshTrigger }: SimpleGroupsListProps) {
     const colors = useColors();
     const theme = useTheme();
     const [groups, setGroups] = useState<any[]>([]);
@@ -120,6 +121,10 @@ export default function SimpleGroupsList({ onGroupClick, navigation }: SimpleGro
     useEffect(() => {
         loadGroups();
     }, [loadGroups]);
+
+    useEffect(() => {
+        if (refreshTrigger != null && refreshTrigger > 0) loadGroups();
+    }, [refreshTrigger, loadGroups]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);

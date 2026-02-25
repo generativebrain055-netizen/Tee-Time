@@ -9,7 +9,7 @@ import {
     ActivityIndicator,
     Alert,
 } from "react-native";
-import { Plus, MessageCircle, Search } from "lucide-react-native";
+import { Plus, MessageCircle } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
@@ -225,6 +225,7 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
         <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
             <ScrollView
                 style={{ flex: 1 }}
+                contentContainerStyle={onDeck.length === 0 ? { flexGrow: 1, justifyContent: "center" } : undefined}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -260,25 +261,24 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                         <View style={{ height: 100 }} />
                     </>
                 ) : (
-                    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, paddingTop: 60, minHeight: 280 }}>
-                        <Search size={56} color="#D1D5DB" strokeWidth={1.5} />
+                    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40, minHeight: 280 }}>
                         <Text style={{
                             fontFamily: theme.fontFamily.semiBold,
-                            fontSize: 17,
-                            color: "#6B7280",
-                            marginTop: 20,
+                            fontSize: 20,
+                            color: "#111827",
                             textAlign: "center",
                         }}>
-                            No backup players
+                            Backup players
                         </Text>
                         <Text style={{
                             fontFamily: theme.fontFamily.regular,
-                            fontSize: 14,
-                            color: "#9CA3AF",
-                            marginTop: 8,
+                            fontSize: 15,
+                            color: "#6B7280",
+                            marginTop: 16,
                             textAlign: "center",
+                            lineHeight: 22,
                         }}>
-                            Add players to your on-deck list
+                            Golfing buddies who are not part of your core Roster; out-of-town friends, occasional players, or last-minute fills. Promote them to your Roster at anytime or invite them directly via Manual Invite.
                         </Text>
                         <TouchableOpacity
                             style={{
@@ -286,7 +286,7 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                                 paddingHorizontal: 32,
                                 paddingVertical: 14,
                                 borderRadius: 10,
-                                marginTop: 24,
+                                marginTop: 28,
                             }}
                             onPress={() => navigation?.navigate("FindPlayers")}
                         >

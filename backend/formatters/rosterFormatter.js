@@ -78,6 +78,7 @@ const formatGroup = (g) => ({
   position: g.position,
   memberCount: parseInt(g.member_count) || 0,
   onDeckCount: parseInt(g.on_deck_count) || 0,
+  upcomingTeeTimeCount: parseInt(g.upcoming_tee_time_count) || 0,
   autoInvite: g.auto_invite,
   maxMembers: g.max_members,
   isDefault: g.is_default,

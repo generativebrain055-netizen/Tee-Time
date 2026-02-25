@@ -1,12 +1,14 @@
 /**
  * Group Profile Screen - Modular Implementation
  */
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../constants/colors";
 import { RosterContact, rosterApi, friendApi } from "../../../services/api";
+import { useToast } from "../../../ui/feedback";
+import { useAuthStore } from "../../../stores";
 
 import { useGroupProfile } from "./hooks/useGroupProfile";
 import {
@@ -17,6 +19,7 @@ import {
     TeeTimesList,
     MembersList,
     AddMembersModal,
+    GroupOptionsSheet,
 } from "./components";
 import { getGroupInitials, calculateAvgHandicap } from "./utils";
 
@@ -28,6 +31,9 @@ interface Props {
 export default function GroupProfileScreen({ navigation, route }: Props) {
     const insets = useSafeAreaInsets();
     const { groupId } = route.params;
+    const toast = useToast();
+    const [showOptionsSheet, setShowOptionsSheet] = useState(false);
+    const currentUserId = useAuthStore((s) => s.user?.id);
 
     const {
         loading,
@@ -52,6 +58,42 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     const handleBack = useCallback(() => {
         navigation.goBack();
     }, [navigation]);
+
+    const handleOpenOptions = useCallback(() => {
+        setShowOptionsSheet(true);
+    }, []);
+
+    const handleLeaveGroupConfirm = useCallback(() => {
+        Alert.alert(
+            "Leave group?",
+            "You'll no longer be part of this group. You can rejoin if you're invited again.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Leave group",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const res = await rosterApi.leaveGroup(groupId);
+                            if (res.success) {
+                                toast.show({ message: "You've left the group", type: "success" });
+                                navigation.goBack();
+                            } else {
+                                Alert.alert("Error", "Failed to leave group");
+                            }
+                        } catch (e: any) {
+                            Alert.alert("Error", e?.message || "Failed to leave group");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [groupId, navigation, toast]);
+
+    const handleLeaveGroupFromSheet = useCallback(() => {
+        setShowOptionsSheet(false);
+        handleLeaveGroupConfirm();
+    }, [handleLeaveGroupConfirm]);
 
     const handleAddTeeTime = useCallback(() => {
         navigation?.navigate("CreateTeeTime", { groupId });
@@ -165,7 +207,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     topInset={insets.top}
                     isOwner={group.isOwner}
                     onBack={handleBack}
-                    onSettings={handleSettings}
+                    onSettings={handleOpenOptions}
                 />
 
                 <GroupActions
@@ -194,6 +236,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
                 <MembersList
                     members={members}
+                    currentUserId={currentUserId}
                     isOwner={group.isOwner}
                     onAddPress={openAddPeopleModal}
                     onMemberPress={handleMemberPress}
@@ -207,7 +250,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                         <TouchableOpacity
                             className="py-3.5 px-4 rounded-md items-center"
                             style={{ backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FEE2E2" }}
-                            onPress={handleLeaveGroup}
+                            onPress={handleLeaveGroupConfirm}
                         >
                             <Text className="text-[15px] font-semibold" style={{ color: "#DC2626" }}>
                                 Leave Group
@@ -218,6 +261,15 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
                 <View className="h-10" />
             </ScrollView>
+
+            <GroupOptionsSheet
+                visible={showOptionsSheet}
+                onClose={() => setShowOptionsSheet(false)}
+                onLeaveGroup={handleLeaveGroupFromSheet}
+                members={members}
+                currentUserId={currentUserId}
+                isOwner={group.isOwner}
+            />
 
             <AddMembersModal
                 visible={showAddModal}
