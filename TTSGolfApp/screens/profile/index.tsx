@@ -23,8 +23,20 @@ import { logger } from "../../utils/logger";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const QR_MODAL_SIZE = Math.min(SCREEN_WIDTH * 0.55, 240);
-const QR_LOGO_SIZE = Math.round(QR_MODAL_SIZE * 0.34);
+/** QR dashboard: design 874pt screen, modal 703.8pt height, starts at top 176pt */
+const QR_MODAL_HEIGHT_RATIO = 703.8 / 874;
+const QR_MODAL_TOP_RATIO = 176 / 874;
+/** Pixel-perfect from CSS: header 77px, card 319x370, QR 240, logo 78, segmented 212x47, pill 100x41 */
+const QR_HEADER_HEIGHT = 77;
+const QR_CARD_WIDTH = 319;
+const QR_CARD_HEIGHT_MYCODE = 370;
+const QR_BOX_SIZE = 240;
+const QR_LOGO_SIZE = 78;
+const QR_SEGMENTED_WIDTH = 212;
+const QR_SEGMENTED_HEIGHT = 47;
+const QR_PILL_WIDTH = 100;
+const QR_PILL_HEIGHT = 41;
+const QR_SCAN_PLACEHOLDER_SIZE = 319;
 const TeeTimeLogo = require("../../assets/compact-logo.png");
 
 const getInitials = (firstName?: string, lastName?: string): string => {
@@ -36,14 +48,15 @@ const getFullName = (firstName?: string, lastName?: string): string => {
 };
 
 const getMemberSinceText = (createdAt?: string): string => {
-    if (!createdAt) return "Member";
     try {
-        const d = new Date(createdAt);
-        const month = d.toLocaleString("en-US", { month: "long" });
+        const d = createdAt ? new Date(createdAt) : new Date();
+        if (Number.isNaN(d.getTime())) return `Member since ${new Date().toLocaleString("en-US", { month: "short" })} ${new Date().getFullYear()}`;
+        const month = d.toLocaleString("en-US", { month: "short" });
         const year = d.getFullYear();
         return `Member since ${month} ${year}`;
     } catch {
-        return "Member";
+        const now = new Date();
+        return `Member since ${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
     }
 };
 
@@ -91,6 +104,7 @@ export default function ProfileScreen({ navigation }: any) {
     const [roundsLoading, setRoundsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [showQRModal, setShowQRModal] = useState(false);
+    const [qrModalTab, setQrModalTab] = useState<'scan' | 'mycode'>('mycode');
     const [qrModalLoading, setQrModalLoading] = useState(false);
     const [qrData, setQrData] = useState<string | null>(null);
     const [qrVersion, setQrVersion] = useState(1);
@@ -177,7 +191,10 @@ export default function ProfileScreen({ navigation }: any) {
         }
     }, [showQRModal, fetchQRForModal]);
 
-    const closeQRModal = useCallback(() => setShowQRModal(false), []);
+    const closeQRModal = useCallback(() => {
+        setShowQRModal(false);
+        setQrModalTab("mycode");
+    }, []);
 
     const handleQRShare = useCallback(async () => {
         if (!qrData) return;
@@ -221,6 +238,11 @@ export default function ProfileScreen({ navigation }: any) {
     }, []);
 
     const handleQRScan = useCallback(() => {
+        setShowQRModal(false);
+        navigation?.navigate("ScanQR");
+    }, [navigation]);
+
+    const openScanScreen = useCallback(() => {
         setShowQRModal(false);
         navigation?.navigate("ScanQR");
     }, [navigation]);
@@ -757,99 +779,189 @@ export default function ProfileScreen({ navigation }: any) {
         </ScreenShell>
 
         <Modal visible={showQRModal} transparent animationType="slide">
-            <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end", alignItems: "center" }}>
+            <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)" }}>
+                {/* White modal: top 176/874, height 703.8/874 per CSS */}
                 <View style={{
-                    width: "100%",
-                    height: SCREEN_HEIGHT * (4 / 5),
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    top: SCREEN_HEIGHT * QR_MODAL_TOP_RATIO,
+                    height: SCREEN_HEIGHT * QR_MODAL_HEIGHT_RATIO,
                     backgroundColor: "#FFFFFF",
-                    borderTopLeftRadius: 20,
-                    borderTopRightRadius: 20,
-                    paddingTop: 12,
-                    paddingBottom: Math.max(insets.bottom, 24),
-                    paddingHorizontal: 24,
-                    alignItems: "center",
+                    borderTopLeftRadius: 16,
+                    borderTopRightRadius: 16,
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 16 },
+                    shadowOpacity: 0.16,
+                    shadowRadius: 48,
+                    elevation: 16,
+                    overflow: "hidden",
                 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: 12 }}>
-                        <View style={{ width: 32 }} />
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#1F2937" }} numberOfLines={1}>
-                            {profile?.username?.trim() || fullName}
-                        </Text>
-                        <TouchableOpacity onPress={closeQRModal} hitSlop={12} style={{ padding: 4 }}>
-                            <X size={24} color="#4B5563" strokeWidth={2} />
-                        </TouchableOpacity>
-                    </View>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: "#747474", textAlign: "center", marginBottom: 20 }}>
-                        {getMemberSinceText(profile?.createdAt)}
-                    </Text>
-
-                    {qrModalLoading ? (
-                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
-                            <ActivityIndicator size="large" color="#5EBC68" />
-                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginTop: 12 }}>Generating QR Code...</Text>
-                        </View>
-                    ) : qrData ? (
-                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
-                            <View style={{ width: QR_MODAL_SIZE, height: QR_MODAL_SIZE, backgroundColor: "#FFFFFF", borderRadius: 4, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
-                                <QRCode
-                                    value={qrData}
-                                    size={QR_MODAL_SIZE}
-                                    color="#111827"
-                                    backgroundColor="#FFFFFF"
-                                    quietZone={0}
-                                    ecl="M"
-                                    logo={TeeTimeLogo}
-                                    logoSize={QR_LOGO_SIZE}
-                                    logoBackgroundColor="#FFFFFF"
-                                    logoBorderRadius={Math.round(QR_LOGO_SIZE / 2)}
-                                />
-                            </View>
-                        </View>
-                    ) : (
-                        <View style={{ width: QR_MODAL_SIZE + 32, height: QR_MODAL_SIZE + 32, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
-                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginBottom: 12 }}>Failed to load QR code</Text>
-                            <TouchableOpacity onPress={fetchQRForModal} style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#5EBC68", borderRadius: 10 }}>
-                                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFFFFF" }}>Tap to retry</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    <View style={{ flexDirection: "row", gap: 12, width: "100%", maxWidth: 320 }}>
+                    {/* Header: 77px, QR Code 17px/600, close 36x36 @ right 20 top 20 */}
+                    <View style={{
+                        height: QR_HEADER_HEIGHT,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingHorizontal: 20,
+                    }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 17, lineHeight: 28, color: "#1F2937" }}>QR Code</Text>
                         <TouchableOpacity
-                            onPress={handleQRScan}
-                            activeOpacity={0.8}
+                            onPress={closeQRModal}
+                            hitSlop={8}
                             style={{
-                                flex: 1,
-                                flexDirection: "row",
+                                position: "absolute",
+                                right: 20,
+                                top: 20,
+                                width: 36,
+                                height: 36,
+                                borderRadius: 9999,
                                 alignItems: "center",
                                 justifyContent: "center",
-                                paddingVertical: 14,
-                                borderRadius: 10,
-                                backgroundColor: "#E9E9E9",
-                                gap: 8,
                             }}
                         >
-                            <ScanLine size={20} color="#6E6E6E" strokeWidth={2.5} />
-                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#6E6E6E" }}>Scan</Text>
+                            <X size={20} color="#4B5563" strokeWidth={2} />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={handleQRShare}
-                            disabled={!qrData}
-                            activeOpacity={0.8}
-                            style={{
-                                flex: 1,
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                paddingVertical: 14,
-                                borderRadius: 8,
+                    </View>
+
+                    {/* Content area + segmented at bottom */}
+                    {qrModalTab === "scan" ? (
+                        /* Scan: content #636363, placeholder 319x320 white border, "Scan a code" #FFFFFF */
+                        <View style={{ flex: 1, backgroundColor: "#636363", alignItems: "center", justifyContent: "center", paddingBottom: QR_SEGMENTED_HEIGHT + 16 + Math.max(insets.bottom, 24) }}>
+                            <TouchableOpacity
+                                activeOpacity={0.9}
+                                onPress={openScanScreen}
+                                style={{
+                                    width: Math.min(QR_SCAN_PLACEHOLDER_SIZE, SCREEN_WIDTH - 48),
+                                    height: Math.min(QR_SCAN_PLACEHOLDER_SIZE, SCREEN_WIDTH - 48),
+                                    maxWidth: QR_SCAN_PLACEHOLDER_SIZE,
+                                    maxHeight: QR_SCAN_PLACEHOLDER_SIZE,
+                                    backgroundColor: "#636363",
+                                    borderWidth: 1,
+                                    borderColor: "#FFFFFF",
+                                    borderRadius: 20,
+                                }}
+                            />
+                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 15, lineHeight: 28, color: "#FFFFFF", marginTop: 38 }}>Scan a code</Text>
+                        </View>
+                    ) : (
+                        /* My code: content #F7F7F7, card 319x370, name 18/700 #1B1B1B, member 14/400 #747474, QR 240 logo 78 */
+                        <View style={{ flex: 1, backgroundColor: "#F7F7F7", alignItems: "center", paddingTop: 66, paddingBottom: QR_SEGMENTED_HEIGHT + 16 + Math.max(insets.bottom, 24) }}>
+                            <View style={{
+                                width: Math.min(QR_CARD_WIDTH, SCREEN_WIDTH - 40),
+                                minHeight: QR_CARD_HEIGHT_MYCODE,
                                 backgroundColor: "#FFFFFF",
                                 borderWidth: 1,
                                 borderColor: "#E5E5E5",
-                                gap: 8,
+                                borderRadius: 20,
+                                paddingTop: 24,
+                                paddingHorizontal: 40,
+                                alignItems: "center",
+                            }}>
+                                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, lineHeight: 32, color: "#1B1B1B", marginBottom: 0 }}>{fullName}</Text>
+                                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 32, color: "#747474", marginBottom: 24 }}>
+                                    {getMemberSinceText(profile?.createdAt)}
+                                </Text>
+                                {qrModalLoading ? (
+                                    <View style={{ width: QR_BOX_SIZE, height: QR_BOX_SIZE, justifyContent: "center", alignItems: "center" }}>
+                                        <ActivityIndicator size="large" color="#5EBC68" />
+                                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginTop: 12 }}>Generating QR Code...</Text>
+                                    </View>
+                                ) : qrData ? (
+                                    <View style={{ position: "relative", width: QR_BOX_SIZE, height: QR_BOX_SIZE }}>
+                                        <QRCode
+                                            value={qrData}
+                                            size={QR_BOX_SIZE}
+                                            color="#111827"
+                                            backgroundColor="#FFFFFF"
+                                            quietZone={0}
+                                            ecl="M"
+                                        />
+                                        <View
+                                            style={{
+                                                position: "absolute",
+                                                left: (QR_BOX_SIZE - QR_LOGO_SIZE) / 2,
+                                                top: (QR_BOX_SIZE - QR_LOGO_SIZE) / 2,
+                                                width: QR_LOGO_SIZE,
+                                                height: QR_LOGO_SIZE,
+                                                borderRadius: QR_LOGO_SIZE / 2,
+                                                backgroundColor: "#FFFFFF",
+                                                borderWidth: 1,
+                                                borderColor: "#E5E5E5",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                overflow: "hidden",
+                                            }}
+                                        >
+                                            <Image
+                                                source={TeeTimeLogo}
+                                                style={{ width: QR_LOGO_SIZE * 0.77, height: QR_LOGO_SIZE * 0.77 }}
+                                                resizeMode="contain"
+                                            />
+                                        </View>
+                                    </View>
+                                ) : (
+                                    <View style={{ alignItems: "center", paddingVertical: 24 }}>
+                                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#6B7280", marginBottom: 12 }}>Failed to load QR code</Text>
+                                        <TouchableOpacity onPress={fetchQRForModal} style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#5EBC68", borderRadius: 10 }}>
+                                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFFFFF" }}>Tap to retry</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Segmented control: 212x47, #E9E9E9, radius 10; pills 100x41, radius 8; font 15/500 */}
+                    <View style={{
+                        position: "absolute",
+                        left: (SCREEN_WIDTH - QR_SEGMENTED_WIDTH) / 2,
+                        bottom: Math.max(insets.bottom, 24),
+                        width: QR_SEGMENTED_WIDTH,
+                        height: QR_SEGMENTED_HEIGHT,
+                        backgroundColor: "#E9E9E9",
+                        borderRadius: 10,
+                        flexDirection: "row",
+                        padding: (QR_SEGMENTED_HEIGHT - QR_PILL_HEIGHT) / 2,
+                        justifyContent: "space-between",
+                    }}>
+                        <TouchableOpacity
+                            onPress={() => setQrModalTab("scan")}
+                            activeOpacity={0.8}
+                            style={{
+                                width: QR_PILL_WIDTH,
+                                height: QR_PILL_HEIGHT,
+                                borderRadius: 8,
+                                backgroundColor: qrModalTab === "scan" ? "#FFFFFF" : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
                             }}
                         >
-                            <QrCode size={18} color="#1F2937" />
-                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: "#1F2937" }}>My Code</Text>
+                            <Text style={{
+                                fontFamily: "Inter_500Medium",
+                                fontSize: 15,
+                                lineHeight: 28,
+                                color: qrModalTab === "scan" ? "#000000" : "#6E6E6E",
+                            }}>Scan</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => setQrModalTab("mycode")}
+                            activeOpacity={0.8}
+                            style={{
+                                width: QR_PILL_WIDTH,
+                                height: QR_PILL_HEIGHT,
+                                borderRadius: 8,
+                                backgroundColor: qrModalTab === "mycode" ? "#FFFFFF" : "transparent",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                        >
+                            <Text style={{
+                                fontFamily: "Inter_500Medium",
+                                fontSize: 15,
+                                lineHeight: 28,
+                                color: qrModalTab === "mycode" ? "#000000" : "#6E6E6E",
+                            }}>My code</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

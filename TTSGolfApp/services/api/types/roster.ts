@@ -25,6 +25,8 @@ export interface RosterGroup {
   description?: string;
   color: string;
   icon?: string;
+  /** Group avatar/image URL */
+  avatar?: string;
   position: number;
   memberCount: number;
   onDeckCount: number;
@@ -36,6 +38,8 @@ export interface RosterGroup {
   isOwner?: boolean;
   ownerId?: string;
   sortPreference?: SortPreference;
+  /** True when the group has at least one invite not yet accepted/declined */
+  hasPendingInvites?: boolean;
 }
 
 export type SortPreference =

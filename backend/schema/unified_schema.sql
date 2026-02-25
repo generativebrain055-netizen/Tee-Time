@@ -416,7 +416,7 @@ CREATE TABLE roster_groups (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     color VARCHAR(7) DEFAULT '#5DB075',
-    icon VARCHAR(50),
+    icon TEXT,
     position INT DEFAULT 0,
     is_default BOOLEAN DEFAULT false,
     auto_invite BOOLEAN DEFAULT true,

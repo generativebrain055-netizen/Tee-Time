@@ -396,7 +396,23 @@ class RosterRepository {
         upcomingCountByGroup[gid] = teeTimeIds.size;
       });
 
-      // Get member counts for each group and attach upcoming_tee_time_count
+      // Group IDs that have at least one pending group invite (we are the inviter)
+      let groupIdsWithPendingInvites = new Set();
+      try {
+        const { data: inviteNotifs } = await supabaseAdmin
+          .from("notifications")
+          .select("data")
+          .filter("data->>type", "eq", "group_invite")
+          .filter("data->>inviterId", "eq", String(userId));
+        (inviteNotifs || []).forEach((n) => {
+          const d = n.data || {};
+          if (d.groupId && d.responded !== true) {
+            groupIdsWithPendingInvites.add(d.groupId);
+          }
+        });
+      } catch (_) {}
+
+      // Get member counts for each group and attach upcoming_tee_time_count + has_pending_invites
       const groupsWithCounts = await Promise.all(
         dataFiltered.map(async (group) => {
           const { count: memberCount } = await supabaseAdmin
@@ -416,6 +432,7 @@ class RosterRepository {
             on_deck_count: onDeckCount || 0,
             upcoming_tee_time_count: upcomingCountByGroup[group.id] ?? 0,
             is_owner: true,
+            has_pending_invites: groupIdsWithPendingInvites.has(group.id),
           };
         })
       );
@@ -430,13 +447,13 @@ class RosterRepository {
     const { name, description, color, icon, autoInvite, maxMembers } = data;
 
     try {
-      // Check for duplicate name
+      // Check for duplicate name (.maybeSingle() so 0 rows returns null, not an error)
       const { data: existing } = await supabaseAdmin
         .from("roster_groups")
         .select("id")
         .eq("user_id", userId)
         .ilike("name", name)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         const error = new Error("You already have a roster with this name");
@@ -444,29 +461,32 @@ class RosterRepository {
         throw error;
       }
 
-      // Get max position
+      // Get max position (.maybeSingle() so 0 groups returns null, not an error)
       const { data: maxData } = await supabaseAdmin
         .from("roster_groups")
         .select("position")
         .eq("user_id", userId)
         .order("position", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       const position = (maxData?.position ?? -1) + 1;
 
+      const insertPayload = {
+        user_id: userId,
+        name,
+        description,
+        color: color || "#5DB075",
+        position,
+        auto_invite: autoInvite !== false,
+        max_members: maxMembers || 20,
+      };
+      if (icon != null && String(icon).trim() !== "") {
+        insertPayload.icon = String(icon).trim();
+      }
       const { data: group, error } = await supabaseAdmin
         .from("roster_groups")
-        .insert({
-          user_id: userId,
-          name,
-          description,
-          color: color || "#5DB075",
-          icon,
-          position,
-          auto_invite: autoInvite !== false,
-          max_members: maxMembers || 20,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
@@ -652,7 +672,7 @@ class RosterRepository {
             .eq("user_id", userId)
             .order("position", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           const position = (maxData?.position ?? -1) + 1;
 

@@ -85,6 +85,7 @@ const formatGroup = (g) => ({
   isOwner: g.is_owner,
   ownerId: g.user_id,
   sortPreference: g.sort_preference || "position",
+  hasPendingInvites: !!g.has_pending_invites,
 });
 
 /**

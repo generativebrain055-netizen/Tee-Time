@@ -76,7 +76,7 @@ const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
                     <Users size={13} color="#9CA3AF" strokeWidth={2} />
                     <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 13, color: "#9CA3AF", marginLeft: 6 }}>
-                        {group.memberCount || group.members?.length || 0} members
+                        {group.memberCount || group.members?.length || 0} members{group.hasPendingInvites ? " (pending)" : ""}
                     </Text>
                 </View>
 

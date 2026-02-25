@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { View, Text, TouchableOpacity, Modal, Image } from "react-native";
-import { X, LogOut } from "lucide-react-native";
+import { X, LogOut, Pencil } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { RosterContact } from "../../../../services/api";
 
@@ -8,6 +8,7 @@ interface GroupOptionsSheetProps {
     visible: boolean;
     onClose: () => void;
     onLeaveGroup: () => void;
+    onEditName?: () => void;
     members: RosterContact[];
     currentUserId?: string | null;
     isOwner?: boolean;
@@ -17,6 +18,7 @@ export const GroupOptionsSheet = memo(({
     visible,
     onClose,
     onLeaveGroup,
+    onEditName,
     members,
     currentUserId,
     isOwner,
@@ -42,6 +44,18 @@ export const GroupOptionsSheet = memo(({
                             <X size={24} color="#374151" strokeWidth={2} />
                         </TouchableOpacity>
                     </View>
+
+                    {isOwner !== false && onEditName && (
+                        <TouchableOpacity
+                            onPress={() => { onClose(); onEditName(); }}
+                            style={{ flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 4, marginBottom: 4 }}
+                        >
+                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                                <Pencil size={20} color="#374151" strokeWidth={2} />
+                            </View>
+                            <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 16, color: "#111827" }}>Edit group name</Text>
+                        </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                         onPress={() => {

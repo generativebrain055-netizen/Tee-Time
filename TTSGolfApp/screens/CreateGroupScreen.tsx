@@ -8,11 +8,15 @@ import {
     Image,
     ActivityIndicator,
     Alert,
+    ActionSheetIOS,
+    Platform,
 } from "react-native";
-import { X, Check, Search } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
+import { X, Check, Search, Camera } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
-import { friendApi, rosterApi } from "../services/api";
+import { friendApi, rosterApi, profileApi } from "../services/api";
+import { useAuthStore } from "../stores";
 import { useDebounce } from "../hooks";
 import { logger } from "../utils/logger";
 
@@ -65,6 +69,7 @@ const FIGMA = {
 export default function CreateGroupScreen({ navigation, route }: any) {
     const colors = useColors();
     const theme = useTheme();
+    const currentUser = useAuthStore((s) => s.user);
     const initialParticipantIds = route?.params?.initialParticipantIds as string[] | undefined;
     const [step, setStep] = useState<"players" | "details">("players");
     const [groupName, setGroupName] = useState("");
@@ -77,7 +82,9 @@ export default function CreateGroupScreen({ navigation, route }: any) {
     const [searchUsers, setSearchUsers] = useState<SearchUser[]>([]);
     const [searching, setSearching] = useState(false);
     const [showSearchResults, setShowSearchResults] = useState(false);
-    
+    const [groupAvatarUri, setGroupAvatarUri] = useState<string | null>(null);
+    const [groupAvatarBase64, setGroupAvatarBase64] = useState<string | null>(null);
+
     const debouncedSearch = useDebounce(searchText, 300);
 
     const getGroupInitials = useCallback((name: string): string => {
@@ -180,6 +187,74 @@ export default function CreateGroupScreen({ navigation, route }: any) {
         });
     }, []);
 
+    const handlePickGroupAvatar = useCallback(() => {
+        const options = ["Take Photo", "Choose from Library", "Cancel"];
+        const cancelIndex = 2;
+        const runPicker = async (buttonIndex: number) => {
+            if (buttonIndex === cancelIndex) return;
+            try {
+                if (buttonIndex === 0) {
+                    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                    if (status !== "granted") {
+                        Alert.alert("Permission Required", "Camera access is needed to take a photo.");
+                        return;
+                    }
+                    try {
+                        const result = await ImagePicker.launchCameraAsync({
+                        mediaTypes: ["images"],
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                        base64: true,
+                    });
+                    if (result.canceled || !result.assets[0]) return;
+                    const asset = result.assets[0];
+                    setGroupAvatarUri(asset.uri);
+                    setGroupAvatarBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
+                    } catch (camErr: any) {
+                        if (camErr?.message?.toLowerCase().includes("simulator") || camErr?.message?.toLowerCase().includes("camera not available")) {
+                            Alert.alert("Camera unavailable", "Camera is not available on this device or simulator. Use “Choose from Library” to pick a photo.");
+                        } else {
+                            throw camErr;
+                        }
+                    }
+                } else if (buttonIndex === 1) {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== "granted") {
+                        Alert.alert("Photo library access needed", "Allow access to choose a photo.");
+                        return;
+                    }
+                    const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ["images"],
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                        base64: true,
+                    });
+                    if (result.canceled || !result.assets[0]) return;
+                    const asset = result.assets[0];
+                    setGroupAvatarUri(asset.uri);
+                    setGroupAvatarBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
+                }
+            } catch (e: any) {
+                logger.error("[CreateGroupScreen] Pick avatar error", e);
+                Alert.alert("Error", e?.message || "Failed to pick photo.");
+            }
+        };
+        if (Platform.OS === "ios") {
+            ActionSheetIOS.showActionSheetWithOptions(
+                { options, cancelButtonIndex: cancelIndex },
+                (buttonIndex) => { runPicker(buttonIndex); }
+            );
+        } else {
+            Alert.alert("Group photo", undefined, [
+                { text: "Take Photo", onPress: () => runPicker(0) },
+                { text: "Choose from Library", onPress: () => runPicker(1) },
+                { text: "Cancel", style: "cancel" },
+            ]);
+        }
+    }, []);
+
     const handleCreate = async () => {
         if (!groupName.trim()) {
             Alert.alert("Group Name Required", "Please enter a name for your group");
@@ -193,13 +268,26 @@ export default function CreateGroupScreen({ navigation, route }: any) {
 
         setCreating(true);
         try {
-            // Create the group with members using memberIds parameter
+            let iconUrl: string | undefined;
+            if (groupAvatarBase64) {
+                try {
+                    const uploadRes = await profileApi.uploadAvatar(groupAvatarBase64);
+                    if (uploadRes.success && uploadRes.avatarUrl) iconUrl = uploadRes.avatarUrl;
+                } catch (uploadErr: any) {
+                    logger.error("[CreateGroupScreen] Avatar upload failed", uploadErr);
+                    Alert.alert("Upload failed", uploadErr?.message || "Could not upload photo. Create group without photo?");
+                    setCreating(false);
+                    return;
+                }
+            }
+
             const memberIds = Array.from(selectedFriends);
             const createResponse = await rosterApi.createGroup({
                 name: groupName.trim(),
                 description: "",
                 color: groupColor,
                 memberIds: memberIds,
+                icon: iconUrl,
             });
 
             if (createResponse.success && createResponse.group) {
@@ -231,11 +319,12 @@ export default function CreateGroupScreen({ navigation, route }: any) {
     return (
         <ScreenShell>
             <AppHeader
-                title={step === "players" ? "Invite Players" : "Group details"}
+                title={step === "players" ? "Invite members" : "Group details"}
                 onBack={step === "details" ? () => setStep("players") : () => navigation?.goBack()}
             />
 
-            <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
+            <View style={{ flex: 1 }}>
+            <ScrollView style={{ flex: 1, backgroundColor: "#F3F4F6" }} contentContainerStyle={{ paddingBottom: step === "players" ? 102 : 24 }}>
                 {step === "players" ? (
                     <>
                 {/* Step 1: Search - Figma 48px height, "Search players" #A9A9A9 */}
@@ -443,8 +532,103 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                     )}
                 </View>
 
-                {/* Figma: Cancel #F0F0F0 #565656, Next #5EBC68 46px height, "Next (N)" when N>0 */}
-                <View style={{ flexDirection: "row", paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40, gap: 12 }}>
+                    </>
+                ) : (
+                    <>
+                {/* Step 2: Group details - Figma 362x84 card: 58px avatar (tappable for camera/library), camera overlay, group name input */}
+                <View style={{ marginHorizontal: 20, marginTop: 16, marginBottom: 24 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", height: FIGMA.groupNameCardHeight, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: FIGMA.inputRadius, paddingLeft: 17, paddingRight: 18 }}>
+                        <TouchableOpacity onPress={handlePickGroupAvatar} style={{ position: "relative" }} activeOpacity={0.8}>
+                            {groupAvatarUri ? (
+                                <>
+                                    <Image source={{ uri: groupAvatarUri }} style={{ width: FIGMA.groupAvatarSize, height: FIGMA.groupAvatarSize, borderRadius: FIGMA.groupAvatarSize / 2 }} resizeMode="cover" />
+                                    <View style={{ position: "absolute", right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFFFFF", borderWidth: 1.2, borderColor: "#E4E4E4", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4.8 }, shadowOpacity: 0.14, shadowRadius: 9.12, elevation: 4 }}>
+                                        <Camera size={12} color="#6D6D6D" strokeWidth={1.4} />
+                                    </View>
+                                </>
+                            ) : groupName.trim() ? (
+                                <>
+                                    <View style={{ width: FIGMA.groupAvatarSize, height: FIGMA.groupAvatarSize, borderRadius: FIGMA.groupAvatarSize / 2, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center" }}>
+                                        <Text style={{ fontFamily: theme.fontFamily.medium, fontSize: 18, lineHeight: 28, color: "#FFFFFF" }}>{getGroupInitials(groupName)}</Text>
+                                    </View>
+                                    <View style={{ position: "absolute", right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFFFFF", borderWidth: 1.2, borderColor: "#E4E4E4", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4.8 }, shadowOpacity: 0.14, shadowRadius: 9.12, elevation: 4 }}>
+                                        <Camera size={12} color="#6D6D6D" strokeWidth={1.4} />
+                                    </View>
+                                </>
+                            ) : (
+                                <View style={{ width: FIGMA.groupAvatarSize, height: FIGMA.groupAvatarSize, borderRadius: FIGMA.groupAvatarSize / 2, backgroundColor: FIGMA.groupAvatarEmpty, alignItems: "center", justifyContent: "center" }}>
+                                    <Camera size={22} color="#0000FF" strokeWidth={1.8} />
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TextInput
+                            value={groupName}
+                            onChangeText={setGroupName}
+                            placeholder="Group name"
+                            placeholderTextColor={FIGMA.groupNameLabel}
+                            style={{ flex: 1, marginLeft: 12, fontFamily: theme.fontFamily.medium, fontSize: 18, lineHeight: 28, color: FIGMA.groupNameValue, paddingVertical: 0 }}
+                            maxLength={50}
+                        />
+                    </View>
+                </View>
+
+                {/* Group members (N) - 16px/600 #1F2937 */}
+                <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 28, color: "#1F2937", marginHorizontal: 20, marginBottom: 12 }}>
+                    Group members ({(currentUser ? 1 : 0) + selectedPeopleList.length})
+                </Text>
+
+                {/* List: You first, then selected members - 44px avatar, 15px/500 name */}
+                <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: 20, borderRadius: FIGMA.inputRadius, borderWidth: 1, borderColor: "#E5E7EB", overflow: "hidden" }}>
+                    {currentUser && (
+                        <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 20 }}>
+                            {currentUser.avatar || currentUser.avatarUrl ? (
+                                <Image source={{ uri: (currentUser.avatar || currentUser.avatarUrl) ?? "" }} style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2 }} />
+                            ) : (
+                                <View style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2, backgroundColor: "#E3E4E7", alignItems: "center", justifyContent: "center" }}>
+                                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 14, color: "#6B7280" }}>{getInitials(currentUser.firstName, currentUser.lastName)}</Text>
+                                </View>
+                            )}
+                            <Text style={{ marginLeft: 14, fontFamily: theme.fontFamily.medium, fontSize: 15, lineHeight: 22, color: "#000000" }}>You</Text>
+                        </View>
+                    )}
+                    {selectedPeopleList.map((p) => (
+                        <View key={p.id} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: "#F3F4F6" }}>
+                            {p.avatar ? (
+                                <Image source={{ uri: p.avatar }} style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2 }} />
+                            ) : (
+                                <View style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2, backgroundColor: "#E3E4E7", alignItems: "center", justifyContent: "center" }}>
+                                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 14, color: "#6B7280" }}>{getInitials(p.firstName, p.lastName)}</Text>
+                                </View>
+                            )}
+                            <Text style={{ marginLeft: 14, fontFamily: theme.fontFamily.medium, fontSize: 15, lineHeight: 22, color: "#000000" }}>{`${p.firstName} ${p.lastName}`.trim() || "—"}</Text>
+                        </View>
+                    ))}
+                </View>
+
+                {/* We'll invite these members to join the group - 15px/400 centered */}
+                <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 15, lineHeight: 22, color: "#000000", textAlign: "center", marginTop: 24, marginHorizontal: 20 }}>
+                    We'll invite these members to join the group
+                </Text>
+
+                {/* Create group - full width 362px, 46px height, #5EBC68 */}
+                <View style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 40 }}>
+                    <TouchableOpacity
+                        onPress={handleCreate}
+                        disabled={creating || !groupName.trim() || selectedFriends.size === 0}
+                        style={{ width: "100%", height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: (creating || !groupName.trim() || selectedFriends.size === 0) ? "#9CA3AF" : FIGMA.primaryGreen, alignItems: "center", justifyContent: "center", opacity: (creating || !groupName.trim() || selectedFriends.size === 0) ? 0.5 : 1 }}
+                    >
+                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 22, color: "#FFFFFF" }}>
+                            {creating ? "Creating..." : "Create group"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+                    </>
+                )}
+            </ScrollView>
+
+            {/* Step 1 fixed footer: Frame 2608800 - white bar, border-top #F3F3F3, shadow */}
+            {step === "players" && (
+                <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 102, backgroundColor: "#FFFFFF", borderTopWidth: 1, borderTopColor: "#F3F3F3", paddingHorizontal: 20, paddingTop: 25, paddingBottom: 31, flexDirection: "row", gap: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 7, elevation: 4 }}>
                     <TouchableOpacity
                         onPress={() => navigation?.goBack()}
                         style={{ flex: 1, height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: FIGMA.cancelBg, alignItems: "center", justifyContent: "center" }}
@@ -454,87 +638,15 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                     <TouchableOpacity
                         onPress={() => setStep("details")}
                         disabled={selectedFriends.size === 0}
-                        style={{ flex: 1, height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: selectedFriends.size === 0 ? "#9CA3AF" : FIGMA.primaryGreen, alignItems: "center", justifyContent: "center", opacity: selectedFriends.size === 0 ? 0.5 : 1 }}
+                        style={{ flex: 1, height: FIGMA.footerButtonHeight, borderRadius: FIGMA.buttonRadius, backgroundColor: selectedFriends.size === 0 ? FIGMA.primaryGreen : FIGMA.primaryGreen, alignItems: "center", justifyContent: "center", opacity: selectedFriends.size === 0 ? 0.5 : 1 }}
                     >
                         <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, lineHeight: 22, color: "#FFFFFF" }}>
                             {selectedFriends.size > 0 ? `Next (${selectedFriends.size})` : "Next"}
                         </Text>
                     </TouchableOpacity>
                 </View>
-                    </>
-                ) : (
-                    <>
-                {/* Step 2: Group details - name and color */}
-                <View
-                    style={{
-                        backgroundColor: "#FFFFFF",
-                        paddingHorizontal: 20,
-                        paddingVertical: 16,
-                        marginHorizontal: 20,
-                        marginTop: 16,
-                        marginBottom: 8,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: "#E5E7EB",
-                    }}
-                >
-                    <TextInput
-                        value={groupName}
-                        onChangeText={setGroupName}
-                        placeholder="Group name"
-                        placeholderTextColor="#9CA3AF"
-                        style={{
-                            fontFamily: theme.fontFamily.regular,
-                            fontSize: 16,
-                            color: "#111827",
-                            paddingVertical: 8,
-                        }}
-                        maxLength={50}
-                    />
-                </View>
-
-                <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginHorizontal: 20, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" }}>
-                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#1F2937", marginBottom: 12 }}>
-                        Color
-                    </Text>
-                    <View style={{ flexDirection: "row", gap: 12 }}>
-                        {GROUP_COLORS.map((color) => (
-                            <TouchableOpacity
-                                key={color}
-                                onPress={() => setGroupColor(color)}
-                                style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 18,
-                                    backgroundColor: color,
-                                    borderWidth: groupColor === color ? 3 : 0,
-                                    borderColor: "#111827",
-                                }}
-                            />
-                        ))}
-                    </View>
-                </View>
-
-                <View style={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 }}>
-                    <TouchableOpacity
-                        onPress={handleCreate}
-                        disabled={creating || !groupName.trim() || selectedFriends.size === 0}
-                        style={{
-                            backgroundColor: (creating || !groupName.trim() || selectedFriends.size === 0) ? "#9CA3AF" : (colors.primary ?? "#5EBC68"),
-                            borderRadius: 8,
-                            paddingVertical: 16,
-                            alignItems: "center",
-                            justifyContent: "center",
-                        }}
-                    >
-                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>
-                            {creating ? "Creating..." : "Create group"}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                    </>
-                )}
-            </ScrollView>
+            )}
+            </View>
         </ScreenShell>
     );
 }

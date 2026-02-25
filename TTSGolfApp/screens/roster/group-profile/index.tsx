@@ -2,13 +2,15 @@
  * Group Profile Screen - Modular Implementation
  */
 import React, { useCallback, useState } from "react";
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, ActionSheetIOS, Platform, Modal, TextInput } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 import { COLORS } from "../../../constants/colors";
-import { RosterContact, rosterApi, friendApi } from "../../../services/api";
+import { RosterContact, rosterApi, friendApi, profileApi } from "../../../services/api";
 import { useToast } from "../../../ui/feedback";
 import { useAuthStore } from "../../../stores";
+import { logger } from "../../../utils/logger";
 
 import { useGroupProfile } from "./hooks/useGroupProfile";
 import {
@@ -33,6 +35,8 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     const { groupId } = route.params;
     const toast = useToast();
     const [showOptionsSheet, setShowOptionsSheet] = useState(false);
+    const [editNameModalVisible, setEditNameModalVisible] = useState(false);
+    const [editNameValue, setEditNameValue] = useState("");
     const currentUserId = useAuthStore((s) => s.user?.id);
 
     const {
@@ -53,6 +57,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         handleLeaveGroup,
         handleGroupChat,
         handleSettings,
+        updateGroup,
     } = useGroupProfile(groupId, navigation);
 
     const handleBack = useCallback(() => {
@@ -62,6 +67,140 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     const handleOpenOptions = useCallback(() => {
         setShowOptionsSheet(true);
     }, []);
+
+    const handleEditAvatar = useCallback(() => {
+        const options = ["Take Photo", "Choose from Library", "Cancel"];
+        const cancelIndex = 2;
+        if (Platform.OS === "ios") {
+            ActionSheetIOS.showActionSheetWithOptions(
+                { options, cancelButtonIndex: cancelIndex },
+                async (buttonIndex) => {
+                    if (buttonIndex === cancelIndex) return;
+                    try {
+                        if (buttonIndex === 0) {
+                            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                            if (status !== "granted") {
+                                Alert.alert("Permission Required", "Camera access is needed to take a photo.");
+                                return;
+                            }
+                                let result;
+                                try {
+                                    result = await ImagePicker.launchCameraAsync({
+                                        mediaTypes: ["images"],
+                                        allowsEditing: true,
+                                        aspect: [1, 1],
+                                        quality: 0.8,
+                                        base64: true,
+                                    });
+                                } catch (camErr: any) {
+                                    if (camErr?.message?.toLowerCase().includes("simulator") || camErr?.message?.toLowerCase().includes("camera not available")) {
+                                        Alert.alert("Camera unavailable", "Camera is not available on this device or simulator. Use “Choose from Library” to pick a photo.");
+                                    } else {
+                                        throw camErr;
+                                    }
+                                    return;
+                                }
+                            if (result!.canceled || !result!.assets[0]) return;
+                            const asset = result!.assets[0];
+                            const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
+                            if (!dataUrl) {
+                                Alert.alert("Image too large", "Could not process this photo. Try a smaller image.");
+                                return;
+                            }
+                            const data = await profileApi.uploadAvatar(dataUrl);
+                            if (data.success && data.avatarUrl) {
+                                await updateGroup({ icon: data.avatarUrl, avatar: data.avatarUrl });
+                                toast.show({ message: "Group photo updated", type: "success" });
+                            }
+                        } else if (buttonIndex === 1) {
+                            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                            if (status !== "granted") {
+                                Alert.alert("Photo library access needed", "Allow access to choose a photo.");
+                                return;
+                            }
+                            const result = await ImagePicker.launchImageLibraryAsync({
+                                mediaTypes: ["images"],
+                                allowsEditing: true,
+                                aspect: [1, 1],
+                                quality: 0.8,
+                                base64: true,
+                            });
+                            if (result.canceled || !result.assets[0]) return;
+                            const asset = result.assets[0];
+                            const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
+                            if (!dataUrl) {
+                                Alert.alert("Image too large", "Try a smaller image.");
+                                return;
+                            }
+                            const data = await profileApi.uploadAvatar(dataUrl);
+                            if (data.success && data.avatarUrl) {
+                                await updateGroup({ icon: data.avatarUrl, avatar: data.avatarUrl });
+                                toast.show({ message: "Group photo updated", type: "success" });
+                            }
+                        }
+                    } catch (e: any) {
+                        logger.error("[GroupProfile] Edit avatar error", e);
+                        Alert.alert("Error", e?.message || "Failed to update group photo.");
+                    }
+                }
+            );
+        } else {
+            Alert.alert("Edit group photo", undefined, [
+                { text: "Take Photo", onPress: async () => {
+                    try {
+                        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                        if (status !== "granted") { Alert.alert("Permission Required", "Camera access is needed."); return; }
+                        try {
+                            const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
+                            if (result.canceled || !result.assets[0]) return;
+                            const dataUrl = result.assets[0].base64 ? `data:image/jpeg;base64,${result.assets[0].base64}` : null;
+                            if (!dataUrl) { Alert.alert("Image too large", "Try a smaller image."); return; }
+                            const data = await profileApi.uploadAvatar(dataUrl);
+                            if (data.success && data.avatarUrl) { await updateGroup({ icon: data.avatarUrl, avatar: data.avatarUrl }); toast.show({ message: "Group photo updated", type: "success" }); }
+                        } catch (camErr: any) {
+                            if (camErr?.message?.toLowerCase().includes("simulator") || camErr?.message?.toLowerCase().includes("camera not available")) {
+                                Alert.alert("Camera unavailable", "Camera is not available on this device or simulator. Use “Choose from Library” to pick a photo.");
+                            } else {
+                                throw camErr;
+                            }
+                        }
+                    } catch (err: any) { Alert.alert("Error", err?.message || "Failed to update photo."); }
+                }},
+                { text: "Choose from Library", onPress: async () => {
+                    try {
+                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                        if (status !== "granted") { Alert.alert("Photo library access needed", "Allow access to choose a photo."); return; }
+                        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
+                        if (result.canceled || !result.assets[0]) return;
+                        const dataUrl = result.assets[0].base64 ? `data:image/jpeg;base64,${result.assets[0].base64}` : null;
+                        if (!dataUrl) { Alert.alert("Image too large", "Try a smaller image."); return; }
+                        const data = await profileApi.uploadAvatar(dataUrl);
+                        if (data.success && data.avatarUrl) { await updateGroup({ icon: data.avatarUrl, avatar: data.avatarUrl }); toast.show({ message: "Group photo updated", type: "success" }); }
+                    } catch (err: any) { Alert.alert("Error", err?.message || "Failed to update photo."); }
+                }},
+                { text: "Cancel", style: "cancel" },
+            ]);
+        }
+    }, [updateGroup, toast]);
+
+    const handleEditName = useCallback(() => {
+        setShowOptionsSheet(false);
+        setEditNameValue(group?.name ?? "");
+        setEditNameModalVisible(true);
+    }, [group?.name]);
+
+    const handleSaveEditName = useCallback(async () => {
+        const name = editNameValue.trim();
+        if (!name) return;
+        setEditNameModalVisible(false);
+        try {
+            const res = await updateGroup({ name });
+            if (res?.success) toast.show({ message: "Group name updated", type: "success" });
+            else Alert.alert("Error", "Failed to update name.");
+        } catch (e: any) {
+            Alert.alert("Error", e?.message || "Failed to update name.");
+        }
+    }, [editNameValue, updateGroup, toast]);
 
     const handleLeaveGroupConfirm = useCallback(() => {
         Alert.alert(
@@ -216,10 +355,13 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     initials={groupInitials}
                     name={group.name}
                     color={group.color}
+                    avatarUri={group.avatar ?? group.icon}
                     topInset={insets.top}
                     isOwner={group.isOwner}
                     onBack={handleBack}
                     onSettings={handleOpenOptions}
+                    onEditAvatar={handleEditAvatar}
+                    onEditName={handleEditName}
                 />
 
                 <GroupActions
@@ -239,12 +381,14 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     upcomingCount={upcomingTeeTimes.length}
                 />
 
-                <TeeTimesList
-                    teeTimes={upcomingTeeTimes}
-                    onAddTeeTime={handleAddTeeTime}
-                />
+                <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 20 }}>
+                    <TeeTimesList
+                        teeTimes={upcomingTeeTimes}
+                        onAddTeeTime={handleAddTeeTime}
+                    />
+                </View>
 
-                <View style={{ height: 6, backgroundColor: "#F3F3F3" }} />
+                <View style={{ height: 6, backgroundColor: "#F3F3F3", marginBottom: 20 }} />
 
                 <MembersList
                     members={members}
@@ -278,10 +422,35 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 visible={showOptionsSheet}
                 onClose={() => setShowOptionsSheet(false)}
                 onLeaveGroup={handleLeaveGroupFromSheet}
+                onEditName={handleEditName}
                 members={members}
                 currentUserId={currentUserId}
                 isOwner={group.isOwner}
             />
+
+            <Modal visible={editNameModalVisible} transparent animationType="fade">
+                <TouchableOpacity activeOpacity={1} onPress={() => setEditNameModalVisible(false)} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 }}>
+                    <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()} style={{ backgroundColor: "#FFFFFF", borderRadius: 12, padding: 20 }}>
+                        <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 18, color: "#111827", marginBottom: 12 }}>Edit group name</Text>
+                        <TextInput
+                            value={editNameValue}
+                            onChangeText={setEditNameValue}
+                            placeholder="Group name"
+                            placeholderTextColor="#9CA3AF"
+                            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: "#111827", marginBottom: 16 }}
+                            autoFocus
+                        />
+                        <View style={{ flexDirection: "row", gap: 12, justifyContent: "flex-end" }}>
+                            <TouchableOpacity onPress={() => setEditNameModalVisible(false)} style={{ paddingVertical: 10, paddingHorizontal: 16 }}>
+                                <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 16, color: "#6B7280" }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleSaveEditName} style={{ paddingVertical: 10, paddingHorizontal: 16 }}>
+                                <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 16, color: COLORS.primary }}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
 
             <AddMembersModal
                 visible={showAddModal}

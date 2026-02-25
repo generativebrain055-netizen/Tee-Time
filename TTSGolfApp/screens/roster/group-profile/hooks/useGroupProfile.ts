@@ -161,6 +161,18 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
         Alert.alert("Group Settings", "Group settings coming soon!");
     }, []);
 
+    const updateGroup = useCallback(
+        async (data: { name?: string; description?: string; color?: string; icon?: string; avatar?: string }) => {
+            if (!groupId) return;
+            const res = await rosterApi.updateGroup(groupId, data);
+            if (res.success) {
+                await loadGroupData();
+            }
+            return res;
+        },
+        [groupId, loadGroupData]
+    );
+
     return {
         loading,
         refreshing,
@@ -179,5 +191,6 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
         handleLeaveGroup,
         handleGroupChat,
         handleSettings,
+        updateGroup,
     };
 };
