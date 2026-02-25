@@ -318,7 +318,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                             {scannedUser?.avatar ? (
                                 <Image source={{ uri: scannedUser.avatar }} className="w-[90px] h-[90px] rounded-full mb-4" />
                             ) : (
-                                <View className="w-[90px] h-[90px] rounded-full bg-blue-600 justify-center items-center mb-4">
+                                <View className="w-[90px] h-[90px] rounded-full justify-center items-center mb-4" style={{ backgroundColor: '#5EBC68' }}>
                                     <Text className="text-4xl font-bold text-white">
                                         {scannedUser?.name?.charAt(0)?.toUpperCase() || "?"}
                                     </Text>

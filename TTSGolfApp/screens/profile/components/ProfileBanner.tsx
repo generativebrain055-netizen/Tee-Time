@@ -61,7 +61,7 @@ const ProfileBanner = memo(({
             {avatar ? (
                 <Image source={{ uri: avatar }} className="w-[100px] h-[100px] rounded-full border-4 border-white" />
             ) : (
-                <View className="w-[100px] h-[100px] rounded-full bg-blue-600 justify-center items-center border-4 border-white">
+                <View className="w-[100px] h-[100px] rounded-full justify-center items-center border-4 border-white" style={{ backgroundColor: COLORS.primary }}>
                     <Text className="text-4xl font-bold text-white">{initials}</Text>
                 </View>
             )}

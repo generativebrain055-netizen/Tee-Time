@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
 } from "react-native";
 import { X, Check } from "lucide-react-native";
-import { useTheme } from "../../ui/theme";
+import { useTheme, useColors } from "../../ui/theme";
 import { rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
@@ -37,6 +37,7 @@ export default function AddOnDeckToRosterModal({
     onRefreshRoster,
 }: AddOnDeckToRosterModalProps) {
     const theme = useTheme();
+    const colors = useColors();
     const [onDeck, setOnDeck] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -163,8 +164,8 @@ export default function AddOnDeckToRosterModal({
                                             {avatar ? (
                                                 <Image source={{ uri: avatar }} style={{ width: 48, height: 48, borderRadius: 24 }} />
                                             ) : (
-                                                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#E5E7EB", alignItems: "center", justifyContent: "center" }}>
-                                                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>{getInitials(name)}</Text>
+                                                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" }}>
+                                                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>{getInitials(name)}</Text>
                                                 </View>
                                             )}
                                             <Text style={{ flex: 1, fontFamily: theme.fontFamily.medium, fontSize: 16, color: "#111827", marginLeft: 14 }} numberOfLines={1}>

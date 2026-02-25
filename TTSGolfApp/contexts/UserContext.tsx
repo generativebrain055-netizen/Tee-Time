@@ -138,7 +138,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (response.success && response.user) {
         logger.debug('[UserContext] User clubs from API', response.user.clubs);
-        
+        const u = response.user as { avatarUrl?: string; avatar?: string };
+        const avatarUrl = u.avatarUrl || u.avatar || undefined;
         const userProfile: UserProfile = {
           id: response.user.id,
           firstName: response.user.firstName || '',
@@ -147,7 +148,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phoneNumber: response.user.phoneNumber,
           location: response.user.location,
           handicap: response.user.handicap,
-          avatarUrl: response.user.avatarUrl,
+          avatarUrl: avatarUrl && avatarUrl.trim() ? avatarUrl.trim() : undefined,
           homeCourse: response.user.homeCourse,
           clubs: response.user.clubs || [],
           bio: response.user.bio,

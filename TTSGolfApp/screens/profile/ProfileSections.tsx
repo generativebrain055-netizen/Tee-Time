@@ -36,6 +36,7 @@ export function ProfilePhotoSection({
             <View className="mb-4">
                 <Avatar
                     uri={profile.avatar}
+                    initials={`${profile.firstName?.[0] || ""}${profile.lastName?.[0] || ""}`.toUpperCase()}
                     size={120}
                     showCameraButton={true}
                     onCameraPress={onChangePhoto}

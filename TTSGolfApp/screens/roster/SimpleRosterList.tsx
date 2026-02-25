@@ -63,7 +63,16 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
     
     const handlePress = () => {
         if (isEditMode) return;
-        navigation?.navigate("FriendProfile", { userId: userId || item.id });
+        navigation?.navigate("FriendProfile", {
+            userId: userId || item.id,
+            user: {
+                id: userId || item.id,
+                firstName: contact.name?.split(" ")[0] || contact.firstName || "",
+                lastName: contact.name?.split(" ").slice(1).join(" ") || contact.lastName || "",
+                avatar: avatar || undefined,
+                friendshipStatus: "friend" as const,
+            },
+        });
     };
     
     const handleLongPress = () => {
@@ -152,11 +161,11 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                     width: 56,
                     height: 56,
                     borderRadius: 28,
-                    backgroundColor: "#E5E7EB",
+                    backgroundColor: colors.primary,
                     alignItems: "center",
                     justifyContent: "center",
                 }}>
-                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>
+                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>
                         {getInitials(firstName, lastName)}
                     </Text>
                 </View>

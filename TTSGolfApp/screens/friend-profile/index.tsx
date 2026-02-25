@@ -107,6 +107,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
 
   const fullName = getFullName(profile.firstName, profile.lastName);
   const initials = getInitials(profile.firstName, profile.lastName);
+  const avatarUri = (profile.avatar || (profile as { avatarUrl?: string }).avatarUrl || "").trim() || undefined;
   const isFriend = profile.friendshipStatus === "friend";
 
   const rounds = profile.roundsCount ?? profile.roundsPlayed ?? 0;
@@ -128,7 +129,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
         }
       >
         <ProfileBanner
-          avatar={profile.avatar}
+          avatar={avatarUri}
           initials={initials}
           headerImageUri={profile.headerImage}
           topInset={insets.top}

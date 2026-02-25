@@ -471,6 +471,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                                 <View>
                                     <Avatar
                                         uri={localAvatarUri ?? initialProfile?.avatarUrl}
+                                        initials={initials}
                                         size={64}
                                         showCameraButton={false}
                                     />

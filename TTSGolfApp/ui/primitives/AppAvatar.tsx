@@ -55,8 +55,8 @@ function AppAvatarInner({
       <Avatar.Text
         size={px}
         label={label}
-        style={[{ backgroundColor: colors.primaryLight }, style]}
-        labelStyle={{ color: colors.primary }}
+        style={[{ backgroundColor: colors.primary }, style]}
+        labelStyle={{ color: colors.onPrimary }}
       />
     );
   }

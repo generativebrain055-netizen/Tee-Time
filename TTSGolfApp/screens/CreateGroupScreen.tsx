@@ -429,8 +429,8 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                                     {friend.avatar ? (
                                         <Image source={{ uri: friend.avatar }} style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2 }} />
                                     ) : (
-                                        <View style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2, backgroundColor: "#E3E4E7", alignItems: "center", justifyContent: "center" }}>
-                                            <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>{getInitials(friend.firstName, friend.lastName)}</Text>
+                                        <View style={{ width: FIGMA.avatarList, height: FIGMA.avatarList, borderRadius: FIGMA.avatarList / 2, backgroundColor: FIGMA.primaryGreen, alignItems: "center", justifyContent: "center" }}>
+                                            <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>{getInitials(friend.firstName, friend.lastName)}</Text>
                                         </View>
                                     )}
                                     <Text style={{ flex: 1, marginLeft: 12, fontFamily: theme.fontFamily.medium, fontSize: 15, lineHeight: 22, color: FIGMA.nameColor }}>{friend.firstName} {friend.lastName}</Text>

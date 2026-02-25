@@ -108,7 +108,7 @@ const AllRow = memo(
           <Image source={{ uri: item.avatar }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Text style={styles.avatarInitials}>{getInitials(item.name)}</Text>
+            <Text style={styles.avatarInitialsWhite}>{getInitials(item.name)}</Text>
           </View>
         )}
       </View>
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: FIGMA_AVATAR_SIZE / 2,
   },
   avatarPlaceholder: {
-    backgroundColor: "#9D9D9D",
+    backgroundColor: "#5EBC68",
     alignItems: "center",
     justifyContent: "center",
   },

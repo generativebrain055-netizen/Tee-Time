@@ -7,16 +7,28 @@ import { friendApi, DiscoveredUser } from "../../../services/api";
 import { FriendProfileData } from "../types";
 
 export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) => {
-    const [profile, setProfile] = useState<FriendProfileData | null>(null); // Don't use initialUser
-    const [loading, setLoading] = useState(true); // Always start with loading
+    const [profile, setProfile] = useState<FriendProfileData | null>(() => {
+        if (initialUser && initialUser.id === userId) {
+            const avatar = initialUser.avatar || (initialUser as Record<string, unknown>).avatarUrl as string | undefined;
+            return { ...initialUser, avatar: avatar || undefined } as FriendProfileData;
+        }
+        return null;
+    });
+    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
     const fetchProfile = useCallback(async () => {
         try {
             const response = await friendApi.getUserProfile(userId);
-            if (response.success) {
-                setProfile(response.profile);
+            if (response.success && response.profile) {
+                const p = response.profile as Record<string, unknown>;
+                const apiAvatar = (typeof p.avatar === "string" ? p.avatar : (p.avatarUrl as string) || "").trim();
+                setProfile((prev) => {
+                    const merged = { ...response.profile } as FriendProfileData;
+                    merged.avatar = apiAvatar || (prev?.avatar && String(prev.avatar).trim()) || undefined;
+                    return merged;
+                });
             }
         } catch (error) {
             // Error handling is done by the component

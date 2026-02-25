@@ -101,7 +101,19 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
     const handleMemberPress = useCallback((member: RosterContact) => {
         if (member.contact?.userId) {
-            navigation?.navigate("FriendProfile", { userId: member.contact.userId });
+            const c = member.contact;
+            const name = c.name || "";
+            const parts = name.trim().split(/\s+/);
+            navigation?.navigate("FriendProfile", {
+                userId: c.userId,
+                user: {
+                    id: c.userId,
+                    firstName: parts[0] || "",
+                    lastName: parts.slice(1).join(" ") || "",
+                    avatar: c.avatar || undefined,
+                    friendshipStatus: "friend" as const,
+                },
+            });
         }
     }, [navigation]);
 

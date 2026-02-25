@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Image, TouchableOpacity } from "react-native";
+import { View, Image, TouchableOpacity, Text } from "react-native";
 import { User, Camera } from "lucide-react-native";
 
 const COLORS = {
@@ -11,6 +11,8 @@ const COLORS = {
 
 interface AvatarProps {
     uri?: string | null;
+    /** Initials shown in green placeholder when no avatar image is set (e.g. "JD"). */
+    initials?: string;
     size?: number;
     showCameraButton?: boolean;
     onCameraPress?: () => void;
@@ -18,6 +20,7 @@ interface AvatarProps {
 
 export default function Avatar({
     uri,
+    initials,
     size = 120,
     showCameraButton = false,
     onCameraPress,
@@ -39,14 +42,29 @@ export default function Avatar({
                 />
             ) : (
                 <View
-                    className="bg-gray-200 justify-center items-center"
                     style={{
                         width: size,
                         height: size,
                         borderRadius: size / 2,
+                        backgroundColor: COLORS.primary,
+                        justifyContent: "center",
+                        alignItems: "center",
                     }}
                 >
-                    <User size={size * 0.5} color={COLORS.textSub} />
+                    {initials && initials.length > 0 ? (
+                        <Text
+                            style={{
+                                fontSize: Math.round(size * 0.4),
+                                fontWeight: "700",
+                                color: COLORS.white,
+                            }}
+                            numberOfLines={1}
+                        >
+                            {initials}
+                        </Text>
+                    ) : (
+                        <User size={size * 0.5} color={COLORS.white} />
+                    )}
                 </View>
             )}
             {showCameraButton && (

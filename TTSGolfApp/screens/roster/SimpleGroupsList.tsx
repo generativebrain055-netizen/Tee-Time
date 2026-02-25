@@ -56,12 +56,12 @@ const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress
                         width: 56,
                         height: 56,
                         borderRadius: 28,
-                        backgroundColor: group.color || "#3B82F6",
+                        backgroundColor: group.color || colors.primary,
                         alignItems: "center",
                         justifyContent: "center",
                     }}
                 >
-                    <Text style={{ fontFamily: theme.fontFamily.bold, fontSize: 18, color: "#FFFFFF" }}>
+                    <Text style={{ fontFamily: theme.fontFamily.bold, fontSize: 18, color: "#FFFFFF" }} numberOfLines={1}>
                         {getInitials(group.name || "")}
                     </Text>
                 </View>

@@ -26,9 +26,9 @@ const MemberCard = memo(({ member, displayName: displayNameProp, isOwner, onPres
                 {member.contact?.avatar ? (
                     <Image source={{ uri: member.contact.avatar }} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 16 }} />
                 ) : (
-                    <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: "#E5E7EB", alignItems: "center", justifyContent: "center", marginRight: 16 }}>
-                        <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 14, color: COLORS.textSub }}>{initials}</Text>
-                    </View>
+<View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", marginRight: 16 }}>
+                    <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 14, color: "#FFFFFF" }}>{initials}</Text>
+                </View>
                 )}
                 <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Inter", fontWeight: "500", fontSize: 16, lineHeight: 19, color: "#000000" }} numberOfLines={1}>{displayName}</Text>

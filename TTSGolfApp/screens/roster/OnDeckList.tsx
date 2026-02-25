@@ -50,7 +50,19 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, addin
 }) => {
     const handlePress = () => {
         const userId = item.contact?.userId || item.id;
-        navigation?.navigate("FriendProfile", { userId });
+        const c = item.contact || item;
+        const name = c.name || "";
+        const parts = name.trim().split(/\s+/);
+        navigation?.navigate("FriendProfile", {
+            userId,
+            user: {
+                id: userId,
+                firstName: parts[0] || c.firstName || "",
+                lastName: parts.slice(1).join(" ") || c.lastName || "",
+                avatar: c.avatar || item.avatar || undefined,
+                friendshipStatus: "friend" as const,
+            },
+        });
     };
     
     const handleAddToRoster = (e: any) => {
@@ -91,11 +103,11 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, addin
                     width: 56,
                     height: 56,
                     borderRadius: 28,
-                    backgroundColor: "#E5E7EB",
+                    backgroundColor: colors.primary,
                     alignItems: "center",
                     justifyContent: "center",
                 }}>
-                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#6B7280" }}>
+                    <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 16, color: "#FFFFFF" }}>
                         {getInitials(firstName, lastName)}
                     </Text>
                 </View>

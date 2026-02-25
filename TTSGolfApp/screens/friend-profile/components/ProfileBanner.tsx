@@ -19,7 +19,7 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
         <Image source={{ uri: headerImageUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       ) : (
         <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800' }}
+          source={require('../../../assets/profile-cover.png')}
           style={{ width: '100%', height: '100%' }}
           resizeMode="cover"
         />
@@ -51,6 +51,7 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
     }}>
       {avatar ? (
         <Image
+          key={avatar}
           source={{ uri: avatar }}
           style={{
             width: 120,
@@ -65,7 +66,7 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
           width: 120,
           height: 120,
           borderRadius: 60,
-          backgroundColor: '#22C55E',
+          backgroundColor: '#5EBC68',
           justifyContent: 'center',
           alignItems: 'center',
           borderWidth: 5,

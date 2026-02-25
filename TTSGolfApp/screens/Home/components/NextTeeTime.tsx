@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   avatarPlaceholder: {
-    backgroundColor: palette.emerald500,
+    backgroundColor: palette.green500,
     justifyContent: "center",
     alignItems: "center",
   },

@@ -235,6 +235,7 @@ export default function ProfileScreen({ navigation }: any) {
 
     const fullName = getFullName(profile?.firstName, profile?.lastName);
     const initials = getInitials(profile?.firstName, profile?.lastName);
+    const avatarUri = (profile?.avatarUrl || (profile as { avatar?: string })?.avatar || "").trim();
     const coursesPlayed = recentRounds.length > 0
         ? new Set(recentRounds.map(r => r.courseName)).size
         : 0;
@@ -304,9 +305,10 @@ export default function ProfileScreen({ navigation }: any) {
                         right: 0,
                         alignItems: 'center',
                     }}>
-                        {profile?.avatarUrl ? (
+                        {avatarUri ? (
                             <Image
-                                source={{ uri: profile.avatarUrl }}
+                                key={avatarUri}
+                                source={{ uri: avatarUri }}
                                 style={{
                                     width: 120,
                                     height: 120,
@@ -320,7 +322,7 @@ export default function ProfileScreen({ navigation }: any) {
                                 width: 120,
                                 height: 120,
                                 borderRadius: 60,
-                                backgroundColor: '#3B82F6',
+                                backgroundColor: '#5EBC68',
                                 justifyContent: 'center',
                                 alignItems: 'center',
                                 borderWidth: 5,

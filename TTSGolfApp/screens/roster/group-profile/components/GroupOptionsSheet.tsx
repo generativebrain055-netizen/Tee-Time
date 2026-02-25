@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { View, Text, TouchableOpacity, Modal, Image } from "react-native";
 import { X, LogOut } from "lucide-react-native";
+import { COLORS } from "../../../../constants/colors";
 import { RosterContact } from "../../../../services/api";
 
 interface GroupOptionsSheetProps {
@@ -62,8 +63,8 @@ export const GroupOptionsSheet = memo(({
                                     {member.contact?.avatar ? (
                                         <Image source={{ uri: member.contact.avatar }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
                                     ) : (
-                                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E5E7EB", marginRight: 12, alignItems: "center", justifyContent: "center" }}>
-                                            <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 14, color: "#6B7280" }}>
+                                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, marginRight: 12, alignItems: "center", justifyContent: "center" }}>
+                                            <Text style={{ fontFamily: "Inter", fontWeight: "600", fontSize: 14, color: "#FFFFFF" }}>
                                                 {(member.contact?.name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                                             </Text>
                                         </View>
