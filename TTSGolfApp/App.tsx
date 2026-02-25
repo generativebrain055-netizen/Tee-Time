@@ -59,6 +59,7 @@ import GlobalSearchScreen from "./screens/GlobalSearchScreen";
 import FindPlayersScreen from "./screens/FindPlayersScreen";
 import UserProfileScreen from "./screens/UserProfileScreen";
 import SettingsScreen from "./screens/SettingsScreen";
+import AccountSettingsScreen from "./screens/AccountSettingsScreen";
 import NotificationSettingsScreen from "./screens/NotificationSettingsScreen";
 import LocationSettingsScreen from "./screens/LocationSettingsScreen";
 import PrivacySecurityScreen from "./screens/PrivacySecurityScreen";
@@ -88,6 +89,7 @@ type ScreenName =
   | "QRCode"
   | "ScanQR"
   | "Settings"
+  | "AccountSettings"
   | "NotificationSettings"
   | "LocationSettings"
   | "HelpSupport"
@@ -490,6 +492,13 @@ export default function App(): React.ReactElement {
         return (
           <SettingsScreen
             key={`settings-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "AccountSettings":
+        return (
+          <AccountSettingsScreen
+            key={`account-settings-${screenKey}`}
             navigation={navigation as any}
           />
         );

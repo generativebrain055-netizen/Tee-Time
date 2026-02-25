@@ -14,7 +14,7 @@ import {
     User, 
     Mail, 
     Phone, 
-    MapPin, 
+    MapPin,
     Edit3,
     Bell,
     Shield,
@@ -43,7 +43,7 @@ export default function SettingsScreen({ navigation }: any) {
 
 
     const handleEditProfile = useCallback(() => {
-        navigation?.navigate("EditProfile");
+        navigation?.navigate("AccountSettings");
     }, [navigation]);
 
     const handleNotifications = useCallback(() => {
@@ -141,7 +141,6 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
                     {[
                         { icon: Bell, label: 'Notifications', subtitle: 'Manage notification preferences', onPress: handleNotifications, iconColor: '#3B82F6', iconBg: '#DBEAFE' },
-                        { icon: Navigation, label: 'Location', subtitle: 'Update location for distance features', onPress: () => navigation?.navigate("LocationSettings"), iconColor: '#10B981', iconBg: '#D1FAE5' },
                         { icon: Shield, label: 'Privacy & Security', subtitle: 'Privacy settings and policies', onPress: handlePrivacy, iconColor: '#9333EA', iconBg: '#E9D5FF' },
                         { icon: HelpCircle, label: 'Help & Support', subtitle: 'Support center and FAQs', onPress: handleHelp, iconColor: colors.primary, iconBg: colors.primaryContainer },
                     ].map((item, index, array) => {

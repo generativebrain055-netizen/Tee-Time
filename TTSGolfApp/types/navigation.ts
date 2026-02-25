@@ -23,6 +23,7 @@ export type ScreenName =
   | "QRCode"
   | "ScanQR"
   | "Settings"
+  | "AccountSettings"
   | "CreateTeeTime"
   | "Invites"
   | "Availability"
