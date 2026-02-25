@@ -16,6 +16,8 @@ export interface AvatarUploadResponse {
   success: boolean;
   avatarUrl: string;
   message?: string;
+  /** When authenticated, backend persists avatar and returns updated user */
+  user?: Partial<UserProfile>;
 }
 
 export const profileApi = {
@@ -40,25 +42,14 @@ export const profileApi = {
     ),
 
   /**
-   * Upload avatar image to Supabase Storage
+   * Upload avatar image to Supabase Storage. When authenticated, backend also saves to profile.
    * Expects base64 data URL (e.g. data:image/jpeg;base64,...) as returned by image picker with base64: true
    */
-  uploadAvatar: async (profilePhotoBase64: string): Promise<AvatarUploadResponse> => {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${API_URL}/auth/upload-avatar`, {
+  uploadAvatar: (profilePhotoBase64: string): Promise<AvatarUploadResponse> =>
+    apiCall<AvatarUploadResponse>(`${API_URL}/auth/upload-avatar`, {
       method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ profilePhotoBase64 }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || "Failed to upload avatar");
-    }
-    return data;
-  },
+    }),
 
   /**
    * Delete current avatar

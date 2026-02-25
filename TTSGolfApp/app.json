@@ -39,7 +39,12 @@
       "icon": "./assets/AppIcon.png",
       "edgeToEdgeEnabled": true,
       "package": "com.teetimesocial.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -52,6 +57,13 @@
         "expo-camera",
         {
           "cameraPermission": "This app uses the camera to scan QR codes and take profile photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tee Time needs access to your photo library to choose a profile photo.",
+          "cameraPermission": "Tee Time needs access to your camera to take a profile photo."
         }
       ],
       "./plugins/withIosNoEmptyDsym.js",

@@ -281,12 +281,13 @@ router.post(
 
 /**
  * @route   POST /api/auth/upload-avatar
- * @desc    Upload profile photo, returns public URL for use in register/update
- * @access  Public
+ * @desc    Upload profile photo, returns public URL. If authenticated, also saves to user profile.
+ * @access  Public (register) or Private (authenticated – persists to profile)
  */
 router.post(
   "/upload-avatar",
   captureDeviceInfo,
+  optionalAuth,
   [
     body("imageBase64").optional().isString(),
     body("profilePhotoBase64").optional().isString(),

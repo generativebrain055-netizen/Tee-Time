@@ -11,7 +11,9 @@ import {
     Alert,
     Modal,
     InteractionManager,
+    Linking,
 } from "react-native";
+import * as Device from "expo-device";
 import * as ImagePicker from "expo-image-picker";
 import { ChevronDown, Trash2, Camera, X, MapPin } from "lucide-react-native";
 import { Avatar } from "../../components/common";
@@ -298,6 +300,13 @@ export default function EditProfileScreen({ navigation, route }: Props) {
 
     const handleTakePhoto = useCallback(() => {
         setShowPhotoModal(false);
+        if (!Device.isDevice) {
+            Alert.alert(
+                "Camera not available",
+                "The camera isn't available in the simulator. Use a physical device to take a photo, or choose a photo from your library."
+            );
+            return;
+        }
         InteractionManager.runAfterInteractions(() => {
             (async () => {
                 try {
@@ -316,18 +325,37 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                     if (result.canceled || !result.assets[0]) return;
                     const asset = result.assets[0];
                     const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
-                    if (!dataUrl) return;
+                    if (!dataUrl) {
+                        Alert.alert(
+                            "Image too large",
+                            "Could not process this photo. Try choosing a smaller image or a different photo."
+                        );
+                        return;
+                    }
                     setUploadingAvatar(true);
-                    const data = await profileApi.uploadAvatar(dataUrl);
-                    if (data.success && data.avatarUrl) {
-                        setLocalAvatarUri(data.avatarUrl);
-                        updateContextProfile({ avatarUrl: data.avatarUrl });
-                        await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                    try {
+                        const data = await profileApi.uploadAvatar(dataUrl);
+                        if (data.success && data.avatarUrl) {
+                            setLocalAvatarUri(data.avatarUrl);
+                            if (data.user) {
+                                updateContextProfile(data.user as Parameters<typeof updateContextProfile>[0]);
+                            } else {
+                                updateContextProfile({ avatarUrl: data.avatarUrl });
+                                await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                            }
+                        }
+                    } catch (uploadError: any) {
+                        logger.error("[EditProfileScreen] Take photo / upload error", uploadError);
+                        Alert.alert(
+                            "Upload failed",
+                            uploadError?.message || "Could not upload photo. Check your connection and try again."
+                        );
+                    } finally {
+                        setUploadingAvatar(false);
                     }
                 } catch (error: any) {
-                    logger.error("[EditProfileScreen] Take photo / upload error", error);
+                    logger.error("[EditProfileScreen] Take photo error", error);
                     Alert.alert("Error", error?.message || "Failed to take or upload photo.");
-                } finally {
                     setUploadingAvatar(false);
                 }
             })();
@@ -341,7 +369,14 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 try {
                     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                     if (status !== "granted") {
-                        Alert.alert("Permission Required", "Photo library access is needed to choose a photo.");
+                        Alert.alert(
+                            "Photo library access needed",
+                            "Tee Time needs access to your photos to choose a profile photo. You can allow it in Settings.",
+                            [
+                                { text: "Cancel", style: "cancel" },
+                                { text: "Open Settings", onPress: () => Linking.openSettings() },
+                            ]
+                        );
                         return;
                     }
                     const result = await ImagePicker.launchImageLibraryAsync({
@@ -354,18 +389,37 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                     if (result.canceled || !result.assets[0]) return;
                     const asset = result.assets[0];
                     const dataUrl = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null;
-                    if (!dataUrl) return;
+                    if (!dataUrl) {
+                        Alert.alert(
+                            "Image too large",
+                            "Could not process this photo. Try choosing a smaller image or a different photo."
+                        );
+                        return;
+                    }
                     setUploadingAvatar(true);
-                    const data = await profileApi.uploadAvatar(dataUrl);
-                    if (data.success && data.avatarUrl) {
-                        setLocalAvatarUri(data.avatarUrl);
-                        updateContextProfile({ avatarUrl: data.avatarUrl });
-                        await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                    try {
+                        const data = await profileApi.uploadAvatar(dataUrl);
+                        if (data.success && data.avatarUrl) {
+                            setLocalAvatarUri(data.avatarUrl);
+                            if (data.user) {
+                                updateContextProfile(data.user as Parameters<typeof updateContextProfile>[0]);
+                            } else {
+                                updateContextProfile({ avatarUrl: data.avatarUrl });
+                                await profileApi.updateProfile({ avatarUrl: data.avatarUrl });
+                            }
+                        }
+                    } catch (uploadError: any) {
+                        logger.error("[EditProfileScreen] Library pick / upload error", uploadError);
+                        Alert.alert(
+                            "Upload failed",
+                            uploadError?.message || "Could not upload photo. Check your connection and try again."
+                        );
+                    } finally {
+                        setUploadingAvatar(false);
                     }
                 } catch (error: any) {
-                    logger.error("[EditProfileScreen] Library pick / upload error", error);
+                    logger.error("[EditProfileScreen] Choose photo error", error);
                     Alert.alert("Error", error?.message || "Failed to choose or upload photo.");
-                } finally {
                     setUploadingAvatar(false);
                 }
             })();

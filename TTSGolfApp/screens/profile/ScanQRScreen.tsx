@@ -11,6 +11,7 @@ import {
     Animated,
     StyleSheet,
 } from "react-native";
+import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { X, UserPlus, Camera, AlertCircle } from "lucide-react-native";
@@ -177,6 +178,22 @@ export default function ScanQRScreen({ navigation }: Props) {
     }, [resetScanner]);
 
     const GRAY_BG = "#374151";
+
+    // Simulator: camera not available
+    if (!Device.isDevice) {
+        return (
+            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
+                <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
+                <Text className="text-xl font-bold text-white mb-2">Camera not available</Text>
+                <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
+                    QR scanning requires a physical device. The camera isn't available in the simulator.
+                </Text>
+                <TouchableOpacity className="py-3" onPress={handleClose}>
+                    <Text className="text-base text-gray-400">Go back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     // Permission handling
     if (!permission) {

@@ -228,7 +228,7 @@ const registerUser = async (req, res, next) => {
 };
 
 /**
- * Upload profile photo (standalone - returns URL for use in register/update)
+ * Upload profile photo. Returns public URL. If user is authenticated, also persists to profile.
  */
 const uploadAvatar = async (req, res, next) => {
   try {
@@ -242,7 +242,39 @@ const uploadAvatar = async (req, res, next) => {
       });
     }
 
-    const avatarUrl = await avatarUploadService.uploadAvatar(base64);
+    const userId = req.user?.id || null;
+    const avatarUrl = await avatarUploadService.uploadAvatar(base64, userId);
+
+    if (userId) {
+      const userRepository = require("../../repositories/userRepository");
+      await userRepository.updateProfile(userId, { avatarUrl });
+      const updatedUser = await userRepository.findById(userId);
+      return res.json({
+        success: true,
+        avatarUrl,
+        user: updatedUser ? {
+          id: updatedUser.id,
+          phoneNumber: updatedUser.phone_number,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          firstName: updatedUser.first_name,
+          lastName: updatedUser.last_name,
+          handicap: updatedUser.handicap,
+          socialRate: updatedUser.social_rate,
+          avatarUrl: updatedUser.avatar_url || null,
+          bio: updatedUser.bio,
+          location: updatedUser.location,
+          homeCourse: updatedUser.home_course,
+          clubs: updatedUser.clubs || [],
+          preferences: {
+            preferredTeeTime: updatedUser.preferred_tee_time,
+            walkOrRide: updatedUser.walk_or_ride,
+            playingPartnerPreference: updatedUser.playing_partner_preference,
+            drinkOfChoice: updatedUser.drink_of_choice,
+          },
+        } : undefined,
+      });
+    }
 
     return res.json({
       success: true,
