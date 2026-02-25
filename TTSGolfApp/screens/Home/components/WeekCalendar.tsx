@@ -13,6 +13,8 @@ interface WeekCalendarProps {
   onSelectDay: (date: Date) => void;
   onViewSchedule: () => void;
   children?: React.ReactNode;
+  /** When true, the line between weekdays and content is hidden (e.g. empty state) */
+  hideDivider?: boolean;
 }
 
 const toDateString = (d: Date) => d.toDateString();
@@ -81,6 +83,7 @@ function WeekCalendar({
   onSelectDay,
   onViewSchedule,
   children,
+  hideDivider = false,
 }: WeekCalendarProps) {
   const selectedKey = selectedDate ? toDateString(selectedDate) : null;
 
@@ -117,7 +120,7 @@ function WeekCalendar({
         </View>
         {children && (
           <>
-            <View style={styles.cardDivider} />
+            {!hideDivider && <View style={styles.cardDivider} />}
             <View style={styles.cardContent}>
               {children}
             </View>

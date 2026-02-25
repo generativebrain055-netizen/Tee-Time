@@ -1,19 +1,22 @@
 import React, { memo, useCallback } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { CalendarDay } from "../types";
-import { MONTHS } from "../constants";
+import { MONTHS_SHORT } from "../constants";
 import { spacing, fontSize, fontFamily, radii } from "../../../ui/theme/tokens";
 
 const PRIMARY_GREEN = "#5EBC68";
 
 interface DayCellProps {
   item: CalendarDay;
-  onPress: (day: number | "") => void;
+  onPress: (date: Date) => void;
 }
 
 const DayCell = memo(({ item, onPress }: DayCellProps) => {
-  const handlePress = useCallback(() => onPress(item.day), [item.day, onPress]);
+  const handlePress = useCallback(() => {
+    if (item.day === "" || item.year == null || item.month == null) return;
+    onPress(new Date(item.year, item.month, item.day as number));
+  }, [item.day, item.year, item.month, onPress]);
 
   if (item.day === "") {
     return (
@@ -32,16 +35,17 @@ const DayCell = memo(({ item, onPress }: DayCellProps) => {
     <View
       style={{
         width: "14.28%",
+        minWidth: 0,
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: spacing.sm,
+        paddingVertical: spacing.xs,
       }}
     >
       <TouchableOpacity
         onPress={handlePress}
         style={{
-          width: 44,
-          height: 44,
+          width: 36,
+          height: 36,
           alignItems: "center",
           justifyContent: "center",
           borderRadius: radii.md,
@@ -49,13 +53,19 @@ const DayCell = memo(({ item, onPress }: DayCellProps) => {
         }}
       >
         <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
           style={{
-            fontSize: fontSize.base,
-            color: item.isSelected ? "#FFFFFF" : "#1F2937",
+            fontSize: fontSize.sm,
+            color: item.isSelected
+              ? "#FFFFFF"
+              : item.isOtherMonth
+                ? "#D1D5DB"
+                : "#1F2937",
             fontFamily: item.isToday ? fontFamily.bold : fontFamily.semiBold,
           }}
         >
-          {item.day}
+          {String(item.day)}
         </Text>
       </TouchableOpacity>
       {item.hasEvent && (
@@ -80,7 +90,7 @@ interface CalendarGridProps {
   calendarDays: CalendarDay[];
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  onDayPress: (day: number | "") => void;
+  onDayPress: (date: Date) => void;
 }
 
 const CalendarGrid = memo(({
@@ -94,40 +104,49 @@ const CalendarGrid = memo(({
   <View
     style={{
       paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.xl,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.md,
       flex: 1,
-      justifyContent: "center",
+      minHeight: 0,
     }}
   >
+    {/* Month row - always visible at top */}
     <View
       style={{
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: spacing.xl,
+        marginBottom: spacing.lg,
       }}
     >
       <TouchableOpacity onPress={onPrevMonth} style={{ padding: spacing.sm }}>
         <ChevronLeft size={24} color="#6B7280" />
       </TouchableOpacity>
-      <Text
-        style={{
-          fontSize: fontSize.lg,
-          fontFamily: fontFamily.bold,
-          color: "#1F2937",
-        }}
-      >
-        {MONTHS[currentMonth]} {currentYear}
-      </Text>
+      <View style={{ flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" }}>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={{
+            fontSize: fontSize.lg,
+            fontFamily: fontFamily.bold,
+            color: "#1F2937",
+          }}
+        >
+          {MONTHS_SHORT[currentMonth]} {currentYear}
+        </Text>
+      </View>
       <TouchableOpacity onPress={onNextMonth} style={{ padding: spacing.sm }}>
         <ChevronRight size={24} color="#6B7280" />
       </TouchableOpacity>
     </View>
 
-    <View style={{ flexDirection: "row", marginBottom: spacing.md }}>
+    {/* Weekday labels - always visible */}
+    <View style={{ flexDirection: "row", marginBottom: spacing.sm }}>
       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-        <View key={day} style={{ width: "14.28%", alignItems: "center" }}>
+        <View key={day} style={{ width: "14.28%", alignItems: "center", minWidth: 0 }}>
           <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
             style={{
               fontSize: fontSize.xs + 1,
               fontFamily: fontFamily.medium,
@@ -140,11 +159,18 @@ const CalendarGrid = memo(({
       ))}
     </View>
 
-    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-      {calendarDays.map((item) => (
-        <DayCell key={item.id} item={item} onPress={onDayPress} />
-      ))}
-    </View>
+    {/* Day grid - scrollable when 6 rows to prevent overflow */}
+    <ScrollView
+      style={{ flex: 1, minHeight: 0 }}
+      contentContainerStyle={{ paddingBottom: spacing.md }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignContent: "flex-start" }}>
+        {calendarDays.map((item) => (
+          <DayCell key={item.id} item={item} onPress={onDayPress} />
+        ))}
+      </View>
+    </ScrollView>
   </View>
 ));
 

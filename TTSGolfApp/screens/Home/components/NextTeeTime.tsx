@@ -13,8 +13,6 @@ interface NextTeeTimeProps {
   teeTime: UpcomingTeeTime | null;
   currentUserId?: string;
   onPress?: (teeTimeId: string) => void;
-  /** e.g. "Dec 30th" for empty state title */
-  selectedDateLabel?: string;
 }
 
 const formatTime = (timeStr: string): string => {
@@ -77,15 +75,10 @@ function NextTeeTime({
   teeTime,
   currentUserId,
   onPress,
-  selectedDateLabel,
 }: NextTeeTimeProps) {
   if (!teeTime) {
-    const emptyTitle = selectedDateLabel
-      ? `Next tee time (${selectedDateLabel})`
-      : "Next tee time";
     return (
       <View style={styles.emptyRoot}>
-        <Text style={styles.sectionTitle}>{emptyTitle}</Text>
         <MotiView
           from={{ opacity: 0, translateY: 8 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -225,9 +218,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: palette.gray200,
   },
   emptyIconWrap: { marginBottom: spacing.lg, opacity: 0.5 },
   emptyText: {

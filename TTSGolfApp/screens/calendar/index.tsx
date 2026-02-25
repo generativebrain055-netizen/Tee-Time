@@ -55,8 +55,10 @@ const FilterDropdown = memo(
             flexDirection: "row",
             alignItems: "center",
             gap: spacing.sm,
-            backgroundColor: "#F3F4F6",
+            backgroundColor: "#FFFFFF",
             borderRadius: radii.md,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.sm + 2,
           }}
@@ -192,6 +194,7 @@ export default function FullCalendarScreen({ navigation }: Props) {
         <View
           style={{
             flex: 0.48,
+            minHeight: 200,
             marginHorizontal: spacing.lg,
             marginTop: spacing.lg,
             backgroundColor: "#FFFFFF",
@@ -201,6 +204,7 @@ export default function FullCalendarScreen({ navigation }: Props) {
             shadowOpacity: 0.05,
             shadowRadius: 8,
             elevation: 2,
+            overflow: "hidden",
           }}
         >
           <CalendarGrid

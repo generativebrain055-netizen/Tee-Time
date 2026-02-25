@@ -8,7 +8,7 @@ import { colorTokens } from "../../../theme/tokens";
 
 interface QuickActionsProps {
   onCreateTeeTime: () => void;
-  onInviteViaLink: () => void;
+  onInviteViaSMS: () => void;
   onFindPlayers: () => void;
 }
 
@@ -48,12 +48,12 @@ function ActionButton({
 
 function QuickActions({
   onCreateTeeTime,
-  onInviteViaLink,
+  onInviteViaSMS,
   onFindPlayers,
 }: QuickActionsProps) {
   const actions = [
     { icon: CalendarPlus, label: "Create tee time", onPress: onCreateTeeTime },
-    { icon: UserPlus, label: "Invite via link", onPress: onInviteViaLink },
+    { icon: UserPlus, label: "Invite via SMS", onPress: onInviteViaSMS },
     { icon: Search, label: "Find Players", onPress: onFindPlayers },
   ];
 

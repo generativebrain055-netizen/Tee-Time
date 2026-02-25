@@ -28,6 +28,7 @@ export type ScreenName =
   | "Invites"
   | "Availability"
   | "EditAvailability"
+  | "ConfirmAvailability"
   | "Community"
   | "FriendProfile"
   | "GroupProfile"

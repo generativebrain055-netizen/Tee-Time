@@ -32,10 +32,33 @@ export const generateCalendarDays = (
   const today = new Date();
   const days: CalendarDay[] = [];
 
+  // Previous month trailing days (e.g. Nov 30 when first day of Dec is Monday)
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear = month === 0 ? year - 1 : year;
+  const daysInPrevMonth = getDaysInMonth(prevYear, prevMonth);
   for (let i = 0; i < firstDay; i++) {
-    days.push({ day: "", id: `empty-${i}` });
+    const d = daysInPrevMonth - firstDay + 1 + i;
+    const dateKey = `${prevYear}-${prevMonth}-${d}`;
+    const events = teeTimesMap.get(dateKey);
+    const isSelected =
+      selectedDate &&
+      selectedDate.getFullYear() === prevYear &&
+      selectedDate.getMonth() === prevMonth &&
+      selectedDate.getDate() === d;
+    days.push({
+      day: d,
+      id: `prev-${prevYear}-${prevMonth}-${d}`,
+      year: prevYear,
+      month: prevMonth,
+      hasEvent: !!events && events.length > 0,
+      isSelected: !!isSelected,
+      isToday: false,
+      isOtherMonth: true,
+      events,
+    });
   }
 
+  // Current month
   for (let day = 1; day <= daysInMonth; day++) {
     const dateKey = `${year}-${month}-${day}`;
     const isToday =
@@ -50,13 +73,44 @@ export const generateCalendarDays = (
     const events = teeTimesMap.get(dateKey);
     days.push({
       day,
-      id: `day-${day}`,
+      id: `day-${year}-${month}-${day}`,
+      year,
+      month,
       hasEvent: !!events && events.length > 0,
       isSelected: !!isSelected,
       isToday,
+      isOtherMonth: false,
       events,
     });
   }
+
+  // Next month leading days to fill the last row (6 rows of 7 = 42 cells max)
+  const totalSoFar = days.length;
+  const remaining = 42 - totalSoFar;
+  for (let i = 0; i < remaining; i++) {
+    const d = i + 1;
+    const nextMonth = month === 11 ? 0 : month + 1;
+    const nextYear = month === 11 ? year + 1 : year;
+    const dateKey = `${nextYear}-${nextMonth}-${d}`;
+    const events = teeTimesMap.get(dateKey);
+    const isSelected =
+      selectedDate &&
+      selectedDate.getFullYear() === nextYear &&
+      selectedDate.getMonth() === nextMonth &&
+      selectedDate.getDate() === d;
+    days.push({
+      day: d,
+      id: `next-${nextYear}-${nextMonth}-${d}`,
+      year: nextYear,
+      month: nextMonth,
+      hasEvent: !!events && events.length > 0,
+      isSelected: !!isSelected,
+      isToday: false,
+      isOtherMonth: true,
+      events,
+    });
+  }
+
   return days;
 };
 

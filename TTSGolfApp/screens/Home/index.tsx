@@ -13,22 +13,6 @@ import { Header, QuickActions, AdsSection, WeekCalendar, NextTeeTime } from "./c
 const toDateString = (d: Date | string) =>
   new Date(d).toDateString();
 
-const getDateLabel = (date: Date): string => {
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  const day = date.getDate();
-  const suffix =
-    day >= 11 && day <= 13
-      ? "th"
-      : day % 10 === 1
-        ? "st"
-        : day % 10 === 2
-          ? "nd"
-          : day % 10 === 3
-            ? "rd"
-            : "th";
-  return `${month} ${day}${suffix}`;
-};
-
 const getWeekDays = (selectedDate: Date, teeTimes: TeeTime[]): WeekDay[] => {
   const today = new Date();
   const currentDay = today.getDay();
@@ -108,8 +92,6 @@ function HomePage({ navigation }: any) {
     return found ? transformTeeTime(found) : null;
   }, [upcomingTeeTimes, selectedKey]);
 
-  const selectedDateLabel = getDateLabel(selectedDate);
-
   const handleNotifications = useCallback(() => {
     navigation?.navigate("Notifications");
   }, [navigation]);
@@ -118,8 +100,8 @@ function HomePage({ navigation }: any) {
     navigation?.navigate("CreateTeeTime");
   }, [navigation]);
 
-  const handleInviteViaLink = useCallback(() => {
-    navigation?.navigate("CreateTeeTime");
+  const handleInviteViaSMS = useCallback(() => {
+    navigation?.navigate("CreateTeeTime", { inviteViaSMS: true });
   }, [navigation]);
 
   const handleFindPlayers = useCallback(() => {
@@ -150,7 +132,7 @@ function HomePage({ navigation }: any) {
         <Header onNotificationPress={handleNotifications} />
         <QuickActions
           onCreateTeeTime={handleCreateTeeTime}
-          onInviteViaLink={handleInviteViaLink}
+          onInviteViaSMS={handleInviteViaSMS}
           onFindPlayers={handleFindPlayers}
         />
         <AdsSection title="Sponsored" slots={DEFAULT_AD_SLOTS} />
@@ -159,12 +141,12 @@ function HomePage({ navigation }: any) {
           selectedDate={selectedDate}
           onSelectDay={handleSelectDay}
           onViewSchedule={handleViewSchedule}
+          hideDivider={!teeTimeForSelectedDay}
         >
           <NextTeeTime
             teeTime={teeTimeForSelectedDay}
             currentUserId={user?.id}
             onPress={handleTeeTimePress}
-            selectedDateLabel={!teeTimeForSelectedDay ? selectedDateLabel : undefined}
           />
         </WeekCalendar>
       </ContentArea>

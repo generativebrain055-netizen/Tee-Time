@@ -8,6 +8,11 @@ export interface CalendarDay {
   hasEvent?: boolean;
   isSelected?: boolean;
   isToday?: boolean;
+  /** True when day is from previous or next month (shown in grey) */
+  isOtherMonth?: boolean;
+  /** Year (0-indexed month); set for non-empty cells so tap can resolve to a Date */
+  year?: number;
+  month?: number;
   events?: CalendarTeeTime[];
 }
 

@@ -5,9 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Calendar, Clock as ClockIcon } from 'lucide-react-native';
 import { availabilityApi, type TimeSlot, type DayOfWeek, type TimeSlotType } from '../services/api/availabilityApi';
@@ -33,6 +31,26 @@ const TIME_SLOTS: { id: TimeSlotType; label: string }[] = [
 ];
 
 type CustomTimes = Record<DayOfWeek, TimeSlotType[]>;
+
+/** Day order for "next week" (Monday first). */
+const DAY_ORDER: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function getNextWeekDateForDay(dayOfWeek: DayOfWeek): Date {
+  const today = new Date();
+  const dayIndex = DAY_ORDER.indexOf(dayOfWeek);
+  const nextMonday = new Date(today);
+  const daysUntilMonday = (8 - today.getDay()) % 7;
+  nextMonday.setDate(today.getDate() + (daysUntilMonday === 0 ? 7 : daysUntilMonday));
+  nextMonday.setDate(nextMonday.getDate() + dayIndex);
+  return nextMonday;
+}
+
+function formatDayDate(date: Date): string {
+  const month = date.toLocaleDateString('en-US', { month: 'long' });
+  const day = date.getDate();
+  const suffix = day >= 11 && day <= 13 ? 'th' : day % 10 === 1 ? 'st' : day % 10 === 2 ? 'nd' : day % 10 === 3 ? 'rd' : 'th';
+  return `${month} ${day}${suffix}`;
+}
 
 // Day chip component - matches design
 const DayChip = memo<{
@@ -124,8 +142,6 @@ const LoadingSkeleton = memo(() => {
 LoadingSkeleton.displayName = 'LoadingSkeleton';
 
 function EditAvailabilityScreen({ navigation, route }: any) {
-  const insets = useSafeAreaInsets();
-  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [customTimes, setCustomTimes] = useState<CustomTimes>({
@@ -200,46 +216,6 @@ function EditAvailabilityScreen({ navigation, route }: any) {
     });
   }, []);
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    try {
-      const availability: TimeSlot[] = [];
-      Object.entries(customTimes).forEach(([day, slots]) => {
-        slots.forEach((slot) => {
-          availability.push({
-            day_of_week: day as DayOfWeek,
-            time_slot: slot,
-          });
-        });
-      });
-
-      const response = await availabilityApi.saveUserAvailability(availability);
-
-      if (response.success) {
-        // Show success feedback and navigate back
-        Alert.alert(
-          'Success', 
-          'Your availability has been updated successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack(),
-            },
-          ],
-          { cancelable: false }
-        );
-      } else {
-        throw new Error(response.message || 'Failed to save availability');
-      }
-    } catch (error: any) {
-      logger.error('Save availability error:', error);
-      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to save availability';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setSaving(false);
-    }
-  }, [customTimes, navigation]);
-
   const totalSelected = Object.values(customTimes).reduce(
     (sum, slots) => sum + slots.length,
     0
@@ -264,31 +240,35 @@ function EditAvailabilityScreen({ navigation, route }: any) {
         onBack={() => navigation.goBack()}
         rightComponent={
           <TouchableOpacity
-            onPress={handleSave}
-            disabled={saving || totalSelected === 0}
+            onPress={() => {
+              if (totalSelected > 0) {
+                navigation.navigate('ConfirmAvailability', { customTimes });
+              }
+            }}
+            disabled={totalSelected === 0}
             style={{
               backgroundColor: totalSelected > 0 ? '#22C55E' : '#E5E7EB',
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 16,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 20,
               alignItems: 'center',
               justifyContent: 'center',
+              minWidth: 52,
+              flexDirection: 'row',
+              flexShrink: 0,
             }}
             activeOpacity={0.8}
           >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text
-                style={{
-                  fontFamily: 'Inter_600SemiBold',
-                  fontSize: 14,
-                  color: totalSelected > 0 ? '#FFFFFF' : '#9CA3AF',
-                }}
-              >
-                Save
-              </Text>
-            )}
+            <Text
+              numberOfLines={1}
+              style={{
+                fontFamily: 'Inter_600SemiBold',
+                fontSize: 14,
+                color: totalSelected > 0 ? '#FFFFFF' : '#9CA3AF',
+              }}
+            >
+              Next
+            </Text>
           </TouchableOpacity>
         }
       />
@@ -431,10 +411,13 @@ function EditAvailabilityScreen({ navigation, route }: any) {
           {/* Per-day customization */}
           {isCustomizing && selectedDays.length > 0 && (
             <View>
-              {selectedDays.map(([day, slots]) => (
+              {selectedDays.map(([day, slots]) => {
+                const dayLabel = WEEK_DAYS.find(d => d.id === day)?.label ?? day;
+                const dateLabel = formatDayDate(getNextWeekDateForDay(day as DayOfWeek));
+                return (
                 <View key={day} style={{ marginBottom: 24, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12 }}>
                   <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 12, fontFamily: 'Inter_600SemiBold' }}>
-                    {WEEK_DAYS.find(d => d.id === day)?.label}
+                    {dayLabel} - {dateLabel}
                   </Text>
                   
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -448,7 +431,8 @@ function EditAvailabilityScreen({ navigation, route }: any) {
                     ))}
                   </View>
                 </View>
-              ))}
+              );
+              })}
             </View>
           )}
         </View>

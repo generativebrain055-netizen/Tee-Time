@@ -139,13 +139,9 @@ export const useCalendar = () => {
     } else setCurrentMonth((m) => m + 1);
   }, [currentMonth]);
 
-  const handleDayPress = useCallback(
-    (day: number | "") => {
-      if (day === "") return;
-      setSelectedDate(new Date(currentYear, currentMonth, day));
-    },
-    [currentYear, currentMonth]
-  );
+  const handleDayPress = useCallback((date: Date) => {
+    setSelectedDate(date);
+  }, []);
 
   return {
     currentMonth,

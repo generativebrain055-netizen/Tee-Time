@@ -117,12 +117,10 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
 
   return (
     <>
-      <TouchableOpacity
+      <View
         style={{
-          backgroundColor: '#FFFFFF',
+          backgroundColor: "#FFFFFF",
           borderRadius: 16,
-          borderLeftWidth: 4,
-          borderLeftColor: '#22C55E',
           padding: 20,
           marginBottom: 12,
           shadowColor: "#000",
@@ -131,47 +129,87 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
           shadowRadius: 8,
           elevation: 2,
         }}
-        onPress={handlePress}
-        activeOpacity={0.9}
       >
-        {/* Row 1: Date + Status */}
-        <View className="flex-row justify-between items-center mb-4">
-          <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', fontFamily: 'Inter_700Bold' }}>
+        {/* Row 1: Date + Status pill + Three-dot menu */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 15,
+              fontFamily: "Inter_700Bold",
+              color: "#111827",
+              flex: 1,
+            }}
+          >
             {formatTeeTimeDate(teeTime.date)}
           </Text>
-          <View style={{ 
-            flexDirection: 'row', 
-            alignItems: 'center', 
-            gap: 6, 
-            backgroundColor: '#E8F5E9', 
-            paddingHorizontal: 12, 
-            paddingVertical: 6, 
-            borderRadius: 9999 
-          }}>
-            <StatusIcon size={12} color={statusDisplay.color} strokeWidth={3} />
-            <Text style={{ fontSize: 11, fontWeight: '600', color: statusDisplay.color, fontFamily: 'Inter_600SemiBold' }}>
-              {statusDisplay.label}
-            </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: teeTime.status === "confirmed" ? PRIMARY_GREEN : "#E8F5E9",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 9999,
+              }}
+            >
+              {teeTime.status === "confirmed" ? (
+                <Image source={TickIcon} style={{ width: 12, height: 12 }} resizeMode="contain" />
+              ) : (
+                <StatusIcon size={12} color={statusDisplay.color} strokeWidth={3} />
+              )}
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_600SemiBold",
+                  color: teeTime.status === "confirmed" ? "#FFFFFF" : statusDisplay.color,
+                }}
+              >
+                {statusDisplay.label}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleMorePress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{ padding: 4 }}
+            >
+              <MoreHorizontal size={20} color="#6B7280" />
+            </TouchableOpacity>
           </View>
         </View>
 
+        <TouchableOpacity onPress={handlePress} activeOpacity={0.9} style={{ marginHorizontal: -20, paddingHorizontal: 20, marginBottom: -20, paddingBottom: 20 }}>
         {/* Time */}
-        <View className="flex-row items-center gap-3 mb-3">
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <Clock size={18} color="#9CA3AF" />
-          <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151', fontFamily: 'Inter_600SemiBold' }}>
+          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#374151" }}>
             {formatTeeTimeTime(teeTime.time)}
           </Text>
         </View>
 
         {/* Location */}
-        <View className="flex-row items-start gap-3 mb-6">
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 24 }}>
           <MapPin size={18} color="#9CA3AF" style={{ marginTop: 2 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827', fontFamily: 'Inter_600SemiBold' }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#111827" }}>
               {teeTime.course}
             </Text>
             {teeTime.location ? (
-              <Text style={{ fontSize: 12, color: '#9CA3AF', fontFamily: 'Inter_400Regular', marginTop: 2 }}>
+              <Text style={{ fontSize: 12, color: "#9CA3AF", fontFamily: "Inter_400Regular", marginTop: 2 }}>
                 {teeTime.location}
               </Text>
             ) : null}
@@ -180,66 +218,80 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
 
         {/* Participants */}
         {participants.length > 0 ? (
-          <View className="flex-row items-center gap-3">
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <Users size={18} color="#9CA3AF" />
-            <View className="flex-row items-start gap-4">
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16, flex: 1, flexWrap: "wrap" }}>
               {participants.map((p) => {
                 const isYou = currentUserId === p.userId;
-                const displayName = isYou ? "You" : (p.name.length > 6 ? `${p.name.slice(0, 5)}...` : p.name);
+                const parts = p.name.trim().split(/\s+/);
+                const displayName = isYou
+                  ? "You"
+                  : parts.length >= 2
+                    ? `${parts[0]} ${parts[1][0]}`
+                    : p.name.length > 6
+                      ? `${p.name.slice(0, 5)}...`
+                      : p.name;
                 return (
-                  <View key={p.id} style={{ alignItems: 'center', minHeight: 70 }}>
-                    <View style={{ position: 'relative' }}>
+                  <View key={p.id} style={{ alignItems: "center", minWidth: 48 }}>
+                    <View style={{ position: "relative" }}>
                       {p.avatar ? (
-                        <Image source={{ uri: p.avatar }} style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: '#FFFFFF' }} />
+                        <Image
+                          source={{ uri: p.avatar }}
+                          style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: "#FFFFFF" }}
+                        />
                       ) : (
-                        <View style={{ 
-                          width: 44, 
-                          height: 44, 
-                          borderRadius: 22, 
-                          backgroundColor: '#F3F4F6', 
-                          justifyContent: 'center', 
-                          alignItems: 'center',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF'
-                        }}>
-                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#6B7280' }}>
-                            {p.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                        <View
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            backgroundColor: "#F3F4F6",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            borderWidth: 2,
+                            borderColor: "#FFFFFF",
+                          }}
+                        >
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#6B7280" }}>
+                            {p.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()
+                              .slice(0, 2)}
                           </Text>
                         </View>
                       )}
-                      <View style={{ 
-                        position: 'absolute', 
-                        bottom: -2, 
-                        right: -2, 
-                        width: 18,
-                        height: 18,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        <Image 
-                          source={TickIcon} 
-                          style={{ width: 18, height: 18 }}
-                          resizeMode="contain"
-                        />
+                      <View
+                        style={{
+                          position: "absolute",
+                          bottom: -2,
+                          right: -2,
+                          width: 18,
+                          height: 18,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Image source={TickIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
                       </View>
                     </View>
-                    <Text style={{ 
-                      fontFamily: 'Inter_500Medium', 
-                      fontSize: 10, 
-                      color: '#6B7280', 
-                      textAlign: 'center', 
-                      marginTop: 4,
-                      maxWidth: 56
-                    }} numberOfLines={1}>
+                    <Text
+                      style={{
+                        fontFamily: "Inter_500Medium",
+                        fontSize: 10,
+                        color: "#6B7280",
+                        textAlign: "center",
+                        marginTop: 4,
+                        maxWidth: 56,
+                      }}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       {displayName}
                     </Text>
                     {p.isCreator && (
-                      <Text style={{ 
-                        fontFamily: 'Inter_400Regular', 
-                        fontSize: 9, 
-                        color: '#9CA3AF',
-                        marginTop: 0
-                      }}>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#9CA3AF" }}>
                         (host)
                       </Text>
                     )}
@@ -249,11 +301,12 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
             </View>
           </View>
         ) : (
-          <Text style={{ fontSize: 14, color: '#9CA3AF', fontFamily: 'Inter_500Medium' }}>
+          <Text style={{ fontSize: 14, color: "#9CA3AF", fontFamily: "Inter_500Medium" }}>
             No participants
           </Text>
         )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
 
       <Modal
         visible={showCancelModal}

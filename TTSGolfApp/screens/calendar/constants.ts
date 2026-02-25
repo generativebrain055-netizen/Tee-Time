@@ -15,6 +15,11 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+export const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 export const CALENDAR_COLORS = {
   primary: "#5EBC68",
   bg: "#F6F6F6",

@@ -5,6 +5,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -29,6 +32,7 @@ import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
+import { X, Users, Phone, ChevronRight } from "lucide-react-native";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -37,6 +41,13 @@ interface ExtendedFriend extends Friend {
   phone?: string;
   rosterId?: string; // Original roster entry ID
 }
+
+/** Normalize phone to E.164 for API (backend expects /^\+?[1-9]\d{6,14}$/). */
+const toE164Phone = (phone: string): string | undefined => {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10) return undefined;
+  return digits.length === 10 ? `+1${digits}` : `+${digits}`;
+};
 
 // Helper function to convert time slot to time string
 const timeSlotToTime = (timeSlot: string): string => {
@@ -53,11 +64,12 @@ const timeSlotToTime = (timeSlot: string): string => {
 export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
-  const [step, setStep] = useState(1);
+  const inviteViaSMS = route?.params?.inviteViaSMS === true;
+  const [step, setStep] = useState(inviteViaSMS ? 2 : 1);
   const [loading, setLoading] = useState(false);
 
-  // Step 1 - Invite Type (Roster or First Come First Served)
-  const [inviteType, setInviteType] = useState<InviteType>("roster");
+  // Step 1 - Invite Type (Roster or First Come First Served). SMS flow uses roster.
+  const [inviteType, setInviteType] = useState<InviteType>(inviteViaSMS ? "roster" : "roster");
 
   // Form state - Step 2 (Details: date, time, course, group size)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -81,6 +93,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const [responseWindow, setResponseWindow] = useState(2); // hours
   const [orderedPlayers, setOrderedPlayers] = useState<string[]>([]);
   const [phoneInvites, setPhoneInvites] = useState<Array<{ phone: string; name: string }>>([]);
+  const [showAddMoreModal, setShowAddMoreModal] = useState(false);
+  const [showPhoneInviteModal, setShowPhoneInviteModal] = useState(false);
+  const [phoneInviteInput, setPhoneInviteInput] = useState("");
 
   // FCFS state
   const [fcfsTargetType, setFcfsTargetType] =
@@ -417,13 +432,16 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             });
           });
           
-          // Add phone invites (non-registered users)
+          // Add phone invites (non-registered users). Backend expects phone as E.164-style digits only.
           phoneInvites.forEach((phoneInvite, index) => {
-            invitees.push({
-              phone: phoneInvite.phone,
-              name: phoneInvite.name,
-              order: orderedPlayers.length + index + 1,
-            });
+            const e164 = toE164Phone(phoneInvite.phone);
+            if (e164) {
+              invitees.push({
+                phone: e164,
+                name: phoneInvite.name || undefined,
+                order: orderedPlayers.length + index + 1,
+              });
+            }
           });
           
           logger.debug("Roster invitees prepared", { count: invitees.length, phoneInvites: phoneInvites.length });
@@ -528,9 +546,10 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
               invitee.userId = id;
             }
 
-            // Include phone if available
+            // Include phone if available (backend expects E.164)
             if (player?.phone) {
-              invitee.phone = player.phone;
+              const e164 = toE164Phone(player.phone);
+              if (e164) invitee.phone = e164;
             }
 
             // Include name
@@ -660,8 +679,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
   const getButtonText = () => {
     if (step === 3) return "Next";
-    if (step === 4 && inviteType === "roster") return "Review Invite Order";
-    if (step === 4) return "Send Invites";
+    if (step === 4) return "Send invites";
     return "Continue";
   };
 
@@ -677,7 +695,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
       if (inviteType === "manual") return selectedPlayers.length > 0;
     }
     if (step === 4) {
-      if (inviteType === "roster") return orderedPlayers.length > 0;
+      if (inviteType === "roster") return orderedPlayers.length > 0 || phoneInvites.length > 0;
       if (inviteType === "fcfs") return fcfsSelectedPlayers.length > 0;
       if (inviteType === "manual") return selectedPlayers.length > 0;
     }
@@ -810,6 +828,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             teeTime={selectedTime}
             courseName={location.split(',')[0]?.trim() || ''}
             groupSize={groupSize}
+            phoneInvites={phoneInvites}
+            onRemovePhoneInvite={(phone) => setPhoneInvites((prev) => prev.filter((p) => p.phone !== phone))}
+            onAddMore={() => setShowAddMoreModal(true)}
           />
         </>
       )}
@@ -861,6 +882,114 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         initialTime={selectedTime}
       />
 
+      {/* Add more modal (Select from players / Invite via phone number) */}
+      <Modal
+        visible={showAddMoreModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddMoreModal(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={addMoreStyles.backdrop}
+          onPress={() => setShowAddMoreModal(false)}
+        >
+          <View style={addMoreStyles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={addMoreStyles.sheetHeader}>
+              <Text style={addMoreStyles.sheetTitle}>Add more</Text>
+              <TouchableOpacity onPress={() => setShowAddMoreModal(false)} hitSlop={12}>
+                <X size={24} color="#374151" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={addMoreStyles.optionRow}
+              onPress={() => {
+                setShowAddMoreModal(false);
+                setStep(3);
+              }}
+              activeOpacity={0.7}
+            >
+              <Users size={22} color="#6B7280" strokeWidth={2} />
+              <Text style={addMoreStyles.optionTitle}>Select from players</Text>
+              <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={addMoreStyles.optionRow}
+              onPress={() => {
+                setShowAddMoreModal(false);
+                setShowPhoneInviteModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Phone size={22} color="#6B7280" strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={addMoreStyles.optionTitle}>Invite via phone number</Text>
+                <Text style={addMoreStyles.optionSubtitle}>Invite someone not on Tee Time Social.</Text>
+              </View>
+              <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Invite via phone number modal */}
+      <Modal
+        visible={showPhoneInviteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setShowPhoneInviteModal(false); setPhoneInviteInput(""); }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={addMoreStyles.backdrop}
+          onPress={() => { setShowPhoneInviteModal(false); setPhoneInviteInput(""); }}
+        >
+          <View style={addMoreStyles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={addMoreStyles.sheetHeader}>
+              <Text style={addMoreStyles.sheetTitle}>Invite via phone number</Text>
+              <TouchableOpacity
+                onPress={() => { setShowPhoneInviteModal(false); setPhoneInviteInput(""); }}
+                hitSlop={12}
+              >
+                <X size={24} color="#374151" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={addMoreStyles.phoneInput}
+              placeholder="(555) 123-4567"
+              placeholderTextColor="#9CA3AF"
+              value={phoneInviteInput}
+              onChangeText={(text) => {
+                const digits = text.replace(/\D/g, "").slice(0, 10);
+                if (digits.length <= 3) setPhoneInviteInput(digits);
+                else if (digits.length <= 6) setPhoneInviteInput(`(${digits.slice(0, 3)}) ${digits.slice(3)}`);
+                else setPhoneInviteInput(`(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`);
+              }}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity
+              style={[
+                addMoreStyles.addButton,
+                phoneInviteInput.replace(/\D/g, "").length < 10 && addMoreStyles.addButtonDisabled,
+              ]}
+              onPress={() => {
+                const digits = phoneInviteInput.replace(/\D/g, "");
+                if (digits.length >= 10) {
+                  const formatted = phoneInviteInput.trim() || `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+                  setPhoneInvites((prev) => [...prev, { phone: formatted, name: "" }]);
+                  setPhoneInviteInput("");
+                  setShowPhoneInviteModal(false);
+                }
+              }}
+              disabled={phoneInviteInput.replace(/\D/g, "").length < 10}
+              activeOpacity={0.8}
+            >
+              <Text style={addMoreStyles.addButtonText}>Add to invite list</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Footer */}
       <View className="p-5 bg-white border-t border-gray-200" style={{ paddingBottom: insets.bottom + 16 }}>
         <TouchableOpacity
@@ -880,3 +1009,78 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     </ScreenShell>
   );
 }
+
+const addMoreStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    color: "#111827",
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+  },
+  optionTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 16,
+    color: "#111827",
+    flex: 1,
+  },
+  optionSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  phoneInput: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 16,
+    color: "#111827",
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+  },
+  addButton: {
+    backgroundColor: "#22C55E",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  addButtonDisabled: {
+    opacity: 0.5,
+  },
+  addButtonText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+});

@@ -43,6 +43,7 @@ import InvitesScreen from "./screens/InvitesScreen";
 import InviteDetailScreen from "./screens/InviteDetailScreen";
 import AvailabilityScreen from "./screens/AvailabilityScreen";
 import EditAvailabilityScreen from "./screens/EditAvailabilityScreen";
+import ConfirmAvailabilityScreen from "./screens/ConfirmAvailabilityScreen";
 import FriendProfileScreen from "./screens/friend-profile";
 import GroupProfileScreen from "./screens/roster/group-profile";
 import EditProfileScreen from "./screens/profile/EditProfileScreen";
@@ -99,6 +100,7 @@ type ScreenName =
   | "InviteDetail"
   | "Availability"
   | "EditAvailability"
+  | "ConfirmAvailability"
   | "Community"
   | "FriendProfile"
   | "GroupProfile"
@@ -484,6 +486,14 @@ export default function App(): React.ReactElement {
         return (
           <EditAvailabilityScreen
             key={`edit-availability-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
+        );
+      case "ConfirmAvailability":
+        return (
+          <ConfirmAvailabilityScreen
+            key={`confirm-availability-${screenKey}`}
             navigation={navigation as any}
             route={{ params: screenParams } as any}
           />
