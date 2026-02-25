@@ -9,6 +9,8 @@ import {
     TouchableOpacity,
     Alert,
     StyleSheet,
+    ScrollView,
+    Dimensions,
 } from "react-native";
 import { 
     User, 
@@ -20,8 +22,7 @@ import {
     Shield,
     HelpCircle,
     LogOut,
-    ChevronRight,
-    Navigation
+    ChevronRight
 } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "../contexts";
@@ -88,7 +89,12 @@ export default function SettingsScreen({ navigation }: any) {
                 onBack={() => navigation?.goBack()}
             />
 
-            <View style={styles.container}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* Account Information Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
@@ -196,16 +202,21 @@ export default function SettingsScreen({ navigation }: any) {
                 <Text style={[styles.versionText, { color: colors.textMuted }]}>
                     Tee Time Social v1.0.0
                 </Text>
-            </View>
+            </ScrollView>
         </ScreenShell>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    scrollView: {
         flex: 1,
         backgroundColor: '#F9FAFB',
+    },
+    scrollContent: {
+        flexGrow: 1,
         padding: spacing.lg,
+        paddingBottom: spacing['3xl'] ?? 48,
+        minHeight: Dimensions.get('window').height,
     },
     section: {
         marginBottom: spacing['2xl'],

@@ -14,6 +14,7 @@ import {
     ScrollView,
     KeyboardAvoidingView,
     Platform,
+    Dimensions,
 } from "react-native";
 import * as Application from "expo-application";
 import { useUser } from "../contexts";
@@ -28,6 +29,10 @@ const GRAY_900 = "#111827";
 const GRAY_500 = "#6B7280";
 const GRAY_400 = "#9CA3AF";
 const PRIMARY = "#5EBC68";
+
+const { height: WINDOW_HEIGHT } = Dimensions.get("window");
+// Ensure scroll content is at least full height so the screen is always scrollable (keyboard, small devices).
+const SCROLL_CONTENT_MIN_HEIGHT = WINDOW_HEIGHT;
 
 function formatPhoneDisplay(value: string | undefined): string {
     if (!value) return "";
@@ -119,6 +124,9 @@ export default function AccountSettingsScreen({ navigation }: any) {
                     style={styles.scroll}
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={true}
+                    bounces={true}
+                    alwaysBounceVertical={false}
                 >
                     <View style={styles.card}>
                         <View style={styles.field}>
@@ -201,9 +209,11 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
+        flexGrow: 1,
+        minHeight: SCROLL_CONTENT_MIN_HEIGHT,
         backgroundColor: GRAY_BG,
         padding: spacing.lg,
-        paddingBottom: spacing["2xl"],
+        paddingBottom: spacing["3xl"] ?? 48,
     },
     card: {
         backgroundColor: "#FFFFFF",
