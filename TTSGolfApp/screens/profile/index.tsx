@@ -229,10 +229,6 @@ export default function ProfileScreen({ navigation }: any) {
         navigation?.navigate("Settings");
     }, [navigation]);
 
-    const handleEditAvailability = useCallback(() => {
-        navigation?.navigate("EditAvailability");
-    }, [navigation]);
-
     const fullName = getFullName(profile?.firstName, profile?.lastName);
     const initials = getInitials(profile?.firstName, profile?.lastName);
     const avatarUri = (profile?.avatarUrl || (profile as { avatar?: string })?.avatar || "").trim();
@@ -422,9 +418,6 @@ export default function ProfileScreen({ navigation }: any) {
                         borderColor: '#E5E7EB',
                     }}>
                         <View style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
                             marginBottom: 20,
                         }}>
                             <Text style={{
@@ -434,24 +427,6 @@ export default function ProfileScreen({ navigation }: any) {
                             }}>
                                 Playing preferences
                             </Text>
-                            <TouchableOpacity
-                                onPress={handleEditAvailability}
-                                activeOpacity={0.7}
-                                style={{
-                                    paddingVertical: 6,
-                                    paddingHorizontal: 12,
-                                    backgroundColor: '#F3F4F6',
-                                    borderRadius: 8,
-                                }}
-                            >
-                                <Text style={{
-                                    fontFamily: 'Inter_600SemiBold',
-                                    fontSize: 13,
-                                    color: '#5EBC68',
-                                }}>
-                                    Edit Availability
-                                </Text>
-                            </TouchableOpacity>
                         </View>
                         <View style={{
                             flexDirection: 'row',
