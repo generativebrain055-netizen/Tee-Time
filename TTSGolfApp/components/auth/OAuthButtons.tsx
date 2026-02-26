@@ -32,9 +32,10 @@ import Svg, { Path } from "react-native-svg";
 import GoogleLogo from "../GoogleLogo";
 import { logger } from "../../utils/logger";
 
-function AppleLogo({ size = 20 }: { size?: number }) {
+/** Apple logo from reference SVG – viewBox cropped to visible content bounds */
+function AppleLogo({ width = 14, height = 17 }: { width?: number; height?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 36 36" fill="none">
+    <Svg width={width} height={height} viewBox="19.5 15.5 17 20" fill="none">
       <Path
         d="M35.6647 30.8068C35.3774 31.4706 35.0374 32.0816 34.6434 32.6434C34.1064 33.4092 33.6667 33.9393 33.3279 34.2337C32.8026 34.7169 32.2398 34.9644 31.6371 34.9784C31.2045 34.9784 30.6827 34.8553 30.0753 34.6055C29.466 34.3568 28.906 34.2337 28.394 34.2337C27.857 34.2337 27.281 34.3568 26.665 34.6055C26.048 34.8553 25.551 34.9855 25.171 34.9984C24.5931 35.023 24.017 34.7685 23.442 34.2337C23.075 33.9135 22.616 33.3647 22.0661 32.5871C21.4761 31.7567 20.991 30.7939 20.611 29.6961C20.204 28.5104 20 27.3622 20 26.2507C20 24.9773 20.2751 23.8791 20.826 22.9588C21.259 22.2196 21.8351 21.6365 22.5561 21.2084C23.277 20.7804 24.056 20.5622 24.895 20.5483C25.354 20.5483 25.956 20.6903 26.704 20.9694C27.45 21.2495 27.9289 21.3915 28.1389 21.3915C28.2959 21.3915 28.828 21.2254 29.73 20.8943C30.583 20.5873 31.3029 20.4602 31.8927 20.5103C33.4908 20.6393 34.6915 21.2694 35.49 22.4047C34.0607 23.2709 33.3537 24.4842 33.3677 26.0406C33.3806 27.2529 33.8203 28.2618 34.6845 29.0628C35.0761 29.4346 35.5134 29.7219 36 29.926C35.8945 30.2321 35.7831 30.5253 35.6647 30.8068ZM31.9994 16.3801C31.9994 17.3303 31.6524 18.2175 30.9606 19.0387C30.1258 20.015 29.116 20.5791 28.021 20.4901C28.007 20.3761 27.9989 20.2561 27.9989 20.13C27.9989 19.2178 28.396 18.2416 29.101 17.4434C29.453 17.0392 29.9006 16.7032 30.4435 16.4351C30.9852 16.171 31.4976 16.025 31.9795 16C31.9936 16.127 31.9994 16.2541 31.9994 16.3801V16.3801Z"
         fill="black"
@@ -50,14 +51,14 @@ function AppleLogo({ size = 20 }: { size?: number }) {
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-// Figma: fill #F7F7F7, stroke #E5E7EB (node 1269-2903)
-const FIGMA_BG = "#F7F7F7";
-const FIGMA_BORDER = "#E5E7EB";
-const FIGMA_BUTTON_HEIGHT = 53;
-const FIGMA_RADIUS = 8;
-const ICON_SIZE = 24;
-/** Apple icon size per Figma 1269-2903 – larger than default for visual balance */
-const APPLE_ICON_SIZE = 28;
+// Figma Sign up w/ SSO: both buttons same style
+const OAUTH_BG = "#F7F7F7";
+const OAUTH_BORDER = "#E5E7EB";
+const BUTTON_HEIGHT = 54;
+const BUTTON_RADIUS = 8;
+const ICON_SIZE = 17;
+const HORIZONTAL_PADDING = 19;
+const GAP_ICON_TEXT = 12;
 
 // ============================================================================
 // Helper Functions
@@ -372,34 +373,38 @@ export function OAuthButtons({
   const renderAppleButton = () =>
     Platform.OS === "ios" && (
       <TouchableOpacity
-        style={[styles.figmaButton, (disabled || isAppleLoading) && styles.buttonDisabled]}
+        style={[styles.oauthButton, (disabled || isAppleLoading) && styles.buttonDisabled]}
         onPress={() => void (!disabled && !isAppleLoading && handleAppleSignIn())}
         activeOpacity={0.8}
         disabled={disabled || isAppleLoading}
       >
-        <View style={[styles.iconLeft, { width: APPLE_ICON_SIZE, height: APPLE_ICON_SIZE }]}>
-          <AppleLogo size={APPLE_ICON_SIZE} />
+        <View style={styles.appleIconWrap}>
+          <AppleLogo />
         </View>
-        <Text style={styles.figmaButtonText}>
-          {isAppleLoading ? "Signing in..." : "Continue with Apple"}
-        </Text>
+        <View style={styles.textWrap}>
+          <Text style={styles.oauthButtonText}>
+            {isAppleLoading ? "Signing in..." : "Continue with Apple"}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
 
   const renderGoogleButton = () =>
     googleConfigured && (
       <TouchableOpacity
-        style={[styles.figmaButton, styles.figmaGoogleButton, (disabled || isGoogleLoading) && styles.buttonDisabled]}
+        style={[styles.oauthButton, (disabled || isGoogleLoading) && styles.buttonDisabled]}
         onPress={handleGoogleSignIn}
         activeOpacity={0.8}
         disabled={disabled || isGoogleLoading}
       >
-        <View style={styles.iconLeft}>
+        <View style={styles.googleIconWrap}>
           <GoogleLogo size={ICON_SIZE} />
         </View>
-        <Text style={styles.figmaButtonText}>
-          {isGoogleLoading ? "Signing in..." : "Continue with Google"}
-        </Text>
+        <View style={styles.textWrap}>
+          <Text style={styles.oauthButtonText}>
+            {isGoogleLoading ? "Signing in..." : "Continue with Google"}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
 
@@ -424,31 +429,41 @@ const styles = StyleSheet.create({
   buttonsContainer: {
     gap: 16,
   },
-  figmaButton: {
-    height: FIGMA_BUTTON_HEIGHT,
-    backgroundColor: FIGMA_BG,
-    borderRadius: FIGMA_RADIUS,
+  oauthButton: {
+    height: BUTTON_HEIGHT,
+    backgroundColor: OAUTH_BG,
+    borderRadius: BUTTON_RADIUS,
     borderWidth: 1,
-    borderColor: FIGMA_BORDER,
+    borderColor: OAUTH_BORDER,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: HORIZONTAL_PADDING,
   },
-  iconLeft: {
+  appleIconWrap: {
+    width: 14,
+    height: 17,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: GAP_ICON_TEXT,
+  },
+  /** Google button: 17×17 icon at 19px from left (per reference SVG) */
+  googleIconWrap: {
     width: ICON_SIZE,
     height: ICON_SIZE,
     justifyContent: "center",
-    alignItems: "flex-start",
+    alignItems: "center",
+    marginRight: GAP_ICON_TEXT,
   },
-  figmaGoogleButton: {
-    // Same as figmaButton; Google has icon + text
-  },
-  figmaButtonText: {
+  textWrap: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  oauthButtonText: {
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 20,
     color: "#000000",
-    textAlign: "center",
   },
   buttonDisabled: {
     opacity: 0.5,

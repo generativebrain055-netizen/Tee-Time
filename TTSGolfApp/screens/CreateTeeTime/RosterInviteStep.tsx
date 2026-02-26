@@ -9,7 +9,7 @@ import {
     TextInput,
     StyleSheet,
 } from "react-native";
-import { Clock, ChevronDown, Check, SlidersHorizontal, X, Search, Phone, Plus, ChevronRight, ArrowLeft } from "lucide-react-native";
+import { Clock, ChevronDown, ChevronUp, Check, Filter, X, Search, Phone, Plus, ChevronRight } from "lucide-react-native";
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend } from "../../services/api";
 
@@ -189,6 +189,7 @@ export default function RosterInviteStep({
     };
 
     const openSaveSearch = () => {
+        setShowFilterModal(false);
         setNewFilterName("");
         setShowCreateFilter(true);
     };
@@ -355,25 +356,9 @@ export default function RosterInviteStep({
                     )}
                 </View>
 
-                {/* Figma 1269-3055: Your players + Search players */}
-                <Text style={rosterStyles.sectionTitle}>{FIGMA_YOUR_PLAYERS.title}</Text>
-                <View style={rosterStyles.searchWrap}>
-                    <Search size={18} color="#9CA3AF" strokeWidth={2} />
-                    <TextInput
-                        style={rosterStyles.searchInput}
-                        placeholder={FIGMA_YOUR_PLAYERS.searchPlaceholder}
-                        placeholderTextColor="#9CA3AF"
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
-                </View>
-                <View style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 16,
-                }}>
-                    <View style={{ flex: 1 }} />
+                {/* Your roster + Filter (Figma Set Up Roster Invite) */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <Text style={rosterStyles.sectionTitle}>Your roster</Text>
                     <TouchableOpacity
                         style={{
                             flexDirection: 'row',
@@ -389,15 +374,11 @@ export default function RosterInviteStep({
                         onPress={() => setShowFilterModal(true)}
                         activeOpacity={0.7}
                     >
-                        <SlidersHorizontal size={16} color="#6B7280" strokeWidth={2} />
-                        <Text style={{
-                            fontFamily: 'Inter_600SemiBold',
-                            fontSize: 14,
-                            color: '#6B7280',
-                        }}>
+                        <Filter size={16} color="#6B7280" strokeWidth={2} />
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#6B7280' }}>
                             Filter
                         </Text>
-                        {selectedClubs.length > 0 && (
+                        {(selectedClubs.length > 0 || selectedSort !== 'roster' || indicatedAvailable) && (
                             <View style={{
                                 width: 20,
                                 height: 20,
@@ -406,16 +387,22 @@ export default function RosterInviteStep({
                                 justifyContent: 'center',
                                 alignItems: 'center',
                             }}>
-                                <Text style={{
-                                    fontFamily: 'Inter_700Bold',
-                                    fontSize: 11,
-                                    color: '#FFFFFF',
-                                }}>
-                                    {selectedClubs.length}
+                                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: '#FFFFFF' }}>
+                                    {(selectedClubs.length > 0 ? 1 : 0) + (selectedSort !== 'roster' ? 1 : 0) + (indicatedAvailable ? 1 : 0)}
                                 </Text>
                             </View>
                         )}
                     </TouchableOpacity>
+                </View>
+                <View style={[rosterStyles.searchWrap, { marginBottom: 16 }]}>
+                    <Search size={18} color="#9CA3AF" strokeWidth={2} />
+                    <TextInput
+                        style={rosterStyles.searchInput}
+                        placeholder={FIGMA_YOUR_PLAYERS.searchPlaceholder}
+                        placeholderTextColor="#9CA3AF"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
                 </View>
 
                 {/* Roster List – Figma 430-958: 8px radius */}
@@ -677,135 +664,132 @@ export default function RosterInviteStep({
                 </View>
             </ScrollView>
 
-            {/* Filter Modal */}
+            {/* Sort & Filter Modal – bottom sheet (Figma Set Up Roster Invite) */}
             <Modal
                 visible={showFilterModal}
                 animationType="slide"
                 transparent={true}
                 onRequestClose={() => {
                     setShowCreateFilter(false);
+                    setShowSortDropdown(false);
                     setShowFilterModal(false);
                 }}
             >
-                <View style={{
-                    flex: 1,
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    justifyContent: 'flex-end',
-                }}>
-                    <View style={{
-                        backgroundColor: '#FFFFFF',
-                        borderTopLeftRadius: 24,
-                        borderTopRightRadius: 24,
-                        paddingTop: 20,
-                        paddingBottom: 40,
-                        maxHeight: '90%',
-                    }}>
-                        {/* Create filter view (Figma 565-1135, 565-1269) */}
-                        {showCreateFilter ? (
-                            <>
-                                <View style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 20,
-                                    paddingBottom: 16,
-                                    borderBottomWidth: 1,
-                                    borderBottomColor: '#F3F4F6',
-                                }}>
-                                    <TouchableOpacity onPress={() => setShowCreateFilter(false)} style={{ padding: 4 }} activeOpacity={0.7}>
-                                        <ArrowLeft size={24} color="#6B7280" strokeWidth={2} />
-                                    </TouchableOpacity>
-                                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: '#111827', marginLeft: 12 }}>
-                                        Create filter
-                                    </Text>
-                                </View>
-                                <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
-                                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#6B7280', marginBottom: 8 }}>
-                                        Filter name
-                                    </Text>
-                                    <TextInput
-                                        placeholder="e.g. Weekend players"
-                                        value={newFilterName}
-                                        onChangeText={setNewFilterName}
-                                        style={{
-                                            backgroundColor: '#F9FAFB',
-                                            borderWidth: 1,
-                                            borderColor: '#E5E7EB',
-                                            borderRadius: 12,
-                                            paddingVertical: 14,
-                                            paddingHorizontal: 16,
-                                            fontSize: 16,
-                                            fontFamily: 'Inter_400Regular',
-                                            color: '#111827',
-                                        }}
-                                        placeholderTextColor="#9CA3AF"
-                                    />
-                                    <TouchableOpacity
-                                        onPress={saveNewFilter}
-                                        disabled={!newFilterName.trim()}
-                                        style={{
-                                            marginTop: 24,
-                                            paddingVertical: 14,
-                                            borderRadius: 12,
-                                            backgroundColor: newFilterName.trim() ? '#22C55E' : '#D1D5DB',
-                                            alignItems: 'center',
-                                        }}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' }}>
-                                            Save
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </>
-                        ) : (
-                            <>
-                        {/* Header (Figma 565-351) */}
+                <TouchableOpacity
+                    activeOpacity={1}
+                    style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' }}
+                    onPress={() => {
+                        setShowSortDropdown(false);
+                        setShowFilterModal(false);
+                    }}
+                >
+                    <View
+                        style={{
+                            backgroundColor: '#FFFFFF',
+                            borderTopLeftRadius: 24,
+                            borderTopRightRadius: 24,
+                            maxHeight: '90%',
+                            minHeight: 360,
+                        }}
+                        onStartShouldSetResponder={() => true}
+                    >
+                        {/* Header: X | Sort & Filter | Sort by ▼ */}
                         <View style={{
                             flexDirection: 'row',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             paddingHorizontal: 20,
-                            paddingBottom: 20,
+                            paddingTop: 20,
+                            paddingBottom: 16,
                             borderBottomWidth: 1,
                             borderBottomColor: '#F3F4F6',
                         }}>
-                            <TouchableOpacity onPress={() => setShowFilterModal(false)} activeOpacity={0.7}>
+                            <TouchableOpacity onPress={() => { setShowSortDropdown(false); setShowFilterModal(false); }} hitSlop={12} activeOpacity={0.7}>
                                 <X size={24} color="#6B7280" strokeWidth={2} />
                             </TouchableOpacity>
-                            <Text style={{
-                                fontFamily: 'Inter_700Bold',
-                                fontSize: 18,
-                                color: '#111827',
-                            }}>
+                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: '#111827' }}>
                                 Sort & Filter
                             </Text>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 onPress={() => setShowSortDropdown(!showSortDropdown)}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                }}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                                 activeOpacity={0.7}
                             >
-                                <Text style={{
-                                    fontFamily: 'Inter_600SemiBold',
-                                    fontSize: 14,
-                                    color: '#6B7280',
-                                }}>
-                                    Sort by
-                                </Text>
-                                <ChevronDown size={16} color="#6B7280" strokeWidth={2} />
+                                {selectedSort !== 'roster' && (
+                                    <View style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: 10,
+                                        backgroundColor: '#22C55E',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                    }}>
+                                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: '#FFFFFF' }}>1</Text>
+                                    </View>
+                                )}
+                                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#6B7280' }}>Sort by</Text>
+                                {showSortDropdown ? <ChevronUp size={18} color="#6B7280" strokeWidth={2} /> : <ChevronDown size={18} color="#6B7280" strokeWidth={2} />}
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20 }} keyboardShouldPersistTaps="handled">
-                            {/* Saved searches (Figma 565-1269) */}
+                        {/* Sort by overlay (nested white card with radio list) */}
+                        {showSortDropdown && (
+                            <View style={{
+                                marginHorizontal: 20,
+                                marginTop: 12,
+                                backgroundColor: '#FFFFFF',
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: '#E5E7EB',
+                                paddingVertical: 12,
+                                paddingHorizontal: 16,
+                                marginBottom: 8,
+                            }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#111827' }}>Sort by</Text>
+                                    <TouchableOpacity onPress={() => setShowSortDropdown(false)} hitSlop={8}>
+                                        <X size={18} color="#9CA3AF" strokeWidth={2} />
+                                    </TouchableOpacity>
+                                </View>
+                                {SORT_OPTIONS.map((option) => (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}
+                                        onPress={() => { setSelectedSort(option.value); setShowSortDropdown(false); }}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={{
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: 10,
+                                            borderWidth: 2,
+                                            borderColor: selectedSort === option.value ? '#22C55E' : '#D1D5DB',
+                                            backgroundColor: selectedSort === option.value ? '#22C55E' : '#FFFFFF',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                        }}>
+                                            {selectedSort === option.value && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                                        </View>
+                                        <Text style={{ fontFamily: 'Inter_500Medium', fontSize: 15, color: '#111827' }}>{option.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+                            {/* Saved search (optional row with count badge) */}
                             {savedFilters.length > 0 && (
-                                <View style={{ marginBottom: 24 }}>
-                                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: '#111827', marginBottom: 12 }}>
-                                        Saved searches
-                                    </Text>
+                                <View style={{ marginBottom: 20 }}>
+                                    <TouchableOpacity
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                                        onPress={() => {}}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#2563EB' }}>Saved search</Text>
+                                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }}>
+                                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 12, color: '#6B7280' }}>{savedFilters.length}</Text>
+                                        </View>
+                                    </TouchableOpacity>
                                     {savedFilters.map((filter) => (
                                         <TouchableOpacity
                                             key={filter.id}
@@ -814,83 +798,16 @@ export default function RosterInviteStep({
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                paddingVertical: 14,
-                                                paddingHorizontal: 16,
+                                                paddingVertical: 12,
+                                                paddingHorizontal: 14,
                                                 backgroundColor: '#F9FAFB',
                                                 borderRadius: 12,
-                                                marginBottom: 8,
+                                                marginTop: 8,
                                             }}
                                             activeOpacity={0.7}
                                         >
-                                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#111827' }}>
-                                                {filter.name}
-                                            </Text>
+                                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#111827' }}>{filter.name}</Text>
                                             <ChevronRight size={20} color="#9CA3AF" strokeWidth={2} />
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                            {/* Sort Dropdown */}
-                            {showSortDropdown && (
-                                <View style={{
-                                    backgroundColor: '#F9FAFB',
-                                    borderRadius: 12,
-                                    padding: 12,
-                                    marginBottom: 20,
-                                }}>
-                                    <View style={{
-                                        flexDirection: 'row',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        marginBottom: 12,
-                                    }}>
-                                        <Text style={{
-                                            fontFamily: 'Inter_600SemiBold',
-                                            fontSize: 14,
-                                            color: '#6B7280',
-                                        }}>
-                                            Sort by
-                                        </Text>
-                                        <TouchableOpacity onPress={() => setShowSortDropdown(false)}>
-                                            <X size={18} color="#9CA3AF" strokeWidth={2} />
-                                        </TouchableOpacity>
-                                    </View>
-                                    {SORT_OPTIONS.map((option) => (
-                                        <TouchableOpacity
-                                            key={option.value}
-                                            style={{
-                                                flexDirection: 'row',
-                                                alignItems: 'center',
-                                                paddingVertical: 12,
-                                                gap: 12,
-                                            }}
-                                            onPress={() => {
-                                                setSelectedSort(option.value);
-                                                setShowSortDropdown(false);
-                                            }}
-                                            activeOpacity={0.7}
-                                        >
-                                            <View style={{
-                                                width: 20,
-                                                height: 20,
-                                                borderRadius: 10,
-                                                borderWidth: 2,
-                                                borderColor: selectedSort === option.value ? '#22C55E' : '#D1D5DB',
-                                                backgroundColor: selectedSort === option.value ? '#22C55E' : '#FFFFFF',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                            }}>
-                                                {selectedSort === option.value && (
-                                                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                                                )}
-                                            </View>
-                                            <Text style={{
-                                                fontFamily: 'Inter_500Medium',
-                                                fontSize: 15,
-                                                color: '#111827',
-                                            }}>
-                                                {option.label}
-                                            </Text>
                                         </TouchableOpacity>
                                     ))}
                                 </View>
@@ -898,43 +815,15 @@ export default function RosterInviteStep({
 
                             {/* Club Membership */}
                             <View style={{ marginBottom: 24 }}>
-                                <View style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    marginBottom: 16,
-                                }}>
-                                    <Text style={{
-                                        fontFamily: 'Inter_700Bold',
-                                        fontSize: 16,
-                                        color: '#111827',
-                                    }}>
-                                        Club Membership
-                                    </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: '#111827' }}>Club Membership</Text>
                                     {selectedClubs.length > 0 && (
-                                        <View style={{
-                                            width: 24,
-                                            height: 24,
-                                            borderRadius: 12,
-                                            backgroundColor: '#22C55E',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                        }}>
-                                            <Text style={{
-                                                fontFamily: 'Inter_700Bold',
-                                                fontSize: 12,
-                                                color: '#FFFFFF',
-                                            }}>
-                                                {selectedClubs.length}
-                                            </Text>
+                                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#22C55E', justifyContent: 'center', alignItems: 'center' }}>
+                                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 12, color: '#FFFFFF' }}>{selectedClubs.length}</Text>
                                         </View>
                                     )}
                                 </View>
-                                <View style={{
-                                    flexDirection: 'row',
-                                    flexWrap: 'wrap',
-                                    gap: 8,
-                                }}>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                                     {availableClubs.length > 0 ? availableClubs.map((club) => (
                                         <TouchableOpacity
                                             key={club}
@@ -949,42 +838,17 @@ export default function RosterInviteStep({
                                             onPress={() => toggleClub(club)}
                                             activeOpacity={0.7}
                                         >
-                                            <Text style={{
-                                                fontFamily: 'Inter_600SemiBold',
-                                                fontSize: 14,
-                                                color: selectedClubs.includes(club) ? '#FFFFFF' : '#6B7280',
-                                            }}>
-                                                {club}
-                                            </Text>
+                                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: selectedClubs.includes(club) ? '#FFFFFF' : '#374151' }}>{club}</Text>
                                         </TouchableOpacity>
                                     )) : (
-                                        <Text style={{
-                                            fontFamily: 'Inter_400Regular',
-                                            fontSize: 14,
-                                            color: '#9CA3AF',
-                                            textAlign: 'center',
-                                            paddingVertical: 20,
-                                        }}>
-                                            No club memberships found in roster
-                                        </Text>
+                                        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: '#9CA3AF', paddingVertical: 12 }}>No club memberships found in roster</Text>
                                     )}
                                 </View>
                             </View>
 
-                            {/* Indicated Available Toggle */}
-                            <View style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                marginBottom: 24,
-                            }}>
-                                <Text style={{
-                                    fontFamily: 'Inter_600SemiBold',
-                                    fontSize: 16,
-                                    color: '#111827',
-                                }}>
-                                    Indicated available
-                                </Text>
+                            {/* Indicated available */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#111827' }}>Indicated available</Text>
                                 <TouchableOpacity
                                     style={{
                                         width: 51,
@@ -1008,58 +872,86 @@ export default function RosterInviteStep({
                             </View>
                         </ScrollView>
 
-                        {/* Action Buttons */}
-                        <View style={{
-                            flexDirection: 'row',
-                            gap: 12,
-                            paddingHorizontal: 20,
-                            paddingTop: 20,
-                        }}>
+                        {/* Footer: Save search | See results */}
+                        <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28, borderTopWidth: 1, borderTopColor: '#F3F4F6' }}>
                             <TouchableOpacity
-                                style={{
-                                    flex: 1,
-                                    paddingVertical: 14,
-                                    borderRadius: 12,
-                                    borderWidth: 1,
-                                    borderColor: '#E5E7EB',
-                                    backgroundColor: '#FFFFFF',
-                                    alignItems: 'center',
-                                }}
+                                style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF', alignItems: 'center' }}
                                 onPress={openSaveSearch}
                                 activeOpacity={0.7}
                             >
-                                <Text style={{
-                                    fontFamily: 'Inter_600SemiBold',
-                                    fontSize: 16,
-                                    color: '#6B7280',
-                                }}>
-                                    Save search
-                                </Text>
+                                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#6B7280' }}>Save search</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={{
-                                    flex: 1,
-                                    paddingVertical: 14,
-                                    borderRadius: 12,
-                                    backgroundColor: '#22C55E',
-                                    alignItems: 'center',
-                                }}
+                                style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#22C55E', alignItems: 'center' }}
                                 onPress={applyFilters}
                                 activeOpacity={0.7}
                             >
-                                <Text style={{
-                                    fontFamily: 'Inter_600SemiBold',
-                                    fontSize: 16,
-                                    color: '#FFFFFF',
-                                }}>
-                                    See results
-                                </Text>
+                                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' }}>See results</Text>
                             </TouchableOpacity>
                         </View>
-                            </>
-                        )}
                     </View>
-                </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Save search – centered modal (Figma: Save search dialog) */}
+            <Modal
+                visible={showCreateFilter}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowCreateFilter(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }}
+                    onPress={() => setShowCreateFilter(false)}
+                >
+                    <View
+                        style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 16,
+                            paddingHorizontal: 24,
+                            paddingTop: 24,
+                            paddingBottom: 24,
+                            width: '100%',
+                            maxWidth: 340,
+                        }}
+                        onStartShouldSetResponder={() => true}
+                    >
+                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: '#111827', marginBottom: 8 }}>Save search</Text>
+                        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: '#6B7280', marginBottom: 16 }}>Save this search to reuse later</Text>
+                        <TextInput
+                            placeholder="Enter a name"
+                            placeholderTextColor="#9CA3AF"
+                            value={newFilterName}
+                            onChangeText={setNewFilterName}
+                            style={{
+                                backgroundColor: '#FFFFFF',
+                                borderWidth: 1,
+                                borderColor: '#E5E7EB',
+                                borderRadius: 12,
+                                paddingVertical: 14,
+                                paddingHorizontal: 16,
+                                fontSize: 16,
+                                fontFamily: 'Inter_400Regular',
+                                color: '#111827',
+                                marginBottom: 20,
+                            }}
+                        />
+                        <TouchableOpacity
+                            onPress={saveNewFilter}
+                            disabled={!newFilterName.trim()}
+                            style={{
+                                paddingVertical: 14,
+                                borderRadius: 12,
+                                backgroundColor: newFilterName.trim() ? '#22C55E' : '#D1D5DB',
+                                alignItems: 'center',
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' }}>Create</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
             </Modal>
         </View>
     );

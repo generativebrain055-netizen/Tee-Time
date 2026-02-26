@@ -215,16 +215,22 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: COLORS.textMain,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 28,
+    color: COLORS.black,
     marginBottom: 8,
+    textAlign: "center",
   },
   subtitle: {
+    fontFamily: "Inter_500Medium",
     fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 28,
     color: COLORS.textSub,
-    lineHeight: 22,
     marginBottom: 32,
+    textAlign: "center",
   },
   inputSection: {
     width: "100%",
@@ -233,12 +239,12 @@ const styles = StyleSheet.create({
   phoneInputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
+    height: 50,
     backgroundColor: COLORS.white,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
   phoneInputContainerFocused: {
     borderColor: COLORS.textMain,
@@ -251,9 +257,10 @@ const styles = StyleSheet.create({
   phoneInput: {
     flex: 1,
     height: "100%",
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "500",
+    lineHeight: 28,
     color: COLORS.textMain,
-    fontWeight: "400",
   },
   phoneInputError: {
     color: COLORS.error,
@@ -287,7 +294,8 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: 16,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 28,
     color: COLORS.dividerText,
     fontWeight: "500",
   },
@@ -309,8 +317,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   nextButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
+    lineHeight: 20,
     color: COLORS.white,
   },
 });
