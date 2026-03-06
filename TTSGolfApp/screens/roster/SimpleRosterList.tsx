@@ -9,18 +9,13 @@ import {
     ActivityIndicator,
     Alert,
 } from "react-native";
-import { MessageCircle, Trash2 } from "lucide-react-native";
+import { MessageCircle } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
 import { rosterApi, messagesApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 interface RosterListProps {
     navigation: any;
-    removeMode?: boolean;
-    onEnterRemoveMode?: () => void;
-    onExitRemoveMode?: () => void;
-    /** When this value changes (e.g. after Done), scroll list to top to show normal roster screen. */
-    scrollToTopTrigger?: number;
 }
 
 const getInitials = (firstName: string, lastName: string): string => {
@@ -48,21 +43,17 @@ const formatLastPlayed = (dateStr: string): string => {
     return `${month}/${day}/${year}`;
 };
 
-const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isEditMode, onLongPressItem }: { 
+const RosterItem = memo(({ item, index, navigation, colors, theme }: { 
     item: any; 
     index: number; 
     navigation: any;
     colors: any;
     theme: any;
-    onRemove?: (rosterId: string) => void;
-    isEditMode?: boolean;
-    onLongPressItem?: () => void;
 }) => {
     const contact = item.contact || item;
     const userId = contact.userId;
     
     const handlePress = () => {
-        if (isEditMode) return;
         navigation?.navigate("FriendProfile", {
             userId: userId || item.id,
             user: {
@@ -75,14 +66,8 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
         });
     };
     
-    const handleLongPress = () => {
-        if (isEditMode) return;
-        onLongPressItem?.();
-    };
-    
     const handleMessage = useCallback(async (e: any) => {
         e?.stopPropagation();
-        if (isEditMode) return;
         if (!userId) {
             Alert.alert("Message", "This contact is not a registered user and cannot be messaged.");
             return;
@@ -107,9 +92,8 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
             logger.error("[SimpleRosterList] Failed to open conversation", err);
             Alert.alert("Error", "Could not open conversation.");
         }
-    }, [userId, contact, isEditMode, navigation]);
+    }, [userId, contact, navigation]);
     
-    // Use contact from top of component (item.contact || item)
     const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
     const lastName = contact.name?.split(" ").slice(1).join(" ") || contact.lastName || "";
     const avatar = contact.avatar || item.avatar;
@@ -119,7 +103,6 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
         <>
         <TouchableOpacity 
             onPress={handlePress}
-            onLongPress={handleLongPress}
             activeOpacity={0.7}
             style={{
                 flexDirection: "row",
@@ -129,7 +112,7 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                 backgroundColor: "#FFFFFF",
             }}
         >
-            {/* Green Badge */}
+            {/* Green numbered badge */}
             <View 
                 style={{
                     width: 32,
@@ -150,11 +133,7 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
             {avatar ? (
                 <Image 
                     source={{ uri: avatar }} 
-                    style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 28,
-                    }}
+                    style={{ width: 56, height: 56, borderRadius: 28 }}
                 />
             ) : (
                 <View style={{
@@ -180,42 +159,21 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
                 </Text>
             </View>
 
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {isEditMode ? (
-                    <TouchableOpacity 
-                        onPress={(e) => {
-                            e.stopPropagation();
-                            onRemove?.(item.id);
-                        }}
-                        style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 20,
-                            backgroundColor: "#FEE2E2",
-                            alignItems: "center",
-                            justifyContent: "center",
-                        }}
-                        activeOpacity={0.7}
-                    >
-                        <Trash2 size={18} color="#EF4444" strokeWidth={2} />
-                    </TouchableOpacity>
-                ) : (
-                    <TouchableOpacity 
-                            onPress={handleMessage}
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 20,
-                                backgroundColor: "#DBEAFE",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                            activeOpacity={0.7}
-                        >
-                            <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
-                        </TouchableOpacity>
-                )}
-            </View>
+            {/* Message button */}
+            <TouchableOpacity 
+                onPress={handleMessage}
+                style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#DBEAFE",
+                    alignItems: "center",
+                    justifyContent: "center",
+                }}
+                activeOpacity={0.7}
+            >
+                <MessageCircle size={18} color="#3B82F6" strokeWidth={2} />
+            </TouchableOpacity>
         </TouchableOpacity>
         </>
     );
@@ -223,18 +181,13 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onRemove, isE
 
 RosterItem.displayName = "RosterItem";
 
-type UndoState = { userId: string; name: string } | null;
-
-export default function SimpleRosterList({ navigation, removeMode = false, onEnterRemoveMode, onExitRemoveMode, scrollToTopTrigger = 0 }: RosterListProps) {
+export default function SimpleRosterList({ navigation }: RosterListProps) {
     const colors = useColors();
     const theme = useTheme();
     const scrollRef = React.useRef<ScrollView | null>(null);
     const [roster, setRoster] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [removingId, setRemovingId] = useState<string | null>(null);
-    const [undoState, setUndoState] = useState<UndoState>(null);
-    const undoTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadRoster = useCallback(async () => {
         try {
@@ -255,69 +208,10 @@ export default function SimpleRosterList({ navigation, removeMode = false, onEnt
         loadRoster();
     }, [loadRoster]);
 
-    useEffect(() => {
-        return () => {
-            if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-        };
-    }, []);
-
-    useEffect(() => {
-        if (scrollToTopTrigger > 0 && scrollRef.current) {
-            scrollRef.current.scrollTo({ y: 0, animated: true });
-        }
-    }, [scrollToTopTrigger]);
-
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await loadRoster();
     }, [loadRoster]);
-
-    const showUndoSnackbar = useCallback((userId: string, name: string) => {
-        if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-        setUndoState({ userId, name });
-        undoTimeoutRef.current = setTimeout(() => {
-            setUndoState(null);
-            undoTimeoutRef.current = null;
-        }, 5000);
-    }, []);
-
-    const handleUndo = useCallback(async () => {
-        if (!undoState) return;
-        if (undoTimeoutRef.current) {
-            clearTimeout(undoTimeoutRef.current);
-            undoTimeoutRef.current = null;
-        }
-        try {
-            await rosterApi.addToRoster({ contactUserId: undoState.userId });
-            setUndoState(null);
-            await loadRoster();
-        } catch (err) {
-            logger.error("[SimpleRosterList] Undo add to roster failed", err);
-            Alert.alert("Error", "Could not add back to roster.");
-        }
-    }, [undoState, loadRoster]);
-
-    const handleRemove = useCallback(async (rosterId: string) => {
-        const item = roster.find((r) => r.id === rosterId);
-        const contact = item?.contact || item;
-        const userId = contact?.userId;
-        const name = contact?.name || [contact?.firstName, contact?.lastName].filter(Boolean).join(" ").trim() || "Contact";
-
-        setRemovingId(rosterId);
-        try {
-            await rosterApi.removeFromRoster(rosterId);
-            logger.info("[SimpleRosterList] Removed from roster", { rosterId });
-            await loadRoster();
-            if (removeMode && userId) {
-                showUndoSnackbar(userId, name);
-            }
-        } catch (error) {
-            logger.error("[SimpleRosterList] Failed to remove from roster", error);
-            Alert.alert("Error", "Failed to remove from roster. Please try again.");
-        } finally {
-            setRemovingId(null);
-        }
-    }, [loadRoster, roster, removeMode, showUndoSnackbar]);
 
     if (loading) {
         return (
@@ -404,9 +298,6 @@ export default function SimpleRosterList({ navigation, removeMode = false, onEnt
                             navigation={navigation} 
                             colors={colors} 
                             theme={theme}
-                            onRemove={handleRemove}
-                            isEditMode={removeMode}
-                            onLongPressItem={onEnterRemoveMode}
                         />
                         {index < roster.length - 1 && (
                             <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />
@@ -416,42 +307,6 @@ export default function SimpleRosterList({ navigation, removeMode = false, onEnt
                 <View style={{ height: 100 }} />
             </ScrollView>
 
-            {/* Removed from roster - Undo snackbar (Figma 795-2173, 795-2326) */}
-            {undoState && (
-                <View
-                    style={{
-                        position: "absolute",
-                        left: 16,
-                        right: 16,
-                        bottom: 24,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        backgroundColor: "#111827",
-                        borderRadius: 12,
-                        paddingVertical: 14,
-                        paddingHorizontal: 16,
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 8,
-                        elevation: 8,
-                    }}
-                >
-                    <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 15, color: "#FFFFFF", flex: 1 }}>
-                        Removed from roster
-                    </Text>
-                    <TouchableOpacity
-                        onPress={handleUndo}
-                        style={{ paddingVertical: 4, paddingHorizontal: 12 }}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={{ fontFamily: theme.fontFamily.semiBold, fontSize: 15, color: "#60A5FA" }}>
-                            Undo
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            )}
         </View>
     );
 }

@@ -21,6 +21,13 @@ interface RosterInviteStepProps {
     onReorderPlayers: (orderedIds: string[]) => void;
     onAddPhoneInvite?: (phone: string, name: string) => void;
     phoneInvites?: Array<{ phone: string; name: string }>;
+    /** Controlled phone-form state (lifted to parent so Next can see pending input) */
+    showPhoneInput?: boolean;
+    onShowPhoneInputChange?: (show: boolean) => void;
+    phoneInputValue?: string;
+    onPhoneInputValueChange?: (text: string) => void;
+    phoneNameValue?: string;
+    onPhoneNameValueChange?: (text: string) => void;
     /** Figma 565-351: creator header (name + avatar) */
     creatorName?: string;
     creatorAvatarUrl?: string;
@@ -62,6 +69,12 @@ export default function RosterInviteStep({
     onReorderPlayers,
     onAddPhoneInvite,
     phoneInvites = [],
+    showPhoneInput: showPhoneInputProp,
+    onShowPhoneInputChange,
+    phoneInputValue,
+    onPhoneInputValueChange,
+    phoneNameValue,
+    onPhoneNameValueChange,
     creatorName,
     creatorAvatarUrl,
 }: RosterInviteStepProps) {
@@ -72,9 +85,16 @@ export default function RosterInviteStep({
     const [selectedSort, setSelectedSort] = useState("roster");
     const [indicatedAvailable, setIndicatedAvailable] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [showPhoneInput, setShowPhoneInput] = useState(false);
-    const [phoneNumber, setPhoneNumber] = useState("");
-    const [phoneName, setPhoneName] = useState("");
+    // Phone form state – controlled by parent when props are provided, else local fallback
+    const [localShowPhoneInput, setLocalShowPhoneInput] = useState(false);
+    const [localPhoneNumber, setLocalPhoneNumber] = useState("");
+    const [localPhoneName, setLocalPhoneName] = useState("");
+    const isControlled = onShowPhoneInputChange !== undefined;
+    const showPhoneInput = isControlled ? (showPhoneInputProp ?? false) : localShowPhoneInput;
+    const phoneNumber = isControlled ? (phoneInputValue ?? "") : localPhoneNumber;
+    const phoneName = isControlled ? (phoneNameValue ?? "") : localPhoneName;
+    const setShowPhoneInput = isControlled ? (v: boolean) => onShowPhoneInputChange(v) : setLocalShowPhoneInput;
+    const setPhoneName = isControlled ? (v: string) => onPhoneNameValueChange?.(v) : setLocalPhoneName;
     const [savedFilters, setSavedFilters] = useState<SavedRosterFilter[]>([]);
     const [showCreateFilter, setShowCreateFilter] = useState(false);
     const [newFilterName, setNewFilterName] = useState("");
@@ -599,10 +619,17 @@ export default function RosterInviteStep({
                                     paddingHorizontal: 16,
                                     marginBottom: 12,
                                 }}
-                                placeholder="Phone number (e.g., +15551234567)"
+                                placeholder="(555) 123-4567"
                                 placeholderTextColor="#9CA3AF"
                                 value={phoneNumber}
-                                onChangeText={setPhoneNumber}
+                                onChangeText={(text) => {
+                                    const digits = text.replace(/\D/g, "").slice(0, 10);
+                                    let formatted = digits;
+                                    if (digits.length > 6) formatted = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+                                    else if (digits.length > 3) formatted = `(${digits.slice(0,3)}) ${digits.slice(3)}`;
+                                    if (isControlled) onPhoneInputValueChange?.(formatted);
+                                    else setLocalPhoneNumber(formatted);
+                                }}
                                 keyboardType="phone-pad"
                             />
                             <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -618,8 +645,13 @@ export default function RosterInviteStep({
                                     }}
                                     onPress={() => {
                                         setShowPhoneInput(false);
-                                        setPhoneNumber("");
-                                        setPhoneName("");
+                                        if (isControlled) {
+                                            onPhoneInputValueChange?.("");
+                                            onPhoneNameValueChange?.("");
+                                        } else {
+                                            setLocalPhoneNumber("");
+                                            setLocalPhoneName("");
+                                        }
                                     }}
                                     activeOpacity={0.7}
                                 >
@@ -636,19 +668,18 @@ export default function RosterInviteStep({
                                         flex: 1,
                                         paddingVertical: 12,
                                         borderRadius: 8,
-                                        backgroundColor: '#22C55E',
+                                        backgroundColor: phoneNumber.replace(/\D/g, "").length >= 10 ? '#22C55E' : '#D1D5DB',
                                         alignItems: 'center',
                                     }}
                                     onPress={() => {
-                                        if (phoneNumber.trim()) {
+                                        const digits = phoneNumber.replace(/\D/g, "");
+                                        if (digits.length >= 10) {
                                             onAddPhoneInvite(phoneNumber.trim(), phoneName.trim() || phoneNumber.trim());
-                                            setPhoneNumber("");
-                                            setPhoneName("");
-                                            setShowPhoneInput(false);
+                                            // Parent resets form state via onAddPhoneInvite handler
                                         }
                                     }}
                                     activeOpacity={0.7}
-                                    disabled={!phoneNumber.trim()}
+                                    disabled={phoneNumber.replace(/\D/g, "").length < 10}
                                 >
                                     <Text style={{
                                         fontFamily: 'Inter_600SemiBold',

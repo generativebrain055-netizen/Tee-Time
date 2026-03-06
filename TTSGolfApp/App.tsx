@@ -68,6 +68,8 @@ import PrivacySecurityScreen from "./screens/PrivacySecurityScreen";
 import HelpSupportScreen from "./screens/HelpSupportScreen";
 import CreateGroupScreen from "./screens/CreateGroupScreen";
 import WaiverWireScreen from "./screens/WaiverWireScreen";
+import InviteFriendScreen from "./screens/InviteFriend/InviteFriendScreen";
+import InviteSentScreen from "./screens/InviteFriend/InviteSentScreen";
 
 type ScreenName =
   | "Splash"
@@ -114,7 +116,9 @@ type ScreenName =
   | "UserProfile"
   | "GlobalSearch"
   | "ComposeMessage"
-  | "WaiverWire";
+  | "WaiverWire"
+  | "InviteFriend"
+  | "InviteSent";
 
 interface UserData {
   firstName: string;
@@ -454,6 +458,20 @@ export default function App(): React.ReactElement {
             key={`invite-detail-${screenKey}`}
             navigation={navigation as any}
             route={{ params: routeParams }}
+          />
+        );
+      case "InviteFriend":
+        return (
+          <InviteFriendScreen
+            key={`invite-friend-${screenKey}`}
+            navigation={navigation as any}
+          />
+        );
+      case "InviteSent":
+        return (
+          <InviteSentScreen
+            key={`invite-sent-${screenKey}`}
+            navigation={navigation as any}
           />
         );
       case "Availability":

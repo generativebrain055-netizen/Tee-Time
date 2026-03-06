@@ -1,11 +1,14 @@
 const friendRepository = require("../repositories/friendRepository");
 const notificationService = require("../services/notificationService");
+const twilioService = require("../services/twilioService");
+const { normalizePhoneToE164 } = require("../utils/validation");
 const logger = require("../config/logger");
 
 class FriendController {
     constructor() {
         // Bind all methods to preserve 'this' context
         this.sendFriendRequest = this.sendFriendRequest.bind(this);
+        this.inviteByPhone = this.inviteByPhone.bind(this);
         this.getPendingRequests = this.getPendingRequests.bind(this);
         this.getSentRequests = this.getSentRequests.bind(this);
         this.respondToRequest = this.respondToRequest.bind(this);
@@ -60,6 +63,27 @@ class FriendController {
         } catch (error) {
             logger.error("Send friend request error:", error);
             res.status(500).json({ success: false, message: "Failed to send friend request" });
+        }
+    }
+
+    // POST /api/friends/invite-by-phone — send "Invite via Link" SMS (no tee time)
+    async inviteByPhone(req, res) {
+        try {
+            const { phone } = req.body;
+            if (!phone || typeof phone !== "string" || !phone.trim()) {
+                return res.status(400).json({ success: false, message: "Phone number is required" });
+            }
+            const e164 = normalizePhoneToE164(phone.trim());
+            if (!e164) {
+                return res.status(400).json({ success: false, message: "Invalid phone number format" });
+            }
+            const inviterName = [req.user.firstName, req.user.lastName].filter(Boolean).join(" ") || "Someone";
+            const message = `${inviterName} invited you to connect on Tee Time Social. Download the app and sign up with your phone number to connect and start playing together.\n\nhttps://teetimesocial.com`;
+            await twilioService.sendSMS(e164, message);
+            return res.status(200).json({ success: true, message: "Invite sent" });
+        } catch (error) {
+            logger.error("Invite by phone error:", error);
+            return res.status(500).json({ success: false, message: error.message || "Failed to send invite" });
         }
     }
 

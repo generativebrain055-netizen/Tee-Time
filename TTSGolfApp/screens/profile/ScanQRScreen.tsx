@@ -9,12 +9,11 @@ import {
     Image,
     Dimensions,
     Animated,
-    StyleSheet,
 } from "react-native";
 import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { X, UserPlus, Camera, AlertCircle } from "lucide-react-native";
+import { X, UserPlus, Camera } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "../../ui/theme";
 import { draftApi, ScannedUser } from "../../services/api";
@@ -37,7 +36,6 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
-    const [cameraMounted, setCameraMounted] = useState(false);
     const [lastDetection, setLastDetection] = useState<string>("");
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
@@ -51,13 +49,6 @@ export default function ScanQRScreen({ navigation }: Props) {
             requestPermission();
         }
     }, [permission?.granted, permission?.canAskAgain, requestPermission]);
-
-    // Delay mounting CameraView until after layout (fixes black screen on many devices)
-    useEffect(() => {
-        if (!permission?.granted) return;
-        const t = setTimeout(() => setCameraMounted(true), 200);
-        return () => clearTimeout(t);
-    }, [permission?.granted]);
 
     useEffect(() => {
         // Animate scan line
@@ -177,76 +168,36 @@ export default function ScanQRScreen({ navigation }: Props) {
         resetScanner();
     }, [resetScanner]);
 
-    const GRAY_BG = "#374151";
-
-    // Simulator: camera not available
-    if (!Device.isDevice) {
-        return (
-            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
-                <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
-                <Text className="text-xl font-bold text-white mb-2">Camera not available</Text>
-                <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
-                    QR scanning requires a physical device. The camera isn't available in the simulator.
-                </Text>
-                <TouchableOpacity className="py-3" onPress={handleClose}>
-                    <Text className="text-base text-gray-400">Go back</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    // Permission handling
-    if (!permission) {
-        return (
-            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center" }}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text className="text-white mt-4 text-sm">Checking camera permission...</Text>
-            </View>
-        );
-    }
-
-    if (!permission.granted) {
-        return (
-            <View style={{ flex: 1, backgroundColor: GRAY_BG, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
-                <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
-                <Text className="text-xl font-bold text-white mb-2">Camera Access Required</Text>
-                <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
-                    To scan QR codes, we need access to your camera.
-                </Text>
-                <TouchableOpacity className="bg-blue-600 px-8 py-3.5 rounded-md mb-4" onPress={requestPermission}>
-                    <Text className="text-base font-semibold text-white">Grant Permission</Text>
-                </TouchableOpacity>
-                <TouchableOpacity className="py-3" onPress={handleClose}>
-                    <Text className="text-base text-gray-400">Cancel</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
     const scanLineTranslate = scanLineAnim.interpolate({
         inputRange: [0, 1],
         outputRange: [0, SCAN_AREA_SIZE - 4],
     });
 
+    // Determine if camera should render (permission granted and on a real device)
+    const cameraActive = Device.isDevice && permission?.granted === true;
+    // Show inline loading/blocked state in the scan area
+    const scanAreaBlocked = !cameraReady || !cameraActive;
+
     return (
-        <View className="flex-1 bg-black">
+        <View style={{ flex: 1, backgroundColor: '#000000' }}>
             <StatusBar style="light" />
 
-            {/* Camera - Full screen */}
-            <CameraView
-                className="flex-1"
-                facing="back"
-                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-                barcodeScannerSettings={{
-                    barcodeTypes: ["qr"],
-                }}
-                onCameraReady={() => {
-                    logger.debug("[ScanQRScreen] Camera is ready");
-                    setCameraReady(true);
-                    logger.debug("[ScanQRScreen] Camera is ready");
-                }}
-                enableTorch={false}
-            />
+            {/* Camera - only mounted when permission is granted on a real device */}
+            {cameraActive && (
+                <CameraView
+                    className="flex-1"
+                    facing="back"
+                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                    barcodeScannerSettings={{
+                        barcodeTypes: ["qr"],
+                    }}
+                    onCameraReady={() => {
+                        logger.debug("[ScanQRScreen] Camera is ready");
+                        setCameraReady(true);
+                    }}
+                    enableTorch={false}
+                />
+            )}
 
             {/* Overlay */}
             <View className="absolute inset-0" pointerEvents="box-none">
@@ -274,7 +225,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                         <View className="absolute bottom-0 left-0 w-[35px] h-[35px] border-b-4 border-l-4 border-blue-600 rounded-bl-2xl" />
                         <View className="absolute bottom-0 right-0 w-[35px] h-[35px] border-b-4 border-r-4 border-blue-600 rounded-br-2xl" />
 
-                        {/* Animated scan line */}
+                        {/* Animated scan line – shown once camera is live */}
                         {cameraReady && !scanned && (
                             <Animated.View
                                 className="absolute left-2.5 right-2.5 h-[3px] bg-blue-600 rounded-sm"
@@ -296,8 +247,8 @@ export default function ScanQRScreen({ navigation }: Props) {
                             </View>
                         )}
 
-                        {/* Camera starting */}
-                        {!cameraReady && (
+                        {/* Camera initialising / permission loading */}
+                        {scanAreaBlocked && !processing && (
                             <View className="absolute inset-0 bg-black/60 justify-center items-center rounded-md">
                                 <ActivityIndicator size="small" color={colors.primary} />
                                 <Text className="text-white mt-3 text-sm font-medium">Starting camera...</Text>
@@ -326,6 +277,43 @@ export default function ScanQRScreen({ navigation }: Props) {
                     )}
                 </View>
             </View>
+
+            {/* Simulator: camera not available – shown as dark overlay so no grey flash */}
+            {!Device.isDevice && (
+                <View style={{ position: "absolute", inset: 0, backgroundColor: "#111827", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
+                    <TouchableOpacity style={{ position: "absolute", top: insets.top + 16, left: 20, padding: 8 }} onPress={handleClose}>
+                        <X size={28} color="#fff" />
+                    </TouchableOpacity>
+                    <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
+                    <Text className="text-xl font-bold text-white mb-2">Camera not available</Text>
+                    <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
+                        QR scanning requires a physical device. The camera isn't available in the simulator.
+                    </Text>
+                    <TouchableOpacity className="py-3" onPress={handleClose}>
+                        <Text className="text-base text-gray-400">Go back</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Permission denied – shown as dark overlay, no separate grey page */}
+            {Device.isDevice && permission && !permission.granted && (
+                <View style={{ position: "absolute", inset: 0, backgroundColor: "#111827", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
+                    <TouchableOpacity style={{ position: "absolute", top: insets.top + 16, left: 20, padding: 8 }} onPress={handleClose}>
+                        <X size={28} color="#fff" />
+                    </TouchableOpacity>
+                    <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
+                    <Text className="text-xl font-bold text-white mb-2">Camera Access Required</Text>
+                    <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
+                        To scan QR codes, we need access to your camera.
+                    </Text>
+                    <TouchableOpacity className="bg-blue-600 px-8 py-3.5 rounded-md mb-4" onPress={requestPermission}>
+                        <Text className="text-base font-semibold text-white">Grant Permission</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity className="py-3" onPress={handleClose}>
+                        <Text className="text-base text-gray-400">Cancel</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
             {/* Confirm Modal */}
             <Modal visible={showConfirmModal} transparent animationType="fade">
@@ -400,29 +388,3 @@ export default function ScanQRScreen({ navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#000",
-    },
-    cameraPlaceholder: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#000",
-    },
-    cameraPlaceholderText: {
-        color: "rgba(255,255,255,0.8)",
-        fontSize: 14,
-        marginTop: 12,
-    },
-    camera: {
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
-    },
-});

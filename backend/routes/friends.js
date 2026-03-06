@@ -1,5 +1,5 @@
 const express = require("express");
-const { query } = require("express-validator");
+const { query, body } = require("express-validator");
 const router = express.Router();
 const friendController = require("../controllers/friendController");
 const { authenticate } = require("../middleware/auth");
@@ -10,6 +10,13 @@ router.use(authenticate);
 
 // Friend requests
 router.post("/request", friendController.sendFriendRequest);
+// Invite via Link — send SMS to phone with app link (no tee time)
+router.post(
+    "/invite-by-phone",
+    [body("phone").isString().notEmpty().trim().withMessage("Phone number is required")],
+    validateRequest,
+    friendController.inviteByPhone,
+);
 router.get("/requests/pending", friendController.getPendingRequests);
 router.get("/requests/sent", friendController.getSentRequests);
 router.put("/requests/:id/respond", friendController.respondToRequest);

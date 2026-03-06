@@ -528,7 +528,7 @@ export default function ProfileScreen({ navigation }: any) {
                                     fontSize: 15,
                                     color: '#111827',
                                 }}>
-                                    {profile?.preferences?.drinkOfChoice || "Transfusion"}
+                                    {profile?.preferences?.drinkOfChoice || ""}
                                 </Text>
                             </View>
                         </View>

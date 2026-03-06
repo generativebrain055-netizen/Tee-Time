@@ -97,6 +97,10 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const [showAddMoreModal, setShowAddMoreModal] = useState(false);
   const [showPhoneInviteModal, setShowPhoneInviteModal] = useState(false);
   const [phoneInviteInput, setPhoneInviteInput] = useState("");
+  // Controlled phone-form state for RosterInviteStep (lifted so canContinue can see pending input)
+  const [showRosterPhoneInput, setShowRosterPhoneInput] = useState(false);
+  const [rosterPhoneInput, setRosterPhoneInput] = useState("");
+  const [rosterPhoneName, setRosterPhoneName] = useState("");
 
   // FCFS state
   const [fcfsTargetType, setFcfsTargetType] =
@@ -351,6 +355,16 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     } else if (step === 3) {
       // For all invite types, go to review step
       if (inviteType === "roster" || inviteType === "fcfs" || inviteType === "manual") {
+        // For roster: auto-commit any pending phone number typed in the inline form
+        if (inviteType === "roster" && showRosterPhoneInput) {
+          const digits = rosterPhoneInput.replace(/\D/g, "");
+          if (digits.length >= 10) {
+            setPhoneInvites((prev) => [...prev, { phone: rosterPhoneInput.trim(), name: rosterPhoneName.trim() }]);
+          }
+          setRosterPhoneInput("");
+          setRosterPhoneName("");
+          setShowRosterPhoneInput(false);
+        }
         setStep(4);
       } else {
         await handleCreate();
@@ -688,8 +702,11 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     if (step === 1) return true;
     if (step === 2) return selectedDate && location;
     if (step === 3) {
-      // Roster: allow continuing with roster players and/or phone-number invitees
-      if (inviteType === "roster") return orderedPlayers.length > 0 || phoneInvites.length > 0;
+      if (inviteType === "roster") {
+        // Also count a valid phone that's been typed but not yet committed via "Add"
+        const hasPendingPhone = showRosterPhoneInput && rosterPhoneInput.replace(/\D/g, "").length >= 10;
+        return orderedPlayers.length > 0 || phoneInvites.length > 0 || hasPendingPhone;
+      }
       if (inviteType === "fcfs") {
         return fcfsSelectedPlayers.length > 0;
       }
@@ -750,9 +767,19 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           onResponseWindowChange={setResponseWindow}
           onReorderPlayers={setOrderedPlayers}
           onAddPhoneInvite={(phone, name) => {
-            setPhoneInvites(prev => [...prev, { phone, name }]);
+            setPhoneInvites((prev) => [...prev, { phone, name }]);
+            // Reset the controlled form state after committing
+            setRosterPhoneInput("");
+            setRosterPhoneName("");
+            setShowRosterPhoneInput(false);
           }}
           phoneInvites={phoneInvites}
+          showPhoneInput={showRosterPhoneInput}
+          onShowPhoneInputChange={setShowRosterPhoneInput}
+          phoneInputValue={rosterPhoneInput}
+          onPhoneInputValueChange={setRosterPhoneInput}
+          phoneNameValue={rosterPhoneName}
+          onPhoneNameValueChange={setRosterPhoneName}
           creatorName={user ? `${user.firstName} ${user.lastName}`.trim() : undefined}
           creatorAvatarUrl={user?.avatar ?? user?.avatarUrl ?? undefined}
         />

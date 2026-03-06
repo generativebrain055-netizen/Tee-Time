@@ -75,6 +75,7 @@ export interface ApiEndpoints {
   // Friends
   FRIENDS: string;
   FRIENDS_REQUEST: string;
+  FRIENDS_INVITE_BY_PHONE: string;
   FRIENDS_REQUESTS_PENDING: string;
   FRIENDS_REQUESTS_SENT: string;
   FRIENDS_DISCOVER: string;
@@ -151,6 +152,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   // Friends
   FRIENDS: `${API_URL}/api/friends`,
   FRIENDS_REQUEST: `${API_URL}/api/friends/request`,
+  FRIENDS_INVITE_BY_PHONE: `${API_URL}/api/friends/invite-by-phone`,
   FRIENDS_REQUESTS_PENDING: `${API_URL}/api/friends/requests/pending`,
   FRIENDS_REQUESTS_SENT: `${API_URL}/api/friends/requests/sent`,
   FRIENDS_DISCOVER: `${API_URL}/api/friends/discover`,

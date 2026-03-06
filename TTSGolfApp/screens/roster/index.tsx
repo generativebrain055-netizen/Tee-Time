@@ -21,11 +21,9 @@ const TABS = ["Roster", "Groups", "On Deck", "Requests"];
 export default function RosterScreen({ navigation, route }: any) {
     const initialTab = route?.params?.initialTab || "Roster";
     const [activeTab, setActiveTab] = useState(initialTab);
-    const [removeMode, setRemoveMode] = useState(false);
     const [addModalVisible, setAddModalVisible] = useState(false);
     const [addedToRosterUndo, setAddedToRosterUndo] = useState<string[] | null>(null);
     const [rosterRefreshKey, setRosterRefreshKey] = useState(0);
-    const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0);
     const addedUndoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const colors = useColors();
     const theme = useTheme();
@@ -35,10 +33,6 @@ export default function RosterScreen({ navigation, route }: any) {
             setActiveTab(route.params.initialTab);
         }
     }, [route?.params?.initialTab]);
-
-    useEffect(() => {
-        if (activeTab !== "Roster") setRemoveMode(false);
-    }, [activeTab]);
 
     useEffect(() => {
         return () => {
@@ -88,10 +82,6 @@ export default function RosterScreen({ navigation, route }: any) {
                     <SimpleRosterList
                         key={rosterRefreshKey}
                         navigation={navigation}
-                        removeMode={removeMode}
-                        onEnterRemoveMode={() => setRemoveMode(true)}
-                        onExitRemoveMode={() => setRemoveMode(false)}
-                        scrollToTopTrigger={scrollToTopTrigger}
                     />
                 );
             case "Groups":
@@ -114,33 +104,6 @@ export default function RosterScreen({ navigation, route }: any) {
     };
 
     const renderRightAction = () => {
-        if (activeTab === "Roster") {
-            if (removeMode) {
-                return (
-                    <TouchableOpacity
-                        style={{ paddingHorizontal: 4 }}
-                        onPress={() => {
-                            setRemoveMode(false);
-                            setScrollToTopTrigger((t) => t + 1);
-                        }}
-                    >
-                        <Text style={{ fontSize: 14, fontWeight: "600", color: "#3B82F6" }}>
-                            Done
-                        </Text>
-                    </TouchableOpacity>
-                );
-            }
-            return (
-                <TouchableOpacity
-                    style={{ paddingHorizontal: 4, paddingVertical: 4 }}
-                    onPress={() => setRemoveMode(true)}
-                >
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>
-                        Edit
-                    </Text>
-                </TouchableOpacity>
-            );
-        }
         if (activeTab === "Groups") {
             return (
                 <TouchableOpacity style={{ padding: 4 }} onPress={handleCreateGroup}>

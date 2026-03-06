@@ -17,6 +17,18 @@ export interface DiscoverUsersParams {
 
 export const friendApi = {
   /**
+   * Send invite via link (SMS to phone with app link; "Invite via Link" flow)
+   */
+  sendInviteByPhone: (phone: string) =>
+    apiCall<{ success: boolean; message: string }>(
+      API_ENDPOINTS.FRIENDS_INVITE_BY_PHONE,
+      {
+        method: "POST",
+        body: JSON.stringify({ phone }),
+      },
+    ),
+
+  /**
    * Send friend request
    */
   sendRequest: (receiverId: string, message?: string) =>

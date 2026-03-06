@@ -53,7 +53,7 @@ function QuickActions({
 }: QuickActionsProps) {
   const actions = [
     { icon: CalendarPlus, label: "Create tee time", onPress: onCreateTeeTime },
-    { icon: UserPlus, label: "Invite via SMS", onPress: onInviteViaSMS },
+    { icon: UserPlus, label: "Invite via Link", onPress: onInviteViaSMS },
     { icon: Search, label: "Find Players", onPress: onFindPlayers },
   ];
 

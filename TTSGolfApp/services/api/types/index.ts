@@ -90,6 +90,7 @@ export interface UserProfile {
     preferredTeeTime?: string;
     walkOrRide?: "walk" | "ride" | "either";
     playingPartnerPreference?: string;
+    drinkOfChoice?: string;
   };
   timezone?: string;
   language?: string;

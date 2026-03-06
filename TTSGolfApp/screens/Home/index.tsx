@@ -101,7 +101,7 @@ function HomePage({ navigation }: any) {
   }, [navigation]);
 
   const handleInviteViaSMS = useCallback(() => {
-    navigation?.navigate("CreateTeeTime", { inviteViaSMS: true });
+    navigation?.navigate("InviteFriend");
   }, [navigation]);
 
   const handleFindPlayers = useCallback(() => {
