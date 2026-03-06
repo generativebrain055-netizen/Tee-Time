@@ -81,25 +81,6 @@ const googleSignIn = async (req, res, next) => {
     // Check profile completeness (business logic in service)
     const profileStatus = oauthService.getProfileCompleteness(user);
 
-    // For new users, require phone verification via SMS magic link
-    if (isNewUser) {
-      return res.json({
-        status: "pending_phone_verification",
-        success: true,
-        needsPhoneVerification: true,
-        providerData: {
-          email,
-          email_verified: emailVerified,
-          first_name: givenName,
-          last_name: familyName,
-          firstName: givenName,
-          lastName: familyName,
-          picture,
-        },
-        message: "Please verify your phone number to complete sign up",
-      });
-    }
-
     return res.json({
       status: "authenticated",
       success: true,
@@ -617,26 +598,6 @@ const appleSignIn = async (req, res, next) => {
     // Check profile completeness (business logic in service)
     const profileStatus = oauthService.getProfileCompleteness(user);
 
-    // For new users, require phone verification via SMS magic link
-    if (isNewUser) {
-      return res.json({
-        status: "pending_phone_verification",
-        success: true,
-        needsPhoneVerification: true,
-        providerData: {
-          email,
-          email_verified: emailVerified,
-          is_private_email: isPrivateEmail,
-          first_name: firstName,
-          last_name: lastName,
-          firstName,
-          lastName,
-          picture: null, // Apple doesn't provide profile pictures
-        },
-        message: "Please verify your phone number to complete sign up",
-      });
-    }
-
     return res.json({
       status: "authenticated",
       success: true,
@@ -747,6 +708,10 @@ const completeOAuthProfile = async (req, res, next) => {
       zipCode,
       avatarUrl,
       profilePhotoBase64,
+      preferredTeeTime,
+      walkOrRide,
+      playingPartnerPreference,
+      drinkOfChoice,
     } = req.body;
 
     // LEGACY SUPPORT: If tempToken is provided, use old flow
@@ -788,6 +753,10 @@ const completeOAuthProfile = async (req, res, next) => {
     }
     if (zipCode !== undefined) updates.zipCode = zipCode;
     if (avatarUrl) updates.avatarUrl = avatarUrl;
+    if (preferredTeeTime !== undefined) updates.preferredTeeTime = preferredTeeTime;
+    if (walkOrRide !== undefined) updates.walkOrRide = walkOrRide;
+    if (playingPartnerPreference !== undefined) updates.playingPartnerPreference = playingPartnerPreference;
+    if (drinkOfChoice !== undefined) updates.drinkOfChoice = drinkOfChoice;
 
     // Upload profile photo if base64 provided (non-blocking: do not fail profile update)
     if (profilePhotoBase64) {
@@ -968,12 +937,15 @@ const handleLegacyTempTokenFlow = async (req, res) => {
     provider,
   });
 
+  // Re-fetch so response includes full user + profile (same shape as findById)
+  const fullUser = await userRepository.findById(newUser.id) || newUser;
+
   return res.status(201).json({
     status: "authenticated",
     success: true,
     accessToken,
     refreshToken,
-    user: formatUser(newUser),
+    user: formatUser(fullUser),
   });
 };
 

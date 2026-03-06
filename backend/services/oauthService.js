@@ -492,21 +492,17 @@ const findOrCreateOAuthUser = async ({
 };
 
 /**
- * Check what profile fields are missing for OAuth users
- * Only checks REQUIRED fields for OAuth flow
+ * Check what profile fields are missing for OAuth users.
+ * Phone number is not required for SSO sign-up.
  * @param {Object} user - User record
  * @returns {Object} - Profile completeness status
  */
 const getProfileCompleteness = (user) => {
   const missingFields = [];
 
-  // Required fields for OAuth users
+  // Required fields for OAuth users (no phone verification)
   if (!user.first_name) missingFields.push("firstName");
   if (!user.last_name) missingFields.push("lastName");
-  if (!user.phone_number) missingFields.push("phoneNumber");
-
-  // Optional fields - don't block onboarding
-  // location and home_course can be added later from profile settings
 
   return {
     isComplete: missingFields.length === 0,

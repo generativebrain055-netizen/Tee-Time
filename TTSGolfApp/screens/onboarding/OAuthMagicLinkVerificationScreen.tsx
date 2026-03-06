@@ -95,11 +95,17 @@ export function OAuthMagicLinkVerificationScreen({
               refreshToken: result.refreshToken,
               user: result.user,
             });
-            
-            // OAuth user phone linked - navigate directly to availability onboarding
             setIsAuthenticated(true);
+            // Route through full onboarding to collect handicap, home course, club, location, preferences
             setTimeout(() => {
-              navigation.replace("AvailabilityOnboarding", { user: result.user });
+              navigation.replace("Onboarding", {
+                oauthData: {
+                  ...result.user,
+                  accessToken: result.accessToken,
+                  refreshToken: result.refreshToken,
+                  fromVerifiedMagicLink: true,
+                },
+              });
             }, 1500);
             return;
           }

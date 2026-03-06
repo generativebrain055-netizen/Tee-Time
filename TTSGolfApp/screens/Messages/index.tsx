@@ -13,6 +13,7 @@ import { Edit3, MessageCircle } from "lucide-react-native";
 import { messagesApi } from "../../services/api";
 import type { ConversationListItem } from "../../services/api/messagesApi";
 import { ScreenShell, AppHeader, AppBottomNav } from "../../ui";
+import { AdContainerPlaceholder, AD_CONTAINER_HEIGHT, AD_CONTAINER_MARGIN_TOP, AD_CONTAINER_MARGIN_BOTTOM } from "../../components";
 import { useColors } from "../../ui/theme/ThemeContext";
 import { spacing, fontSize, palette, radii } from "../../ui/theme/tokens";
 import type {
@@ -25,8 +26,6 @@ import type {
 import { getInitials, formatRelativeTime } from "./utils";
 import { getAvatarColor } from "../../utils/formatting";
 import { logger } from "../../utils/logger";
-import { AdsSection } from "../Home/components";
-import { DEFAULT_AD_SLOTS } from "../Home/constants";
 
 const TABS: MessageTab[] = ["All", "Tee Times", "Groups"];
 
@@ -95,6 +94,10 @@ const FIGMA_TAB_PILL_RADIUS = 26.5;
 const FIGMA_TAB_PILL_PADDING_H = 20;
 const FIGMA_GROUP_AVATAR_BLUE = "#2563EB";
 const FIGMA_TEE_TIME_AVATAR_SIZE = 36;
+
+/** Height of the fixed ad strip at bottom (above tab bar) so list padding matches. */
+const STATIC_AD_STRIP_HEIGHT =
+  AD_CONTAINER_MARGIN_TOP + AD_CONTAINER_HEIGHT + AD_CONTAINER_MARGIN_BOTTOM;
 
 const AllRow = memo(
   ({ item, onPress }: { item: AllConversationItem; onPress: () => void }) => (
@@ -215,6 +218,16 @@ const GroupRow = memo(
 );
 
 const styles = StyleSheet.create({
+  listArea: {
+    flex: 1,
+  },
+  list: {
+    flex: 1,
+  },
+  staticAdStrip: {
+    backgroundColor: palette.white,
+    paddingVertical: 0,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -586,21 +599,23 @@ function MessagesScreen({ navigation }: any) {
         })}
       </View>
 
-      {loading ? (
-        <View style={[styles.emptyWrap, { backgroundColor: palette.white }]}>
-          <Text style={{ color: palette.gray400 }}>Loading...</Text>
-        </View>
-      ) : (
-        <FlatList
+      <View style={styles.listArea}>
+        {loading ? (
+          <View style={[styles.emptyWrap, { backgroundColor: palette.white, flex: 1 }]}>
+            <Text style={{ color: palette.gray400 }}>Loading...</Text>
+          </View>
+        ) : (
+          <FlatList
           data={currentList}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          ListHeaderComponent={<AdsSection title="Sponsored" slots={DEFAULT_AD_SLOTS} />}
           ListEmptyComponent={listEmpty}
           contentContainerStyle={
-            currentList.length === 0 ? { flex: 1 } : { paddingBottom: 100 }
+            currentList.length === 0
+              ? { flex: 1 }
+              : { paddingBottom: STATIC_AD_STRIP_HEIGHT + 100 }
           }
-          style={{ backgroundColor: palette.white }}
+          style={[styles.list, { backgroundColor: palette.white }]}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           refreshControl={
@@ -611,7 +626,12 @@ function MessagesScreen({ navigation }: any) {
             />
           }
         />
-      )}
+        )}
+      </View>
+
+      <View style={styles.staticAdStrip}>
+        <AdContainerPlaceholder />
+      </View>
 
       <AppBottomNav activeTab="Messages" navigation={navigation} />
     </ScreenShell>

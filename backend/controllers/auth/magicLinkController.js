@@ -536,8 +536,12 @@ const verifySmsMagicLink = async (req, res, next) => {
     if (magicLink.purpose === "signup" && magicLink.metadata?.email && magicLink.metadata?.isOAuth) {
       const authProviderRepository = require("../../repositories/authProviderRepository");
       
-      // Find OAuth user by email (check auth_providers for users with this email)
-      const oauthUser = await userRepository.findByEmail(magicLink.metadata.email);
+      // Find OAuth user by email (case-insensitive so app and provider email match)
+      const rawEmail = magicLink.metadata.email && String(magicLink.metadata.email).trim();
+      let oauthUser = rawEmail ? await userRepository.findByEmail(rawEmail) : null;
+      if (!oauthUser && rawEmail) {
+        oauthUser = await userRepository.findByEmail(rawEmail.toLowerCase());
+      }
       
       if (oauthUser) {
         // Check if user has OAuth provider but no phone

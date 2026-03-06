@@ -14,6 +14,7 @@ import { availabilityApi, type TimeSlot, type DayOfWeek, type TimeSlotType } fro
 
 interface AvailabilityOnboardingScreenProps {
   navigation: any;
+  route?: { params?: Record<string, unknown> };
 }
 
 const WEEK_DAYS: { id: DayOfWeek; label: string }[] = [
@@ -102,6 +103,7 @@ const Toggle: React.FC<{
 
 export default function AvailabilityOnboardingScreen({
   navigation,
+  route,
 }: AvailabilityOnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>('intro');

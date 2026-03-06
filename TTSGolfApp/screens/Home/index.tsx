@@ -6,9 +6,9 @@ import { ContentArea } from "../../ui/layout";
 import { AppBottomNav } from "../../ui/navigation";
 import { TeeTime } from "../../services/api";
 import { useAuthStore, useTeeTimeStore } from "../../stores";
-import { DAYS_SHORT, DEFAULT_AD_SLOTS } from "./constants";
+import { DAYS_SHORT } from "./constants";
 import { WeekDay, UpcomingTeeTime } from "./types";
-import { Header, QuickActions, AdsSection, WeekCalendar, NextTeeTime } from "./components";
+import { Header, QuickActions, WeekCalendar, NextTeeTime } from "./components";
 
 const toDateString = (d: Date | string) =>
   new Date(d).toDateString();
@@ -135,7 +135,6 @@ function HomePage({ navigation }: any) {
           onInviteViaSMS={handleInviteViaSMS}
           onFindPlayers={handleFindPlayers}
         />
-        <AdsSection title="Sponsored" slots={DEFAULT_AD_SLOTS} />
         <WeekCalendar
           weekDays={weekDays}
           selectedDate={selectedDate}

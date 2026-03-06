@@ -38,13 +38,17 @@ interface SignUpOptionsPageProps {
   onNext: (data: { phoneNumber: string }) => void;
   onBack: () => void;
   onOAuthSuccess: (data: OAuthSuccessData) => void;
+  /** When set, user is SSO sign-up and we only show phone input (same step as phone flow) */
+  oauthData?: Record<string, unknown> | null;
 }
 
 export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
   onNext,
   onBack,
   onOAuthSuccess,
+  oauthData,
 }) => {
+  const isOAuthFlow = !!oauthData;
   const insets = useSafeAreaInsets();
   const inputRef = useRef<RNTextInput>(null);
 
@@ -90,9 +94,13 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
 
             {/* Main Content */}
             <View style={styles.mainContent}>
-              <Text style={styles.title}>Enter your phone number</Text>
+              <Text style={styles.title}>
+                {isOAuthFlow ? "Add your phone number" : "Enter your phone number"}
+              </Text>
               <Text style={styles.subtitle}>
-              We'll text you a link to verify your phone
+                {isOAuthFlow
+                  ? "We'll text you a link to verify your phone and continue"
+                  : "We'll text you a link to verify your phone"}
               </Text>
 
               {/* Phone Input */}
@@ -162,23 +170,25 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Figma: "or" divider between phone CTA and OAuth */}
-            <View style={styles.dividerWrap}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Bottom Section: Apple then Google (Figma: #F7F7F7, #E5E7EB) */}
-            <View style={styles.bottomSection}>
-              <OAuthButtons
-                onSuccess={onOAuthSuccess}
-                onError={(err) => {
-                  const { logger } = require("../../utils/logger");
-                  logger.error("[SignUpOptions] OAuth error", err);
-                }}
-              />
-            </View>
+            {/* For phone-only flow show divider + OAuth; for SSO flow (oauthData) we only need phone */}
+            {!isOAuthFlow && (
+              <>
+                <View style={styles.dividerWrap}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <View style={styles.bottomSection}>
+                  <OAuthButtons
+                    onSuccess={onOAuthSuccess}
+                    onError={(err) => {
+                      const { logger } = require("../../utils/logger");
+                      logger.error("[SignUpOptions] OAuth error", err);
+                    }}
+                  />
+                </View>
+              </>
+            )}
 
             {/* Ad container area (Figma: designated position for ad) */}
             <AdContainerPlaceholder />

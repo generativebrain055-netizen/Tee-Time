@@ -19,6 +19,7 @@ import {
   verifySmsMagicLink,
   maskPhoneDisplay,
 } from "../../utils/smsMagicLink";
+import { sessionManager } from "../../utils/sessionManager";
 
 const COLORS = {
   primary: "#5EBC68",
@@ -34,6 +35,8 @@ interface MagicLinkPageProps {
   onNext: (data: Partial<OnboardingData>) => void;
   onBack?: () => void;
   initialPhone?: string;
+  /** When set, this is SSO sign-up; send with userData and on verify save session + set fromVerifiedMagicLink */
+  oauthData?: Record<string, unknown> | null;
 }
 
 interface Styles {
@@ -58,6 +61,7 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
   onNext,
   onBack,
   initialPhone,
+  oauthData,
 }) => {
   const [isSending, setIsSending] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -87,6 +91,15 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
 
         if (result.success) {
           setIsAuthenticated(true);
+          // SSO flow: backend returned tokens after linking phone to OAuth user
+          if (oauthData && result.accessToken && result.refreshToken && result.user) {
+            await sessionManager.saveSession({
+              accessToken: result.accessToken,
+              refreshToken: result.refreshToken,
+              user: result.user as any,
+            });
+            onNext({ magicLinkVerified: true, fromVerifiedMagicLink: true });
+          }
         } else {
           Alert.alert("Verification Failed", result.error || "Please try again.");
         }
@@ -95,10 +108,10 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
         Alert.alert("Verification Failed", "Please try again.");
       }
     },
-    []
+    [oauthData, onNext]
   );
 
-  // Send verification link on mount
+  // Send verification link on mount (for SSO pass userData so backend can link phone to OAuth user)
   useEffect(() => {
     if (!initialPhone) {
       setIsSending(false);
@@ -106,7 +119,16 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
       return;
     }
 
-    requestSmsMagicLink(initialPhone).then((result) => {
+    const userData = oauthData
+      ? {
+          email: (oauthData as any).email,
+          firstName: (oauthData as any).firstName,
+          lastName: (oauthData as any).lastName,
+          isOAuth: true,
+        }
+      : undefined;
+
+    requestSmsMagicLink(initialPhone, userData).then((result) => {
       setIsSending(false);
       if (!result.success) {
         setSendError(result.error || "Failed to send verification link.");
@@ -114,7 +136,7 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
         setDevWebFallback(result.webFallback);
       }
     });
-  }, [initialPhone]);
+  }, [initialPhone, oauthData]);
 
   // Listen for deep link (app in foreground/background)
   useEffect(() => {
@@ -145,7 +167,15 @@ export const MagicLinkPage: React.FC<MagicLinkPageProps> = ({
     setIsSending(true);
     setSendError(null);
     setDevWebFallback(null);
-    const result = await requestSmsMagicLink(initialPhone);
+    const userData = oauthData
+      ? {
+          email: (oauthData as any).email,
+          firstName: (oauthData as any).firstName,
+          lastName: (oauthData as any).lastName,
+          isOAuth: true,
+        }
+      : undefined;
+    const result = await requestSmsMagicLink(initialPhone, userData);
     setIsSending(false);
     if (!result.success) {
       setSendError(result.error || "Failed to send.");

@@ -139,6 +139,25 @@ class SessionManager {
     }
   }
 
+  // Get full session (accessToken + refreshToken + user)
+  async getSession(): Promise<{ accessToken: string | null; refreshToken: string | null; user: any | null }> {
+    try {
+      const [accessToken, refreshToken, userStr] = await Promise.all([
+        AsyncStorage.getItem("accessToken"),
+        AsyncStorage.getItem("refreshToken"),
+        AsyncStorage.getItem("user"),
+      ]);
+      return {
+        accessToken,
+        refreshToken,
+        user: userStr ? JSON.parse(userStr) : null,
+      };
+    } catch (error) {
+      logger.error("[SessionManager] Error getting session", error);
+      return { accessToken: null, refreshToken: null, user: null };
+    }
+  }
+
   // Get access token
   async getAccessToken() {
     try {

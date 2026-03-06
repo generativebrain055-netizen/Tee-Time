@@ -30,7 +30,8 @@ const OAuthOnboardingModule = lazy(() => import("./screens/onboarding/OAuthOnboa
 const OAuthPhoneEntryModule = lazy(() => import("./screens/onboarding/OAuthPhoneEntryScreen"));
 const OAuthMagicLinkVerificationModule = lazy(() => import("./screens/onboarding/OAuthMagicLinkVerificationScreen"));
 const OAuthProfileCompletionModule = lazy(() => import("./screens/onboarding/OAuthProfileCompletionScreen"));
-const AvailabilityOnboardingModule = lazy(() => import("./screens/onboarding/AvailabilityOnboardingScreen"));
+// Eager load so SSO sign-up flow shows last screen (Figma 1269-2679) immediately after onboarding
+import AvailabilityOnboardingScreen from "./screens/onboarding/AvailabilityOnboardingScreen";
 const ComposeMessageScreen = lazy(() => import("./screens/ComposeMessageScreen"));
 import HomePage from "./screens/Home";
 import RosterScreen from "./screens/roster";
@@ -280,6 +281,7 @@ export default function App(): React.ReactElement {
             <OnboardingModule
               key={`onboarding-${screenKey}`}
               navigation={navigation as any}
+              route={{ params: screenParams } as any}
             />
           </Suspense>
         );
@@ -349,18 +351,11 @@ export default function App(): React.ReactElement {
         );
       case "AvailabilityOnboarding":
         return (
-          <Suspense
-            fallback={
-              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" }}>
-                <ActivityIndicator size="large" color="#007AFF" />
-              </View>
-            }
-          >
-            <AvailabilityOnboardingModule
-              key={`availability-onboarding-${screenKey}`}
-              navigation={navigation as any}
-            />
-          </Suspense>
+          <AvailabilityOnboardingScreen
+            key={`availability-onboarding-${screenKey}`}
+            navigation={navigation as any}
+            route={{ params: screenParams } as any}
+          />
         );
       case "HomePage":
       case "Home":

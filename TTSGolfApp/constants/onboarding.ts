@@ -21,6 +21,7 @@ export const ONBOARDING_STEPS = {
   CLUB: "club",
   HANDICAP: "handicap",
   PREFERENCES: "preferences",
+  SSO_CREATE_ACCOUNT: "sso_create_account", // Create your account (name, email, phone, Finish setup) – SSO only
   COMPLETE: "complete",
 } as const;
 

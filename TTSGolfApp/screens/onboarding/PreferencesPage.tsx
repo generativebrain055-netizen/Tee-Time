@@ -149,6 +149,8 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   onNext,
   onBack,
   initialPreferences = {},
+  isSubmitting = false,
+  onSkip,
 }) => {
   const insets = useSafeAreaInsets();
   const [preferredTime, setPreferredTime] = useState<string>(
@@ -167,11 +169,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
   const isValid = preferredTime !== "" && playStyle !== "" && golfVibe !== "";
 
   const handleNext = useCallback((): void => {
-    // Validation handled by button disabled state
-
-    if (!isValid) {
-      return;
-    }
+    if (!isValid || isSubmitting) return;
 
     const preferencesData: PreferencesData = {
       playStyle: playStyle as "walk" | "ride" | "either",
@@ -181,7 +179,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     };
 
     onNext({ preferences: preferencesData });
-  }, [isValid, playStyle, preferredTime, golfVibe, drinkOfChoice, onNext]);
+  }, [isValid, isSubmitting, playStyle, preferredTime, golfVibe, drinkOfChoice, onNext]);
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
@@ -196,6 +194,17 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
               <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
             </TouchableOpacity>
+            {onSkip ? (
+              <TouchableOpacity
+                onPress={onSkip}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                className="py-2 px-1"
+              >
+                <Text className="text-gray-500 font-semibold text-sm">Skip</Text>
+              </TouchableOpacity>
+            ) : (
+              <View className="w-10" />
+            )}
           </View>
 
           <ScrollView 
@@ -249,12 +258,14 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
 
           <View className="pb-8">
             <TouchableOpacity
-              className={`h-14 bg-primary rounded-md justify-center items-center ${!isValid ? "opacity-60" : ""}`}
+              className={`h-14 bg-primary rounded-md justify-center items-center ${!isValid || isSubmitting ? "opacity-60" : ""}`}
               onPress={handleNext}
-              disabled={!isValid}
+              disabled={!isValid || isSubmitting}
               activeOpacity={0.8}
             >
-              <Text className="text-base font-semibold text-white">Next</Text>
+              <Text className="text-base font-semibold text-white">
+                {isSubmitting ? "..." : "Next"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -5,8 +5,8 @@
  */
 
 /**
- * Format user for API response (standard fields)
- * @param {Object} user - User database record
+ * Format user for API response (standard + profile fields so SSO/sign-up profile is saved in session)
+ * @param {Object} user - User database record (may include user_profiles fields when joined or from create)
  * @returns {Object} Formatted user object
  */
 const formatUser = (user) => ({
@@ -16,10 +16,18 @@ const formatUser = (user) => ({
   username: user.username || null,
   firstName: user.first_name || null,
   lastName: user.last_name || null,
-  handicap: user.handicap || null,
-  socialRate: user.social_rate || null,
+  handicap: user.handicap != null ? user.handicap : null,
+  socialRate: user.social_rate != null ? user.social_rate : null,
   location: user.location || null,
   homeCourse: user.home_course || null,
+  // Profile fields (from user_profiles or create return) so profile data is saved in session
+  zipCode: user.zip_code != null ? user.zip_code : null,
+  avatarUrl: user.avatar_url || null,
+  clubs: user.clubs != null ? user.clubs : null,
+  preferredTeeTime: user.preferred_tee_time != null ? user.preferred_tee_time : null,
+  walkOrRide: user.walk_or_ride || null,
+  playingPartnerPreference: user.playing_partner_preference || null,
+  drinkOfChoice: user.drink_of_choice || null,
 });
 
 /**

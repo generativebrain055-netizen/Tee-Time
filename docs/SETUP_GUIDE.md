@@ -7,7 +7,8 @@ This guide consolidates all setup instructions for the TeeTime Social applicatio
 2. [Firebase Configuration](#firebase-configuration)
 3. [OAuth Setup](#oauth-setup)
 4. [Keystore Configuration](#keystore-configuration)
-5. [Installation on Device](#installation-on-device)
+5. [Run on iOS Simulator](#run-on-ios-simulator)
+6. [Installation on Device](#installation-on-device)
 
 ---
 
@@ -185,6 +186,42 @@ Location: `TTSGolfApp/android/app/teetimesocial-release.keystore`
 - SHA-256: `92:F2:96:54:EE:C4:62:B8:60:72:E6:D9:11:F4:26:AC:1E:F0:61:02:5F:66:B4:B4:70:44:78:B6:5B:B1:98:F1`
 
 **Important:** Keep keystore file secure and never commit to version control.
+
+---
+
+## Run on iOS Simulator
+
+The app uses **Apple Sign In** (`usesAppleSignIn: true`), so Xcode requires a **Development Team** for code signing even when building only for the simulator.
+
+### One-time: Set up Xcode signing
+
+1. **Generate the native `ios` folder** (if you haven’t already):
+   ```bash
+   cd TTSGolfApp
+   npx expo prebuild --platform ios
+   ```
+
+2. **Open the iOS project in Xcode:**
+   ```bash
+   open ios/TeeTime.xcworkspace
+   ```
+   (The workspace name comes from the app display name “Tee Time”. Or use `open ios/*.xcworkspace` to open whatever workspace exists.)
+
+3. **In Xcode:**
+   - Select the **TeeTime** project in the left sidebar (blue icon).
+   - Select the **TeeTime** target.
+   - Open the **Signing & Capabilities** tab.
+   - Check **Automatically manage signing**.
+   - Set **Team** to your Apple ID (a free account is enough: Xcode → Settings → Accounts → add Apple ID).
+   - If Xcode shows “Failed to register bundle identifier”, change the **Bundle Identifier** temporarily (e.g. `com.teetimesocial.app.dev`) or use a team that can register it.
+
+4. **Close Xcode** and run the app from the command line:
+   ```bash
+   cd TTSGolfApp
+   npm run ios
+   ```
+
+The app will build and launch in the default iOS Simulator. To pick a specific simulator: `npx expo run:ios --device` and choose an simulator from the list.
 
 ---
 

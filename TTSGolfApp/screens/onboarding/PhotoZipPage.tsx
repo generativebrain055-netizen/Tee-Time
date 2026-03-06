@@ -71,14 +71,14 @@ export const PhotoZipPage: React.FC<PhotoZipPageProps> = ({
 
     const result = useCamera
       ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: "Images",
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.8,
           base64: true,
         })
       : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: "Images",
           allowsEditing: true,
           aspect: [1, 1],
           quality: 0.8,

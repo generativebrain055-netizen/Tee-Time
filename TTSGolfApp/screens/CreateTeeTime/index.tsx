@@ -33,6 +33,7 @@ import ReviewManualInviteStep from "./ReviewManualInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
 import { X, Users, Phone, ChevronRight } from "lucide-react-native";
+import { AdContainerPlaceholder } from "../../components";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -687,9 +688,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     if (step === 1) return true;
     if (step === 2) return selectedDate && location;
     if (step === 3) {
-      if (inviteType === "roster") return orderedPlayers.length > 0;
+      // Roster: allow continuing with roster players and/or phone-number invitees
+      if (inviteType === "roster") return orderedPlayers.length > 0 || phoneInvites.length > 0;
       if (inviteType === "fcfs") {
-        // FCFS requires at least one selected player
         return fcfsSelectedPlayers.length > 0;
       }
       if (inviteType === "manual") return selectedPlayers.length > 0;
@@ -710,7 +711,14 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
       {/* Content */}
       {step === 1 && (
-        <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
+        <>
+          <View style={{ flex: 1 }}>
+            <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
+          </View>
+          <View style={{ backgroundColor: "#F3F4F6" }}>
+            <AdContainerPlaceholder />
+          </View>
+        </>
       )}
 
       {step === 2 && (

@@ -116,6 +116,8 @@ export interface HandicapPageProps extends OnboardingPageProps {
 
 export interface PreferencesPageProps extends OnboardingPageProps {
   initialPreferences?: Partial<UserPreferences>;
+  isSubmitting?: boolean;
+  onSkip?: () => void;
 }
 
 export interface PhotoZipPageProps extends OnboardingPageProps {

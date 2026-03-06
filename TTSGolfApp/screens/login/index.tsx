@@ -127,37 +127,40 @@ export default function LoginScreen({ navigation }: Props) {
                       isNewUser: data.isNewUser,
                       needsPhoneVerification: data.needsPhoneVerification,
                       needsOnboarding: data.needsOnboarding,
+                      hasUser: !!data.user,
+                      hasProviderData: !!data.providerData,
                     });
-                    
-                    // Check if user needs phone verification (new user)
-                    if (data.status === "pending_phone_verification" && data.needsPhoneVerification) {
-                      logger.info("[LoginScreen] New user - navigating to phone entry for SMS verification");
-                      navigation.navigate("OAuthPhoneEntry", {
-                        providerData: data.providerData,
-                      });
+
+                    const pd = data.providerData;
+                    const isUnregisteredSso =
+                      (data.status === "pending_phone_verification" && pd) ||
+                      (data.isNewUser && pd && !data.user);
+
+                    if (isUnregisteredSso) {
+                      logger.info("[LoginScreen] Unregistered SSO → Onboarding screen 18");
+                      const oauthData = {
+                        email: pd?.email ?? undefined,
+                        firstName: pd?.firstName ?? pd?.first_name ?? undefined,
+                        lastName: pd?.lastName ?? pd?.last_name ?? undefined,
+                        picture: pd?.picture ?? undefined,
+                        providerData: pd,
+                        needsPhoneVerification: true,
+                      };
+                      if (typeof (navigation as any).reset === "function") {
+                        (navigation as any).reset({
+                          index: 0,
+                          routes: [{ name: "Onboarding", params: { oauthData } }],
+                        });
+                      } else {
+                        navigation.replace("Onboarding", { oauthData });
+                      }
                       return;
                     }
-                    
-                    // Check if user needs to complete profile (missing required fields)
-                    if (data.needsOnboarding && data.oauthData && !data.oauthData.needsPhoneVerification) {
-                      const missingFields = ("missingFields" in data.oauthData ? data.oauthData.missingFields : []) || [];
-                      logger.debug("[LoginScreen] User missing fields", { missingFields });
-                      
-                      // Only show onboarding if missing critical fields (name or phone)
-                      const hasCriticalMissing = missingFields.some(field => 
-                        field === "firstName" || field === "lastName" || field === "phoneNumber"
-                      );
-                      
-                      if (hasCriticalMissing) {
-                        logger.info("[LoginScreen] Missing critical fields - navigating to OAuthOnboarding");
-                        navigation.navigate("OAuthOnboarding", {
-                          oauthData: data.oauthData,
-                        });
-                        return;
-                      }
+                    if (data.needsOnboarding && data.oauthData) {
+                      logger.info("[LoginScreen] SSO needs onboarding - full Onboarding flow");
+                      navigation.replace("Onboarding", { oauthData: data.oauthData });
+                      return;
                     }
-                    
-                    // User has all required fields - check availability
                     if (data.user) {
                       logger.debug("[LoginScreen] User has required fields, checking availability");
                       
