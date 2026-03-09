@@ -155,6 +155,44 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     [conversationId]
   );
 
+  const handleConvertToGroupMessage = useCallback(
+    async (messageId: string) => {
+      if (!conversationId) return;
+      try {
+        const res = await messagesApi.convertToGroupMessage(conversationId, messageId);
+        if (res.success && res.message) {
+          const updated = res.message as ChatMessage;
+          setState((prev) => ({
+            ...prev,
+            messages: prev.messages.map((m) => (m.id === messageId ? updated : m)),
+          }));
+        }
+      } catch (err) {
+        logger.warn("[useChat] Convert to group message error", err);
+      }
+    },
+    [conversationId]
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!conversationId) return;
+      try {
+        const res = await messagesApi.deleteMessage(conversationId, messageId);
+        if (res.success) {
+          setState((prev) => ({
+            ...prev,
+            messages: prev.messages.filter((m) => m.id !== messageId),
+          }));
+        }
+      } catch (err) {
+        logger.warn("[useChat] Delete message error", err);
+        throw err; // So caller can show alert on 403
+      }
+    },
+    [conversationId]
+  );
+
   return {
     ...state,
     conversationId,
@@ -164,5 +202,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     setShowMenu,
     handleSend,
     handleSendImage,
+    handleConvertToGroupMessage,
+    handleDeleteMessage,
   };
 };

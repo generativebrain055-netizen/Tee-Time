@@ -148,6 +148,56 @@ async function markRead(req, res) {
   }
 }
 
+/**
+ * POST /api/messages/conversations/:id/messages/:messageId/convert-to-group
+ * Turn an auto-generated tee time message (system message) into a group message from the current user.
+ */
+async function convertToGroupMessage(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId, messageId } = req.params;
+    const message = await messageService.convertToGroupMessage(conversationId, messageId, userId);
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found or not a system message",
+      });
+    }
+    return res.json({ success: true, message });
+  } catch (error) {
+    logger.error("Convert to group message error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to convert message",
+    });
+  }
+}
+
+/**
+ * DELETE /api/messages/conversations/:id/messages/:messageId
+ * Delete a message. Allowed for sender or tee time organizer (for organization).
+ */
+async function deleteMessage(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId, messageId } = req.params;
+    const deleted = await messageService.deleteMessage(conversationId, messageId, userId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    if (error.message && error.message.includes("only delete")) {
+      return res.status(403).json({ success: false, message: error.message });
+    }
+    logger.error("Delete message error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete message",
+    });
+  }
+}
+
 module.exports = {
   listConversations,
   getOrCreateConversation,
@@ -155,4 +205,6 @@ module.exports = {
   sendMessage,
   getUnreadCount,
   markRead,
+  convertToGroupMessage,
+  deleteMessage,
 };

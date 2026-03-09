@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
-import { fetchDashboardStats, type DashboardStats } from '../api/client';
+import {
+  fetchDashboardStats,
+  fetchCourseUsage,
+  type DashboardStats,
+  type CourseUsageEntry,
+} from '../api/client';
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [courseUsage, setCourseUsage] = useState<CourseUsageEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usageLoading, setUsageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,6 +32,28 @@ export function Dashboard() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setUsageLoading(true);
+    setUsageError(null);
+    fetchCourseUsage(50)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setCourseUsage(res.data);
+        } else {
+          setUsageError(!res.success && 'message' in res ? res.message || 'Failed to load course usage.' : 'Failed to load course usage.');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUsageError('Failed to load course usage.');
+      })
+      .finally(() => {
+        if (!cancelled) setUsageLoading(false);
       });
     return () => { cancelled = true; };
   }, []);
@@ -51,6 +81,38 @@ export function Dashboard() {
             <span style={styles.cardValue}>{stats.teeTimesBooked.toLocaleString()}</span>
           </div>
         </div>
+      )}
+
+      <h3 style={styles.sectionTitle}>Most used courses</h3>
+      <p style={styles.sectionSubtitle}>
+        Courses ranked by number of tee times (platform usage).
+      </p>
+      {usageLoading && <p style={styles.muted}>Loading course usage…</p>}
+      {usageError && <div style={styles.errorBox}>{usageError}</div>}
+      {!usageLoading && !usageError && courseUsage.length > 0 && (
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Course</th>
+                <th style={styles.th}>Location</th>
+                <th style={styles.thRight}>Tee times</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courseUsage.map((row, i) => (
+                <tr key={`${row.course_name}-${row.course_location}-${i}`}>
+                  <td style={styles.td}>{row.course_name || '—'}</td>
+                  <td style={styles.td}>{row.course_location || '—'}</td>
+                  <td style={styles.tdRight}>{row.tee_time_count.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!usageLoading && !usageError && courseUsage.length === 0 && (
+        <p style={styles.muted}>No tee time data yet.</p>
       )}
     </div>
   );
@@ -106,5 +168,53 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 'var(--font-size-xl)',
     fontWeight: 600,
     color: 'var(--color-text-primary)',
+  },
+  sectionTitle: {
+    fontSize: 'var(--font-size-xl)',
+    fontWeight: 600,
+    color: 'var(--color-text-primary)',
+    marginTop: 'var(--space-2xl)',
+    marginBottom: 'var(--space-sm)',
+  },
+  sectionSubtitle: {
+    fontSize: 'var(--font-size-sm)',
+    color: 'var(--color-text-secondary)',
+    marginBottom: 'var(--space-lg)',
+  },
+  tableWrap: {
+    overflowX: 'auto',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-lg)',
+    background: 'var(--color-surface)',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 'var(--font-size-sm)',
+  },
+  th: {
+    textAlign: 'left',
+    padding: 'var(--space-md) var(--space-lg)',
+    borderBottom: '1px solid var(--color-border)',
+    color: 'var(--color-text-secondary)',
+    fontWeight: 600,
+  },
+  thRight: {
+    textAlign: 'right',
+    padding: 'var(--space-md) var(--space-lg)',
+    borderBottom: '1px solid var(--color-border)',
+    color: 'var(--color-text-secondary)',
+    fontWeight: 600,
+  },
+  td: {
+    padding: 'var(--space-md) var(--space-lg)',
+    borderBottom: '1px solid var(--color-border)',
+    color: 'var(--color-text-primary)',
+  },
+  tdRight: {
+    padding: 'var(--space-md) var(--space-lg)',
+    borderBottom: '1px solid var(--color-border)',
+    color: 'var(--color-text-primary)',
+    textAlign: 'right',
   },
 };

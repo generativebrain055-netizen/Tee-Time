@@ -353,6 +353,7 @@ class NotificationService {
         responderName,
         accepted,
       },
+      sendPush: true,
     });
   }
 
@@ -490,6 +491,7 @@ class NotificationService {
         cancelledPlayerName: playerName,
         courseName,
       },
+      sendPush: true,
     });
   }
 

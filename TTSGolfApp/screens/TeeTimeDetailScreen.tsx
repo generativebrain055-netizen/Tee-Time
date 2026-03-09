@@ -15,9 +15,10 @@ import {
 import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck } from "lucide-react-native";
 import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
-import { ConfirmModal } from "../ui/feedback";
+import { ConfirmModal, useToast } from "../ui/feedback";
 import { Alert } from "react-native";
 import { useAuthStore } from "../stores";
+import { useUser } from "../contexts/UserContext";
 import { logger } from "../utils/logger";
 
 // Import tick and cross assets
@@ -245,6 +246,8 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
 function TeeTimeDetailScreen({ navigation, route }: any) {
     const { teeTimeId } = route.params || {};
     const currentUserId = useAuthStore((s) => s.user?.id);
+    const { fetchProfile } = useUser();
+    const toast = useToast();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [teeTime, setTeeTime] = useState<TeeTimeDetail | null>(null);
@@ -431,6 +434,14 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         try {
             const response = await attendanceApi.cancelParticipation(teeTimeId);
             if (response.success) {
+                const delta = response.socialRateDelta;
+                const newScore = response.newSocialRate;
+                if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                    await fetchProfile(true);
+                    const sign = delta > 0 ? "+" : "";
+                    const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+                    toast?.show({ message: msg, type: "info" });
+                }
                 Alert.alert(
                     "Left Tee Time",
                     response.penaltyApplied 

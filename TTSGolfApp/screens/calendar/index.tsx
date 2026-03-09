@@ -9,7 +9,7 @@ import { useCalendar, StatusFilter, RoleFilter } from "./hooks/useCalendar";
 import { CalendarGrid, TeeTimesList } from "./components";
 import { CALENDAR_COLORS } from "./constants";
 import { ScreenShell, AppHeader } from "../../ui";
-import { AdContainerPlaceholder } from "../../components";
+import { BannerAd } from "../../components/BannerAd";
 import { spacing, fontSize, fontFamily, radii } from "../../ui/theme/tokens";
 
 const PRIMARY_GREEN = CALENDAR_COLORS.primary;
@@ -272,7 +272,7 @@ export default function FullCalendarScreen({ navigation }: Props) {
                   }}
                 />
               </View>
-              <AdContainerPlaceholder />
+              <BannerAd slotKey="banner_2" />
             </View>
 
             <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>

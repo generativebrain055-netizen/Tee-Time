@@ -47,7 +47,8 @@ export const refreshAccessToken = async (): Promise<string | null> => {
     await sessionManager.handleSessionExpired();
     return null;
   } catch (error) {
-    logger.error("[api/core] Token refresh failed", error);
+    // Expected when logged out or refresh token invalid; avoid alarming logs
+    logger.debug("[api/core] Token refresh failed (session may be cleared)", error);
     return null;
   }
 };
@@ -123,9 +124,9 @@ export const apiCall = async <T>(
       ok: response.ok,
     });
 
-    // Handle 401 Unauthorized - try to refresh token
+    // Handle 401 Unauthorized - try to refresh token (unless caller opted out, e.g. /auth/me)
     if (response.status === 401 && retryOnUnauthorized) {
-      logger.warn("[api/core] Received 401, attempting token refresh", { url });
+      logger.debug("[api/core] Received 401, attempting token refresh", { url });
       const newToken = await refreshAccessToken();
       if (newToken) {
         logger.info("[api/core] Token refreshed, retrying request", { url });
@@ -154,8 +155,8 @@ export const apiCall = async <T>(
         logger.info("[api/core] Retry request succeeded", { url });
         return retryData;
       }
-      // Token refresh failed - session manager already handled redirect
-      logger.error("[api/core] Token refresh failed", { url });
+      // Token refresh failed (e.g. logged out or session invalid) - expected, not an error
+      logger.info("[api/core] Session invalid or logged out, not retrying", { url });
       throw new ApiError("Session expired", 401, "SESSION_EXPIRED");
     }
 

@@ -36,6 +36,7 @@ export default function LocationSettingsScreen({ navigation }: any) {
     const [updating, setUpdating] = useState(false);
     const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locationName, setLocationName] = useState<string>("");
+    const [postalCode, setPostalCode] = useState<string | null>(null);
 
     useEffect(() => {
         // Load current location from profile
@@ -100,11 +101,12 @@ export default function LocationSettingsScreen({ navigation }: any) {
                 });
 
                 if (addresses && addresses.length > 0) {
-                    const address = addresses[0];
+                    const address = addresses[0] as { city?: string; region?: string; subAdministrativeArea?: string; postalCode?: string };
                     const city = address.city || address.subAdministrativeArea || "";
                     const state = address.region || "";
                     const locationStr = city && state ? `${city}, ${state}` : city || state || "Current Location";
                     setLocationName(locationStr);
+                    setPostalCode(address.postalCode || null);
                 }
             } catch (geocodeError) {
                 logger.warn("[LocationSettingsScreen] Geocoding failed", geocodeError);
@@ -135,21 +137,18 @@ export default function LocationSettingsScreen({ navigation }: any) {
         try {
             await profileApi.updateProfile({
                 location: locationName,
+                ...(postalCode ? { zipCode: postalCode } : {}),
             });
 
-            // Store coordinates in a way that can be used for distance calculations
-            // Note: We're storing location as a string, but coordinates could be stored separately
-            // For now, we'll update the location string and the app can use geocoding when needed
-            
-            await fetchProfile();
-            Alert.alert("Success", "Location updated successfully");
+            await fetchProfile(true);
+            Alert.alert("Success", "Location updated. Distance-based filters will use this for accurate results.");
         } catch (error: any) {
             logger.error("[LocationSettingsScreen] Update error", error);
             Alert.alert("Error", error?.message || "Failed to update location");
         } finally {
             setUpdating(false);
         }
-    }, [currentLocation, locationName, fetchProfile, updateProfile]);
+    }, [currentLocation, locationName, postalCode, fetchProfile]);
 
     return (
         <ScreenShell>
@@ -248,9 +247,8 @@ export default function LocationSettingsScreen({ navigation }: any) {
 
                 {/* Info Text */}
                 <Text style={[styles.infoText, { color: colors.textMuted }]}>
-                    Your location is used to calculate distances for features like Open invites, 
-                    Waiver Wire posts, and course recommendations. Update it whenever you travel 
-                    to ensure accurate results.
+                    Your location is used for distance-based filters (Open invites, Waiver Wire, 
+                    course search). Update it whenever you travel so filters stay accurate.
                 </Text>
             </ScrollView>
         </ScreenShell>

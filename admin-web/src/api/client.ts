@@ -21,6 +21,7 @@ export function removeAdminToken(): void {
 
 export type LoginResponse =
   | { success: true; accessToken: string; expiresIn?: string }
+  | { success: true; needsMfaVerification: true; temporaryToken: string; message?: string }
   | { success: false; message: string };
 
 export async function adminLogin(email: string, password: string): Promise<LoginResponse> {
@@ -34,10 +35,34 @@ export async function adminLogin(email: string, password: string): Promise<Login
   if (!res.ok) {
     return { success: false, message: data.message || 'Login failed.' };
   }
+  if (data.success && data.needsMfaVerification && data.temporaryToken) {
+    return { success: true, needsMfaVerification: true, temporaryToken: data.temporaryToken, message: data.message };
+  }
   if (data.success && data.accessToken) {
     return { success: true, accessToken: data.accessToken, expiresIn: data.expiresIn };
   }
   return { success: false, message: data.message || 'Login failed.' };
+}
+
+export type MfaVerifyResponse =
+  | { success: true; accessToken: string; expiresIn?: string }
+  | { success: false; message: string };
+
+export async function adminVerifyMfa(temporaryToken: string, code: string): Promise<MfaVerifyResponse> {
+  const base = getBaseUrl();
+  const res = await fetch(`${base}/api/admin/mfa/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ temporaryToken, code: code.trim().replace(/\s/g, '') }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, message: data.message || 'Verification failed.' };
+  }
+  if (data.success && data.accessToken) {
+    return { success: true, accessToken: data.accessToken, expiresIn: data.expiresIn };
+  }
+  return { success: false, message: data.message || 'Verification failed.' };
 }
 
 export type DashboardStats = {
@@ -69,12 +94,110 @@ export async function fetchDashboardStats(): Promise<DashboardStatsResponse> {
   return { success: false, message: 'Invalid response' };
 }
 
+export type CourseUsageEntry = {
+  course_name: string;
+  course_location: string;
+  tee_time_count: number;
+};
+
+export type CourseUsageResponse =
+  | { success: true; data: CourseUsageEntry[] }
+  | { success: false; message?: string };
+
+export async function fetchCourseUsage(limit?: number): Promise<CourseUsageResponse> {
+  const token = getAdminToken();
+  if (!token) {
+    return { success: false, message: 'Not authenticated' };
+  }
+  const base = getBaseUrl();
+  const qs = limit != null ? `?limit=${limit}` : '';
+  const res = await fetch(`${base}/api/admin/courses/usage${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, message: data.message || 'Failed to load course usage' };
+  }
+  if (data.success && Array.isArray(data.data)) {
+    return { success: true, data: data.data };
+  }
+  return { success: false, message: 'Invalid response' };
+}
+
 function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAdminToken();
   const base = getBaseUrl();
   const headers = new Headers(options.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   return fetch(`${base}${url}`, { ...options, headers });
+}
+
+// --- Ad slots (4 placements: loading screen + 3 banners) ---
+export type AdSlot = {
+  id: string;
+  slot_key: 'loading_screen' | 'banner_1' | 'banner_2' | 'banner_3';
+  label: string;
+  image_url: string | null;
+  link_url: string | null;
+  active: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function listAdSlots(): Promise<{ success: true; data: AdSlot[] } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/ad-slots');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load ad slots' };
+  if (data.success && Array.isArray(data.data)) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function updateAdSlot(
+  slotKey: string,
+  payload: { label?: string; image_url?: string | null; link_url?: string | null; active?: boolean; sort_order?: number }
+): Promise<{ success: true; data: AdSlot } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/ad-slots/${encodeURIComponent(slotKey)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to update ad slot' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
+/** Upload a custom creative image for a slot (JPEG, PNG, WebP, GIF; max 2MB). Replaces existing asset. */
+export async function uploadAdSlotAsset(slotKey: string, file: File): Promise<{ success: true; data: AdSlot; image_url: string } | { success: false; message: string }> {
+  const base64 = await new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result && result.startsWith('data:') ? result : null);
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+  if (!base64) return { success: false, message: 'Could not read file' };
+  const res = await authFetch(`/api/admin/ad-slots/${encodeURIComponent(slotKey)}/asset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64: base64 }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Upload failed' };
+  if (data.success && data.data) return { success: true, data: data.data, image_url: data.image_url || data.data.image_url };
+  return { success: false, message: 'Invalid response' };
+}
+
+/** Remove the custom creative for a slot (clears image and deletes stored file). */
+export async function removeAdSlotAsset(slotKey: string): Promise<{ success: true; data: AdSlot } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/ad-slots/${encodeURIComponent(slotKey)}/asset`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to remove creative' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
 }
 
 // --- User management ---
@@ -257,4 +380,79 @@ export async function getSystemSettings(): Promise<{ success: true; data: System
   if (!res.ok) return { success: false, message: data.message || 'Failed to load settings' };
   if (data.success && data.data) return { success: true, data: data.data };
   return { success: false, message: 'Invalid response' };
+}
+
+// --- Golf courses (US database for autocomplete) ---
+export type GolfCourse = {
+  id: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  phone?: string | null;
+  website?: string | null;
+  holes?: number | null;
+  par?: number | null;
+  course_type?: string | null;
+  price_range?: string | null;
+  rating?: number | null;
+  google_place_id?: string | null;
+  created_at?: string;
+};
+
+export async function listCourses(q?: string, limit?: number, offset?: number): Promise<{ success: true; data: GolfCourse[]; total: number } | { success: false; message: string }> {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  const url = params.toString() ? `/api/admin/courses?${params}` : '/api/admin/courses';
+  const res = await authFetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load courses' };
+  if (data.success && Array.isArray(data.data)) return { success: true, data: data.data, total: data.total ?? data.data.length };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function getCourse(id: string): Promise<{ success: true; data: GolfCourse } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/courses/${id}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load course' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function createCourse(body: Partial<GolfCourse>): Promise<{ success: true; data: GolfCourse } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/courses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to create course' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function updateCourse(id: string, body: Partial<GolfCourse>): Promise<{ success: true; data: GolfCourse } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/courses/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to update course' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function deleteCourse(id: string): Promise<{ success: true } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to delete course' };
+  if (data.success) return { success: true };
+  return { success: false, message: data.message || 'Delete failed' };
 }

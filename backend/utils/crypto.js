@@ -186,6 +186,44 @@ const verifyAdminToken = (token) => {
 };
 
 /**
+ * Generate short-lived JWT for admin MFA pending step (after password, before TOTP).
+ * @param {Object} payload - e.g. { sub: 'super_admin' }
+ * @param {string} expiresIn - e.g. '5m'
+ * @returns {string} JWT
+ */
+const generateAdminMfaPendingToken = (payload = {}, expiresIn = "5m") => {
+  const secret = process.env.JWT_SECRET || "default-secret-change-this";
+  return jwt.sign(
+    { ...payload, role: "super_admin" },
+    secret,
+    {
+      expiresIn,
+      issuer: "tts-golf-app",
+      audience: "tts-golf-admin-mfa-pending",
+    }
+  );
+};
+
+/**
+ * Verify admin MFA-pending token (used in POST /api/admin/mfa/verify).
+ * @param {string} token - JWT from login response
+ * @returns {Object} Decoded payload
+ */
+const verifyAdminMfaPendingToken = (token) => {
+  const secret = process.env.JWT_SECRET || "default-secret-change-this";
+  const decoded = jwt.verify(token, secret, {
+    issuer: "tts-golf-app",
+    audience: "tts-golf-admin-mfa-pending",
+  });
+  if (decoded.role !== "super_admin") {
+    const err = new Error("Invalid MFA pending token");
+    err.name = "AuthenticationError";
+    throw err;
+  }
+  return decoded;
+};
+
+/**
  * Generate a unique session ID
  * @returns {string} UUID v4
  */
@@ -261,6 +299,8 @@ module.exports = {
   verifyRefreshToken,
   generateAdminToken,
   verifyAdminToken,
+  generateAdminMfaPendingToken,
+  verifyAdminMfaPendingToken,
   generateSessionId,
   generateDeviceFingerprint,
   createHMAC,

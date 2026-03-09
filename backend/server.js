@@ -201,6 +201,7 @@ app.use("/api/social-rate", socialRateRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/draft", draftRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/ad-slots", require("./routes/adSlots"));
 app.use("/api/admin", adminRoutes);
 app.use("/api/support", supportRoutes);
 
@@ -251,6 +252,10 @@ const startServer = async () => {
     const chatImageUploadService = require("./services/chatImageUploadService");
     chatImageUploadService.ensureBucketExists().catch((e) => {
       logger.warn("Chat images bucket check skipped:", e.message);
+    });
+    const adCreativeUploadService = require("./services/adCreativeUploadService");
+    adCreativeUploadService.ensureBucketExists().catch((e) => {
+      logger.warn("Ad-creatives bucket check skipped:", e.message);
     });
 
     // Load golf clubs from CSV (non-blocking)

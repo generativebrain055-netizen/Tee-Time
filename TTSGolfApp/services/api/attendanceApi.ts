@@ -69,7 +69,13 @@ export const attendanceApi = {
    * Cancel own participation
    */
   cancelParticipation: (teeTimeId: string) =>
-    apiCall<{ success: boolean; message: string; penaltyApplied: boolean }>(
+    apiCall<{
+      success: boolean;
+      message: string;
+      penaltyApplied: boolean;
+      socialRateDelta?: number;
+      newSocialRate?: number;
+    }>(
       `${API_ENDPOINTS.TEE_TIMES}/${teeTimeId}/cancel-participation`,
       { method: "POST" },
     ),

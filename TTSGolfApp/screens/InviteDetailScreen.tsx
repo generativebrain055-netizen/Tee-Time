@@ -25,6 +25,8 @@ import {
 } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme/ThemeContext";
+import { useToast } from "../ui/feedback";
+import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
 import { useAuthStore } from "../stores";
 import logger from "../utils/logger";
@@ -37,6 +39,8 @@ interface InviteDetailScreenProps {
 export default function InviteDetailScreen({ navigation, route }: InviteDetailScreenProps) {
     const { inviteId } = route?.params || {};
     const colors = useColors();
+    const { fetchProfile } = useUser();
+    const toast = useToast();
     const currentUserId = useAuthStore((s) => s.user?.id);
     
     const [invite, setInvite] = useState<Invite & { participants?: any[] } | null>(null);
@@ -140,6 +144,14 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
             });
             
             if (result.success) {
+                const delta = result.socialRateDelta;
+                const newScore = result.newSocialRate;
+                if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                    await fetchProfile(true);
+                    const sign = delta > 0 ? "+" : "";
+                    const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+                    toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                }
                 // Navigate back immediately to remove from view
                 navigation?.goBack();
                 

@@ -23,6 +23,8 @@ Copy `.env.example` to `.env` and set your backend API URL:
 cp .env.example .env
 ```
 
+**Backend (super admin):** The backend uses `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` for admin login. To enable **MFA (TOTP)**, set `SUPER_ADMIN_MFA_SECRET` in the backend env to a base32 secret and add it to an authenticator app (e.g. Google Authenticator). After password sign-in, the admin portal will prompt for the 6-digit code.
+
 ## Run
 
 ```bash

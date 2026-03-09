@@ -1,7 +1,6 @@
 /**
  * Compose Message Screen (Figma "Composing a new message")
- * Recipient picker: multi-select for group message, single tap for direct.
- * Next button creates group conversation when multiple users selected.
+ * Recipient picker: Friends + Roster + On Deck (anyone with userId). Multi-select for group, single for direct.
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
@@ -22,61 +21,122 @@ import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { useColors } from "../ui/theme/ThemeContext";
 import { logger } from "../utils/logger";
 
-interface Friend {
+/** Unified recipient: friend or roster/on-deck contact with userId */
+interface Recipient {
   id: string;
   firstName: string;
   lastName: string;
   avatar?: string;
   username?: string;
+  source?: "friend" | "roster" | "onDeck";
+}
+
+function toRecipientFromFriend(f: { id: string; firstName: string; lastName: string; avatar?: string; username?: string }): Recipient {
+  return {
+    id: f.id,
+    firstName: f.firstName ?? "",
+    lastName: f.lastName ?? "",
+    avatar: f.avatar,
+    username: f.username,
+    source: "friend",
+  };
+}
+
+function toRecipientFromRosterContact(entry: { contact?: { userId?: string; name?: string; avatar?: string } }): Recipient | null {
+  const userId = entry.contact?.userId;
+  if (!userId) return null;
+  const name = entry.contact?.name ?? "";
+  const parts = name.trim().split(/\s+/);
+  const firstName = parts[0] ?? "";
+  const lastName = parts.slice(1).join(" ") ?? "";
+  return {
+    id: userId,
+    firstName,
+    lastName,
+    avatar: entry.contact?.avatar,
+    source: "roster",
+  };
 }
 
 export default function ComposeMessageScreen({ navigation }: any) {
   const colors = useColors();
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [filteredRecipients, setFilteredRecipients] = useState<Recipient[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    loadFriends();
+    loadRecipients();
   }, []);
 
   useEffect(() => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      setFilteredFriends(
-        friends.filter(
-          (f) =>
-            `${f.firstName} ${f.lastName}`.toLowerCase().includes(query) ||
-            f.username?.toLowerCase().includes(query),
+      setFilteredRecipients(
+        recipients.filter(
+          (r) =>
+            `${r.firstName} ${r.lastName}`.trim().toLowerCase().includes(query) ||
+            r.username?.toLowerCase().includes(query),
         ),
       );
     } else {
-      setFilteredFriends(friends);
+      setFilteredRecipients(recipients);
     }
-  }, [searchQuery, friends]);
+  }, [searchQuery, recipients]);
 
-  const loadFriends = async () => {
+  const loadRecipients = async () => {
     try {
-      const response = await friendApi.getFriends();
-      if (response.success && response.friends) {
-        setFriends(response.friends);
-        setFilteredFriends(response.friends);
+      const [friendsRes, rosterRes, onDeckRes, blockedRes] = await Promise.all([
+        friendApi.getFriends(),
+        rosterApi.getRoster(),
+        rosterApi.getOnDeck(),
+        friendApi.getBlockedUsers(),
+      ]);
+      const blockedIds = new Set<string>();
+      if (blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
+        (blockedRes.blockedUsers as { id?: string }[]).forEach((u) => {
+          if (u.id) blockedIds.add(u.id);
+        });
       }
+      const byId = new Map<string, Recipient>();
+      if (friendsRes.success && friendsRes.friends) {
+        friendsRes.friends.forEach((f) => {
+          if (!blockedIds.has(f.id)) byId.set(f.id, toRecipientFromFriend(f));
+        });
+      }
+      if (rosterRes.success && rosterRes.roster) {
+        rosterRes.roster.forEach((entry) => {
+          const r = toRecipientFromRosterContact(entry);
+          if (r && !blockedIds.has(r.id) && !byId.has(r.id)) byId.set(r.id, r);
+        });
+      }
+      if (onDeckRes.success && onDeckRes.onDeck) {
+        onDeckRes.onDeck.forEach((entry) => {
+          const r = toRecipientFromRosterContact(entry);
+          if (r && !blockedIds.has(r.id)) {
+            const existing = byId.get(r.id);
+            if (!existing) byId.set(r.id, { ...r, source: "onDeck" });
+            else if (existing.source === "roster") byId.set(r.id, { ...existing, source: "onDeck" });
+          }
+        });
+      }
+      const list = Array.from(byId.values());
+      setRecipients(list);
+      setFilteredRecipients(list);
     } catch (error) {
-      logger.error("[ComposeMessageScreen] Failed to load friends", error);
+      logger.error("[ComposeMessageScreen] Failed to load recipients", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleFriend = useCallback((friendId: string) => {
+  const toggleRecipient = useCallback((recipientId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(friendId)) next.delete(friendId);
-      else next.add(friendId);
+      if (next.has(recipientId)) next.delete(recipientId);
+      else next.add(recipientId);
       return next;
     });
   }, []);
@@ -86,20 +146,20 @@ export default function ComposeMessageScreen({ navigation }: any) {
     if (ids.length === 0) return;
 
     if (ids.length === 1) {
-      const friendId = ids[0];
-      const friend = friends.find((f) => f.id === friendId);
-      if (!friend) return;
+      const recipientId = ids[0];
+      const recipient = recipients.find((r) => r.id === recipientId);
+      if (!recipient) return;
       try {
-        const convRes = await messagesApi.getOrCreateConversation({ recipientId: friendId });
+        const convRes = await messagesApi.getOrCreateConversation({ recipientId });
         if (convRes.success && convRes.conversation) {
           navigation?.navigate("ChatDetail", {
             chatInfo: {
               conversationId: convRes.conversation.id,
-              recipientId: friendId,
-              id: friendId,
-              name: `${friend.firstName} ${friend.lastName}`,
+              recipientId,
+              id: recipientId,
+              name: `${recipient.firstName} ${recipient.lastName}`.trim() || "Unknown",
               subtitle: "Direct message",
-              img: friend.avatar,
+              img: recipient.avatar,
               isGroup: false,
             },
           });
@@ -147,13 +207,13 @@ export default function ComposeMessageScreen({ navigation }: any) {
     } finally {
       setCreating(false);
     }
-  }, [selectedIds, friends, navigation]);
+  }, [selectedIds, recipients, navigation]);
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
   };
 
-  const displayFriends = useMemo(() => filteredFriends, [filteredFriends]);
+  const displayRecipients = useMemo(() => filteredRecipients, [filteredRecipients]);
   const hasSelection = selectedIds.size > 0;
 
   return (
@@ -184,7 +244,7 @@ export default function ComposeMessageScreen({ navigation }: any) {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search friends..."
+            placeholder="Search friends, roster & on deck..."
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.textPrimary }]}
             autoCapitalize="none"
@@ -196,41 +256,46 @@ export default function ComposeMessageScreen({ navigation }: any) {
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
-        ) : displayFriends.length === 0 ? (
+        ) : displayRecipients.length === 0 ? (
           <View style={styles.center}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              {searchQuery.trim() ? "No friends found" : "No friends available"}
+              {searchQuery.trim() ? "No one found" : "No contacts with messaging available"}
             </Text>
           </View>
         ) : (
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {displayFriends.map((friend) => {
-              const isSelected = selectedIds.has(friend.id);
+            {displayRecipients.map((recipient) => {
+              const isSelected = selectedIds.has(recipient.id);
+              const displayName = `${recipient.firstName} ${recipient.lastName}`.trim() || "Unknown";
               return (
                 <TouchableOpacity
-                  key={friend.id}
+                  key={recipient.id}
                   style={[styles.friendRow, { borderBottomColor: colors.border }]}
-                  onPress={() => toggleFriend(friend.id)}
+                  onPress={() => toggleRecipient(recipient.id)}
                   activeOpacity={0.7}
                 >
-                  {friend.avatar ? (
-                    <Image source={{ uri: friend.avatar }} style={styles.avatar} />
+                  {recipient.avatar ? (
+                    <Image source={{ uri: recipient.avatar }} style={styles.avatar} />
                   ) : (
                     <View style={[styles.avatarPlaceholder, { backgroundColor: colors.surfaceTertiary }]}>
                       <Text style={[styles.avatarText, { color: colors.textMuted }]}>
-                        {getInitials(friend.firstName, friend.lastName)}
+                        {getInitials(recipient.firstName, recipient.lastName)}
                       </Text>
                     </View>
                   )}
                   <View style={styles.friendInfo}>
                     <Text style={[styles.friendName, { color: colors.textPrimary }]} numberOfLines={1}>
-                      {friend.firstName} {friend.lastName}
+                      {displayName}
                     </Text>
-                    {friend.username && (
+                    {recipient.username ? (
                       <Text style={[styles.friendUsername, { color: colors.textSecondary }]} numberOfLines={1}>
-                        @{friend.username}
+                        @{recipient.username}
                       </Text>
-                    )}
+                    ) : recipient.source === "roster" || recipient.source === "onDeck" ? (
+                      <Text style={[styles.friendUsername, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {recipient.source === "onDeck" ? "On deck" : "Roster"}
+                      </Text>
+                    ) : null}
                   </View>
                   {isSelected && (
                     <View style={[styles.checkIcon, { backgroundColor: colors.primary }]}>

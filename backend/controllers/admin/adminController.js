@@ -1,6 +1,10 @@
-const { generateAdminToken } = require("../../utils/crypto");
+const { generateAdminToken, generateAdminMfaPendingToken, verifyAdminMfaPendingToken } = require("../../utils/crypto");
+const speakeasy = require("speakeasy");
 const userRepository = require("../../repositories/userRepository");
 const userReportRepository = require("../../repositories/userReportRepository");
+const courseRepository = require("../../repositories/courseRepository");
+const adSlotRepository = require("../../repositories/adSlotRepository");
+const adCreativeUploadService = require("../../services/adCreativeUploadService");
 const deviceRepository = require("../../repositories/deviceRepository");
 const notificationService = require("../../services/notificationService");
 const { supabaseAdmin } = require("../../config/supabase");
@@ -10,8 +14,9 @@ const BROADCAST_CHUNK_SIZE = 100; // Expo recommends ≤100 messages per request
 
 /**
  * Super admin login.
- * Credentials are from env: SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD.
- * Only authorized personnel (with these credentials) can access the admin portal.
+ * Credentials from env: SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD.
+ * If SUPER_ADMIN_MFA_SECRET is set (base32 TOTP secret), login returns a temporaryToken
+ * and requires POST /api/admin/mfa/verify with the 6-digit code from an authenticator app.
  */
 const login = async (req, res, next) => {
   try {
@@ -44,6 +49,17 @@ const login = async (req, res, next) => {
       });
     }
 
+    const mfaSecret = process.env.SUPER_ADMIN_MFA_SECRET || "";
+    if (mfaSecret.trim()) {
+      const temporaryToken = generateAdminMfaPendingToken({ sub: "super_admin" }, "5m");
+      return res.json({
+        success: true,
+        needsMfaVerification: true,
+        message: "Enter your authenticator code.",
+        temporaryToken,
+      });
+    }
+
     const token = generateAdminToken({ sub: "super_admin" }, "8h");
     return res.json({
       success: true,
@@ -53,6 +69,66 @@ const login = async (req, res, next) => {
     });
   } catch (error) {
     logger.error("Admin login error:", error);
+    next(error);
+  }
+};
+
+/**
+ * Verify MFA code and issue full admin access token.
+ * Body: { temporaryToken, code } (code = 6-digit TOTP)
+ */
+const mfaVerify = async (req, res, next) => {
+  try {
+    const { temporaryToken, code } = req.body;
+    if (!temporaryToken || !code) {
+      return res.status(400).json({
+        success: false,
+        message: "Temporary token and code are required.",
+      });
+    }
+
+    const mfaSecret = process.env.SUPER_ADMIN_MFA_SECRET || "";
+    if (!mfaSecret.trim()) {
+      return res.status(503).json({
+        success: false,
+        message: "MFA is not configured.",
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = verifyAdminMfaPendingToken(temporaryToken);
+    } catch (e) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired or invalid. Please sign in again.",
+      });
+    }
+
+    const tokenTrimmed = String(code).trim().replace(/\s/g, "");
+    const valid = speakeasy.totp.verify({
+      secret: mfaSecret.trim(),
+      encoding: "base32",
+      token: tokenTrimmed,
+      window: 1,
+    });
+
+    if (!valid) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired code. Please try again.",
+      });
+    }
+
+    const accessToken = generateAdminToken({ sub: decoded.sub || "super_admin" }, "8h");
+    return res.json({
+      success: true,
+      message: "Login successful.",
+      accessToken,
+      expiresIn: "8h",
+    });
+  } catch (error) {
+    logger.error("Admin MFA verify error:", error);
     next(error);
   }
 };
@@ -80,6 +156,48 @@ const getDashboardStats = async (req, res, next) => {
     });
   } catch (error) {
     logger.error("Admin dashboard stats error:", error);
+    next(error);
+  }
+};
+
+/**
+ * Most frequently used courses (by tee time count). For platform usage tracking.
+ * Uses get_course_usage() if available; otherwise aggregates in memory from tee_times.
+ */
+const getCourseUsage = async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    let rows = [];
+
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc("get_course_usage", { p_limit: limit });
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length >= 0) {
+      rows = rpcData.map((r) => ({
+        course_name: r.course_name ?? "",
+        course_location: r.course_location ?? "",
+        tee_time_count: Number(r.tee_time_count) || 0,
+      }));
+    } else {
+      const { data: ttRows, error: ttError } = await supabaseAdmin
+        .from("tee_times")
+        .select("course_name, course_location");
+      if (ttError) throw ttError;
+      const map = new Map();
+      for (const row of ttRows || []) {
+        const key = `${row.course_name || ""}\n${row.course_location || ""}`;
+        map.set(key, (map.get(key) || 0) + 1);
+      }
+      rows = Array.from(map.entries())
+        .map(([key, tee_time_count]) => {
+          const [course_name, course_location] = key.split("\n");
+          return { course_name, course_location, tee_time_count };
+        })
+        .sort((a, b) => b.tee_time_count - a.tee_time_count)
+        .slice(0, limit);
+    }
+
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    logger.error("Admin getCourseUsage error:", error);
     next(error);
   }
 };
@@ -418,9 +536,157 @@ const getSystemSettings = async (req, res, next) => {
   }
 };
 
+// ---------- Golf courses (admin CRUD for autocomplete database) ----------
+const listCourses = async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const result = await courseRepository.listCourses(q, limit, offset);
+    return res.json({ success: true, data: result?.courses || [], total: result?.total ?? 0 });
+  } catch (error) {
+    logger.error("Admin listCourses error:", error);
+    next(error);
+  }
+};
+
+const getCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const course = await courseRepository.getCourseById(id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found." });
+    return res.json({ success: true, data: course });
+  } catch (error) {
+    logger.error("Admin getCourse error:", error);
+    next(error);
+  }
+};
+
+const createCourse = async (req, res, next) => {
+  try {
+    const course = await courseRepository.createCourse(req.body);
+    if (!course) return res.status(400).json({ success: false, message: "Failed to create course." });
+    return res.status(201).json({ success: true, data: course, message: "Course added." });
+  } catch (error) {
+    logger.error("Admin createCourse error:", error);
+    next(error);
+  }
+};
+
+const updateCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await courseRepository.getCourseById(id);
+    if (!existing) return res.status(404).json({ success: false, message: "Course not found." });
+    const course = await courseRepository.updateCourse(id, req.body);
+    return res.json({ success: true, data: course, message: "Course updated." });
+  } catch (error) {
+    logger.error("Admin updateCourse error:", error);
+    next(error);
+  }
+};
+
+const deleteCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await courseRepository.getCourseById(id);
+    if (!existing) return res.status(404).json({ success: false, message: "Course not found." });
+    await courseRepository.deleteCourse(id);
+    return res.json({ success: true, message: "Course removed." });
+  } catch (error) {
+    logger.error("Admin deleteCourse error:", error);
+    next(error);
+  }
+};
+
+// ---------- Ad slots (4 placements: loading screen + 3 banners) ----------
+const VALID_SLOT_KEYS = ["loading_screen", "banner_1", "banner_2", "banner_3"];
+
+const listAdSlots = async (req, res, next) => {
+  try {
+    const slots = await adSlotRepository.listAll();
+    return res.json({ success: true, data: slots });
+  } catch (error) {
+    logger.error("Admin listAdSlots error:", error);
+    next(error);
+  }
+};
+
+const updateAdSlot = async (req, res, next) => {
+  try {
+    const { slotKey } = req.params;
+    if (!VALID_SLOT_KEYS.includes(slotKey)) {
+      return res.status(400).json({ success: false, message: "Invalid slot key. Use: loading_screen, banner_1, banner_2, banner_3." });
+    }
+    const { label, image_url, link_url, active, sort_order } = req.body || {};
+    const payload = {};
+    if (label !== undefined) payload.label = String(label).trim() || null;
+    if (image_url !== undefined) payload.image_url = image_url == null || image_url === "" ? null : String(image_url).trim();
+    if (link_url !== undefined) payload.link_url = link_url == null || link_url === "" ? null : String(link_url).trim();
+    if (typeof active === "boolean") payload.active = active;
+    if (typeof sort_order === "number") payload.sort_order = sort_order;
+    const updated = await adSlotRepository.updateBySlotKey(slotKey, payload);
+    if (!updated) return res.status(500).json({ success: false, message: "Failed to update ad slot." });
+    return res.json({ success: true, data: updated, message: "Ad slot updated." });
+  } catch (error) {
+    logger.error("Admin updateAdSlot error:", error);
+    next(error);
+  }
+};
+
+/**
+ * Upload ad creative asset for a slot. Body: { imageBase64: "data:image/...;base64,..." }.
+ * Stores in Supabase Storage and sets slot.image_url to the public URL.
+ */
+const uploadAdSlotAsset = async (req, res, next) => {
+  try {
+    const { slotKey } = req.params;
+    if (!VALID_SLOT_KEYS.includes(slotKey)) {
+      return res.status(400).json({ success: false, message: "Invalid slot key." });
+    }
+    const { imageBase64 } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, message: "imageBase64 is required." });
+    }
+    const publicUrl = await adCreativeUploadService.uploadAdCreative(slotKey, imageBase64);
+    const updated = await adSlotRepository.updateBySlotKey(slotKey, { image_url: publicUrl });
+    if (!updated) return res.status(500).json({ success: false, message: "Slot updated but failed to save URL." });
+    return res.json({ success: true, data: updated, image_url: publicUrl, message: "Creative uploaded." });
+  } catch (error) {
+    logger.error("Admin uploadAdSlotAsset error:", error);
+    return res.status(400).json({ success: false, message: error.message || "Upload failed." });
+  }
+};
+
+/**
+ * Remove ad creative asset for a slot: clear image_url and delete file from storage if it was ours.
+ */
+const removeAdSlotAsset = async (req, res, next) => {
+  try {
+    const { slotKey } = req.params;
+    if (!VALID_SLOT_KEYS.includes(slotKey)) {
+      return res.status(400).json({ success: false, message: "Invalid slot key." });
+    }
+    const slot = await adSlotRepository.getBySlotKey(slotKey);
+    if (!slot) return res.status(404).json({ success: false, message: "Slot not found." });
+    const currentUrl = slot.image_url || null;
+    if (currentUrl) {
+      await adCreativeUploadService.deleteAdCreativeByUrl(currentUrl);
+    }
+    const updated = await adSlotRepository.updateBySlotKey(slotKey, { image_url: null });
+    if (!updated) return res.status(500).json({ success: false, message: "Failed to clear slot." });
+    return res.json({ success: true, data: updated, message: "Creative removed." });
+  } catch (error) {
+    logger.error("Admin removeAdSlotAsset error:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   login,
+  mfaVerify,
   getDashboardStats,
+  getCourseUsage,
   searchUsers,
   getUserProfile,
   updateUser,
@@ -432,4 +698,13 @@ module.exports = {
   previewBroadcast,
   sendBroadcast,
   getSystemSettings,
+  listCourses,
+  getCourse,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+  listAdSlots,
+  updateAdSlot,
+  uploadAdSlotAsset,
+  removeAdSlotAsset,
 };

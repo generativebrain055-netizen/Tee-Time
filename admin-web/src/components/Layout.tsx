@@ -6,6 +6,8 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/users', label: 'Users' },
   { to: '/reports', label: 'Reported issues' },
+  { to: '/courses', label: 'Golf courses' },
+  { to: '/ad-slots', label: 'Ad slots' },
   { to: '/broadcast', label: 'Broadcast' },
   { to: '/settings', label: 'Settings' },
 ];

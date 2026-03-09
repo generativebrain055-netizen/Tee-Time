@@ -21,6 +21,8 @@ import {
 import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme/ThemeContext";
+import { useToast } from "../ui/feedback";
+import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
 
 const COLORS = {
@@ -43,6 +45,8 @@ const getStatusBadgeClass = (status: string): string => {
 };
 
 export default function InvitesScreen({ navigation }: any) {
+    const { fetchProfile } = useUser();
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<"pending" | "sent">("pending");
     const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
     const [sentInvites, setSentInvites] = useState<Invite[]>([]);
@@ -100,6 +104,16 @@ export default function InvitesScreen({ navigation }: any) {
                 
                 // Refresh invites list to ensure UI is updated
                 await loadInvites();
+                
+                // Show Social Rate change in real-time and refresh profile
+                const delta = result.socialRateDelta;
+                const newScore = result.newSocialRate;
+                if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                    await fetchProfile(true);
+                    const sign = delta > 0 ? "+" : "";
+                    const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+                    toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                }
                 
                 Alert.alert(
                     response === "accepted" ? "Accepted!" : "Declined",

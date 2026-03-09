@@ -3,6 +3,7 @@
  */
 const inviteRepository = require("../../repositories/inviteRepository");
 const teeTimeRepository = require("../../repositories/teeTimeRepository");
+const userRepository = require("../../repositories/userRepository");
 const notificationService = require("../../services/notificationService");
 const logger = require("../../config/logger");
 const { invitesLogger } = require("../../config/logger");
@@ -282,6 +283,23 @@ class InviteController {
                 result = await handleMaybe(invite, userId);
             }
 
+            // Notify organizer when someone accepts or declines
+            if (result.success && (response === INVITE_RESPONSES.ACCEPTED || response === INVITE_RESPONSES.DECLINED)) {
+                try {
+                    const responder = await userRepository.findById(userId);
+                    if (responder && teeTime.creator_id) {
+                        await notificationService.notifyTeeTimeResponse(
+                            teeTime.creator_id,
+                            { id: userId, firstName: responder.first_name || "", lastName: responder.last_name || "" },
+                            teeTime,
+                            response === INVITE_RESPONSES.ACCEPTED
+                        );
+                    }
+                } catch (notifErr) {
+                    logger.error("Failed to notify organizer of invite response", notifErr);
+                }
+            }
+
             // Check and update tee time status after response
             await teeTimeRepository.checkAndUpdateStatus(invite.tee_time_id);
             
@@ -298,6 +316,7 @@ class InviteController {
                         const conversationRepository = require("../../repositories/conversationRepository");
                         const conv = await conversationRepository.getOrCreateTeeTimeConversation(userId, invite.tee_time_id);
                         await conversationRepository.ensureParticipant(conv.id, userId);
+                        await conversationRepository.syncTeeTimeConversationParticipants(invite.tee_time_id);
                         invitesLogger.info("[INVITE] Added participant to conversation", {
                             event: "respond_to_invite_conversation_added",
                             inviteId,

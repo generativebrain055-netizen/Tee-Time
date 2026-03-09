@@ -73,4 +73,26 @@ router.post(
   messageController.sendMessage
 );
 
+/**
+ * POST /api/messages/conversations/:id/messages/:messageId/convert-to-group
+ * Turn an auto-generated tee time message into a group message (claim as current user's message).
+ */
+router.post(
+  "/conversations/:id/messages/:messageId/convert-to-group",
+  [param("id").isUUID(), param("messageId").isUUID()],
+  validateRequest,
+  messageController.convertToGroupMessage
+);
+
+/**
+ * DELETE /api/messages/conversations/:id/messages/:messageId
+ * Delete a message (sender or tee time organizer).
+ */
+router.delete(
+  "/conversations/:id/messages/:messageId",
+  [param("id").isUUID(), param("messageId").isUUID()],
+  validateRequest,
+  messageController.deleteMessage
+);
+
 module.exports = router;

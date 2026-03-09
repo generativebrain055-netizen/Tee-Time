@@ -6,6 +6,7 @@
  * database operations from business logic.
  */
 
+const adSlotRepository = require("./adSlotRepository");
 const authProviderRepository = require("./authProviderRepository");
 const courseRepository = require("./courseRepository");
 const deviceRepository = require("./deviceRepository");
@@ -21,6 +22,7 @@ const teeTimeRepository = require("./teeTimeRepository");
 const userRepository = require("./userRepository");
 
 module.exports = {
+  adSlotRepository,
   authProviderRepository,
   courseRepository,
   deviceRepository,

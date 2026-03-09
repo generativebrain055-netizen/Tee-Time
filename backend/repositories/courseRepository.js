@@ -237,6 +237,109 @@ class CourseRepository {
             handleError(error, "getUserFavorites");
         }
     }
+
+    // ---------- Admin: list courses with optional search and pagination ----------
+    async listCourses(q = "", limit = 50, offset = 0) {
+        try {
+            const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+            const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+            let query = supabaseAdmin
+                .from("golf_courses")
+                .select("id, name, address, city, state, country, postal_code, latitude, longitude, phone, website, holes, par, course_type, price_range, rating, google_place_id, created_at", { count: "exact" })
+                .order("name", { ascending: true })
+                .range(safeOffset, safeOffset + safeLimit - 1);
+            const sanitized = typeof q === "string" ? String(q).trim().replace(/%/g, "") : "";
+            if (sanitized) {
+                const pattern = `%${sanitized}%`;
+                query = query.or(`name.ilike.${pattern},city.ilike.${pattern},state.ilike.${pattern},address.ilike.${pattern}`);
+            }
+            const { data, error, count } = await query;
+            if (error) throw error;
+            return { courses: data || [], total: count ?? 0 };
+        } catch (error) {
+            handleError(error, "listCourses");
+        }
+    }
+
+    // ---------- Admin: create course ----------
+    async createCourse(body) {
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .insert({
+                    name: body.name || null,
+                    address: body.address || null,
+                    city: body.city || null,
+                    state: body.state || null,
+                    country: body.country || "USA",
+                    postal_code: body.postal_code || null,
+                    latitude: body.latitude != null ? parseFloat(body.latitude) : null,
+                    longitude: body.longitude != null ? parseFloat(body.longitude) : null,
+                    phone: body.phone || null,
+                    website: body.website || null,
+                    holes: body.holes != null ? parseInt(body.holes, 10) : 18,
+                    par: body.par != null ? parseInt(body.par, 10) : null,
+                    course_type: body.course_type || null,
+                    price_range: body.price_range || null,
+                    rating: body.rating != null ? parseFloat(body.rating) : null,
+                    google_place_id: body.google_place_id || null,
+                })
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            handleError(error, "createCourse");
+        }
+    }
+
+    // ---------- Admin: update course ----------
+    async updateCourse(id, body) {
+        try {
+            const updates = {};
+            if (body.name !== undefined) updates.name = body.name;
+            if (body.address !== undefined) updates.address = body.address;
+            if (body.city !== undefined) updates.city = body.city;
+            if (body.state !== undefined) updates.state = body.state;
+            if (body.country !== undefined) updates.country = body.country;
+            if (body.postal_code !== undefined) updates.postal_code = body.postal_code;
+            if (body.latitude !== undefined) updates.latitude = body.latitude != null ? parseFloat(body.latitude) : null;
+            if (body.longitude !== undefined) updates.longitude = body.longitude != null ? parseFloat(body.longitude) : null;
+            if (body.phone !== undefined) updates.phone = body.phone;
+            if (body.website !== undefined) updates.website = body.website;
+            if (body.holes !== undefined) updates.holes = body.holes != null ? parseInt(body.holes, 10) : null;
+            if (body.par !== undefined) updates.par = body.par != null ? parseInt(body.par, 10) : null;
+            if (body.course_type !== undefined) updates.course_type = body.course_type;
+            if (body.price_range !== undefined) updates.price_range = body.price_range;
+            if (body.rating !== undefined) updates.rating = body.rating != null ? parseFloat(body.rating) : null;
+            if (body.google_place_id !== undefined) updates.google_place_id = body.google_place_id || null;
+            if (Object.keys(updates).length === 0) return this.getCourseById(id);
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .update(updates)
+                .eq("id", id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            handleError(error, "updateCourse");
+        }
+    }
+
+    // ---------- Admin: delete course ----------
+    async deleteCourse(id) {
+        try {
+            const { error } = await supabaseAdmin
+                .from("golf_courses")
+                .delete()
+                .eq("id", id);
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            handleError(error, "deleteCourse");
+        }
+    }
 }
 
 module.exports = new CourseRepository();

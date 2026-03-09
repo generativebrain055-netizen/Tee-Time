@@ -22,11 +22,14 @@ export interface AvatarUploadResponse {
 
 export const profileApi = {
   /**
-   * Get current user with profile
+   * Get current user with profile.
+   * Skips token refresh on 401 so logout/session-expired doesn't trigger refresh attempts and noisy logs.
    */
   getCurrentUser: () =>
     apiCall<{ success: boolean; user: UserProfile }>(
       API_ENDPOINTS.GET_CURRENT_USER,
+      {},
+      false, // retryOnUnauthorized
     ),
 
   /**

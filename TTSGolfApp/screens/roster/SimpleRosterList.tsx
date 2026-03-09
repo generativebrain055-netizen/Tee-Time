@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { MessageCircle } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
-import { rosterApi, messagesApi } from "../../services/api";
+import { rosterApi, messagesApi, friendApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 interface RosterListProps {
@@ -43,15 +43,17 @@ const formatLastPlayed = (dateStr: string): string => {
     return `${month}/${day}/${year}`;
 };
 
-const RosterItem = memo(({ item, index, navigation, colors, theme }: { 
+const RosterItem = memo(({ item, index, navigation, colors, theme, onBlocked }: { 
     item: any; 
     index: number; 
     navigation: any;
     colors: any;
     theme: any;
+    onBlocked?: () => void;
 }) => {
     const contact = item.contact || item;
-    const userId = contact.userId;
+    const userId = contact.userId ?? contact.user_id;
+    const avatar = contact.avatar || item.avatar;
     
     const handlePress = () => {
         navigation?.navigate("FriendProfile", {
@@ -65,6 +67,34 @@ const RosterItem = memo(({ item, index, navigation, colors, theme }: {
             },
         });
     };
+
+    const handleLongPress = useCallback(() => {
+        if (!userId) {
+            Alert.alert("Block", "This contact is not a registered user. You can remove them from your roster instead.");
+            return;
+        }
+        const name = contact.name || "This person";
+        Alert.alert(
+            "Block messages",
+            `Block ${name}? They will no longer be able to message you and will be removed from your Roster.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await friendApi.blockUser(userId);
+                            onBlocked?.();
+                        } catch (err) {
+                            logger.error("[SimpleRosterList] Block failed", err);
+                            Alert.alert("Error", "Could not block user. Please try again.");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [userId, contact.name, onBlocked]);
     
     const handleMessage = useCallback(async (e: any) => {
         e?.stopPropagation();
@@ -96,13 +126,13 @@ const RosterItem = memo(({ item, index, navigation, colors, theme }: {
     
     const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
     const lastName = contact.name?.split(" ").slice(1).join(" ") || contact.lastName || "";
-    const avatar = contact.avatar || item.avatar;
     const lastPlayed = item.stats?.lastPlayedTogether || item.lastPlayed;
 
     return (
         <>
         <TouchableOpacity 
             onPress={handlePress}
+            onLongPress={handleLongPress}
             activeOpacity={0.7}
             style={{
                 flexDirection: "row",
@@ -298,6 +328,7 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
                             navigation={navigation} 
                             colors={colors} 
                             theme={theme}
+                            onBlocked={loadRoster}
                         />
                         {index < roster.length - 1 && (
                             <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />

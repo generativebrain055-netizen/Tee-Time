@@ -38,6 +38,7 @@ interface NotificationTypeSetting {
 const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: string }> = [
     { type: 'tee_time_invite', label: 'Tee Time Invites', description: 'When someone invites you to a tee time' },
     { type: 'tee_time_response', label: 'Tee Time Responses', description: 'When someone responds to your invite' },
+    { type: 'player_cancelled', label: 'Player Cancelled', description: 'When a player cancels their spot in your tee time' },
     { type: 'friend_request', label: 'Friend Requests', description: 'When someone sends you a friend request' },
     { type: 'roster_add', label: 'Roster Adds', description: 'When someone adds you to their roster' },
     { type: 'waiver_wire', label: 'Waiver Wire (Matching Availability)', description: 'When roster members with matching availability post on Waiver Wire' },
@@ -209,7 +210,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                         Notification Preferences
                     </Text>
                     <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                        Choose how you want to receive notifications
+                        Control how you're contacted — customize push and in-app by type
                     </Text>
                 </View>
 
@@ -249,7 +250,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                             Notification Types
                         </Text>
                         <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                            Customize notifications by type
+                            Turn push and in-app on or off for each notification type
                         </Text>
                         
                         {typeSettings.map((typeSetting, index) => (
@@ -305,7 +306,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
 
                 {/* Info Text */}
                 <Text style={[styles.infoText, { color: colors.textMuted }]}>
-                    You can customize notification preferences for different types of updates. 
+                    You control which notifications you get and how (push on your device or in-app only). 
                     Changes take effect immediately.
                 </Text>
             </ScrollView>

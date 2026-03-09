@@ -32,7 +32,7 @@ export interface ConversationListItem {
 export interface ChatMessage {
   id: string;
   conversationId: string;
-  senderId: string;
+  senderId: string | null;
   senderName: string;
   senderImg: string;
   message: string;
@@ -40,6 +40,8 @@ export interface ChatMessage {
   time: string;
   createdAt: string;
   isMe: boolean;
+  /** True for auto-generated tee time messages (e.g. Tee Time Social welcome) */
+  isSystem?: boolean;
 }
 
 export interface GetOrCreateConversationParams {
@@ -110,5 +112,19 @@ export const messagesApi = {
           imageBase64 ? { body: body.trim(), imageBase64 } : { body: body.trim() }
         ),
       }
+    ),
+
+  /** Turn an auto-generated tee time message into a group message (claim as current user's). */
+  convertToGroupMessage: (conversationId: string, messageId: string) =>
+    apiCall<{ success: boolean; message: ChatMessage }>(
+      API_ENDPOINTS.MESSAGES_CONVERT_TO_GROUP(conversationId, messageId),
+      { method: "POST" }
+    ),
+
+  /** Delete a message (allowed for sender or tee time organizer). */
+  deleteMessage: (conversationId: string, messageId: string) =>
+    apiCall<{ success: boolean }>(
+      API_ENDPOINTS.MESSAGES_DELETE_MESSAGE(conversationId, messageId),
+      { method: "DELETE" }
     ),
 };

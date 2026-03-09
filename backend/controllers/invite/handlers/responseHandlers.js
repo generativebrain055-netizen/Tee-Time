@@ -145,13 +145,15 @@ const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
         }
     }
 
-    // Apply social rate bonus
-    await socialRateService.applyAcceptBonus(userId, invite.tee_time_id, invite.id);
+    // Apply social rate bonus (+2)
+    const newSocialRate = await socialRateService.applyAcceptBonus(userId, invite.tee_time_id, invite.id);
 
     return {
         success: true,
         message: "You're in! See you on the course. (+2 Social Rate)",
-        status: INVITE_RESPONSES.ACCEPTED
+        status: INVITE_RESPONSES.ACCEPTED,
+        socialRateDelta: 2,
+        newSocialRate: newSocialRate ?? undefined
     };
 };
 
@@ -161,12 +163,13 @@ const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
 const handleDecline = async (invite, teeTime, userId) => {
     await inviteRepository.respondToInvite(invite.id, userId, INVITE_RESPONSES.DECLINED);
 
-    const penaltyApplied = await socialRateService.applyLateDeclinePenalty(
+    const newSocialRate = await socialRateService.applyLateDeclinePenalty(
         userId,
         invite.tee_time_id,
         invite.id,
         invite.created_at
     );
+    const penaltyApplied = newSocialRate != null;
 
     // For roster invites: trigger next person in queue
     if (teeTime.invite_type === INVITE_TYPES.ROSTER) {
@@ -180,7 +183,9 @@ const handleDecline = async (invite, teeTime, userId) => {
             ? "Response recorded. (-1 Social Rate for late decline)"
             : "Response recorded. Maybe next time!",
         status: INVITE_RESPONSES.DECLINED,
-        penaltyApplied: !!penaltyApplied
+        penaltyApplied: !!penaltyApplied,
+        socialRateDelta: penaltyApplied ? -1 : 0,
+        newSocialRate: newSocialRate ?? undefined
     };
 };
 

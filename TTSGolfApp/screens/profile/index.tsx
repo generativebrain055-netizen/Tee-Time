@@ -670,14 +670,14 @@ export default function ProfileScreen({ navigation }: any) {
                                     color: '#9333EA',
                                     marginBottom: 4,
                                 }}>
-                                    {formatScore(profile?.socialRate) || "142"}
+                                    {formatScore(profile?.socialRate)}
                                 </Text>
                                 <Text style={{
                                     fontFamily: 'Inter_600SemiBold',
                                     fontSize: 13,
                                     color: '#9333EA',
                                 }}>
-                                    Social Score
+                                    Social Rate
                                 </Text>
                             </TouchableOpacity>
                         </View>

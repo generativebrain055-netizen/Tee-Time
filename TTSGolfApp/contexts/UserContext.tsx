@@ -167,17 +167,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError('Failed to load profile');
       }
     } catch (err: any) {
-      logger.error('[UserContext] Error fetching profile', err);
-      
-      // If user doesn't exist (401/404) or session expired, clear everything
+      // If user doesn't exist (401/404) or session expired, clear everything (expected on logout)
       if (err.statusCode === 401 || err.statusCode === 404 || err.code === 'SESSION_EXPIRED') {
         logger.info('[UserContext] User not found or session expired, clearing session');
         await clearProfile();
         await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'user']);
-        // Trigger session expired handler
         const { sessionManager } = await import('../utils/sessionManager');
         await sessionManager.handleSessionExpired();
       } else {
+        logger.error('[UserContext] Error fetching profile', err);
         setError(err.message || 'Failed to load profile');
       }
     } finally {

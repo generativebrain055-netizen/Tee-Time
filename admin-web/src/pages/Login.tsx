@@ -5,11 +5,14 @@ import { useAuth } from '../context/AuthContext';
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated } = useAuth();
+  const { login, verifyMfa, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mfaStep, setMfaStep] = useState(false);
+  const [temporaryToken, setTemporaryToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
@@ -30,9 +33,38 @@ export function Login() {
     setLoading(false);
     if (result.ok) {
       navigate(from, { replace: true });
+    } else if (result.needsMfa && result.temporaryToken) {
+      setTemporaryToken(result.temporaryToken);
+      setMfaStep(true);
+      setMfaCode('');
     } else {
       setError(result.error || 'Invalid credentials.');
     }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const code = mfaCode.trim().replace(/\s/g, '');
+    if (!temporaryToken || code.length !== 6) {
+      setError('Please enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setLoading(true);
+    const result = await verifyMfa(temporaryToken, code);
+    setLoading(false);
+    if (result.ok) {
+      navigate(from, { replace: true });
+    } else {
+      setError(result.error || 'Invalid code.');
+    }
+  };
+
+  const handleBackToPassword = () => {
+    setMfaStep(false);
+    setTemporaryToken(null);
+    setMfaCode('');
+    setError('');
   };
 
   return (
@@ -42,38 +74,77 @@ export function Login() {
           <span style={styles.logoText}>Tee Time</span>
           <span style={styles.logoSub}>Admin</span>
         </div>
-        <h1 style={styles.title}>Sign in</h1>
-        <p style={styles.subtitle}>
-          Use your super admin credentials to access the dashboard.
-        </p>
-        <form onSubmit={handleSubmit} style={styles.form}>
-          {error && (
-            <div style={styles.errorBox}>{error}</div>
-          )}
-          <label style={styles.label}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@example.com"
-            style={styles.input}
-            autoComplete="email"
-            disabled={loading}
-          />
-          <label style={styles.label}>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            style={styles.input}
-            autoComplete="current-password"
-            disabled={loading}
-          />
-          <button type="submit" style={{ ...styles.button, opacity: loading ? 0.8 : 1 }} disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+        {!mfaStep ? (
+          <>
+            <h1 style={styles.title}>Sign in</h1>
+            <p style={styles.subtitle}>
+              Use your super admin credentials to access the dashboard.
+            </p>
+            <form onSubmit={handleSubmit} style={styles.form}>
+              {error && (
+                <div style={styles.errorBox}>{error}</div>
+              )}
+              <label style={styles.label}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
+                style={styles.input}
+                autoComplete="email"
+                disabled={loading}
+              />
+              <label style={styles.label}>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                style={styles.input}
+                autoComplete="current-password"
+                disabled={loading}
+              />
+              <button type="submit" style={{ ...styles.button, opacity: loading ? 0.8 : 1 }} disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <h1 style={styles.title}>Two-factor authentication</h1>
+            <p style={styles.subtitle}>
+              Enter the 6-digit code from your authenticator app.
+            </p>
+            <form onSubmit={handleMfaSubmit} style={styles.form}>
+              {error && (
+                <div style={styles.errorBox}>{error}</div>
+              )}
+              <label style={styles.label}>Authentication code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                style={styles.input}
+                disabled={loading}
+                maxLength={6}
+              />
+              <button type="submit" style={{ ...styles.button, opacity: loading ? 0.8 : 1 }} disabled={loading || mfaCode.replace(/\D/g, '').length !== 6}>
+                {loading ? 'Verifying…' : 'Verify'}
+              </button>
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={handleBackToPassword}
+                disabled={loading}
+              >
+                ← Back to sign in
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
@@ -157,5 +228,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     boxShadow: 'var(--shadow-primary)',
     marginTop: 'var(--space-sm)',
+  },
+  backButton: {
+    marginTop: 'var(--space-md)',
+    padding: 'var(--space-sm)',
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--color-text-secondary)',
+    fontSize: 'var(--font-size-sm)',
+    cursor: 'pointer',
   },
 };

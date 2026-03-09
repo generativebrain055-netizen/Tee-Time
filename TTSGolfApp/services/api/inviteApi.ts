@@ -122,7 +122,11 @@ export const inviteApi = {
         body: { response, message },
       });
       
-      const result = await apiCall<{ success: boolean }>(
+      const result = await apiCall<{
+        success: boolean;
+        socialRateDelta?: number;
+        newSocialRate?: number;
+      }>(
         url,
         {
           method: "PUT",

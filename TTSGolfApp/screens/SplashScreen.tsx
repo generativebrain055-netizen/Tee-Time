@@ -1,14 +1,17 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Image,
   Dimensions,
   Animated,
   Easing,
+  TouchableOpacity,
+  Linking,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logger } from "../utils/logger";
+import { fetchAdSlots, type AdSlotItem } from "../services/api/adSlotsApi";
 
 const { width, height } = Dimensions.get("window");
 
@@ -37,6 +40,16 @@ export default function SplashScreen({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const [loadingScreenAd, setLoadingScreenAd] = useState<AdSlotItem | null>(null);
+
+  useEffect(() => {
+    fetchAdSlots().then((res) => {
+      if (res.success && res.data?.length) {
+        const slot = res.data.find((s) => s.slot_key === "loading_screen" && s.image_url);
+        if (slot) setLoadingScreenAd(slot);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     // Complex entrance animation
@@ -208,6 +221,23 @@ export default function SplashScreen({
           style={{ width: width * 0.9, height: height * 0.25 }}
           resizeMode="contain"
         />
+        {loadingScreenAd?.image_url && (
+          <View style={{ marginTop: 24, alignItems: "center" }}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                if (loadingScreenAd.link_url) Linking.openURL(loadingScreenAd.link_url);
+              }}
+              style={{ alignItems: "center" }}
+            >
+              <Image
+                source={{ uri: loadingScreenAd.image_url }}
+                style={{ width: width * 0.5, height: Math.min(48, height * 0.06) }}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </View>
+        )}
       </Animated.View>
     </View>
   );

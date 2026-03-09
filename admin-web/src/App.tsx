@@ -9,6 +9,8 @@ import { UserDetail } from './pages/UserDetail';
 import { ReportedIssues } from './pages/ReportedIssues';
 import { Broadcast } from './pages/Broadcast';
 import { SystemSettings } from './pages/SystemSettings';
+import { CourseManagement } from './pages/CourseManagement';
+import { AdSlots } from './pages/AdSlots';
 
 function App() {
   return (
@@ -28,7 +30,9 @@ function App() {
           <Route path="users" element={<UserManagement />} />
           <Route path="users/:id" element={<UserDetail />} />
           <Route path="reports" element={<ReportedIssues />} />
+          <Route path="courses" element={<CourseManagement />} />
           <Route path="broadcast" element={<Broadcast />} />
+          <Route path="ad-slots" element={<AdSlots />} />
           <Route path="settings" element={<SystemSettings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

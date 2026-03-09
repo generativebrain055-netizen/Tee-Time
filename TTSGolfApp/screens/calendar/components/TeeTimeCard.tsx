@@ -15,6 +15,8 @@ import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
 import { attendanceApi } from "../../../services/api";
 import { useAuthStore } from "../../../stores";
+import { useToast } from "../../../ui/feedback";
+import { useUser } from "../../../contexts/UserContext";
 
 // Import tick icon
 const TickIcon = require('../../../assets/Tick.png');
@@ -69,6 +71,8 @@ function getStatusDisplay(status: CalendarTeeTime["status"]) {
 
 const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProps) => {
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const { fetchProfile } = useUser();
+  const toast = useToast();
   const statusDisplay = getStatusDisplay(teeTime.status);
   const StatusIcon = statusDisplay.icon;
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -103,6 +107,14 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
     try {
       const response = await attendanceApi.cancelParticipation(teeTime.id);
       setShowCancelModal(false);
+      const delta = response.socialRateDelta;
+      const newScore = response.newSocialRate;
+      if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+        await fetchProfile(true);
+        const sign = delta > 0 ? "+" : "";
+        const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+        toast?.show({ message: msg, type: "info" });
+      }
       Alert.alert("Cancelled", response.message || "Your tee time has been cancelled.");
       onCancelSuccess?.();
     } catch (error: any) {
@@ -110,7 +122,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
     } finally {
       setIsCancelling(false);
     }
-  }, [teeTime.id, onCancelSuccess]);
+  }, [teeTime.id, onCancelSuccess, fetchProfile, toast]);
 
   const canCancel = teeTime.status === "confirmed" || teeTime.status === "pending";
   const participants = teeTime.participants ?? [];

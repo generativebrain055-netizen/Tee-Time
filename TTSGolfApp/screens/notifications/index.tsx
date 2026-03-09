@@ -18,11 +18,13 @@ import {
 import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail } from "lucide-react-native";
 import { notificationApi, friendApi, inviteApi, rosterApi, AppNotification } from "../../services/api";
 import { ScreenShell, AppHeader } from "../../ui";
+import { useToast } from "../../ui/feedback";
+import { useUser } from "../../contexts/UserContext";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
 
 type TabType = 'activity' | 'invites';
-type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite';
+type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled';
 
 interface CategorySection {
     title: string;
@@ -31,6 +33,8 @@ interface CategorySection {
 }
 
 export default function NotificationsScreen({ navigation }: any) {
+    const { fetchProfile } = useUser();
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<TabType>('activity');
     const [typeFilter, setTypeFilter] = useState<NotificationTypeFilter>('all');
     const [showTypeFilter, setShowTypeFilter] = useState(false);
@@ -150,9 +154,16 @@ export default function NotificationsScreen({ navigation }: any) {
                     await fetchNotifications();
                     return;
                 }
-                await inviteApi.respondToInvite(inviteId, "accepted");
+                const result = await inviteApi.respondToInvite(inviteId, "accepted");
                 console.log("🟢 [NotificationsScreen] inviteApi.respondToInvite completed");
-                
+                const delta = result.socialRateDelta;
+                const newScore = result.newSocialRate;
+                if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                    await fetchProfile(true);
+                    const sign = delta > 0 ? "+" : "";
+                    const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+                    toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                }
                 // Mark notification as responded in backend
                 try {
                     await notificationApi.markAsResponded(notificationId);
@@ -201,9 +212,16 @@ export default function NotificationsScreen({ navigation }: any) {
                     await fetchNotifications();
                     return;
                 }
-                await inviteApi.respondToInvite(inviteId, "declined");
+                const result = await inviteApi.respondToInvite(inviteId, "declined");
                 console.log("🟢 [NotificationsScreen] inviteApi.respondToInvite completed");
-                
+                const delta = result.socialRateDelta;
+                const newScore = result.newSocialRate;
+                if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                    await fetchProfile(true);
+                    const sign = delta > 0 ? "+" : "";
+                    const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
+                    toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                }
                 // Mark notification as responded in backend
                 try {
                     await notificationApi.markAsResponded(notificationId);
@@ -248,6 +266,7 @@ export default function NotificationsScreen({ navigation }: any) {
         return [
             ...baseOptions,
             { key: 'tee_time_response', label: 'Invite Responses' },
+            { key: 'player_cancelled', label: 'Player Cancelled' },
             { key: 'roster_add', label: 'Roster Adds' },
             { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
             { key: 'waiver_wire', label: 'Waiver Wire' },
@@ -280,10 +299,10 @@ export default function NotificationsScreen({ navigation }: any) {
                        t === 'tee_time_not_filled';
             });
         } else {
-            // Activity tab (Figma 1269-817): user's activities (responses, group invite accepted, waiver wire)
+            // Activity tab: responses, group invite accepted, waiver wire, player cancelled (organizer)
             filtered = notifs.filter(n => {
                 const t = getDataType(n);
-                return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire';
+                return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire' || t === 'player_cancelled';
             });
         }
 
@@ -316,6 +335,7 @@ export default function NotificationsScreen({ navigation }: any) {
             else if (type === 'tee_time_response') title = 'Invite Responses';
             else if (type === 'group_invite_accepted') title = 'Group Invitations';
             else if (type === 'waiver_wire') title = 'Waiver Wire Posts';
+            else if (type === 'player_cancelled') title = 'Player Cancelled';
             else title = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             return {

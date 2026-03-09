@@ -36,7 +36,7 @@ import ReviewManualInviteStep from "./ReviewManualInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
 import { X, Users, Phone, ChevronRight } from "lucide-react-native";
-import { AdContainerPlaceholder } from "../../components";
+import { BannerAd } from "../../components/BannerAd";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -803,7 +803,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
           </View>
           <View style={{ backgroundColor: "#F3F4F6" }}>
-            <AdContainerPlaceholder />
+            <BannerAd slotKey="banner_3" />
           </View>
         </>
       )}

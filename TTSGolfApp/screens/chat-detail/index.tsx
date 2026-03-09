@@ -40,6 +40,8 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         setShowMenu,
         handleSend,
         handleSendImage,
+        handleConvertToGroupMessage,
+        handleDeleteMessage,
     } = useChat(chatInfo);
 
     const [participants, setParticipants] = useState<string[]>([]);
@@ -103,6 +105,20 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         }
     }, [navigation, chatInfo.isGroup, chatInfo.groupId]);
 
+    const handleDeleteMessageWithAlert = useCallback(
+        async (messageId: string) => {
+            try {
+                await handleDeleteMessage(messageId);
+            } catch (err: any) {
+                Alert.alert(
+                    "Cannot delete",
+                    err?.message || "You can only delete your own messages, or any message as the tee time organizer."
+                );
+            }
+        },
+        [handleDeleteMessage]
+    );
+
     const handlePickImage = useCallback(
         (uri: string, base64?: string) => {
             if (base64) {
@@ -155,7 +171,15 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                             <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8 }}>Send a message to start the conversation</Text>
                         </View>
                     ) : (
-                        messages.map((message) => <MessageBubble key={message.id} message={message} />)
+                        messages.map((message) => (
+                            <MessageBubble
+                                key={message.id}
+                                message={message}
+                                onConvertToGroupMessage={handleConvertToGroupMessage}
+                                canDelete={message.isMe || !!chatInfo.teeTimeId}
+                                onDelete={handleDeleteMessageWithAlert}
+                            />
+                        ))
                     )}
                 </ScrollView>
                 <MessageInput value={messageText} onChangeText={setMessageText} onSend={handleSend} onPickImage={handlePickImage} onEmojiSelected={handleEmojiSelected} />

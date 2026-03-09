@@ -704,18 +704,19 @@ class FriendRepository {
     }
   }
 
-  // Check if user is blocked
+  // Check if either user has blocked the other (blocks messaging in both directions)
   async isBlocked(userId, otherUserId) {
     try {
       const { data, error } = await supabaseAdmin
         .from("blocked_users")
-        .select("id", { count: "exact", head: true })
+        .select("id")
         .or(
           `and(user_id.eq.${userId},blocked_user_id.eq.${otherUserId}),and(user_id.eq.${otherUserId},blocked_user_id.eq.${userId})`
-        );
+        )
+        .limit(1);
 
       if (error) throw error;
-      return data !== null;
+      return Array.isArray(data) && data.length > 0;
     } catch (error) {
       handleError(error, "isBlocked");
     }

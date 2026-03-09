@@ -57,6 +57,7 @@ export function useNotificationActions({
           navigation?.navigate("Invites");
           break;
         case "tee_time_response":
+        case "player_cancelled":
         case "check_in_reminder":
           if (item.data?.teeTimeId)
             navigation?.navigate("TeeTimeDetail", {

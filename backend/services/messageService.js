@@ -1,5 +1,7 @@
 const conversationRepository = require("../repositories/conversationRepository");
 const messageRepository = require("../repositories/messageRepository");
+const teeTimeRepository = require("../repositories/teeTimeRepository");
+const friendRepository = require("../repositories/friendRepository");
 
 /**
  * Get or create a conversation and return it with metadata.
@@ -17,6 +19,10 @@ async function getOrCreateConversation(userId, params) {
   }
 
   if (recipientId) {
+    const blocked = await friendRepository.isBlocked(userId, recipientId);
+    if (blocked) {
+      throw new Error("You cannot message this user. They have blocked you or you have blocked them.");
+    }
     const conv = await conversationRepository.getOrCreateDirectConversation(
       userId,
       recipientId
@@ -76,15 +82,25 @@ async function getMessages(conversationId, userId, options = {}) {
       time: formatMessageTime(m.created_at),
       createdAt: m.created_at,
       isMe: m.sender_id === userId,
+      isSystem: !!isSystem,
     };
   });
 }
 
 /**
  * Send a message in a conversation.
+ * For direct conversations, rejects if either party has blocked the other.
  * @param {string} [imageUrl] - Optional public URL of attached image
  */
 async function sendMessage(conversationId, userId, body, imageUrl = null) {
+  const conv = await conversationRepository.getById(conversationId, userId);
+  if (!conv) throw new Error("Conversation not found");
+  if (conv.type === "direct" && conv.otherUserId) {
+    const blocked = await friendRepository.isBlocked(userId, conv.otherUserId);
+    if (blocked) {
+      throw new Error("You cannot message this user. They have blocked you or you have blocked them.");
+    }
+  }
   await conversationRepository.ensureParticipant(conversationId, userId);
   const msg = await messageRepository.create(conversationId, userId, body, imageUrl);
   const senders = await messageRepository.getSendersInfo([userId]);
@@ -134,11 +150,61 @@ async function markConversationRead(conversationId, userId) {
   return conversationRepository.markConversationRead(conversationId, userId);
 }
 
-module.exports = {
+/**
+ * Convert an auto-generated (system) tee time message into a group message by assigning the current user as sender.
+ * Only works for messages with sender_id = null (e.g. Tee Time Social welcome). User must be a participant.
+ */
+async function convertToGroupMessage(conversationId, messageId, userId) {
+  await conversationRepository.ensureParticipant(conversationId, userId);
+  const msg = await messageRepository.updateSender(messageId, conversationId, userId);
+  if (!msg) return null;
+  const senders = await messageRepository.getSendersInfo([userId]);
+  return {
+    id: msg.id,
+    conversationId: msg.conversation_id,
+    senderId: msg.sender_id,
+    senderName: senders[userId]?.name || "You",
+    senderImg: senders[userId]?.avatarUrl || "",
+    message: msg.body,
+    imageUrl: msg.image_url || null,
+    time: formatMessageTime(msg.created_at),
+    createdAt: msg.created_at,
+    isMe: true,
+    isSystem: false,
+  };
+}
+
+/**
+ * Delete a message for organization. Allowed if:
+ * - User is the message sender, or
+ * - Conversation is a tee_time chat and user is the tee time organizer (creator).
+ */
+async function deleteMessage(conversationId, messageId, userId) {
+  const conv = await conversationRepository.getById(conversationId, userId);
+  if (!conv) throw new Error("Conversation not found or access denied");
+
+  const msg = await messageRepository.getOne(messageId, conversationId);
+  if (!msg) return false;
+
+  const isSender = msg.sender_id === userId;
+  let isOrganizer = false;
+  if (conv.type === "tee_time" && conv.tee_time_id) {
+    const teeTime = await teeTimeRepository.getTeeTimeById(conv.tee_time_id);
+    isOrganizer = teeTime && teeTime.creator_id === userId;
+  }
+
+  if (!isSender && !isOrganizer) {
+    throw new Error("You can only delete your own messages, or any message as the tee time organizer");
+  }
+
+  return await messageRepository.deleteOne(messageId, conversationId);
+}
   getOrCreateConversation,
   listConversations,
   getMessages,
   sendMessage,
   getUnreadCounts,
   markConversationRead,
+  convertToGroupMessage,
+  deleteMessage,
 };

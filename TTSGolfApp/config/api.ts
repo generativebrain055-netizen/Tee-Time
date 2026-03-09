@@ -106,6 +106,8 @@ export interface ApiEndpoints {
   MESSAGES_SEND_MESSAGE: (id: string) => string;
   MESSAGES_UNREAD_COUNT: string;
   MESSAGES_MARK_READ: (id: string) => string;
+  MESSAGES_CONVERT_TO_GROUP: (conversationId: string, messageId: string) => string;
+  MESSAGES_DELETE_MESSAGE: (conversationId: string, messageId: string) => string;
   // Health
   HEALTH: string;
   // Support
@@ -185,8 +187,14 @@ export const API_ENDPOINTS: ApiEndpoints = {
     `${API_URL}/api/messages/conversations/${id}/messages`,
   MESSAGES_MARK_READ: (id: string) =>
     `${API_URL}/api/messages/conversations/${id}/read`,
+  MESSAGES_CONVERT_TO_GROUP: (conversationId: string, messageId: string) =>
+    `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}/convert-to-group`,
+  MESSAGES_DELETE_MESSAGE: (conversationId: string, messageId: string) =>
+    `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}`,
   // Health
   HEALTH: `${API_URL}/health`,
   // Support
   SUPPORT_EMAIL: `${API_URL}/api/support/email`,
+  // Ad slots (public, no auth)
+  AD_SLOTS: `${API_URL}/api/ad-slots`,
 };

@@ -390,7 +390,7 @@ class TeeTimeRepository {
 
       if (error && error.code !== "23505") throw error;
 
-      // If tee time is confirmed and user is a registered user (not phone-only), add them to conversation
+      // If tee time is confirmed, keep group chat in sync with current participants (add new, remove cancelled)
       if (userId && !phone) {
         try {
           const { data: teeTime } = await supabaseAdmin
@@ -401,13 +401,12 @@ class TeeTimeRepository {
 
           if (teeTime && teeTime.status === "confirmed") {
             const conversationRepository = require("./conversationRepository");
-            // Get or create conversation and ensure participant is added
             const conv = await conversationRepository.getOrCreateTeeTimeConversation(userId, teeTimeId);
             await conversationRepository.ensureParticipant(conv.id, userId);
+            await conversationRepository.syncTeeTimeConversationParticipants(teeTimeId);
             logger.info(`Added participant ${userId} to conversation for confirmed tee time ${teeTimeId}`);
           }
         } catch (chatError) {
-          // Don't fail participant addition if chat update fails
           logger.error(`Failed to add participant to conversation for tee time ${teeTimeId}:`, chatError.message);
         }
       }
@@ -434,6 +433,7 @@ class TeeTimeRepository {
         `,
         )
         .eq("tee_time_id", teeTimeId)
+        .or("status.is.null,status.neq.cancelled")
         .order("position", { ascending: true });
 
       if (error) throw error;
@@ -486,6 +486,7 @@ class TeeTimeRepository {
         `,
         )
         .in("tee_time_id", teeTimeIds)
+        .or("status.is.null,status.neq.cancelled")
         .order("position", { ascending: true });
 
       if (error) throw error;
@@ -667,6 +668,8 @@ class TeeTimeRepository {
         .single();
 
       if (error) throw error;
+      const conversationRepository = require("./conversationRepository");
+      await conversationRepository.syncTeeTimeConversationParticipants(teeTimeId);
       return data;
     } catch (error) {
       handleError(error, "removeParticipantByUser");

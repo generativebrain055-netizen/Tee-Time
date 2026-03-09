@@ -231,8 +231,11 @@ function RosterList({ navigation }: RosterListProps) {
         navigation?.navigate("ChatDetail", {
             chatInfo: {
                 id: friend.id,
+                recipientId: friend.id,
                 name: `${friend.firstName} ${friend.lastName}`,
-                avatar: friend.avatar,
+                subtitle: "Direct message",
+                img: friend.avatar,
+                isGroup: false,
             },
         });
     }, [navigation]);

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Plus, MessageCircle } from "lucide-react-native";
 import { useColors, useTheme } from "../../ui/theme";
-import { rosterApi } from "../../services/api";
+import { rosterApi, messagesApi, friendApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 interface OnDeckListProps {
@@ -40,12 +40,13 @@ const formatLastPlayed = (dateStr: string): string => {
     return date.toLocaleDateString();
 };
 
-const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, adding }: { 
+const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onBlocked, adding }: { 
     item: any; 
     navigation: any; 
     colors: any; 
     theme: any;
     onAddToRoster?: (item: any) => void;
+    onBlocked?: () => void;
     adding?: boolean;
 }) => {
     const handlePress = () => {
@@ -64,12 +65,75 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, addin
             },
         });
     };
+
+    const handleMessage = useCallback(
+        async (e: any) => {
+            e?.stopPropagation?.();
+            const userId = item.contact?.userId;
+            if (!userId) {
+                Alert.alert("Message", "This contact is not on the app yet and cannot be messaged.");
+                return;
+            }
+            try {
+                const convRes = await messagesApi.getOrCreateConversation({ recipientId: userId });
+                if (convRes.success && convRes.conversation && navigation) {
+                    const c = item.contact || item;
+                    const name = c.name || "";
+                    navigation.navigate("ChatDetail", {
+                        chatInfo: {
+                            conversationId: convRes.conversation.id,
+                            recipientId: userId,
+                            id: userId,
+                            name: name || "Unknown",
+                            subtitle: "Direct message",
+                            img: c.avatar || item.avatar,
+                            isGroup: false,
+                        },
+                    });
+                }
+            } catch (err) {
+                logger.error("[OnDeckList] Failed to open conversation", err);
+                Alert.alert("Error", "Could not start conversation. Please try again.");
+            }
+        },
+        [item, navigation]
+    );
     
     const handleAddToRoster = (e: any) => {
         e.stopPropagation();
         onAddToRoster?.(item);
     };
-    
+
+    const handleLongPress = useCallback(() => {
+        const userId = item.contact?.userId;
+        if (!userId) {
+            Alert.alert("Block", "This contact is not a registered user. You can remove them from On Deck instead.");
+            return;
+        }
+        const c = item.contact || item;
+        const name = c.name || "This person";
+        Alert.alert(
+            "Block messages",
+            `Block ${name}? They will no longer be able to message you and will be removed from your On Deck and Roster.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await friendApi.blockUser(userId);
+                            onBlocked?.();
+                        } catch (err) {
+                            logger.error("[OnDeckList] Block failed", err);
+                            Alert.alert("Error", "Could not block user. Please try again.");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [item, onBlocked]);
+
     // Extract contact data (handle both roster API format and flat format)
     const contact = item.contact || item;
     const firstName = contact.name?.split(" ")[0] || contact.firstName || "";
@@ -80,6 +144,7 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, addin
     return (
         <TouchableOpacity 
             onPress={handlePress}
+            onLongPress={handleLongPress}
             activeOpacity={0.7}
             style={{
                 flexDirection: "row",
@@ -145,10 +210,7 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, addin
                     )}
                 </TouchableOpacity>
                 <TouchableOpacity 
-                    onPress={(e) => {
-                        e.stopPropagation();
-                        // Handle message action
-                    }}
+                    onPress={handleMessage}
                     style={{
                         width: 40,
                         height: 40,
@@ -257,12 +319,13 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                         </View>
                         {onDeck.map((item, index) => (
                             <React.Fragment key={item.id || index}>
-                                <OnDeckItem 
-                                    item={item} 
-                                    navigation={navigation} 
-                                    colors={colors} 
+                                <OnDeckItem
+                                    item={item}
+                                    navigation={navigation}
+                                    colors={colors}
                                     theme={theme}
                                     onAddToRoster={handleAddToRoster}
+                                    onBlocked={loadOnDeck}
                                     adding={addingId === item.id}
                                 />
                                 {index < onDeck.length - 1 && (

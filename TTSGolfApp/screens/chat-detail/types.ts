@@ -1,6 +1,6 @@
 export interface ChatMessage {
   id: string;
-  senderId: string;
+  senderId: string | null;
   senderName: string;
   senderImg: string;
   message: string;
@@ -8,6 +8,8 @@ export interface ChatMessage {
   imageUrl?: string | null;
   time: string;
   isMe: boolean;
+  /** True for auto-generated tee time messages (e.g. Tee Time Social welcome) */
+  isSystem?: boolean;
 }
 
 export interface ChatInfo {

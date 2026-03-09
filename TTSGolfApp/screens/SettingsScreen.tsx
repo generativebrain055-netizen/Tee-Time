@@ -22,7 +22,7 @@ import {
     Shield,
     HelpCircle,
     LogOut,
-    ChevronRight
+    ChevronRight,
 } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "../contexts";
@@ -49,6 +49,10 @@ export default function SettingsScreen({ navigation }: any) {
 
     const handleNotifications = useCallback(() => {
         navigation?.navigate("NotificationSettings");
+    }, [navigation]);
+
+    const handleLocation = useCallback(() => {
+        navigation?.navigate("LocationSettings");
     }, [navigation]);
 
     const handlePrivacy = useCallback(() => {
@@ -146,7 +150,8 @@ export default function SettingsScreen({ navigation }: any) {
                 {/* Settings Options */}
                 <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
                     {[
-                        { icon: Bell, label: 'Notifications', subtitle: 'Manage notification preferences', onPress: handleNotifications, iconColor: '#3B82F6', iconBg: '#DBEAFE' },
+                        { icon: Bell, label: 'Notifications', subtitle: 'Push & in-app by type — control how you\'re contacted', onPress: handleNotifications, iconColor: '#3B82F6', iconBg: '#DBEAFE' },
+                        { icon: MapPin, label: 'Location', subtitle: 'Update for accurate distance-based filters', onPress: handleLocation, iconColor: '#10B981', iconBg: '#D1FAE5' },
                         { icon: Shield, label: 'Privacy & Security', subtitle: 'Privacy settings and policies', onPress: handlePrivacy, iconColor: '#9333EA', iconBg: '#E9D5FF' },
                         { icon: HelpCircle, label: 'Help & Support', subtitle: 'Support center and FAQs', onPress: handleHelp, iconColor: colors.primary, iconBg: colors.primaryContainer },
                     ].map((item, index, array) => {

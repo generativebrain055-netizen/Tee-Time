@@ -32,7 +32,7 @@ export function SystemSettings() {
 
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={styles.cardTitle}>Firebase</h3>
+          <h3 style={styles.cardTitle}>Firebase (OAuth and push notifications)</h3>
           <span style={{ ...styles.badge, ...(settings.firebase.configured ? styles.badgeOk : styles.badgeWarn) }}>
             {settings.firebase.configured ? 'Configured' : 'Not configured'}
           </span>
@@ -41,6 +41,20 @@ export function SystemSettings() {
         {settings.firebase.configured && settings.firebase.projectIdMasked && (
           <p style={styles.masked}>Project ID: <code style={styles.code}>{settings.firebase.projectIdMasked}</code></p>
         )}
+        <div style={styles.section}>
+          <h4 style={styles.sectionTitle}>Push notifications</h4>
+          <p style={styles.desc}>
+            For mobile push to be delivered correctly, configure the backend and ensure the app is set up with the same Firebase project.
+          </p>
+          <ol style={styles.stepsList}>
+            <li>Set <code style={styles.code}>FIREBASE_PROJECT_ID</code> in the backend <code style={styles.code}>.env</code> to your Firebase project ID.</li>
+            <li>In Firebase Console → Project settings → Cloud Messaging: enable the API if you use FCM (e.g. for Android with Expo).</li>
+            <li>In your Expo/mobile app, use the same Firebase project (e.g. <code style={styles.code}>googleServicesFile</code> / Firebase config) so device push tokens are valid.</li>
+          </ol>
+          <p style={styles.desc}>
+            The backend sends push via Expo Push API; Expo delivers to FCM (Android) and APNs (iOS). A valid <code style={styles.code}>FIREBASE_PROJECT_ID</code> ensures OAuth and app push registration stay in sync.
+          </p>
+        </div>
         <p style={styles.envLabel}>Environment variables:</p>
         <ul style={styles.envList}>
           {settings.firebase.envVars.map((v) => (
@@ -54,7 +68,7 @@ export function SystemSettings() {
 
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={styles.cardTitle}>Twilio</h3>
+          <h3 style={styles.cardTitle}>Twilio (SMS and text invites)</h3>
           <span style={{ ...styles.badge, ...(settings.twilio.configured ? styles.badgeOk : styles.badgeWarn) }}>
             {settings.twilio.configured ? 'Configured' : 'Not configured'}
           </span>
@@ -70,6 +84,21 @@ export function SystemSettings() {
             )}
           </div>
         )}
+        <div style={styles.section}>
+          <h4 style={styles.sectionTitle}>SMS messaging and text invites</h4>
+          <p style={styles.desc}>
+            For text invites and SMS magic links to work, configure the backend with your Twilio credentials and a sending number.
+          </p>
+          <ol style={styles.stepsList}>
+            <li>In Twilio Console, copy your <strong>Account SID</strong> and <strong>Auth Token</strong> (Account → API keys and tokens). Use the primary SID that starts with <code style={styles.code}>AC</code>.</li>
+            <li>Get a Twilio phone number (Phone Numbers → Manage → Buy a number) or use an existing one. This will be the From number for all SMS.</li>
+            <li>In the backend <code style={styles.code}>.env</code>, set <code style={styles.code}>TWILIO_ACCOUNT_SID</code>, <code style={styles.code}>TWILIO_AUTH_TOKEN</code>, and <code style={styles.code}>TWILIO_FROM_NUMBER</code> (e.g. <code style={styles.code}>+15551234567</code>).</li>
+            <li>Restart the backend server so the new values are loaded.</li>
+          </ol>
+          <p style={styles.desc}>
+            Without Twilio configured, SMS magic links and text invites may only be logged in development and not sent. The status above shows whether the backend has valid credentials.
+          </p>
+        </div>
         <p style={styles.envLabel}>Environment variables:</p>
         <ul style={styles.envList}>
           {settings.twilio.envVars.map((v) => (
@@ -101,6 +130,9 @@ const styles: Record<string, React.CSSProperties> = {
   envLabel: { fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: 'var(--space-xs)' },
   envList: { margin: 0, paddingLeft: 'var(--space-xl)', marginBottom: 'var(--space-md)' },
   envItem: { marginBottom: 4 },
+  section: { marginTop: 'var(--space-lg)', paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-border)' },
+  sectionTitle: { fontSize: 'var(--font-size-base)', fontWeight: 600, marginBottom: 'var(--space-sm)' },
+  stepsList: { margin: '0 0 var(--space-md)', paddingLeft: 'var(--space-xl)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' },
   link: { fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', textDecoration: 'none' },
   error: { padding: 'var(--space-md)', background: 'var(--color-error-container)', color: 'var(--color-error)', borderRadius: 'var(--radius-sm)' },
   muted: { color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' },

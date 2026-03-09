@@ -377,20 +377,23 @@ class AttendanceController {
       }
 
       // Apply penalty based on tee time status
+      const socialRateService = require("../services/socialRateService");
       let penaltyApplied = false;
       let penaltyMessage = "";
-      
+      let newSocialRate = null;
+      let socialRateDelta = 0;
+
       if (teeTime.status === 'confirmed') {
-        // -10 points for cancelling a confirmed tee time
-        const socialRateService = require("../services/socialRateService");
-        await socialRateService.applyConfirmedCancellationPenalty(userId, teeTimeId);
+        newSocialRate = await socialRateService.applyConfirmedCancellationPenalty(userId, teeTimeId);
         penaltyApplied = true;
+        socialRateDelta = -10;
         penaltyMessage = "A -10 Social Rate penalty was applied for cancelling a confirmed tee time.";
       } else {
-        // Check if late cancellation penalty applies (within 24h)
         const hoursUntilTeeTime = (teeDateTime - new Date()) / (1000 * 60 * 60);
         if (hoursUntilTeeTime <= 24) {
+          newSocialRate = await socialRateService.applyLateCancellationPenalty(userId, teeTimeId, teeDateTime);
           penaltyApplied = true;
+          socialRateDelta = -5;
           penaltyMessage = "A -5 Social Rate penalty was applied for late cancellation.";
         }
       }
@@ -413,12 +416,19 @@ class AttendanceController {
       // Trigger auto-reinvite based on invite type
       await inviteManagementService.handlePlayerCancellation(teeTimeId, userId, cancelledUserInfo);
 
+      // When a confirmed player cancels, keep tee time in "in_progress" so it stays active (not reverted to pending)
+      if (teeTime.status === "confirmed") {
+        await teeTimeRepository.updateStatus(teeTimeId, "in_progress");
+      }
+
       res.json({
         success: true,
         message: penaltyApplied 
           ? `Participation cancelled. ${penaltyMessage}`
           : "Participation cancelled successfully.",
-        penaltyApplied
+        penaltyApplied,
+        socialRateDelta: penaltyApplied ? socialRateDelta : 0,
+        newSocialRate: newSocialRate ?? undefined
       });
     } catch (error) {
       logger.error("Cancel participation error:", error);

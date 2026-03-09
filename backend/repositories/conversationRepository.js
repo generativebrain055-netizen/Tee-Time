@@ -456,6 +456,56 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
 }
 
 /**
+ * Sync tee time group chat participants to match current active tee time participants.
+ * Removes cancelled players and adds newly added players (e.g. from backup invite).
+ * Call after participant cancel or when a new participant is added.
+ */
+async function syncTeeTimeConversationParticipants(teeTimeId) {
+  try {
+    const { data: conv } = await supabaseAdmin
+      .from("conversations")
+      .select("id")
+      .eq("type", "tee_time")
+      .eq("tee_time_id", teeTimeId)
+      .maybeSingle();
+    if (!conv) return;
+
+    const { data: activeParticipants } = await supabaseAdmin
+      .from("tee_time_participants")
+      .select("user_id")
+      .eq("tee_time_id", teeTimeId)
+      .or("status.is.null,status.neq.cancelled")
+      .not("user_id", "is", null);
+    const activeUserIds = new Set((activeParticipants || []).map((p) => p.user_id));
+
+    const { data: currentRows } = await supabaseAdmin
+      .from("conversation_participants")
+      .select("user_id")
+      .eq("conversation_id", conv.id);
+    const currentUserIds = new Set((currentRows || []).map((r) => r.user_id));
+
+    const toRemove = [...currentUserIds].filter((id) => !activeUserIds.has(id));
+    const toAdd = [...activeUserIds].filter((id) => !currentUserIds.has(id));
+
+    if (toRemove.length > 0) {
+      await supabaseAdmin
+        .from("conversation_participants")
+        .delete()
+        .eq("conversation_id", conv.id)
+        .in("user_id", toRemove);
+      logger.info(`Removed ${toRemove.length} cancelled player(s) from tee time chat ${conv.id}`);
+    }
+    if (toAdd.length > 0) {
+      const rows = toAdd.map((user_id) => ({ conversation_id: conv.id, user_id }));
+      await supabaseAdmin.from("conversation_participants").upsert(rows, { onConflict: "conversation_id,user_id" });
+      logger.info(`Added ${toAdd.length} new player(s) to tee time chat ${conv.id}`);
+    }
+  } catch (err) {
+    logger.warn("syncTeeTimeConversationParticipants failed:", err?.message);
+  }
+}
+
+/**
  * Count unread messages in a conversation for a user.
  * Only counts messages from others (sender_id != userId) after last_read_at.
  * Messages sent by the user are not counted as unread for the user.
@@ -519,6 +569,7 @@ module.exports = {
   getById,
   ensureParticipant,
   createTeeTimeConversationWithParticipants,
+  syncTeeTimeConversationParticipants,
   getUnreadCountForConversation,
   getUnreadCounts,
   markConversationRead,

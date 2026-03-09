@@ -82,8 +82,65 @@ async function getSendersInfo(senderIds) {
   return byId;
 }
 
+/**
+ * Convert a system message (sender_id IS NULL) into a group message by setting sender_id.
+ * Only updates when the message exists in the conversation and has no sender (auto-generated).
+ * @returns Updated message row or null if not found / not a system message
+ */
+async function updateSender(messageId, conversationId, senderId) {
+  const { data: msg, error } = await supabaseAdmin
+    .from("messages")
+    .update({ sender_id: senderId })
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId)
+    .is("sender_id", null)
+    .select("id, conversation_id, sender_id, body, image_url, created_at")
+    .single();
+
+  if (error || !msg) return null;
+  return msg;
+}
+
+/**
+ * Get a single message by id and conversation (for permission checks).
+ */
+async function getOne(messageId, conversationId) {
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .select("id, conversation_id, sender_id, body, created_at")
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId)
+    .single();
+  if (error || !data) return null;
+  return data;
+}
+
+/**
+ * Delete a message. Returns true if a row was deleted. Updates conversation.updated_at.
+ */
+async function deleteOne(messageId, conversationId) {
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .delete()
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId)
+    .select("id")
+    .single();
+  if (error) handleError(error, "deleteMessage");
+  if (data) {
+    await supabaseAdmin
+      .from("conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", conversationId);
+  }
+  return !!data;
+}
+
 module.exports = {
   listByConversation,
   create,
   getSendersInfo,
+  updateSender,
+  getOne,
+  deleteOne,
 };
