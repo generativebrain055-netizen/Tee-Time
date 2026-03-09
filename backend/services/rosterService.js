@@ -552,25 +552,68 @@ async function getWaiverWire(userId, date, options = {}) {
  * Add user to waiver wire for a date
  * @throws {RosterServiceError} If date is missing
  */
+/**
+ * Day index (0=Sun) to API day_of_week label
+ */
+const DAY_INDEX_TO_DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * Map Waiver Wire preferredTime to user_availability time_slot(s) that count as matching.
+ * Waiver wire: morning, midday, afternoon, anytime.
+ * Availability: morning, late_morning, afternoon, late_afternoon, evening.
+ */
+function waiverTimeToAvailabilitySlots(preferredTime) {
+  if (!preferredTime || preferredTime === "anytime") return null; // null = any slot on the day matches
+  const map = {
+    morning: ["morning"],
+    midday: ["late_morning"],
+    afternoon: ["afternoon", "late_afternoon"],
+  };
+  return map[preferredTime] || null;
+}
+
+/**
+ * Get roster user IDs that have availability matching the waiver wire post (same day + overlapping time).
+ */
+async function getRosterUserIdsWithMatchingAvailability(rosterUserIds, availableDate, preferredTime) {
+  if (!rosterUserIds || rosterUserIds.length === 0) return [];
+  const availabilityRepository = require("../repositories/availabilityRepository");
+  const date = new Date(availableDate);
+  const postDayOfWeek = DAY_INDEX_TO_DAY[date.getDay()];
+  const targetSlots = waiverTimeToAvailabilitySlots(preferredTime);
+
+  const availabilityByUser = await availabilityRepository.getMultipleUsersAvailability(rosterUserIds);
+  const matching = rosterUserIds.filter((uid) => {
+    const slots = availabilityByUser[uid] || [];
+    const hasMatchingSlot = slots.some((s) => {
+      if (s.dayOfWeek !== postDayOfWeek) return false;
+      if (targetSlots === null) return true; // anytime: any slot on that day
+      return targetSlots.includes(s.timeSlot);
+    });
+    return hasMatchingSlot;
+  });
+  return matching;
+}
+
 async function addToWaiverWire(userId, data) {
   if (!data.availableDate) {
     throw new RosterServiceError("Available date is required", "MISSING_DATE");
   }
   const entry = await rosterRepository.addToWaiverWire(userId, data);
   
-  // Notify mutual connections (roster contacts) about the new waiver wire post
+  // Notify roster members who have matching availability (same day + time preference) so they don't miss coordination
   try {
-    const notificationService = require("./notificationService");
     const rosterUserIds = await rosterRepository.getRosterContactUserIds(userId);
-    
-    // Get user info for notification
-    const userRepository = require("../repositories/userRepository");
+    const notifyUserIds = await getRosterUserIdsWithMatchingAvailability(
+      rosterUserIds,
+      data.availableDate,
+      data.preferredTime
+    );
+
     const user = await userRepository.findById(userId);
-    
-    if (user && rosterUserIds.length > 0) {
-      // Send notifications in parallel for better performance
+    if (user && notifyUserIds.length > 0) {
       await Promise.all(
-        rosterUserIds.map((rosterUserId) =>
+        notifyUserIds.map((rosterUserId) =>
           notificationService.notifyWaiverWirePost(rosterUserId, {
             id: userId,
             firstName: user.first_name || "",
@@ -581,14 +624,12 @@ async function addToWaiverWire(userId, data) {
             availableDate: data.availableDate,
             preferredTime: data.preferredTime,
           }).catch((err) => {
-            // Log individual notification failures but don't fail the whole operation
             logger.error(`Failed to notify user ${rosterUserId} about waiver wire post:`, err);
           })
         )
       );
     }
   } catch (notifError) {
-    // Don't fail the waiver wire post if notification fails
     logger.error("Error sending waiver wire notifications:", notifError);
   }
   

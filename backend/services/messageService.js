@@ -60,21 +60,24 @@ async function getMessages(conversationId, userId, options = {}) {
     await conversationRepository.markConversationRead(conversationId, userId);
   }
   const rows = await messageRepository.listByConversation(conversationId, options);
-  const senderIds = [...new Set(rows.map((m) => m.sender_id))];
+  const senderIds = [...new Set(rows.map((m) => m.sender_id).filter(Boolean))];
   const senders = await messageRepository.getSendersInfo(senderIds);
 
-  return rows.map((m) => ({
-    id: m.id,
-    conversationId: m.conversation_id,
-    senderId: m.sender_id,
-    senderName: senders[m.sender_id]?.name || "Unknown",
-    senderImg: senders[m.sender_id]?.avatarUrl || "",
-    message: m.body,
-    imageUrl: m.image_url || null,
-    time: formatMessageTime(m.created_at),
-    createdAt: m.created_at,
-    isMe: m.sender_id === userId,
-  }));
+  return rows.map((m) => {
+    const isSystem = m.sender_id == null;
+    return {
+      id: m.id,
+      conversationId: m.conversation_id,
+      senderId: m.sender_id,
+      senderName: isSystem ? "Tee Time Social" : (senders[m.sender_id]?.name || "Unknown"),
+      senderImg: isSystem ? "" : (senders[m.sender_id]?.avatarUrl || ""),
+      message: m.body,
+      imageUrl: m.image_url || null,
+      time: formatMessageTime(m.created_at),
+      createdAt: m.created_at,
+      isMe: m.sender_id === userId,
+    };
+  });
 }
 
 /**

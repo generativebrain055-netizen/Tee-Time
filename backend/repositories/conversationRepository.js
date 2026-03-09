@@ -1,4 +1,5 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
+const logger = require("../config/logger");
 
 /**
  * Get or create a direct conversation between two users.
@@ -418,6 +419,37 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
         onConflict: "conversation_id,user_id",
         ignoreDuplicates: false,
       });
+  }
+
+  // Post auto welcome message from Tee Time Social
+  try {
+    const { data: tt } = await supabaseAdmin
+      .from("tee_times")
+      .select("course_name, tee_date, tee_time")
+      .eq("id", teeTimeId)
+      .single();
+    if (tt && tt.course_name) {
+      const d = new Date(tt.tee_date);
+      const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
+      const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+      const dd = d.getDate().toString().padStart(2, "0");
+      let timeStr = "";
+      if (tt.tee_time != null) {
+        const t = new Date(tt.tee_time);
+        if (!isNaN(t.getTime())) {
+          timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        } else {
+          timeStr = String(tt.tee_time).slice(0, 5);
+        }
+      }
+      const dateTimeStr = timeStr ? `${dayName}, ${mm}/${dd} ${timeStr}` : `${dayName}, ${mm}/${dd}`;
+      const body = `Thanks for organizing with Tee Time Social. Here is your group for Date: ${dateTimeStr} at ${tt.course_name}. Enjoy.`;
+      const messageRepository = require("./messageRepository");
+      await messageRepository.create(conversationId, null, body, null);
+    }
+  } catch (welcomeErr) {
+    // Don't fail conversation creation if welcome message fails (e.g. sender_id still NOT NULL)
+    logger.warn("Could not post Tee Time Social welcome message:", welcomeErr?.message);
   }
 
   return existing || { id: conversationId, type: "tee_time", created_at: new Date().toISOString() };

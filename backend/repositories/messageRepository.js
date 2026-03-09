@@ -25,17 +25,19 @@ async function listByConversation(conversationId, options = {}) {
 
 /**
  * Add a message and update conversation.updated_at.
+ * @param {string} [senderId] - User ID; null for system messages (e.g. Tee Time Social welcome)
  * @param {string} [imageUrl] - Optional public URL of attached image
  */
 async function create(conversationId, senderId, body, imageUrl = null) {
+  const payload = {
+    conversation_id: conversationId,
+    body: (body || "").trim(),
+    image_url: imageUrl || null,
+  };
+  if (senderId != null) payload.sender_id = senderId;
   const { data: msg, error: msgError } = await supabaseAdmin
     .from("messages")
-    .insert({
-      conversation_id: conversationId,
-      sender_id: senderId,
-      body: (body || "").trim(),
-      image_url: imageUrl || null,
-    })
+    .insert(payload)
     .select("id, conversation_id, sender_id, body, image_url, created_at")
     .single();
 

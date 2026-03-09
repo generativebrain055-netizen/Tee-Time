@@ -4,6 +4,7 @@
 const inviteRepository = require("../../../repositories/inviteRepository");
 const teeTimeRepository = require("../../../repositories/teeTimeRepository");
 const rosterRepository = require("../../../repositories/rosterRepository");
+const userRepository = require("../../../repositories/userRepository");
 const notificationService = require("../../../services/notificationService");
 const logger = require("../../../config/logger");
 const { invitesLogger } = require("../../../config/logger");
@@ -11,6 +12,63 @@ const { sendInviteSms } = require("../smsService");
 const { INVITE_TYPES } = require("../constants");
 
 const fcfsDeadlineService = require("../../../services/fcfsDeadlineService");
+
+/** Try to find app user by phone (E.164 or digits). Returns user id or null. */
+async function findUserIdByPhone(phone) {
+  if (!phone || typeof phone !== "string") return null;
+  const trimmed = phone.trim();
+  let user = await userRepository.findByPhoneNumber(trimmed);
+  if (user) return user.id;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const withPlus = digits.length === 10 ? `+1${digits}` : `+${digits}`;
+    if (withPlus !== trimmed) user = await userRepository.findByPhoneNumber(withPlus);
+    if (user) return user.id;
+    if (digits.length === 10) user = await userRepository.findByPhoneNumber(digits);
+    if (user) return user.id;
+  }
+  return null;
+}
+
+/**
+ * If invite has phone but no user id, resolve user by phone; update invite and send in-app notification if found.
+ * @returns {Promise<boolean>} true if in-app notification was sent (caller can skip SMS)
+ */
+async function notifyPhoneInviteeIfAppUser(invite, teeTime, inviter, expiresAt) {
+  if (invite.invitee_user_id || !invite.invitee_phone) return false;
+  const inviteeUserId = await findUserIdByPhone(invite.invitee_phone);
+  if (!inviteeUserId) return false;
+  try {
+    await inviteRepository.updateInviteeUserId(invite.id, inviteeUserId);
+    invitesLogger.info("[INVITE] Resolved phone to app user, sending in-app notification", {
+      event: "invite_phone_resolved",
+      inviteId: invite.id,
+      inviteeUserId,
+    });
+    await notificationService.notifyTeeTimeInvite(
+      inviteeUserId,
+      {
+        id: teeTime.id,
+        date: teeTime.tee_date,
+        time: teeTime.tee_time,
+        courseName: teeTime.course_name,
+        maxPlayers: teeTime.max_players,
+      },
+      inviter,
+      expiresAt,
+      invite.id
+    );
+    return true;
+  } catch (err) {
+    invitesLogger.error("[INVITE] Failed to notify phone-resolved user", {
+      event: "invite_phone_resolve_error",
+      inviteId: invite.id,
+      error: err?.message,
+    });
+    logger.error(`Error notifying resolved user for invite ${invite.id}:`, err);
+    return false;
+  }
+}
 
 /**
  * Create FCFS invites - all at once, first to accept get spots
@@ -136,12 +194,20 @@ const createFCFSInvites = async (req, res, teeTime, invitees) => {
           logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
         }
       } else if (invite.invitee_phone) {
-        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
-          event: "sms_send_start",
-          inviteId: invite.id,
-          inviteePhone: invite.invitee_phone,
-        });
-        await sendInviteSms(invite, teeTime, true, null, expiresAt);
+        const sentInApp = await notifyPhoneInviteeIfAppUser(
+          invite,
+          teeTime,
+          { id: userId, firstName: req.user.firstName, lastName: req.user.lastName },
+          expiresAt
+        );
+        if (!sentInApp) {
+          invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+            event: "sms_send_start",
+            inviteId: invite.id,
+            inviteePhone: invite.invitee_phone,
+          });
+          await sendInviteSms(invite, teeTime, true, null, expiresAt);
+        }
       } else {
         invitesLogger.warn("[INVITE] Invite has no userId or phone", {
           event: "invite_no_contact",
@@ -360,12 +426,20 @@ const createRosterInvites = async (
           logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
         }
       } else if (invite.invitee_phone) {
-        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
-          event: "sms_send_start",
-          inviteId: invite.id,
-          inviteePhone: invite.invitee_phone,
-        });
-        await sendInviteSms(invite, teeTime, false, responseWindow);
+        const sentInApp = await notifyPhoneInviteeIfAppUser(
+          invite,
+          teeTime,
+          { id: userId, firstName: req.user.firstName, lastName: req.user.lastName },
+          invite.expires_at
+        );
+        if (!sentInApp) {
+          invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+            event: "sms_send_start",
+            inviteId: invite.id,
+            inviteePhone: invite.invitee_phone,
+          });
+          await sendInviteSms(invite, teeTime, false, responseWindow);
+        }
       } else {
         invitesLogger.warn("[INVITE] Invite has no userId or phone", {
           event: "invite_no_contact",
@@ -498,12 +572,20 @@ const createFromRoster = async (req, res) => {
           logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
         }
       } else if (invite.invitee_phone) {
-        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
-          event: "sms_send_start",
-          inviteId: invite.id,
-          inviteePhone: invite.invitee_phone,
-        });
-        await sendInviteSms(invite, teeTime);
+        const sentInApp = await notifyPhoneInviteeIfAppUser(
+          invite,
+          teeTime,
+          { id: userId, firstName: req.user.firstName, lastName: req.user.lastName },
+          null
+        );
+        if (!sentInApp) {
+          invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+            event: "sms_send_start",
+            inviteId: invite.id,
+            inviteePhone: invite.invitee_phone,
+          });
+          await sendInviteSms(invite, teeTime);
+        }
       } else {
         invitesLogger.warn("[INVITE] Invite has no userId or phone", {
           event: "invite_no_contact",
@@ -531,4 +613,5 @@ module.exports = {
   createFCFSInvites,
   createRosterInvites,
   createFromRoster,
+  notifyPhoneInviteeIfAppUser,
 };

@@ -40,7 +40,7 @@ const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: stri
     { type: 'tee_time_response', label: 'Tee Time Responses', description: 'When someone responds to your invite' },
     { type: 'friend_request', label: 'Friend Requests', description: 'When someone sends you a friend request' },
     { type: 'roster_add', label: 'Roster Adds', description: 'When someone adds you to their roster' },
-    { type: 'waiver_wire', label: 'Waiver Wire Posts', description: 'When connections post availability' },
+    { type: 'waiver_wire', label: 'Waiver Wire (Matching Availability)', description: 'When roster members with matching availability post on Waiver Wire' },
     { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
     { type: 'spot_opened', label: 'Spot Opened', description: 'When a spot opens in a tee time' },
 ];

@@ -261,6 +261,25 @@ class InviteRepository {
   }
 
   /**
+   * Set invitee_user_id on an invite (e.g. after resolving phone to app user).
+   * So the invite shows under Invites > Received for that user.
+   */
+  async updateInviteeUserId(inviteId, inviteeUserId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("invites")
+        .update({ invitee_user_id: inviteeUserId })
+        .eq("id", inviteId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleError(error, "updateInviteeUserId");
+    }
+  }
+
+  /**
    * CRITICAL: Accept invite atomically with tie-breaker logic
    * This calls a PostgreSQL function - must be created first!
    * Run: backend/db/supabase_functions.sql in Supabase SQL Editor

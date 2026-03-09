@@ -329,6 +329,7 @@ class NotificationService {
         maxPlayers: teeTime.maxPlayers || teeTime.max_players || null,
         expiresAt: expiresAt || null,
       },
+      sendPush: true, // So invitees get a push and don't miss the invite
     });
   }
 

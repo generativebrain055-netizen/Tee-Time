@@ -10,7 +10,7 @@ const { supabaseAdmin } = require("../../config/supabase");
 
 const { INVITE_TYPES, INVITE_RESPONSES } = require("./constants");
 const { sendInviteSms } = require("./smsService");
-const { createFCFSInvites, createRosterInvites, createFromRoster } = require("./handlers/createHandlers");
+const { createFCFSInvites, createRosterInvites, createFromRoster, notifyPhoneInviteeIfAppUser } = require("./handlers/createHandlers");
 const { processNextRosterInvite, handleAcceptance, handleDecline, handleMaybe } = require("./handlers/responseHandlers");
 const { getInviteById, getPendingInvites, getSentInvites, getInviteResponses, getUserResponseHistory, getWaitlist } = require("./handlers/queryHandlers");
 
@@ -153,12 +153,20 @@ class InviteController {
                         logger.error(`Error sending notification for invite ${invite.id}:`, notifError);
                     }
                 } else if (invite.invitee_phone) {
-                    invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
-                        event: "sms_send_start",
-                        inviteId: invite.id,
-                        inviteePhone: invite.invitee_phone,
-                    });
-                    await sendInviteSms(invite, teeTime);
+                    const sentInApp = await notifyPhoneInviteeIfAppUser(
+                        invite,
+                        teeTime,
+                        { id: userId, firstName: req.user.firstName, lastName: req.user.lastName },
+                        null
+                    );
+                    if (!sentInApp) {
+                        invitesLogger.info("[INVITE] Sending SMS to phone invitee", {
+                            event: "sms_send_start",
+                            inviteId: invite.id,
+                            inviteePhone: invite.invitee_phone,
+                        });
+                        await sendInviteSms(invite, teeTime);
+                    }
                 } else {
                     invitesLogger.warn("[INVITE] Invite has no userId or phone", {
                         event: "invite_no_contact",
