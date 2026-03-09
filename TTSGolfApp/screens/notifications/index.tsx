@@ -22,7 +22,7 @@ import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
 
 type TabType = 'activity' | 'invites';
-type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire';
+type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite';
 
 interface CategorySection {
     title: string;
@@ -238,7 +238,10 @@ export default function NotificationsScreen({ navigation }: any) {
                 ...baseOptions,
                 { key: 'tee_time_invite', label: 'Tee Time Invites' },
                 { key: 'friend_request', label: 'Friend Requests' },
+                { key: 'group_invite', label: 'Group Invites' },
                 { key: 'spot_opened', label: 'Spot Opened' },
+                { key: 'roster_add', label: 'Roster Adds' },
+                { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
             ];
         }
         // activity tab
@@ -336,6 +339,33 @@ export default function NotificationsScreen({ navigation }: any) {
             Alert.alert("Error", "Failed to delete notification");
         }
     }, []);
+
+    const handleDeleteAllRead = useCallback(() => {
+        const readCount = notifications.filter(n => n.isRead).length;
+        if (readCount === 0) return;
+        Alert.alert(
+            "Delete read notifications",
+            `Delete ${readCount} read notification${readCount === 1 ? "" : "s"}? This can't be undone.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const res = await notificationApi.deleteAllRead();
+                            if (res.success) {
+                                setNotifications(prev => prev.filter(n => !n.isRead));
+                            }
+                        } catch (error) {
+                            logger.error("[NotificationsScreen] Delete all read error", error);
+                            Alert.alert("Error", "Failed to delete read notifications");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [notifications]);
 
     const handleMarkAsUnread = useCallback(async (item: AppNotification) => {
         try {
@@ -851,6 +881,7 @@ export default function NotificationsScreen({ navigation }: any) {
     };
 
     const hasUnread = notifications.some(n => !n.isRead);
+    const hasRead = notifications.some(n => n.isRead);
 
     const invitesUnreadCount = notifications.filter(n => {
         const t = getDataType(n);
@@ -880,14 +911,23 @@ export default function NotificationsScreen({ navigation }: any) {
 
     return (
         <ScreenShell>
-            <View style={styles.headerRow}>
-                <AppHeader title="Notifications" onBack={() => navigation?.goBack()} />
-                {hasUnread && (
-                    <TouchableOpacity style={styles.markAllReadButton} onPress={handleMarkAllAsRead} activeOpacity={0.7}>
-                        <Text style={styles.markAllReadText}>Mark all read</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
+            <AppHeader title="Notifications" onBack={() => navigation?.goBack()} />
+            {(hasRead || hasUnread) && (
+                <View style={styles.headerActionsRow}>
+                    <View style={styles.headerActions}>
+                        {hasRead && (
+                            <TouchableOpacity style={styles.headerActionButton} onPress={handleDeleteAllRead} activeOpacity={0.7}>
+                                <Text style={styles.headerActionDestructiveText}>Delete read</Text>
+                            </TouchableOpacity>
+                        )}
+                        {hasUnread && (
+                            <TouchableOpacity style={styles.headerActionButton} onPress={handleMarkAllAsRead} activeOpacity={0.7}>
+                                <Text style={styles.markAllReadText}>Mark all read</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+            )}
 
             {/* Activity & Invites tabs (Figma 1269-817) */}
             <View style={styles.tabBar}>
@@ -934,21 +974,35 @@ export default function NotificationsScreen({ navigation }: any) {
                 </TouchableWithoutFeedback>
             )}
             <View style={styles.filterContainer}>
-                <TouchableOpacity
-                    style={styles.filterButton}
-                    onPress={() => setShowTypeFilter(!showTypeFilter)}
-                    activeOpacity={0.7}
-                >
-                    <Filter size={16} color={palette.gray600} />
-                    <Text style={styles.filterButtonText}>
-                        {typeFilterOptions.find(opt => opt.key === typeFilter)?.label || 'All Types'}
-                    </Text>
-                    {showTypeFilter ? (
-                        <ChevronUp size={16} color={palette.gray600} />
-                    ) : (
-                        <ChevronDown size={16} color={palette.gray600} />
+                <Text style={styles.filterLabel}>Filter by type</Text>
+                <View style={styles.filterRow}>
+                    <TouchableOpacity
+                        style={styles.filterButton}
+                        onPress={() => setShowTypeFilter(!showTypeFilter)}
+                        activeOpacity={0.7}
+                        accessibilityLabel="Filter notifications by type"
+                        accessibilityHint={showTypeFilter ? "Closes filter menu" : "Opens filter menu"}
+                    >
+                        <Filter size={16} color={palette.gray600} />
+                        <Text style={styles.filterButtonText}>
+                            {typeFilterOptions.find(opt => opt.key === typeFilter)?.label || 'All Types'}
+                        </Text>
+                        {showTypeFilter ? (
+                            <ChevronUp size={16} color={palette.gray600} />
+                        ) : (
+                            <ChevronDown size={16} color={palette.gray600} />
+                        )}
+                    </TouchableOpacity>
+                    {typeFilter !== 'all' && (
+                        <TouchableOpacity
+                            style={styles.clearFilterButton}
+                            onPress={() => setTypeFilter('all')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.clearFilterText}>Clear</Text>
+                        </TouchableOpacity>
                     )}
-                </TouchableOpacity>
+                </View>
                 {showTypeFilter && (
                     <View style={styles.filterDropdown}>
                         {typeFilterOptions.map(option => (
@@ -990,11 +1044,27 @@ export default function NotificationsScreen({ navigation }: any) {
                         <View style={styles.emptyIconCircle}>
                             <Bell size={32} color={palette.gray400} strokeWidth={1.5} />
                         </View>
-                        <Text style={styles.emptyTitle}>All caught up</Text>
-                        <Text style={styles.emptySubtitle}>
-                            {activeTab === "activity" && "No activity yet."}
-                            {activeTab === "invites" && "You have no invites."}
+                        <Text style={styles.emptyTitle}>
+                            {typeFilter !== 'all'
+                                ? `No ${typeFilterOptions.find(o => o.key === typeFilter)?.label ?? 'matching'} right now`
+                                : 'All caught up'}
                         </Text>
+                        <Text style={styles.emptySubtitle}>
+                            {typeFilter !== 'all'
+                                ? 'Try another filter or show all notifications.'
+                                : activeTab === "activity"
+                                    ? "No activity yet."
+                                    : "You have no invites."}
+                        </Text>
+                        {typeFilter !== 'all' && (
+                            <TouchableOpacity
+                                style={styles.emptyClearFilterButton}
+                                onPress={() => setTypeFilter('all')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.emptyClearFilterText}>Show all</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 ) : (
                     sections.map((section, idx) => (
@@ -1015,14 +1085,30 @@ export default function NotificationsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    headerRow: {
-        position: "relative",
+    headerActionsRow: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        alignItems: "center",
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.xs,
+        paddingBottom: spacing.sm,
+        backgroundColor: palette.white,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.gray200,
     },
-    markAllReadButton: {
-        position: "absolute",
-        right: spacing.lg,
-        top: 12,
-        zIndex: 10,
+    headerActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+    },
+    headerActionButton: {
+        paddingVertical: 6,
+        paddingHorizontal: spacing.sm,
+    },
+    headerActionDestructiveText: {
+        fontFamily: "Inter_500Medium",
+        fontSize: fontSize.sm,
+        color: palette.red600,
     },
     markAllReadText: {
         fontFamily: "Inter_600SemiBold",
@@ -1108,6 +1194,18 @@ const styles = StyleSheet.create({
         fontSize: fontSize.sm,
         color: palette.gray500,
         textAlign: "center",
+    },
+    emptyClearFilterButton: {
+        marginTop: spacing.lg,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        backgroundColor: palette.green500,
+        borderRadius: radii.md,
+    },
+    emptyClearFilterText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.sm,
+        color: palette.white,
     },
     sectionHeader: {
         paddingHorizontal: spacing.lg,
@@ -1344,6 +1442,17 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.sm,
         zIndex: 999,
     },
+    filterLabel: {
+        fontFamily: "Inter_500Medium",
+        fontSize: fontSize.xs,
+        color: palette.gray500,
+        marginBottom: spacing.xs,
+    },
+    filterRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+    },
     filterButton: {
         flexDirection: "row",
         alignItems: "center",
@@ -1358,6 +1467,17 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_500Medium",
         fontSize: fontSize.sm,
         color: palette.gray700,
+    },
+    clearFilterButton: {
+        paddingVertical: spacing.xs + 2,
+        paddingHorizontal: spacing.md,
+        backgroundColor: palette.gray100,
+        borderRadius: radii.sm,
+    },
+    clearFilterText: {
+        fontFamily: "Inter_500Medium",
+        fontSize: fontSize.sm,
+        color: palette.gray600,
     },
     filterDropdown: {
         position: "absolute",

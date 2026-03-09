@@ -46,6 +46,13 @@ router.get("/unread-count", notificationController.getUnreadCount);
 router.put("/read-all", notificationController.markAllAsRead);
 
 /**
+ * @route   DELETE /api/notifications/read
+ * @desc    Delete all read notifications for the current user
+ * @access  Private
+ */
+router.delete("/read", notificationController.deleteAllRead);
+
+/**
  * @route   PUT /api/notifications/:id/read
  * @desc    Mark a notification as read
  * @access  Private

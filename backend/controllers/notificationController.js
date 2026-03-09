@@ -10,6 +10,7 @@ class NotificationController {
     this.markAsResponded = this.markAsResponded.bind(this);
     this.markAllAsRead = this.markAllAsRead.bind(this);
     this.deleteNotification = this.deleteNotification.bind(this);
+    this.deleteAllRead = this.deleteAllRead.bind(this);
   }
 
   // GET /api/notifications
@@ -238,6 +239,31 @@ class NotificationController {
     } catch (error) {
       logger.error("Mark all as read error:", error.message);
       res.status(500).json({ success: false, message: "Failed to mark notifications as read" });
+    }
+  }
+
+  // DELETE /api/notifications/read — delete all read notifications for the user
+  async deleteAllRead(req, res) {
+    try {
+      const userId = req.user.id;
+
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .delete()
+        .eq("user_id", userId)
+        .not("read_at", "is", null)
+        .select("id");
+
+      if (error) {
+        logger.error("Delete all read error:", error.message);
+        return res.status(500).json({ success: false, message: "Failed to delete read notifications" });
+      }
+
+      const deletedCount = data ? data.length : 0;
+      res.json({ success: true, deletedCount, message: `${deletedCount} notification(s) deleted` });
+    } catch (error) {
+      logger.error("Delete all read error:", error.message);
+      res.status(500).json({ success: false, message: "Failed to delete read notifications" });
     }
   }
 

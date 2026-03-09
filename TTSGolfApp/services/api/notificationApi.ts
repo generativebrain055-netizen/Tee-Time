@@ -81,4 +81,13 @@ export const notificationApi = {
       `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * Delete all read notifications (keeps notification center clean)
+   */
+  deleteAllRead: () =>
+    apiCall<{ success: boolean; deletedCount: number; message: string }>(
+      `${API_ENDPOINTS.NOTIFICATIONS}/read`,
+      { method: "DELETE" },
+    ),
 };
