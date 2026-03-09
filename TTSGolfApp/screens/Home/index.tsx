@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
-import { View } from "react-native";
+import { View, Modal, Text, TouchableOpacity, StyleSheet } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Clock } from "lucide-react-native";
 
 import { ScreenShell } from "../../ui/layout";
 import { ContentArea } from "../../ui/layout";
@@ -9,6 +11,22 @@ import { useAuthStore, useTeeTimeStore } from "../../stores";
 import { DAYS_SHORT } from "./constants";
 import { WeekDay, UpcomingTeeTime } from "./types";
 import { Header, QuickActions, WeekCalendar, NextTeeTime } from "./components";
+import { palette, spacing, fontSize, radii } from "../../ui/theme/tokens";
+
+const WEEKLY_AVAILABILITY_PROMPT_KEY = "weekly_availability_prompt_week";
+
+/** Returns YYYY-MM-DD of the Sunday that starts the current week (week runs Sun–Sat). */
+function getWeekKey(d: Date): string {
+  const day = d.getDay();
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - day);
+  return sunday.toISOString().slice(0, 10);
+}
+
+function isWeekend(d: Date): boolean {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
 
 const toDateString = (d: Date | string) =>
   new Date(d).toDateString();
@@ -51,6 +69,7 @@ const transformTeeTime = (tt: TeeTime): UpcomingTeeTime => ({
 function HomePage({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [showWeeklyAvailabilityPrompt, setShowWeeklyAvailabilityPrompt] = useState(false);
 
   const user = useAuthStore((state) => state.user);
   const loadUser = useAuthStore((state) => state.loadUser);
@@ -72,6 +91,35 @@ function HomePage({ navigation }: any) {
       mounted = false;
     };
   }, [hydrateFromCache, fetchUpcoming]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const now = new Date();
+      if (!isWeekend(now)) return;
+      const weekKey = getWeekKey(now);
+      try {
+        const stored = await AsyncStorage.getItem(WEEKLY_AVAILABILITY_PROMPT_KEY);
+        if (stored === weekKey) return;
+        if (mounted) setShowWeeklyAvailabilityPrompt(true);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const dismissWeeklyPrompt = useCallback(
+    (navigateToAvailability: boolean) => {
+      const weekKey = getWeekKey(new Date());
+      AsyncStorage.setItem(WEEKLY_AVAILABILITY_PROMPT_KEY, weekKey).catch(() => {});
+      setShowWeeklyAvailabilityPrompt(false);
+      if (navigateToAvailability) navigation?.navigate("EditAvailability");
+    },
+    [navigation]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -150,8 +198,112 @@ function HomePage({ navigation }: any) {
         </WeekCalendar>
       </ContentArea>
       <AppBottomNav activeTab="Home" navigation={navigation} />
+
+      <Modal
+        visible={showWeeklyAvailabilityPrompt}
+        transparent
+        animationType="fade"
+      >
+        <View style={weeklyPromptStyles.backdrop}>
+          <View style={weeklyPromptStyles.card}>
+            <View style={weeklyPromptStyles.iconWrap}>
+              <Clock size={32} color={palette.green600} strokeWidth={2} />
+            </View>
+            <Text style={weeklyPromptStyles.title}>Set your availability</Text>
+            <Text style={weeklyPromptStyles.message}>
+              Set your availability for the upcoming week and update your Waiver Wire status so friends can find you for tee times.
+            </Text>
+            <View style={weeklyPromptStyles.actions}>
+              <TouchableOpacity
+                style={weeklyPromptStyles.secondaryButton}
+                onPress={() => dismissWeeklyPrompt(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={weeklyPromptStyles.secondaryButtonText}>Maybe later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={weeklyPromptStyles.primaryButton}
+                onPress={() => dismissWeeklyPrompt(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={weeklyPromptStyles.primaryButtonText}>Set availability</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 }
+
+const weeklyPromptStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  card: {
+    backgroundColor: palette.white,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    width: "100%",
+    maxWidth: 340,
+  },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: palette.green100,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+    marginBottom: spacing.lg,
+  },
+  title: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 20,
+    color: palette.gray900,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  message: {
+    fontFamily: "Inter_400Regular",
+    fontSize: fontSize.base,
+    color: palette.gray600,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: spacing.xl,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  secondaryButton: {
+    flex: 1,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.md,
+    backgroundColor: palette.gray100,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: fontSize.sm,
+    color: palette.gray600,
+  },
+  primaryButton: {
+    flex: 1,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.md,
+    backgroundColor: palette.green500,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: fontSize.sm,
+    color: palette.white,
+  },
+});
 
 export default memo(HomePage);
