@@ -35,6 +35,25 @@ type CustomTimes = Record<DayOfWeek, TimeSlotType[]>;
 /** Day order for "next week" (Monday first). */
 const DAY_ORDER: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+/** Short labels for calendar strip */
+const DAY_SHORT: Record<DayOfWeek, string> = {
+  Mon: 'M', Tue: 'T', Wed: 'W', Thu: 'T', Fri: 'F', Sat: 'S', Sun: 'S',
+};
+
+/** Get the upcoming week (Mon–Sun) for the calendar strip. If today is Mon, use this week; else use next Monday–Sunday. */
+function getUpcomingWeekDates(): { dayOfWeek: DayOfWeek; date: Date; dayNum: number }[] {
+  const today = new Date();
+  const dayIndex = today.getDay();
+  const daysUntilMonday = dayIndex === 0 ? 1 : dayIndex === 1 ? 0 : 8 - dayIndex;
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() + daysUntilMonday);
+  return DAY_ORDER.map((dayOfWeek, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return { dayOfWeek, date: d, dayNum: d.getDate() };
+  });
+}
+
 function getNextWeekDateForDay(dayOfWeek: DayOfWeek): Date {
   const today = new Date();
   const dayIndex = DAY_ORDER.indexOf(dayOfWeek);
@@ -117,6 +136,39 @@ const TimeChip = memo<{
 ));
 
 TimeChip.displayName = 'TimeChip';
+
+// Weekly calendar day cell - tap to toggle day availability
+const WeekDayCell = memo<{
+  dayOfWeek: DayOfWeek;
+  dayNum: number;
+  isSelected: boolean;
+  onPress: () => void;
+}>(({ dayOfWeek, dayNum, isSelected, onPress }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    style={{
+      flex: 1,
+      minWidth: 40,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isSelected ? '#DCFCE7' : '#FFFFFF',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: isSelected ? '#22C55E' : '#E5E7EB',
+    }}
+  >
+    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#6B7280', marginBottom: 2 }}>
+      {DAY_SHORT[dayOfWeek]}
+    </Text>
+    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: isSelected ? '#166534' : '#111827' }}>
+      {dayNum}
+    </Text>
+  </TouchableOpacity>
+));
+WeekDayCell.displayName = 'WeekDayCell';
 
 // Loading skeleton
 const LoadingSkeleton = memo(() => {
@@ -279,6 +331,30 @@ function EditAvailabilityScreen({ navigation, route }: any) {
         contentContainerStyle={{ paddingBottom: 40 }}
       >
         <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
+          {/* Weekly calendar view - tap days to set general availability */}
+          <View style={{ marginBottom: 24, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827', fontFamily: 'Inter_600SemiBold', marginBottom: 12 }}>
+              Your week
+            </Text>
+            <Text style={{ fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular', marginBottom: 12 }}>
+              Tap a day to mark when you're available
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {getUpcomingWeekDates().map(({ dayOfWeek, dayNum }) => {
+                const hasSlots = customTimes[dayOfWeek].length > 0;
+                return (
+                  <WeekDayCell
+                    key={dayOfWeek}
+                    dayOfWeek={dayOfWeek}
+                    dayNum={dayNum}
+                    isSelected={hasSlots}
+                    onPress={() => toggleDay(dayOfWeek)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+
           {/* When can you play section */}
           <View style={{ marginBottom: 32, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
