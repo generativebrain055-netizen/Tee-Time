@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Calendar, Clock as ClockIcon } from 'lucide-react-native';
@@ -196,6 +197,7 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
 function EditAvailabilityScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [dayDetailDay, setDayDetailDay] = useState<DayOfWeek | null>(null);
   const [customTimes, setCustomTimes] = useState<CustomTimes>({
     Mon: [],
     Tue: [],
@@ -267,6 +269,19 @@ function EditAvailabilityScreen({ navigation, route }: any) {
       };
     });
   }, []);
+
+  const openDayDetail = useCallback((day: DayOfWeek) => {
+    const hasSlots = customTimes[day].length > 0;
+    if (!hasSlots) {
+      setCustomTimes((prev) => ({
+        ...prev,
+        [day]: TIME_SLOTS.map((s) => s.id),
+      }));
+    }
+    setDayDetailDay(day);
+  }, [customTimes]);
+
+  const closeDayDetail = useCallback(() => setDayDetailDay(null), []);
 
   const totalSelected = Object.values(customTimes).reduce(
     (sum, slots) => sum + slots.length,
@@ -348,7 +363,7 @@ function EditAvailabilityScreen({ navigation, route }: any) {
                     dayOfWeek={dayOfWeek}
                     dayNum={dayNum}
                     isSelected={hasSlots}
-                    onPress={() => toggleDay(dayOfWeek)}
+                    onPress={() => openDayDetail(dayOfWeek)}
                   />
                 );
               })}
@@ -383,7 +398,7 @@ function EditAvailabilityScreen({ navigation, route }: any) {
                     key={day.id}
                     label={day.label}
                     isSelected={hasSlots}
-                    onPress={() => toggleDay(day.id)}
+                    onPress={() => openDayDetail(day.id)}
                   />
                 );
               })}
@@ -492,9 +507,18 @@ function EditAvailabilityScreen({ navigation, route }: any) {
                 const dateLabel = formatDayDate(getNextWeekDateForDay(day as DayOfWeek));
                 return (
                 <View key={day} style={{ marginBottom: 24, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 12, fontFamily: 'Inter_600SemiBold' }}>
-                    {dayLabel} - {dateLabel}
-                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setDayDetailDay(day as DayOfWeek)}
+                    style={{ marginBottom: 12 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827', fontFamily: 'Inter_600SemiBold' }}>
+                      {dayLabel} – {dateLabel}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular', marginTop: 2 }}>
+                      Tap to customize time blocks
+                    </Text>
+                  </TouchableOpacity>
                   
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                     {TIME_SLOTS.map((slot) => (
@@ -513,6 +537,87 @@ function EditAvailabilityScreen({ navigation, route }: any) {
           )}
         </View>
       </ScrollView>
+
+      {/* Per-day detail modal: customize time blocks for one day */}
+      <Modal
+        visible={dayDetailDay !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDayDetail}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          activeOpacity={1}
+          onPress={closeDayDetail}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 16,
+              padding: 24,
+            }}
+          >
+            {dayDetailDay !== null && (
+              <>
+                <Text style={{ fontSize: 18, fontWeight: '600', color: '#111827', fontFamily: 'Inter_600SemiBold', marginBottom: 4 }}>
+                  {WEEK_DAYS.find(d => d.id === dayDetailDay)?.label ?? dayDetailDay}
+                </Text>
+                <Text style={{ fontSize: 14, color: '#6B7280', fontFamily: 'Inter_400Regular', marginBottom: 20 }}>
+                  {formatDayDate(getNextWeekDateForDay(dayDetailDay))}
+                </Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular', marginBottom: 12 }}>
+                  Select time blocks for this day
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+                  {TIME_SLOTS.map((slot) => (
+                    <TimeChip
+                      key={slot.id}
+                      label={slot.label}
+                      isSelected={customTimes[dayDetailDay].includes(slot.id)}
+                      onPress={() => toggleDaySlot(dayDetailDay, slot.id)}
+                    />
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setCustomTimes((prev) => ({ ...prev, [dayDetailDay]: [] }));
+                      closeDayDetail();
+                    }}
+                    style={{ paddingVertical: 10, paddingHorizontal: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 14, color: '#DC2626', fontFamily: 'Inter_500Medium' }}>
+                      Clear day
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={closeDayDetail}
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 24,
+                      borderRadius: 12,
+                      backgroundColor: '#111827',
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#FFFFFF', fontFamily: 'Inter_600SemiBold' }}>
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScreenShell>
   );
 }

@@ -4,8 +4,9 @@ import {
     Text,
     ScrollView,
     TouchableOpacity,
+    ActivityIndicator,
 } from "react-native";
-import { Calendar, Clock } from "lucide-react-native";
+import { Calendar, Clock, Users, ChevronRight } from "lucide-react-native";
 import { COLORS } from "./constants";
 import GolfCourseAutocomplete, { GolfCourse } from "../../components/GolfCourseAutocomplete";
 
@@ -19,6 +20,8 @@ interface InviteDetailsStepProps {
     onLocationChange: (text: string) => void;
     onCourseSelect?: (course: GolfCourse) => void;
     onGroupSizeChange: (size: number) => void;
+    onSeeMatchingAvailability?: () => void;
+    loadingMatchingAvailability?: boolean;
 }
 
 /** Display date in M/D/Y format (e.g. 12/25/2025) per Figma */
@@ -40,6 +43,8 @@ export default function InviteDetailsStep({
     onLocationChange,
     onCourseSelect,
     onGroupSizeChange,
+    onSeeMatchingAvailability,
+    loadingMatchingAvailability,
 }: InviteDetailsStepProps) {
     const handleCourseSelect = useCallback((course: GolfCourse) => {
         // Set the full location string (name + location)
@@ -112,6 +117,36 @@ export default function InviteDetailsStep({
                     </TouchableOpacity>
                 ))}
             </View>
+
+            {/* See friends with matching availability - only when all fields are filled (date, time, location) */}
+            {selectedDate && selectedTime && location?.trim() && onSeeMatchingAvailability && (
+                <TouchableOpacity
+                    onPress={onSeeMatchingAvailability}
+                    disabled={loadingMatchingAvailability}
+                    className="flex-row items-center justify-between bg-[#F0FDF4] border border-[#22C55E]/30 rounded-lg px-4 py-4 mt-6"
+                    style={{ borderRadius: 8 }}
+                    activeOpacity={0.8}
+                >
+                    <View className="flex-row items-center flex-1">
+                        <View className="w-10 h-10 rounded-lg bg-[#DCFCE7] items-center justify-center mr-3">
+                            <Users size={20} color="#22C55E" strokeWidth={2} />
+                        </View>
+                        <View className="flex-1">
+                            <Text className="text-base font-semibold text-[#1F2937]">
+                                See friends with matching availability?
+                            </Text>
+                            <Text className="text-sm text-[#6B7280] mt-0.5">
+                                Find players in your network who are free this date and time
+                            </Text>
+                        </View>
+                    </View>
+                    {loadingMatchingAvailability ? (
+                        <ActivityIndicator size="small" color="#22C55E" />
+                    ) : (
+                        <ChevronRight size={20} color="#22C55E" strokeWidth={2} />
+                    )}
+                </TouchableOpacity>
+            )}
 
             <View style={{ height: 120 }} />
         </ScrollView>

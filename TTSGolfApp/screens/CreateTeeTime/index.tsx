@@ -8,6 +8,8 @@ import {
   Modal,
   TextInput,
   StyleSheet,
+  ScrollView,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -18,6 +20,7 @@ import {
   Friend,
   RosterGroup,
 } from "../../services/api";
+import { availabilityApi, type DayOfWeek, type TimeSlotType } from "../../services/api/availabilityApi";
 import { ScreenShell, AppHeader } from "../../ui";
 import { COLORS } from "./constants";
 import DatePickerModal from "./DatePickerModal";
@@ -61,6 +64,29 @@ const timeSlotToTime = (timeSlot: string): string => {
   };
   return slotMap[timeSlot] || "10:00 AM";
 };
+
+const DAY_INDEX_TO_DAY: DayOfWeek[] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Map a Date to API day of week. */
+function getDayOfWeekFromDate(date: Date): DayOfWeek {
+  return DAY_INDEX_TO_DAY[date.getDay()];
+}
+
+/** Map a time string (e.g. "10:00 AM") to availability time slot. */
+function getTimeSlotFromTime(time: string): TimeSlotType {
+  const match = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return "late_morning";
+  let hour = parseInt(match[1], 10);
+  const period = (match[3] || "").toUpperCase();
+  if (period === "PM" && hour !== 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+  if (hour >= 7 && hour < 9) return "morning";
+  if (hour >= 9 && hour < 12) return "late_morning";
+  if (hour >= 12 && hour < 15) return "afternoon";
+  if (hour >= 15 && hour < 17) return "late_afternoon";
+  if (hour >= 17 && hour < 20) return "evening";
+  return "late_morning";
+}
 
 export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const user = useAuthStore((s) => s.user);
@@ -120,6 +146,11 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
   // Open Invite state
   const [openDistance, setOpenDistance] = useState(20); // Default 20 miles
+
+  // Matching availability prompt (step 2: after date+time selected)
+  const [showMatchingFriendsModal, setShowMatchingFriendsModal] = useState(false);
+  const [matchingFriends, setMatchingFriends] = useState<Friend[]>([]);
+  const [loadingMatchingFriends, setLoadingMatchingFriends] = useState(false);
 
   // Handle prefilled data from Availability screen
   useEffect(() => {
@@ -290,6 +321,45 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     },
     [loadGroupMembers]
   );
+
+  /** Fetch friends with availability matching selected date + time and show modal. */
+  const handleSeeMatchingAvailability = useCallback(async () => {
+    if (!selectedDate || !selectedTime) return;
+    const dayOfWeek = getDayOfWeekFromDate(selectedDate);
+    const timeSlot = getTimeSlotFromTime(selectedTime);
+    const allUserFriends = [...friends, ...onDeckFriends];
+    const userIds = allUserFriends.map((f) => f.id).filter(Boolean);
+    if (userIds.length === 0) {
+      Alert.alert("No friends", "Add friends or roster connections to see who's available.");
+      return;
+    }
+    setLoadingMatchingFriends(true);
+    try {
+      const res = await availabilityApi.getMultipleUsersAvailability(userIds);
+      if (!res.success || !res.data) {
+        setMatchingFriends([]);
+        setShowMatchingFriendsModal(true);
+        return;
+      }
+      const matchingIds = new Set(
+        userIds.filter((id) => {
+          const slots = res.data![id] || [];
+          return slots.some(
+            (s: { dayOfWeek: DayOfWeek; timeSlot: TimeSlotType }) =>
+              s.dayOfWeek === dayOfWeek && s.timeSlot === timeSlot
+          );
+        })
+      );
+      const list = allUserFriends.filter((f) => matchingIds.has(f.id));
+      setMatchingFriends(list);
+      setShowMatchingFriendsModal(true);
+    } catch (e) {
+      logger.error("Failed to fetch matching availability", e);
+      Alert.alert("Error", "Couldn't load friends' availability. Try again.");
+    } finally {
+      setLoadingMatchingFriends(false);
+    }
+  }, [selectedDate, selectedTime, friends, onDeckFriends]);
 
   const formatDateForApi = (date: Date | null) => {
     if (!date) return "";
@@ -756,6 +826,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             setLocation(fullLocation);
           }}
           onGroupSizeChange={setGroupSize}
+          onSeeMatchingAvailability={handleSeeMatchingAvailability}
+          loadingMatchingAvailability={loadingMatchingFriends}
         />
       )}
 
@@ -916,6 +988,140 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         onSelect={setSelectedTime}
         initialTime={selectedTime}
       />
+
+      {/* Matching availability modal */}
+      <Modal
+        visible={showMatchingFriendsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMatchingFriendsModal(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          onPress={() => setShowMatchingFriendsModal(false)}
+        >
+          <View
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: 16,
+              padding: 24,
+              maxHeight: "80%",
+              minWidth: 280,
+            }}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingRight: 8 }}>
+              <Text style={{ fontSize: 18, fontWeight: "600", color: "#111827", fontFamily: "Inter_600SemiBold", flex: 1 }} numberOfLines={2}>
+                Friends with matching availability
+              </Text>
+              <TouchableOpacity onPress={() => setShowMatchingFriendsModal(false)} hitSlop={12} style={{ marginLeft: 8 }}>
+                <X size={24} color="#374151" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+            {matchingFriends.length === 0 ? (
+              <Text style={{ fontSize: 15, color: "#6B7280", fontFamily: "Inter_400Regular", marginBottom: 24, lineHeight: 22 }}>
+                No friends in your network have set availability for this date and time. You can still invite anyone from your roster.
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingRight: 4 }}>
+                {matchingFriends.map((f) => {
+                  const displayName = [f.firstName, f.lastName].filter(Boolean).join(" ") || "Friend";
+                  const initials = displayName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+                  const avatarUri = f.avatar;
+                  return (
+                    <View
+                      key={f.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingVertical: 12,
+                        borderBottomWidth: 1,
+                        borderBottomColor: "#F3F4F6",
+                      }}
+                    >
+                      {avatarUri ? (
+                        <Image
+                          source={{ uri: avatarUri }}
+                          style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E5E7EB", marginRight: 12, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontSize: 14, fontWeight: "600", color: "#6B7280", fontFamily: "Inter_600SemiBold" }}>
+                            {initials}
+                          </Text>
+                        </View>
+                      )}
+                      <Text style={{ fontSize: 15, color: "#111827", fontFamily: "Inter_500Medium", flex: 1 }} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 24, minHeight: 48 }}>
+              <TouchableOpacity
+                onPress={() => setShowMatchingFriendsModal(false)}
+                style={{
+                  flex: 1,
+                  minHeight: 48,
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: "#F3F4F6",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: "#374151", fontFamily: "Inter_600SemiBold" }} numberOfLines={1}>
+                  Maybe later
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setInviteType("manual");
+                  setSelectedPlayers(matchingFriends.map((f) => f.id));
+                  setFcfsSelectedPlayers(matchingFriends.map((f) => f.id));
+                  setShowMatchingFriendsModal(false);
+                  setStep(3);
+                }}
+                style={{
+                  flex: 1,
+                  minHeight: 48,
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: "#111827",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                activeOpacity={0.8}
+                disabled={matchingFriends.length === 0}
+              >
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: matchingFriends.length > 0 ? "#FFFFFF" : "#9CA3AF",
+                    fontFamily: "Inter_600SemiBold",
+                  }}
+                  numberOfLines={1}
+                >
+                  Invite these players
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Add more modal (Select from players / Invite via phone number) */}
       <Modal
