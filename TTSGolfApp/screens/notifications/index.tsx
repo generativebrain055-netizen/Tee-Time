@@ -15,7 +15,7 @@ import {
     StyleSheet,
     Alert,
 } from "react-native";
-import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users } from "lucide-react-native";
+import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail } from "lucide-react-native";
 import { notificationApi, friendApi, inviteApi, rosterApi, AppNotification } from "../../services/api";
 import { ScreenShell, AppHeader } from "../../ui";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
@@ -438,6 +438,22 @@ export default function NotificationsScreen({ navigation }: any) {
         return `${diffMins}m left`;
     };
 
+    const showReadUnreadMenu = useCallback((item: AppNotification) => {
+        const readUnreadButton = item.isRead
+            ? { text: "Mark as unread", onPress: () => handleMarkAsUnread(item) }
+            : { text: "Mark as read", onPress: () => handleMarkAsRead(item) };
+        Alert.alert(
+            "Notification",
+            undefined,
+            [
+                { text: "Cancel", style: "cancel" },
+                readUnreadButton,
+                { text: "Delete", style: "destructive", onPress: () => handleDelete(item) },
+            ],
+            { cancelable: true }
+        );
+    }, [handleMarkAsRead, handleMarkAsUnread, handleDelete]);
+
     const renderCardActions = (item: AppNotification) => (
         <View style={styles.cardActions}>
             {!item.isRead && <View style={styles.unreadDot} />}
@@ -449,8 +465,16 @@ export default function NotificationsScreen({ navigation }: any) {
                     else handleMarkAsRead(item);
                 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel={item.isRead ? "Mark as unread" : "Mark as read"}
             >
-                <Text style={styles.actionIconText}>{item.isRead ? "Mark unread" : "Mark read"}</Text>
+                <View style={styles.actionIconRow}>
+                    {item.isRead ? (
+                        <Mail size={18} color={palette.gray600} strokeWidth={2} />
+                    ) : (
+                        <CheckCircle size={18} color={palette.green600} strokeWidth={2} />
+                    )}
+                    <Text style={styles.actionIconText}>{item.isRead ? "Unread" : "Read"}</Text>
+                </View>
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.actionIconButton}
@@ -532,6 +556,7 @@ export default function NotificationsScreen({ navigation }: any) {
                     style={[styles.card, styles.inviteCard, !item.isRead && styles.cardUnread]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
+                    onLongPress={() => showReadUnreadMenu(item)}
                 >
                     <View style={styles.avatarContainer}>
                         {senderAvatar ? (
@@ -602,6 +627,7 @@ export default function NotificationsScreen({ navigation }: any) {
                     style={[styles.card, !item.isRead && styles.cardUnread]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
+                    onLongPress={() => showReadUnreadMenu(item)}
                 >
                     <View style={styles.avatarContainer}>
                         {senderAvatar ? (
@@ -653,6 +679,7 @@ export default function NotificationsScreen({ navigation }: any) {
                     style={[styles.card, !item.isRead && styles.cardUnread]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
+                    onLongPress={() => showReadUnreadMenu(item)}
                 >
                     <View style={styles.avatarContainer}>
                         {senderAvatar ? (
@@ -697,6 +724,7 @@ export default function NotificationsScreen({ navigation }: any) {
                     style={[styles.card, !item.isRead && styles.cardUnread]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
+                    onLongPress={() => showReadUnreadMenu(item)}
                 >
                     <View style={styles.avatarContainer}>
                         {senderAvatar ? (
@@ -746,6 +774,7 @@ export default function NotificationsScreen({ navigation }: any) {
                 style={[styles.card, !item.isRead && styles.cardUnread]}
                 activeOpacity={0.7}
                 onPress={() => handleNotificationPress(item)}
+                onLongPress={() => showReadUnreadMenu(item)}
             >
                 <View style={styles.avatarContainer}>
                     {senderAvatar ? (
@@ -1377,6 +1406,11 @@ const styles = StyleSheet.create({
     },
     actionIconButton: {
         padding: spacing.xs,
+    },
+    actionIconRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
     },
     actionIconText: {
         fontFamily: "Inter_400Regular",
