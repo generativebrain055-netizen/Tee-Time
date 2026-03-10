@@ -658,51 +658,47 @@ const getPublicProfile = async (userId) => {
  * Admin: search users by phone number or name (first_name, last_name, username)
  * @param {string} q - search term
  * @param {number} limit - max results (default 50)
- * @returns {Promise<Array>}
+ * @param {number} offset - pagination offset (default 0)
+ * @returns {Promise<{ users: Array, total: number }>}
  */
-const searchByPhoneOrName = async (q, limit = 50) => {
+const searchByPhoneOrName = async (q, limit = 50, offset = 0) => {
   try {
-    const safeLimit = Math.min(limit, 100);
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const selectFields = `
         id, phone_number, email, username, first_name, last_name,
         is_active, is_verified, is_locked, created_at,
         user_profiles (social_rate, handicap, avatar_url)
       `;
-    const baseQuery = () =>
-      supabaseAdmin
-        .from("users")
-        .select(selectFields)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(safeLimit);
+    const mapRow = (row) => {
+      const profile = row.user_profiles?.[0] || row.user_profiles || {};
+      const { user_profiles, ...user } = row;
+      return { ...user, social_rate: profile.social_rate, handicap: profile.handicap, avatar_url: profile.avatar_url };
+    };
 
     const sanitized = typeof q === "string" ? String(q).trim().replace(/%/g, "").replace(/,/g, "") : "";
     if (!sanitized) {
-      const { data, error } = await baseQuery();
+      const { data, error, count } = await supabaseAdmin
+        .from("users")
+        .select(selectFields, { count: "exact" })
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .range(safeOffset, safeOffset + safeLimit - 1);
       if (error) throw error;
-      return (data || []).map((row) => {
-        const profile = row.user_profiles?.[0] || row.user_profiles || {};
-        const { user_profiles, ...user } = row;
-        return { ...user, social_rate: profile.social_rate, handicap: profile.handicap, avatar_url: profile.avatar_url };
-      });
+      return { users: (data || []).map(mapRow), total: count ?? 0 };
     }
 
     const term = `%${sanitized}%`;
     const orFilter = `phone_number.ilike.${term},email.ilike.${term},username.ilike.${term},first_name.ilike.${term},last_name.ilike.${term}`;
-    const { data, error } = await supabaseAdmin
+    const { data, error, count } = await supabaseAdmin
       .from("users")
-      .select(selectFields)
+      .select(selectFields, { count: "exact" })
       .is("deleted_at", null)
       .or(orFilter)
       .order("created_at", { ascending: false })
-      .limit(safeLimit);
-
+      .range(safeOffset, safeOffset + safeLimit - 1);
     if (error) throw error;
-    return (data || []).map((row) => {
-      const profile = row.user_profiles?.[0] || row.user_profiles || {};
-      const { user_profiles, ...user } = row;
-      return { ...user, social_rate: profile.social_rate, handicap: profile.handicap, avatar_url: profile.avatar_url };
-    });
+    return { users: (data || []).map(mapRow), total: count ?? 0 };
   } catch (error) {
     handleError(error, "searchByPhoneOrName");
   }

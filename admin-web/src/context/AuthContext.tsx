@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(result.accessToken);
       return { ok: true };
     }
-    return { ok: false, error: result.message || 'Invalid code.' };
+    return { ok: false, error: (!result.success && 'message' in result ? result.message : null) || 'Invalid code.' };
   }, []);
 
   const logout = useCallback(() => {

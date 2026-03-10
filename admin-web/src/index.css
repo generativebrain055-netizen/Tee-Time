@@ -38,7 +38,13 @@ a:hover {
 
 button {
   font-family: inherit;
+  font-size: inherit;
   cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 input,
@@ -46,4 +52,32 @@ textarea,
 select {
   font-family: inherit;
   font-size: inherit;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+select {
+  cursor: pointer;
+  min-height: 36px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+/* Prevent tables from breaking layout */
+table {
+  table-layout: auto;
+  border-collapse: collapse;
 }

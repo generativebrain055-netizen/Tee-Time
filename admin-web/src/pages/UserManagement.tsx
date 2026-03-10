@@ -1,64 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchUsers, type AdminUser } from '../api/client';
+import { searchUsers, PAGE_SIZE_OPTIONS, type AdminUser } from '../api/client';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function UserManagement() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
-  const [searchResults, setSearchResults] = useState<AdminUser[] | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load all users on mount
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    searchUsers('').then((res) => {
-      if (cancelled) return;
-      setLoading(false);
-      if (res.success) setAllUsers(res.data);
-      else setError(res.message || 'Failed to load users');
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // When query changes: if empty show all users; if non-empty debounce and search
   useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setSearchResults(null);
-      return;
-    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      setSearchLoading(true);
-      searchUsers(q).then((res) => {
-        setSearchLoading(false);
-        if (res.success) setSearchResults(res.data);
-        else setSearchResults([]);
-      });
+      setSearchQuery(query.trim());
+      setPage(0);
     }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  const displayList = query.trim() ? (searchResults ?? []) : allUsers;
-  const showLoading = loading || (query.trim() && searchLoading);
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    searchUsers(searchQuery, pageSize, page * pageSize).then((res) => {
+      setLoading(false);
+      if (res.success) {
+        setUsers(res.data);
+        setTotal(res.total);
+      } else setError(res.message || 'Failed to load users');
+    });
+  }, [searchQuery, page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const openUser = (id: string) => navigate(`/users/${id}`);
 
   return (
     <div style={styles.wrapper}>
       <h2 style={styles.title}>User management</h2>
       <p style={styles.subtitle}>All users are listed below. Search by phone number or name to filter.</p>
-      <div style={styles.searchRow}>
+      <div style={styles.toolbar}>
         <input
           type="text"
           value={query}
@@ -66,12 +54,29 @@ export function UserManagement() {
           placeholder="Phone number or name..."
           style={styles.input}
         />
+        <div style={styles.toolbarRight}>
+          <label style={styles.pageSizeLabel}>
+            Per page
+            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} style={styles.select}>
+              {PAGE_SIZE_OPTIONS.map((n: number) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          {!loading && users.length > 0 && totalPages > 1 && (
+            <div style={styles.pagination}>
+              <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={styles.smallBtn}>Previous</button>
+              <span style={styles.pageInfo}>Page {page + 1} of {totalPages} ({total} total)</span>
+              <button type="button" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={styles.smallBtn}>Next</button>
+            </div>
+          )}
+        </div>
       </div>
       {error && <div style={styles.error}>{error}</div>}
-      {showLoading && <p style={styles.muted}>Loading…</p>}
-      {!showLoading && (
+      {loading && <p style={styles.muted}>Loading…</p>}
+      {!loading && (
         <div style={styles.tableWrap}>
-          {displayList.length === 0 ? (
+          {users.length === 0 ? (
             <p style={styles.muted}>{query.trim() ? 'No users found.' : 'No users yet.'}</p>
           ) : (
             <table style={styles.table}>
@@ -87,7 +92,7 @@ export function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {displayList.map((u) => (
+                {users.map((u) => (
                   <tr key={u.id} style={styles.tr}>
                     <td style={styles.td}>{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
                     <td style={styles.td}>{u.username || '—'}</td>
@@ -119,7 +124,14 @@ const styles: Record<string, React.CSSProperties> = {
   wrapper: { fontFamily: 'var(--font-family)' },
   title: { fontSize: 'var(--font-size-2xl)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-sm)' },
   subtitle: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-lg)' },
+  toolbar: { display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' },
+  toolbarRight: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginLeft: 'auto', flexWrap: 'wrap' },
   searchRow: { display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' },
+  pageSizeLabel: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
+  select: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' },
+  pagination: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)' },
+  smallBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'var(--color-surface)' },
+  pageInfo: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
   input: {
     flex: '1 1 200px',
     minWidth: 200,

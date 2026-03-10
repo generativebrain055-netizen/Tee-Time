@@ -241,7 +241,7 @@ class CourseRepository {
     // ---------- Admin: list courses with optional search and pagination ----------
     async listCourses(q = "", limit = 50, offset = 0) {
         try {
-            const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+            const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
             const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
             let query = supabaseAdmin
                 .from("golf_courses")

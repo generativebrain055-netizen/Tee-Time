@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { listReports, updateReport, type UserReport } from '../api/client';
+import { listReports, updateReport, PAGE_SIZE_OPTIONS, type UserReport } from '../api/client';
 
 export function ReportedIssues() {
   const [reports, setReports] = useState<UserReport[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -14,11 +17,13 @@ export function ReportedIssues() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await listReports(statusFilter || undefined);
+    const res = await listReports(statusFilter || undefined, pageSize, page * pageSize);
     setLoading(false);
-    if (res.success) setReports(res.data);
-    else setError(res.message || 'Failed to load reports');
-  }, [statusFilter]);
+    if (res.success) {
+      setReports(res.data);
+      setTotal(res.total);
+    } else setError(res.message || 'Failed to load reports');
+  }, [statusFilter, page, pageSize]);
 
   useEffect(() => {
     load();
@@ -50,7 +55,7 @@ export function ReportedIssues() {
       <div style={styles.toolbar}>
         <label style={styles.label}>
           Status
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={styles.select}>
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }} style={styles.select}>
             <option value="">All</option>
             <option value="pending">Pending</option>
             <option value="reviewing">Reviewing</option>
@@ -58,6 +63,23 @@ export function ReportedIssues() {
             <option value="dismissed">Dismissed</option>
           </select>
         </label>
+        <div style={styles.toolbarRight}>
+          <label style={styles.label}>
+            Per page
+            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} style={styles.select}>
+              {PAGE_SIZE_OPTIONS.map((n: number) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          {!loading && reports.length > 0 && total > pageSize && (
+            <div style={styles.pagination}>
+              <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={styles.smallBtn}>Previous</button>
+              <span style={styles.pageInfo}>Page {page + 1} of {Math.max(1, Math.ceil(total / pageSize))} ({total} total)</span>
+              <button type="button" onClick={() => setPage((p) => Math.min(Math.ceil(total / pageSize) - 1, p + 1))} disabled={page >= Math.ceil(total / pageSize) - 1} style={styles.smallBtn}>Next</button>
+            </div>
+          )}
+        </div>
       </div>
       {error && <div style={styles.error}>{error}</div>}
       {loading ? (
@@ -143,8 +165,11 @@ const styles: Record<string, React.CSSProperties> = {
   wrapper: { fontFamily: 'var(--font-family)' },
   title: { fontSize: 'var(--font-size-2xl)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-sm)' },
   subtitle: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-lg)' },
-  toolbar: { marginBottom: 'var(--space-lg)' },
+  toolbar: { display: 'flex', gap: 'var(--space-xl)', flexWrap: 'wrap', marginBottom: 'var(--space-lg)', alignItems: 'center', justifyContent: 'space-between' },
+  toolbarRight: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginLeft: 'auto', flexWrap: 'wrap' },
   label: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
+  pagination: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)' },
+  pageInfo: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
   select: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' },
   error: { padding: 'var(--space-md)', background: 'var(--color-error-container)', color: 'var(--color-error)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-lg)' },
   muted: { color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' },
@@ -157,7 +182,7 @@ const styles: Record<string, React.CSSProperties> = {
   notesSection: { marginTop: 'var(--space-md)' },
   textarea: { width: '100%', padding: 'var(--space-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-sm)' },
   notesActions: { display: 'flex', gap: 'var(--space-sm)' },
-  smallBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', marginTop: 'var(--space-sm)' },
+  smallBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', marginTop: 'var(--space-sm)' },
   actions: { display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', marginTop: 'var(--space-lg)' },
   primaryBtn: { padding: 'var(--space-sm) var(--space-lg)', background: 'var(--color-primary)', color: 'var(--color-on-primary)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 },
   secondaryBtn: { padding: 'var(--space-sm) var(--space-lg)', background: 'var(--color-surface-tertiary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },

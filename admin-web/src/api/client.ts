@@ -8,7 +8,11 @@ const getBaseUrl = (): string => {
 };
 
 export function getAdminToken(): string | null {
-  return localStorage.getItem(ADMIN_TOKEN_KEY);
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem(ADMIN_TOKEN_KEY) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function setAdminToken(token: string): void {
@@ -217,11 +221,18 @@ export type AdminUser = {
   avatar_url?: string;
 };
 
-export async function searchUsers(q: string): Promise<{ success: true; data: AdminUser[] } | { success: false; message: string }> {
-  const res = await authFetch(`/api/admin/users?q=${encodeURIComponent(q)}&limit=50`);
+export const PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const;
+export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+
+export async function searchUsers(q: string, limit?: number, offset?: number): Promise<{ success: true; data: AdminUser[]; total: number } | { success: false; message: string }> {
+  const params = new URLSearchParams();
+  params.set('q', q);
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  const res = await authFetch(`/api/admin/users?${params}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Search failed' };
-  return { success: true, data: data.data || [] };
+  return { success: true, data: data.data || [], total: data.total ?? 0 };
 }
 
 export type UserProfileActivity = {
@@ -294,12 +305,16 @@ export type UserReport = {
   reported_user?: { first_name?: string; last_name?: string; username?: string; phone_number?: string } | null;
 };
 
-export async function listReports(status?: string): Promise<{ success: true; data: UserReport[] } | { success: false; message: string }> {
-  const url = status ? `/api/admin/reports?status=${encodeURIComponent(status)}` : '/api/admin/reports';
+export async function listReports(status?: string, limit?: number, offset?: number): Promise<{ success: true; data: UserReport[]; total: number } | { success: false; message: string }> {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  const url = params.toString() ? `/api/admin/reports?${params}` : '/api/admin/reports';
   const res = await authFetch(url);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to load reports' };
-  return { success: true, data: data.data || [] };
+  return { success: true, data: data.data || [], total: data.total ?? 0 };
 }
 
 export async function updateReport(id: string, updates: { status?: string; admin_notes?: string }): Promise<{ success: true; data: UserReport } | { success: false; message: string }> {
@@ -495,5 +510,25 @@ export async function addCsvCourse(body: { name: string; address?: string; city?
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to add course to CSV' };
   if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
+}
+
+export async function updateCsvCourse(id: string, body: { name?: string; address?: string; city?: string; state?: string; country?: string; postal_code?: string; latitude?: number; longitude?: number; phone?: string; website?: string }): Promise<{ success: true; data: CsvCourse } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/courses/csv/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to update course' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
+}
+
+export async function deleteCsvCourse(id: string): Promise<{ success: true } | { success: false; message: string }> {
+  const res = await authFetch(`/api/admin/courses/csv/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to delete course' };
+  if (data.success) return { success: true };
   return { success: false, message: data.message || 'Invalid response' };
 }

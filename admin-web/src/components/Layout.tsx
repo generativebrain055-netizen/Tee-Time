@@ -66,9 +66,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     minHeight: '100vh',
     fontFamily: 'var(--font-family)',
+    width: '100%',
   },
   sidebar: {
     width: 240,
+    minWidth: 240,
+    flexShrink: 0,
     background: 'var(--color-surface)',
     borderRight: '1px solid var(--color-border)',
     display: 'flex',
@@ -80,10 +83,12 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'flex-start',
     marginBottom: 'var(--space-3xl)',
+    minWidth: 0,
   },
   logoImg: {
     height: 40,
     width: 'auto',
+    maxWidth: '100%',
     objectFit: 'contain',
   },
   logoSub: {
@@ -98,6 +103,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 'var(--space-xs)',
   },
   navLink: {
+    display: 'block',
     padding: 'var(--space-md) var(--space-lg)',
     borderRadius: 'var(--radius-md)',
     color: 'var(--color-text-secondary)',
@@ -126,17 +132,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   main: {
     flex: 1,
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
     background: 'var(--color-background-secondary)',
   },
   header: {
     height: 56,
+    minHeight: 56,
     padding: '0 var(--space-2xl)',
     background: 'var(--color-surface)',
     borderBottom: '1px solid var(--color-border)',
     display: 'flex',
     alignItems: 'center',
+    flexShrink: 0,
   },
   headerTitle: {
     fontSize: 'var(--font-size-lg)',
@@ -145,6 +154,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   content: {
     flex: 1,
+    minHeight: 0,
     padding: 'var(--space-2xl)',
     overflow: 'auto',
   },

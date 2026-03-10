@@ -91,6 +91,8 @@ router.post(
   validateRequest,
   adminController.addCsvCourse
 );
+router.put("/courses/csv/:id", authenticateAdmin, adminController.updateCsvCourse);
+router.delete("/courses/csv/:id", authenticateAdmin, adminController.deleteCsvCourse);
 router.get("/courses/:id", authenticateAdmin, adminController.getCourse);
 router.post(
   "/courses",

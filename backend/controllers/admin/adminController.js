@@ -209,9 +209,10 @@ const getCourseUsage = async (req, res, next) => {
 const searchUsers = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
-    const users = await userRepository.searchByPhoneOrName(q, limit);
-    return res.json({ success: true, data: users || [] });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const result = await userRepository.searchByPhoneOrName(q, limit, offset);
+    return res.json({ success: true, data: result?.users || [], total: result?.total ?? 0 });
   } catch (error) {
     logger.error("Admin searchUsers error:", error);
     next(error);
@@ -353,15 +354,17 @@ const listReports = async (req, res, next) => {
   try {
     const status = req.query.status;
     const reported_user_id = req.query.reported_user_id;
-    const limit = parseInt(req.query.limit, 10) || 50;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     let listResult;
     try {
-      listResult = await userReportRepository.list({ status, reported_user_id, limit });
+      listResult = await userReportRepository.list({ status, reported_user_id, limit, offset });
     } catch (err) {
       logger.warn("Admin listReports (table may not exist):", err?.message);
-      listResult = [];
+      listResult = { data: [], total: 0 };
     }
-    const reports = Array.isArray(listResult) ? listResult : [];
+    const reports = Array.isArray(listResult?.data) ? listResult.data : (listResult?.data ? [listResult.data] : []);
+    const totalReports = typeof listResult?.total === "number" ? listResult.total : reports.length;
     const reporterIds = [...new Set(reports.map((r) => r.reporter_id))];
     const reportedIds = [...new Set(reports.map((r) => r.reported_user_id))];
     const userIds = [...new Set([...reporterIds, ...reportedIds])];
@@ -377,7 +380,7 @@ const listReports = async (req, res, next) => {
       reporter: users[r.reporter_id] || null,
       reported_user: users[r.reported_user_id] || null,
     }));
-    return res.json({ success: true, data: enriched });
+    return res.json({ success: true, data: enriched, total: totalReports });
   } catch (error) {
     logger.error("Admin listReports error:", error);
     next(error);
@@ -541,7 +544,7 @@ const getSystemSettings = async (req, res, next) => {
 const listCourses = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const result = await courseRepository.listCourses(q, limit, offset);
     return res.json({ success: true, data: result?.courses || [], total: result?.total ?? 0 });
@@ -605,7 +608,7 @@ const listCsvCourses = async (req, res, next) => {
   try {
     await clubsService.loadClubs();
     const q = String(req.query.q || "").trim();
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const { clubs, total } = clubsService.getClubsForAdmin(q || undefined, limit, offset);
     return res.json({ success: true, data: clubs, total });
@@ -639,6 +642,44 @@ const addCsvCourse = async (req, res, next) => {
     return res.status(201).json({ success: true, data: club, message: "Course added to CSV." });
   } catch (error) {
     logger.error("Admin addCsvCourse error:", error);
+    next(error);
+  }
+};
+
+const updateCsvCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, address, city, state, country, postal_code, postalCode, latitude, longitude, phone, telephone, website } = req.body || {};
+    if (!id) return res.status(400).json({ success: false, message: "Course ID is required." });
+    const updates = {};
+    if (name !== undefined) updates.name = String(name).trim();
+    if (address !== undefined) updates.address = String(address).trim();
+    if (city !== undefined) updates.city = String(city).trim();
+    if (state !== undefined) updates.state = String(state).trim();
+    if (country !== undefined) updates.country = (country && String(country).trim()) || "USA";
+    if (postal_code !== undefined || postalCode !== undefined) updates.postal_code = (postal_code || postalCode || "").toString().trim();
+    if (latitude !== undefined) updates.latitude = latitude != null ? parseFloat(latitude) : null;
+    if (longitude !== undefined) updates.longitude = longitude != null ? parseFloat(longitude) : null;
+    if (phone !== undefined || telephone !== undefined) updates.telephone = (telephone || phone || "").toString().trim();
+    if (website !== undefined) updates.website = website ? String(website).trim() : null;
+    const club = await clubsService.updateClubInCsv(id, updates);
+    if (!club) return res.status(404).json({ success: false, message: "Course not found." });
+    return res.json({ success: true, data: club, message: "Course updated." });
+  } catch (error) {
+    logger.error("Admin updateCsvCourse error:", error);
+    next(error);
+  }
+};
+
+const deleteCsvCourse = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, message: "Course ID is required." });
+    const deleted = await clubsService.deleteClubFromCsv(id);
+    if (!deleted) return res.status(404).json({ success: false, message: "Course not found." });
+    return res.json({ success: true, message: "Course deleted." });
+  } catch (error) {
+    logger.error("Admin deleteCsvCourse error:", error);
     next(error);
   }
 };
@@ -749,6 +790,8 @@ module.exports = {
   deleteCourse,
   listCsvCourses,
   addCsvCourse,
+  updateCsvCourse,
+  deleteCsvCourse,
   listAdSlots,
   updateAdSlot,
   uploadAdSlotAsset,

@@ -348,6 +348,126 @@ class ClubsService {
   }
 
   /**
+   * Read CSV file lines (header + data). Returns { headerLine, dataLines } or null if file missing.
+   */
+  _readCsvLines() {
+    const csvPath = this.getCsvPath();
+    if (!fs.existsSync(csvPath)) return null;
+    const content = fs.readFileSync(csvPath, "utf-8");
+    const lines = content.split("\n").map((l) => l.trimEnd());
+    if (lines.length < 2) return { headerLine: lines[0] || "ClubID,ClubName,Address,City,PostalCode,State,Country,Latitude,Longitude,Website,Telephone", dataLines: [] };
+    return { headerLine: lines[0], dataLines: lines.slice(1).filter((l) => l.length > 0) };
+  }
+
+  /**
+   * Get column index from header line (same order as loadClubs)
+   */
+  _getColumnIndex(headerLine) {
+    const header = headerLine.split(",").map((h) => h.trim());
+    return {
+      ClubID: header.indexOf("ClubID") >= 0 ? header.indexOf("ClubID") : 0,
+      ClubName: header.indexOf("ClubName") >= 0 ? header.indexOf("ClubName") : 1,
+      Address: header.indexOf("Address") >= 0 ? header.indexOf("Address") : 2,
+      City: header.indexOf("City") >= 0 ? header.indexOf("City") : 3,
+      PostalCode: header.indexOf("PostalCode") >= 0 ? header.indexOf("PostalCode") : 4,
+      State: header.indexOf("State") >= 0 ? header.indexOf("State") : 5,
+      Country: header.indexOf("Country") >= 0 ? header.indexOf("Country") : 6,
+      Latitude: header.indexOf("Latitude") >= 0 ? header.indexOf("Latitude") : 7,
+      Longitude: header.indexOf("Longitude") >= 0 ? header.indexOf("Longitude") : 8,
+      Website: header.indexOf("Website") >= 0 ? header.indexOf("Website") : 9,
+      Telephone: header.indexOf("Telephone") >= 0 ? header.indexOf("Telephone") : 10,
+    };
+  }
+
+  /**
+   * Build a single CSV data row (11 columns matching loadClubs)
+   */
+  _buildCsvRow(club) {
+    return [
+      this.escapeCsvValue(club.id ?? ""),
+      this.escapeCsvValue(club.name ?? ""),
+      this.escapeCsvValue(club.address ?? ""),
+      this.escapeCsvValue(club.city ?? ""),
+      this.escapeCsvValue(club.postalCode ?? club.postal_code ?? ""),
+      this.escapeCsvValue(club.state ?? ""),
+      this.escapeCsvValue(club.country ?? "USA"),
+      this.escapeCsvValue(club.latitude != null ? club.latitude : ""),
+      this.escapeCsvValue(club.longitude != null ? club.longitude : ""),
+      this.escapeCsvValue(club.website ?? ""),
+      this.escapeCsvValue(club.telephone ?? club.phone ?? ""),
+    ].join(",");
+  }
+
+  /**
+   * Update a club in the CSV by id. Reloads in-memory data after write.
+   * @param {string} id - ClubID
+   * @param {Object} updates - { name?, address?, city?, state?, country?, postal_code?, latitude?, longitude?, website?, telephone? }
+   * @returns {Promise<Object|null>} Updated club or null if not found
+   */
+  async updateClubInCsv(id, updates) {
+    const csvPath = this.getCsvPath();
+    if (!fs.existsSync(csvPath)) throw new Error("Clubs CSV file not found");
+    const parsed = this._readCsvLines();
+    if (!parsed) throw new Error("Could not read CSV");
+    const { headerLine, dataLines } = parsed;
+    const columnIndex = this._getColumnIndex(headerLine);
+    let found = false;
+    const newDataLines = dataLines.map((line) => {
+      const values = this.parseCSVLine(line);
+      const rowId = (values[columnIndex.ClubID] || "").trim();
+      if (rowId !== String(id)) return line;
+      found = true;
+      const existing = {
+        id: rowId,
+        name: (values[columnIndex.ClubName] || "").trim(),
+        address: (values[columnIndex.Address] || "").trim(),
+        city: (values[columnIndex.City] || "").trim(),
+        postalCode: (values[columnIndex.PostalCode] || "").trim(),
+        state: (values[columnIndex.State] || "").trim(),
+        country: (values[columnIndex.Country] || "").trim() || "USA",
+        latitude: parseFloat(values[columnIndex.Latitude]) || null,
+        longitude: parseFloat(values[columnIndex.Longitude]) || null,
+        website: (values[columnIndex.Website] || "").trim() || null,
+        telephone: (values[columnIndex.Telephone] || "").trim() || null,
+      };
+      const merged = { ...existing, ...updates, id: rowId };
+      return this._buildCsvRow(merged);
+    });
+    if (!found) return null;
+    const newContent = headerLine + "\n" + newDataLines.join("\n") + (newDataLines.length ? "\n" : "");
+    fs.writeFileSync(csvPath, newContent, "utf-8");
+    this.loaded = false;
+    await this.loadClubs();
+    return this.getClubById(String(id));
+  }
+
+  /**
+   * Delete a club from the CSV by id. Reloads in-memory data after write.
+   * @param {string} id - ClubID
+   * @returns {Promise<boolean>} true if deleted, false if not found
+   */
+  async deleteClubFromCsv(id) {
+    const csvPath = this.getCsvPath();
+    if (!fs.existsSync(csvPath)) throw new Error("Clubs CSV file not found");
+    const parsed = this._readCsvLines();
+    if (!parsed) throw new Error("Could not read CSV");
+    const { headerLine, dataLines } = parsed;
+    const columnIndex = this._getColumnIndex(headerLine);
+    const idStr = String(id);
+    const newDataLines = dataLines.filter((line) => {
+      const values = this.parseCSVLine(line);
+      const rowId = (values[columnIndex.ClubID] || "").trim();
+      return rowId !== idStr;
+    });
+    if (newDataLines.length === dataLines.length) return false;
+    const newContent = headerLine + "\n" + newDataLines.join("\n") + (newDataLines.length ? "\n" : "");
+    fs.writeFileSync(csvPath, newContent, "utf-8");
+    this.loaded = false;
+    await this.loadClubs();
+    return true;
+  }
+
+  /**
    * Get clubs for admin list with optional pagination and search
    * @param {string} [q] - Optional search filter (name, city, state)
    * @param {number} [limit=50]
