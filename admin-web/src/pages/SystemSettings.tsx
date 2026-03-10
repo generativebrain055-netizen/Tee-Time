@@ -1,27 +1,60 @@
 import { useState, useEffect } from 'react';
-import { getSystemSettings, type SystemSettings } from '../api/client';
+import { getSystemSettings, sendTwilioTestSms, type SystemSettings } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 const FIREBASE_CONSOLE_URL = 'https://console.firebase.google.com/';
 const TWILIO_CONSOLE_URL = 'https://console.twilio.com/';
 
 export function SystemSettings() {
+  const notify = useNotification();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [twilioTestTo, setTwilioTestTo] = useState('');
+  const [twilioTestLoading, setTwilioTestLoading] = useState(false);
 
   useEffect(() => {
     getSystemSettings()
       .then((res) => {
         if (res.success && res.data) setSettings(res.data);
-        else setError(!res.success && 'message' in res ? res.message : 'Failed to load');
+        else {
+          const msg = !res.success && 'message' in res ? res.message : 'Failed to load';
+          setError(msg);
+          notify.error(msg);
+        }
       })
-      .catch(() => setError('Failed to load'))
+      .catch(() => {
+        setError('Failed to load');
+        notify.error('Failed to load');
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [notify]);
 
   if (loading) return <p style={styles.muted}>Loading…</p>;
   if (error) return <div style={styles.error}>{error}</div>;
   if (!settings) return null;
+
+  const twilioCanTest = settings.twilio.configured || settings.twilio.availableForTest;
+
+  const handleTwilioTest = async () => {
+    const to = twilioTestTo.trim();
+    if (!to) {
+      notify.error('Enter a phone number in E.164 format (e.g. +15551234567).');
+      return;
+    }
+    if (!/^\+[1-9]\d{1,14}$/.test(to)) {
+      notify.error('Invalid format. Use E.164 (e.g. +15551234567).');
+      return;
+    }
+    setTwilioTestLoading(true);
+    const res = await sendTwilioTestSms(to);
+    setTwilioTestLoading(false);
+    if (res.success) {
+      notify.success('Test SMS sent.');
+    } else {
+      notify.error(res.message || 'Failed to send test SMS.');
+    }
+  };
 
   return (
     <div style={styles.wrapper}>
@@ -105,6 +138,27 @@ export function SystemSettings() {
             <li key={v} style={styles.envItem}><code style={styles.code}>{v}</code></li>
           ))}
         </ul>
+        {twilioCanTest && (
+          <div style={styles.testSection}>
+            <h4 style={styles.sectionTitle}>Test Twilio (testing / trial account)</h4>
+            <p style={styles.desc}>
+              Send a test SMS to verify Twilio is working. Use E.164 format (e.g. +15551234567). With a Twilio trial account, the number must be verified in Twilio Console.
+            </p>
+            <div style={styles.testRow}>
+              <input
+                type="tel"
+                value={twilioTestTo}
+                onChange={(e) => setTwilioTestTo(e.target.value)}
+                placeholder="+15551234567"
+                style={styles.testInput}
+                disabled={twilioTestLoading}
+              />
+              <button type="button" onClick={handleTwilioTest} style={styles.testBtn} disabled={twilioTestLoading}>
+                {twilioTestLoading ? 'Sending…' : 'Send test SMS'}
+              </button>
+            </div>
+          </div>
+        )}
         <a href={TWILIO_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>
           Open Twilio Console →
         </a>
@@ -136,4 +190,8 @@ const styles: Record<string, React.CSSProperties> = {
   link: { fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', textDecoration: 'none' },
   error: { padding: 'var(--space-md)', background: 'var(--color-error-container)', color: 'var(--color-error)', borderRadius: 'var(--radius-sm)' },
   muted: { color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' },
+  testSection: { marginTop: 'var(--space-lg)', paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-border)' },
+  testRow: { display: 'flex', gap: 'var(--space-md)', alignItems: 'center', flexWrap: 'wrap' },
+  testInput: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-base)', minWidth: 160 },
+  testBtn: { padding: 'var(--space-sm) var(--space-lg)', background: 'var(--color-primary)', color: 'var(--color-on-primary)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 500 },
 };

@@ -1,24 +1,33 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 5.8 (All SQL Merged)
--- Last Updated: February 12, 2026
+-- Version: 5.9 (Full project database)
+-- Last Updated: February 2026
 --
 -- Merged SQL files:
 --   - unified_schema.sql (this file)
 --   - migrations/002_add_zip_code_to_user_profiles.sql (zip_code in user_profiles)
 --   - migrations/003_add_user_availability_policies.sql (RLS policies for user_availability)
 --   - migrations/004_messaging.sql (conversations, messages, etc.)
+--   - migrations/005_messages_image_url.sql (image_url on messages)
+--   - migrations/006_user_reports.sql (user_reports table)
+--   - migrations/007_roster_groups_icon_text.sql (roster_groups.icon as TEXT)
+--   - migrations/008_messages_sender_id_nullable.sql (system messages)
+--   - migrations/009_course_usage_function.sql (get_course_usage for admin)
 --
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables
 -- 2. Creates all tables fresh
--- 3. Includes all migrations (social rate, attendance, profile, QR draft,
---    blocked users, deadline notifications, OAuth providers with multi-strategy
---    lookup and idempotent operations, user availability preferences,
---    onboarding tracking with backend state management, multi-club memberships)
+-- 3. Includes all migrations and project tables (user_reports, ad_slots, etc.)
 --
 -- Run this in Supabase SQL Editor for a clean setup
+--
+-- CHANGES IN v5.9:
+-- - Added user_reports table (admin mediation of reported issues)
+-- - Added ad_slots table (4 placements: display_name, slot_type, alt_text, image_url, link_url)
+-- - messages.sender_id nullable (system/welcome messages)
+-- - get_course_usage(INT) function for admin dashboard
+-- - RLS and triggers for user_reports, ad_slots
 --
 -- CHANGES IN v5.8:
 -- - Merged all schema/migrations/*.sql into this file
@@ -93,6 +102,8 @@ DROP TABLE IF EXISTS otp_requests CASCADE;
 DROP TABLE IF EXISTS auth_providers CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS devices CASCADE;
+DROP TABLE IF EXISTS user_reports CASCADE;
+DROP TABLE IF EXISTS ad_slots CASCADE;
 DROP TABLE IF EXISTS user_profiles CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
@@ -102,6 +113,7 @@ DROP FUNCTION IF EXISTS cleanup_expired_records() CASCADE;
 DROP FUNCTION IF EXISTS hours_between(TIMESTAMPTZ, TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS is_within_24_hours(TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS get_tee_datetime(DATE, TIME) CASCADE;
+DROP FUNCTION IF EXISTS get_course_usage(INT) CASCADE;
 DROP FUNCTION IF EXISTS accept_invite_atomic(UUID, UUID, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS check_onboarding_complete(UUID) CASCADE;
 DROP FUNCTION IF EXISTS update_onboarding_completed() CASCADE;
@@ -151,6 +163,21 @@ BEGIN
     RETURN (tee_date + tee_time)::TIMESTAMPTZ;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Admin: course usage by tee time count (for admin dashboard)
+CREATE OR REPLACE FUNCTION get_course_usage(p_limit INT DEFAULT 50)
+RETURNS TABLE(course_name TEXT, course_location TEXT, tee_time_count BIGINT)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT tt.course_name::TEXT, COALESCE(tt.course_location, '')::TEXT, COUNT(*)::BIGINT
+    FROM tee_times tt
+    GROUP BY tt.course_name, COALESCE(tt.course_location, '')
+    ORDER BY COUNT(*) DESC
+    LIMIT GREATEST(1, LEAST(p_limit, 200));
+$$;
+
+COMMENT ON FUNCTION get_course_usage(INT) IS 'Returns courses by number of tee times (for admin platform usage)';
 
 -- ============================================================================
 -- STEP 4: CREATE TABLES
@@ -762,6 +789,40 @@ CREATE TABLE user_favorite_courses (
 CREATE INDEX idx_user_favorite_courses_user ON user_favorite_courses(user_id);
 
 -- ============================================================================
+-- 20b. AD_SLOTS TABLE (admin-managed ads: 4 placements)
+-- ============================================================================
+CREATE TABLE ad_slots (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    slot_key TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    slot_type TEXT,
+    image_url TEXT,
+    link_url TEXT,
+    alt_text TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_slot_key CHECK (slot_key IN ('loading_screen', 'banner_1', 'banner_2', 'banner_3')),
+    CONSTRAINT valid_slot_type CHECK (slot_type IS NULL OR slot_type IN ('loading_screen', 'banner'))
+);
+
+CREATE INDEX idx_ad_slots_slot_key ON ad_slots(slot_key);
+CREATE INDEX idx_ad_slots_active ON ad_slots(active) WHERE active = true;
+
+COMMENT ON TABLE ad_slots IS '4 ad placements: Sign up/Sign in, Chatting, Tee time type selection, Calendar view';
+COMMENT ON COLUMN ad_slots.alt_text IS 'Ad copy/description shown with the image';
+
+-- Seed the 4 slots (idempotent)
+INSERT INTO ad_slots (slot_key, display_name, slot_type, sort_order)
+VALUES
+    ('loading_screen', 'Sign up / Sign in page', 'loading_screen', 1),
+    ('banner_1', 'Chatting page', 'banner', 2),
+    ('banner_2', 'Tee time type selection (tee time creating)', 'banner', 3),
+    ('banner_3', 'Calendar view page', 'banner', 4)
+ON CONFLICT (slot_key) DO NOTHING;
+
+-- ============================================================================
 -- 21. ROSTER_MEMBER_HISTORY TABLE
 -- ============================================================================
 CREATE TABLE roster_member_history (
@@ -818,6 +879,31 @@ CREATE TABLE login_logs (
 
 CREATE INDEX idx_login_logs_user_id ON login_logs(user_id);
 CREATE INDEX idx_login_logs_attempted_at ON login_logs(attempted_at DESC);
+
+-- ============================================================================
+-- 23b. USER_REPORTS TABLE (admin mediation)
+-- ============================================================================
+CREATE TABLE user_reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason VARCHAR(100) NOT NULL,
+    description TEXT,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    admin_notes TEXT,
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_report_status CHECK (status IN ('pending', 'reviewing', 'resolved', 'dismissed'))
+);
+
+CREATE INDEX idx_user_reports_reporter ON user_reports(reporter_id);
+CREATE INDEX idx_user_reports_reported_user ON user_reports(reported_user_id);
+CREATE INDEX idx_user_reports_status ON user_reports(status);
+CREATE INDEX idx_user_reports_created ON user_reports(created_at DESC);
+
+COMMENT ON TABLE user_reports IS 'User-reported issues for admin mediation';
 
 -- ============================================================================
 -- 24. NOTIFICATIONS TABLE
@@ -1118,7 +1204,7 @@ CREATE INDEX idx_conversation_participants_user ON conversation_participants(use
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
     body TEXT NOT NULL,
     image_url TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -1173,6 +1259,12 @@ CREATE TRIGGER update_friend_requests_updated_at BEFORE UPDATE ON friend_request
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_golf_courses_updated_at BEFORE UPDATE ON golf_courses
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_reports_updated_at BEFORE UPDATE ON user_reports
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_ad_slots_updated_at BEFORE UPDATE ON ad_slots
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_rate_limits_updated_at BEFORE UPDATE ON rate_limits
@@ -1391,6 +1483,8 @@ ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE golf_courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_favorite_courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE roster_member_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE waiver_wire ENABLE ROW LEVEL SECURITY;
 ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
@@ -1501,8 +1595,10 @@ CREATE POLICY user_availability_select_friends ON user_availability
 --   34. onboarding_steps - Granular onboarding step tracking
 --   35. conversations - Direct, tee_time, and group conversations
 --   36. conversation_participants - Conversation membership
---   37. messages - Chat messages
+--   37. messages - Chat messages (sender_id nullable for system messages)
 --   38. message_read_receipts - Read receipts for messages
+--   23b. user_reports - User-reported issues for admin mediation
+--   20b. ad_slots - 4 ad placements (Sign in, Chatting, Tee time type, Calendar)
 --
 -- Migrations Included (all merged from schema/migrations/*.sql):
 --   - 002: zip_code column on user_profiles

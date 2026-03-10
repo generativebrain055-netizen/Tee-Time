@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchUsers, PAGE_SIZE_OPTIONS, type AdminUser } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function UserManagement() {
   const navigate = useNavigate();
+  const notify = useNotification();
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -35,9 +37,13 @@ export function UserManagement() {
       if (res.success) {
         setUsers(res.data);
         setTotal(res.total);
-      } else setError(res.message || 'Failed to load users');
+      } else {
+        const msg = res.message || 'Failed to load users';
+        setError(msg);
+        notify.error(msg);
+      }
     });
-  }, [searchQuery, page, pageSize]);
+  }, [searchQuery, page, pageSize, notify]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const openUser = (id: string) => navigate(`/users/${id}`);

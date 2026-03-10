@@ -7,6 +7,7 @@ const adSlotRepository = require("../../repositories/adSlotRepository");
 const adCreativeUploadService = require("../../services/adCreativeUploadService");
 const deviceRepository = require("../../repositories/deviceRepository");
 const notificationService = require("../../services/notificationService");
+const twilioService = require("../../services/twilioService");
 const { supabaseAdmin } = require("../../config/supabase");
 const logger = require("../../config/logger");
 
@@ -526,16 +527,53 @@ const getSystemSettings = async (req, res, next) => {
         },
         twilio: {
           configured: twilioConfigured,
+          availableForTest: twilioService.isConfigured(),
           accountSidMasked: twilioAccountSid ? maskValue(twilioAccountSid) : null,
           fromNumberMasked: twilioFromNumber ? maskPhone(twilioFromNumber) : null,
           envVars: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
-          description: "Required for SMS magic links and text invites. TWILIO_ACCOUNT_SID must start with AC.",
+          description: "Required for SMS magic links and text invites. TWILIO_ACCOUNT_SID must start with AC. Trial accounts can send only to verified numbers.",
         },
       },
     });
   } catch (error) {
     logger.error("Admin getSystemSettings error:", error);
     next(error);
+  }
+};
+
+/**
+ * Send a test SMS via Twilio (admin only). Body: { to: "+15551234567" } (E.164).
+ * Works when Twilio is configured (including trial accounts; trial can only send to verified numbers).
+ */
+const sendTwilioTestSms = async (req, res, next) => {
+  try {
+    if (!twilioService.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message: "Twilio is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in the backend .env.",
+      });
+    }
+    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    const e164 = /^\+[1-9]\d{1,14}$/;
+    if (!e164.test(to)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number. Use E.164 format (e.g. +15551234567).",
+      });
+    }
+    const testMessage = "Tee Time Admin: Test SMS. Twilio is working.";
+    const result = await twilioService.sendSMS(to, testMessage);
+    return res.json({
+      success: true,
+      data: { to, mode: result?.mode || "sms", sid: result?.sid },
+      message: "Test SMS sent.",
+    });
+  } catch (error) {
+    logger.error("Admin sendTwilioTestSms error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Failed to send test SMS.",
+    });
   }
 };
 
@@ -660,9 +698,9 @@ const updateAdSlot = async (req, res, next) => {
     if (!VALID_SLOT_KEYS.includes(slotKey)) {
       return res.status(400).json({ success: false, message: "Invalid slot key. Use: loading_screen, banner_1, banner_2, banner_3." });
     }
-    const { label, image_url, link_url, active, sort_order } = req.body || {};
+    const { description, image_url, link_url, active, sort_order } = req.body || {};
     const payload = {};
-    if (label !== undefined) payload.label = String(label).trim() || null;
+    if (description !== undefined) payload.description = description == null || description === "" ? null : String(description).trim();
     if (image_url !== undefined) payload.image_url = image_url == null || image_url === "" ? null : String(image_url).trim();
     if (link_url !== undefined) payload.link_url = link_url == null || link_url === "" ? null : String(link_url).trim();
     if (typeof active === "boolean") payload.active = active;
@@ -740,6 +778,7 @@ module.exports = {
   previewBroadcast,
   sendBroadcast,
   getSystemSettings,
+  sendTwilioTestSms,
   listCourses,
   getCourse,
   createCourse,

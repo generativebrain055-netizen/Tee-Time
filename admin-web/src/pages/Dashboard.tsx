@@ -5,8 +5,10 @@ import {
   type DashboardStats,
   type CourseUsageEntry,
 } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 export function Dashboard() {
+  const notify = useNotification();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [courseUsage, setCourseUsage] = useState<CourseUsageEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,17 +26,22 @@ export function Dashboard() {
         if (res.success && res.data) {
           setStats(res.data);
         } else {
-          setError(!res.success && 'message' in res ? res.message || 'Failed to load dashboard.' : 'Failed to load dashboard.');
+          const msg = !res.success && 'message' in res ? res.message || 'Failed to load dashboard.' : 'Failed to load dashboard.';
+          setError(msg);
+          notify.error(msg);
         }
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load dashboard.');
+        if (!cancelled) {
+          setError('Failed to load dashboard.');
+          notify.error('Failed to load dashboard.');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +53,22 @@ export function Dashboard() {
         if (res.success && res.data) {
           setCourseUsage(res.data);
         } else {
-          setUsageError(!res.success && 'message' in res ? res.message || 'Failed to load course usage.' : 'Failed to load course usage.');
+          const msg = !res.success && 'message' in res ? res.message || 'Failed to load course usage.' : 'Failed to load course usage.';
+          setUsageError(msg);
+          notify.error(msg);
         }
       })
       .catch(() => {
-        if (!cancelled) setUsageError('Failed to load course usage.');
+        if (!cancelled) {
+          setUsageError('Failed to load course usage.');
+          notify.error('Failed to load course usage.');
+        }
       })
       .finally(() => {
         if (!cancelled) setUsageLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [notify]);
 
   return (
     <div style={styles.wrapper}>

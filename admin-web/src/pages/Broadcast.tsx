@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { previewBroadcast, sendBroadcast, type BroadcastPreview } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 export function Broadcast() {
+  const notify = useNotification();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [preview, setPreview] = useState<BroadcastPreview | null>(null);
@@ -17,8 +19,14 @@ export function Broadcast() {
     setPreviewLoading(true);
     const res = await previewBroadcast(title, body);
     setPreviewLoading(false);
-    if (res.success && res.data) setPreview(res.data);
-    else setPreviewError(!res.success && 'message' in res ? res.message : 'Preview failed');
+    if (res.success && res.data) {
+      setPreview(res.data);
+      notify.success('Preview ready.');
+    } else {
+      const msg = !res.success && 'message' in res ? res.message : 'Preview failed';
+      setPreviewError(msg);
+      notify.error(msg);
+    }
   };
 
   const handleSend = async () => {
@@ -34,8 +42,14 @@ export function Broadcast() {
     setSendLoading(true);
     const res = await sendBroadcast(t, b);
     setSendLoading(false);
-    if (res.success && res.data) setSendResult(res.data);
-    else setSendError(!res.success && 'message' in res ? res.message : 'Send failed');
+    if (res.success && res.data) {
+      setSendResult(res.data);
+      notify.success(`Broadcast sent to ${res.data.total} user(s).`);
+    } else {
+      const msg = !res.success && 'message' in res ? res.message : 'Send failed';
+      setSendError(msg);
+      notify.error(msg);
+    }
   };
 
   return (

@@ -75,6 +75,15 @@ router.patch("/reports/:id", authenticateAdmin, adminController.updateReport);
 // ---------- System settings (read-only status) ----------
 router.get("/settings", authenticateAdmin, adminController.getSystemSettings);
 
+// ---------- Twilio test (admin only; for testing/trial accounts) ----------
+router.post(
+  "/twilio/test-sms",
+  authenticateAdmin,
+  [body("to").trim().notEmpty().withMessage("Phone number (E.164) is required")],
+  validateRequest,
+  adminController.sendTwilioTestSms
+);
+
 // ---------- Ad slots (loading screen + 3 banner placements) ----------
 router.get("/ad-slots", authenticateAdmin, adminController.listAdSlots);
 router.put("/ad-slots/:slotKey", authenticateAdmin, adminController.updateAdSlot);

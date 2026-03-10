@@ -8,8 +8,10 @@ import {
   type CsvCourse,
 } from '../api/client';
 import { getStatesForCountry, COUNTRIES } from '../constants/locations';
+import { useNotification } from '../context/NotificationContext';
 
 export function CourseManagement() {
+  const notify = useNotification();
   const [courses, setCourses] = useState<CsvCourse[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -45,8 +47,12 @@ export function CourseManagement() {
     if (res.success) {
       setCourses(res.data);
       setTotal(res.total);
-    } else setError(res.message || 'Failed to load courses');
-  }, [search, page, pageSize]);
+    } else {
+      const msg = res.message || 'Failed to load courses';
+      setError(msg);
+      notify.error(msg);
+    }
+  }, [search, page, pageSize, notify]);
 
   useEffect(() => {
     load();
@@ -135,7 +141,12 @@ export function CourseManagement() {
       setModalOpen(false);
       setEditingCourse(null);
       load();
-    } else setActionError(res.message || (editingCourse ? 'Failed to update course' : 'Failed to add course'));
+      notify.success(editingCourse ? 'Course updated.' : 'Course added.');
+    } else {
+      const msg = res.message || (editingCourse ? 'Failed to update course' : 'Failed to add course');
+      setActionError(msg);
+      notify.error(msg);
+    }
   };
 
   const openDeleteConfirm = (c: CsvCourse) => {
@@ -154,7 +165,12 @@ export function CourseManagement() {
       setCourses((prev) => prev.filter((c) => c.id !== idToDelete));
       setTotal((prev) => Math.max(0, prev - 1));
       await load();
-    } else setActionError(res.message || 'Failed to delete course');
+      notify.success('Course deleted.');
+    } else {
+      const msg = res.message || 'Failed to delete course';
+      setActionError(msg);
+      notify.error(msg);
+    }
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

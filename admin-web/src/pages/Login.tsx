@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, verifyMfa, isAuthenticated } = useAuth();
+  const notify = useNotification();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,7 +40,9 @@ export function Login() {
       setMfaStep(true);
       setMfaCode('');
     } else {
-      setError(result.error || 'Invalid credentials.');
+      const msg = result.error || 'Invalid credentials.';
+      setError(msg);
+      notify.error(msg);
     }
   };
 
@@ -56,7 +60,9 @@ export function Login() {
     if (result.ok) {
       navigate(from, { replace: true });
     } else {
-      setError(result.error || 'Invalid code.');
+      const msg = result.error || 'Invalid code.';
+      setError(msg);
+      notify.error(msg);
     }
   };
 

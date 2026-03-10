@@ -141,6 +141,7 @@ export type AdSlot = {
   id: string;
   slot_key: 'loading_screen' | 'banner_1' | 'banner_2' | 'banner_3';
   label: string;
+  description: string | null;
   image_url: string | null;
   link_url: string | null;
   active: boolean;
@@ -159,7 +160,7 @@ export async function listAdSlots(): Promise<{ success: true; data: AdSlot[] } |
 
 export async function updateAdSlot(
   slotKey: string,
-  payload: { label?: string; image_url?: string | null; link_url?: string | null; active?: boolean; sort_order?: number }
+  payload: { label?: string; description?: string | null; image_url?: string | null; link_url?: string | null; active?: boolean; sort_order?: number }
 ): Promise<{ success: true; data: AdSlot } | { success: false; message: string }> {
   const res = await authFetch(`/api/admin/ad-slots/${encodeURIComponent(slotKey)}`, {
     method: 'PUT',
@@ -378,6 +379,7 @@ export type FirebaseSettingsStatus = {
 
 export type TwilioSettingsStatus = {
   configured: boolean;
+  availableForTest?: boolean;
   accountSidMasked: string | null;
   fromNumberMasked: string | null;
   envVars: string[];
@@ -395,6 +397,19 @@ export async function getSystemSettings(): Promise<{ success: true; data: System
   if (!res.ok) return { success: false, message: data.message || 'Failed to load settings' };
   if (data.success && data.data) return { success: true, data: data.data };
   return { success: false, message: 'Invalid response' };
+}
+
+/** Send a test SMS via Twilio. Phone number must be E.164 (e.g. +15551234567). Trial accounts: use a verified number. */
+export async function sendTwilioTestSms(to: string): Promise<{ success: true; data: { to: string; mode?: string; sid?: string } } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/twilio/test-sms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: to.trim() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to send test SMS' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
 }
 
 // --- Golf courses (US database for autocomplete) ---

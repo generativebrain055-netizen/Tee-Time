@@ -9,8 +9,10 @@ import {
   type UserProfileResponse,
   type AdminUser,
 } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 export function UserDetail() {
+  const notify = useNotification();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<UserProfileResponse | null>(null);
@@ -43,8 +45,12 @@ export function UserDetail() {
         home_course: (u.home_course as string) ?? '',
         bio: (u.bio as string) ?? '',
       });
-    } else setError(res.message || 'Failed to load user');
-  }, [id]);
+    } else {
+      const msg = res.message || 'Failed to load user';
+      setError(msg);
+      notify.error(msg);
+    }
+  }, [id, notify]);
 
   useEffect(() => {
     load();
@@ -91,31 +97,51 @@ export function UserDetail() {
     if (res.success) {
       setEditOpen(false);
       load();
-    } else setActionError(res.message || 'Update failed');
+      notify.success('Profile updated.');
+    } else {
+      const msg = res.message || 'Update failed';
+      setActionError(msg);
+      notify.error(msg);
+    }
   };
 
   const handleSuspend = async () => {
     if (!id || !confirm('Suspend this user? They will not be able to sign in.')) return;
     setActionError(null);
     const res = await suspendUser(id);
-    if (res.success) load();
-    else setActionError(res.message || 'Suspend failed');
+    if (res.success) {
+      load();
+      notify.success('User suspended.');
+    } else {
+      setActionError(res.message || 'Suspend failed');
+      notify.error(res.message || 'Suspend failed');
+    }
   };
 
   const handleUnsuspend = async () => {
     if (!id || !confirm('Restore this user\'s access?')) return;
     setActionError(null);
     const res = await unsuspendUser(id);
-    if (res.success) load();
-    else setActionError(res.message || 'Unsuspend failed');
+    if (res.success) {
+      load();
+      notify.success('User restored.');
+    } else {
+      setActionError(res.message || 'Unsuspend failed');
+      notify.error(res.message || 'Unsuspend failed');
+    }
   };
 
   const handleBan = async () => {
     if (!id || !confirm('Ban this user? They will be locked out. This can be reversed by unsuspending.')) return;
     setActionError(null);
     const res = await banUser(id);
-    if (res.success) load();
-    else setActionError(res.message || 'Ban failed');
+    if (res.success) {
+      load();
+      notify.success('User banned.');
+    } else {
+      setActionError(res.message || 'Ban failed');
+      notify.error(res.message || 'Ban failed');
+    }
   };
 
   if (loading) return <p style={styles.muted}>Loading…</p>;

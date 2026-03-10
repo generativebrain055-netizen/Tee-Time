@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { listReports, updateReport, PAGE_SIZE_OPTIONS, type UserReport } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 
 const ADMIN_NOTES_MAX = 2000;
 
@@ -12,6 +13,7 @@ const REPORT_STATUS_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export function ReportedIssues() {
+  const notify = useNotification();
   const [reports, setReports] = useState<UserReport[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -32,8 +34,12 @@ export function ReportedIssues() {
     if (res.success) {
       setReports(res.data);
       setTotal(res.total);
-    } else setError(res.message || 'Failed to load reports');
-  }, [statusFilter, page, pageSize]);
+    } else {
+      const msg = res.message || 'Failed to load reports';
+      setError(msg);
+      notify.error(msg);
+    }
+  }, [statusFilter, page, pageSize, notify]);
 
   useEffect(() => {
     load();
@@ -43,7 +49,10 @@ export function ReportedIssues() {
     setUpdatingId(reportId);
     const res = await updateReport(reportId, { status: newStatus });
     setUpdatingId(null);
-    if (res.success) load();
+    if (res.success) {
+      load();
+      notify.success(`Report marked as ${newStatus}.`);
+    } else notify.error(res.message || 'Failed to update status');
   };
 
   const handleSaveNotes = async (reportId: string) => {
@@ -52,7 +61,10 @@ export function ReportedIssues() {
     setUpdatingId(null);
     setEditNotesId(null);
     setNotesValue('');
-    if (res.success) load();
+    if (res.success) {
+      load();
+      notify.success('Notes saved.');
+    } else notify.error(res.message || 'Failed to save notes');
   };
 
   const name = (u: UserReport['reporter']) =>
