@@ -8,6 +8,7 @@ const adCreativeUploadService = require("../../services/adCreativeUploadService"
 const deviceRepository = require("../../repositories/deviceRepository");
 const notificationService = require("../../services/notificationService");
 const twilioService = require("../../services/twilioService");
+const twilioConfigService = require("../../services/twilioConfigService");
 const { supabaseAdmin } = require("../../config/supabase");
 const logger = require("../../config/logger");
 
@@ -464,17 +465,47 @@ const sendBroadcast = async (req, res, next) => {
       totalFailed += result?.failed ?? 0;
     }
 
-    return res.json({
-      success: true,
-      data: {
+    const payload = {
+      sent: totalSent,
+      failed: totalFailed,
+      total: list.length,
+      message: `Broadcast sent: ${totalSent} delivered, ${totalFailed} failed (${list.length} total devices).`,
+    };
+
+    try {
+      await supabaseAdmin.from("broadcast_history").insert({
+        title: String(title).trim(),
+        body: String(body).trim(),
         sent: totalSent,
         failed: totalFailed,
         total: list.length,
-        message: `Broadcast sent: ${totalSent} delivered, ${totalFailed} failed (${list.length} total devices).`,
-      },
-    });
+      });
+    } catch (insertErr) {
+      logger.warn("Admin sendBroadcast: could not save to broadcast_history", insertErr?.message);
+    }
+
+    return res.json({ success: true, data: payload });
   } catch (error) {
     logger.error("Admin sendBroadcast error:", error);
+    next(error);
+  }
+};
+
+/**
+ * List broadcast history (most recent first) for admin Broadcast page.
+ */
+const getBroadcastHistory = async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const { data, error } = await supabaseAdmin
+      .from("broadcast_history")
+      .select("id, title, body, sent, failed, total, created_at")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return res.json({ success: true, data: data || [] });
+  } catch (error) {
+    logger.error("Admin getBroadcastHistory error:", error);
     next(error);
   }
 };
@@ -501,20 +532,22 @@ function maskPhone(val) {
 
 /**
  * Get system settings status (Firebase, Twilio) for admin. No secrets returned.
+ * Twilio: Firestore (config/twilio) first, then env.
  */
 const getSystemSettings = async (req, res, next) => {
   try {
     const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || "";
-    const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || "";
-    const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || "";
-    const twilioFromNumber = process.env.TWILIO_FROM_NUMBER || "";
-
     const firebaseConfigured = !!firebaseProjectId.trim();
+
+    const twilioCreds = await twilioService.getCredentials();
     const twilioConfigured =
-      !!twilioAccountSid.trim() &&
-      !!twilioAuthToken.trim() &&
-      !!twilioFromNumber.trim() &&
-      twilioAccountSid.startsWith("AC");
+      !!twilioCreds.accountSid?.trim() &&
+      (!!twilioCreds.authToken?.trim() || (!!twilioCreds.apiKeySid?.trim() && !!twilioCreds.apiKeySecret?.trim())) &&
+      !!twilioCreds.fromNumber?.trim() &&
+      twilioCreds.accountSid.startsWith("AC");
+    const availableForTest = await twilioService.isConfiguredAsync();
+    const firestoreTwilio = await twilioConfigService.getTwilioConfigFromFirestore();
+    const storedInFirestore = !!firestoreTwilio && (!!firestoreTwilio.accountSid || !!firestoreTwilio.fromNumber);
 
     return res.json({
       success: true,
@@ -527,11 +560,12 @@ const getSystemSettings = async (req, res, next) => {
         },
         twilio: {
           configured: twilioConfigured,
-          availableForTest: twilioService.isConfigured(),
-          accountSidMasked: twilioAccountSid ? maskValue(twilioAccountSid) : null,
-          fromNumberMasked: twilioFromNumber ? maskPhone(twilioFromNumber) : null,
-          envVars: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
-          description: "Required for SMS magic links and text invites. TWILIO_ACCOUNT_SID must start with AC. Trial accounts can send only to verified numbers.",
+          availableForTest,
+          accountSidMasked: twilioCreds.accountSid ? maskValue(twilioCreds.accountSid) : null,
+          fromNumberMasked: twilioCreds.fromNumber ? maskPhone(twilioCreds.fromNumber) : null,
+          storedInFirestore,
+          envVars: [],
+          description: "Required for SMS magic links and text invites. Manage credentials in Firestore via this Settings page (document config/twilio). Account SID must start with AC. Trial accounts can send only to verified numbers.",
         },
       },
     });
@@ -544,13 +578,14 @@ const getSystemSettings = async (req, res, next) => {
 /**
  * Send a test SMS via Twilio (admin only). Body: { to: "+15551234567" } (E.164).
  * Works when Twilio is configured (including trial accounts; trial can only send to verified numbers).
+ * This is the test case for Twilio account settings (credentials from Firestore).
  */
 const sendTwilioTestSms = async (req, res, next) => {
   try {
-    if (!twilioService.isConfigured()) {
+    if (!(await twilioService.isConfiguredAsync())) {
       return res.status(503).json({
         success: false,
-        message: "Twilio is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in the backend .env.",
+        message: "Twilio is not configured. Save credentials in Admin → Settings → Store credentials in Firestore.",
       });
     }
     const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
@@ -563,6 +598,12 @@ const sendTwilioTestSms = async (req, res, next) => {
     }
     const testMessage = "Tee Time Admin: Test SMS. Twilio is working.";
     const result = await twilioService.sendSMS(to, testMessage);
+    if (result?.mode === "console_fallback") {
+      return res.status(400).json({
+        success: false,
+        message: "Twilio rejected the send (e.g. From number not valid for this destination). In development the message was only logged. Use a destination allowed for your Twilio number (same country/region or verified number on trial).",
+      });
+    }
     return res.json({
       success: true,
       data: { to, mode: result?.mode || "sms", sid: result?.sid },
@@ -570,9 +611,68 @@ const sendTwilioTestSms = async (req, res, next) => {
     });
   } catch (error) {
     logger.error("Admin sendTwilioTestSms error:", error);
+    const code = error?.code;
+    const msg = error?.message || "";
+    if (code === 21606 || msg.includes("21606") || msg.includes("not a valid message-capable")) {
+      const normalized = to.replace(/\s/g, "");
+      const isTollFree = /^\+1(800|888|877|866|855|844|833)\d{7}$/.test(normalized);
+      const isNorthAmerica = /^\+1\d{10}$/.test(normalized);
+      let hint;
+      if (isTollFree) {
+        hint = "Toll-free numbers (800, 888, 877, etc.) cannot receive SMS. Use a mobile number.";
+      } else if (isNorthAmerica) {
+        hint = "Twilio rejected this US/Canada number. On a trial account, add and verify the destination in Twilio Console → Phone Numbers → Verified Caller IDs. Otherwise the number may be a landline (SMS not supported).";
+      } else {
+        hint = "Your Twilio From number cannot send to this destination (country/region). Use a mobile number in a supported country, or check Twilio Console → Phone Numbers → geographic permissions.";
+      }
+      return res.status(400).json({
+        success: false,
+        message: hint,
+      });
+    }
+    if (code === 21608 || msg.includes("21608")) {
+      return res.status(400).json({
+        success: false,
+        message: "Twilio cannot send to this number (unverified or restricted). On a trial account, add and verify the number in Twilio Console.",
+      });
+    }
     return res.status(500).json({
       success: false,
       message: error?.message || "Failed to send test SMS.",
+    });
+  }
+};
+
+/**
+ * Save Twilio credentials to Firestore (admin only). Body: { accountSid?, authToken?, fromNumber?, apiKeySid?, apiKeySecret?, verifyServiceSid? }.
+ * Backend reads Twilio only from Firestore. Never log or return raw secrets.
+ */
+const updateTwilioSettings = async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const config = {
+      accountSid: typeof body.accountSid === "string" ? body.accountSid.trim() : undefined,
+      authToken: typeof body.authToken === "string" ? body.authToken.trim() : undefined,
+      fromNumber: typeof body.fromNumber === "string" ? body.fromNumber.trim() : undefined,
+      apiKeySid: typeof body.apiKeySid === "string" ? body.apiKeySid.trim() : undefined,
+      apiKeySecret: typeof body.apiKeySecret === "string" ? body.apiKeySecret.trim() : undefined,
+      verifyServiceSid: typeof body.verifyServiceSid === "string" ? body.verifyServiceSid.trim() : undefined,
+    };
+    const hasAny = Object.values(config).some((v) => v && v.length > 0);
+    if (!hasAny) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide at least one of: accountSid, authToken, fromNumber, apiKeySid, apiKeySecret, verifyServiceSid.",
+      });
+    }
+    await twilioConfigService.setTwilioConfigInFirestore(config);
+    twilioService.clearCache();
+    return res.json({ success: true, message: "Twilio settings saved to Firestore." });
+  } catch (error) {
+    logger.error("Admin updateTwilioSettings error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Failed to save Twilio settings.",
     });
   }
 };
@@ -587,40 +687,37 @@ const listCourses = async (req, res, next) => {
     const courses = result?.courses || [];
     const total = result?.total ?? 0;
 
-    // Ongoing booked tee times: pending, confirmed, in_progress, tee_date >= today (match by course_id)
+    // Ongoing booked tee times: pending, confirmed, in_progress, tee_date >= today (exact date/time per course)
     const today = new Date().toISOString().slice(0, 10);
-    let ongoingCounts = [];
+    const courseToTeeTimes = new Map();
     try {
       const { data: ttRows, error: ttError } = await supabaseAdmin
         .from("tee_times")
-        .select("course_id, course_name")
+        .select("course_id, tee_date, tee_time, status")
         .in("status", ["pending", "confirmed", "in_progress"])
-        .gte("tee_date", today);
+        .gte("tee_date", today)
+        .order("tee_date", { ascending: true })
+        .order("tee_time", { ascending: true });
       if (!ttError && Array.isArray(ttRows)) {
-        const map = new Map();
         for (const row of ttRows) {
           const cid = (row.course_id && String(row.course_id).trim()) || "";
-          const cname = (row.course_name && String(row.course_name).trim()) || "";
-          const key = `${cid}\t${cname}`;
-          map.set(key, (map.get(key) || 0) + 1);
+          if (!cid) continue;
+          const teeDate = row.tee_date || "";
+          const teeTime = row.tee_time != null ? String(row.tee_time).slice(0, 5) : "";
+          const status = row.status || "";
+          if (!courseToTeeTimes.has(cid)) courseToTeeTimes.set(cid, []);
+          courseToTeeTimes.get(cid).push({ tee_date: teeDate, tee_time: teeTime, status });
         }
-        ongoingCounts = Array.from(map.entries()).map(([key, count]) => {
-          const [course_id, course_name] = key.split("\t");
-          return { course_id, course_name, count };
-        });
       }
     } catch (err) {
-      logger.warn("Admin listCourses: could not load ongoing tee time counts", err);
+      logger.warn("Admin listCourses: could not load ongoing tee times", err);
     }
 
     const coursesWithCounts = courses.map((course) => {
-      let ongoingBooked = 0;
       const courseIdStr = course.id && String(course.id);
-      for (const row of ongoingCounts) {
-        const matchById = row.course_id && courseIdStr && row.course_id === courseIdStr;
-        if (matchById) ongoingBooked += row.count;
-      }
-      return { ...course, ongoingBooked };
+      const ongoingTeeTimes = (courseIdStr && courseToTeeTimes.get(courseIdStr)) || [];
+      const ongoingBooked = ongoingTeeTimes.length;
+      return { ...course, ongoingBooked, ongoingTeeTimes };
     });
 
     return res.json({ success: true, data: coursesWithCounts, total });
@@ -777,7 +874,9 @@ module.exports = {
   updateReport,
   previewBroadcast,
   sendBroadcast,
+  getBroadcastHistory,
   getSystemSettings,
+  updateTwilioSettings,
   sendTwilioTestSms,
   listCourses,
   getCourse,

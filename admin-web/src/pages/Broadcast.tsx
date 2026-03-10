@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { previewBroadcast, sendBroadcast, type BroadcastPreview } from '../api/client';
+import { useState, useEffect, useCallback } from 'react';
+import { previewBroadcast, sendBroadcast, getBroadcastHistory, type BroadcastPreview, type BroadcastHistoryItem } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 
 export function Broadcast() {
@@ -12,6 +12,19 @@ export function Broadcast() {
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; total: number; message: string } | null>(null);
   const [sendLoading, setSendLoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [history, setHistory] = useState<BroadcastHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    const res = await getBroadcastHistory(50);
+    setHistoryLoading(false);
+    if (res.success) setHistory(res.data);
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const handlePreview = async () => {
     setPreview(null);
@@ -44,6 +57,7 @@ export function Broadcast() {
     setSendLoading(false);
     if (res.success && res.data) {
       setSendResult(res.data);
+      loadHistory();
       notify.success(`Broadcast sent to ${res.data.total} user(s).`);
     } else {
       const msg = !res.success && 'message' in res ? res.message : 'Send failed';
@@ -118,6 +132,28 @@ export function Broadcast() {
           <p style={styles.muted}>Delivered: {sendResult.sent} · Failed: {sendResult.failed} · Total: {sendResult.total}</p>
         </div>
       )}
+
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>Broadcast history</h3>
+        {historyLoading ? (
+          <p style={styles.muted}>Loading history…</p>
+        ) : history.length === 0 ? (
+          <p style={styles.muted}>No broadcasts yet. Sent notifications will appear here.</p>
+        ) : (
+          <ul style={styles.historyList}>
+            {history.map((item) => (
+              <li key={item.id} style={styles.historyItem}>
+                <div style={styles.historyHeader}>
+                  <span style={styles.historyTitle}>{item.title || '(No title)'}</span>
+                  <span style={styles.historyDate}>{new Date(item.created_at).toLocaleString()}</span>
+                </div>
+                <div style={styles.historyBody}>{item.body ? (item.body.length > 120 ? item.body.slice(0, 120) + '…' : item.body) : '(No message)'}</div>
+                <div style={styles.historyMeta}>Delivered: {item.sent} · Failed: {item.failed} · Total: {item.total}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -142,4 +178,11 @@ const styles: Record<string, React.CSSProperties> = {
   previewBody: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' },
   recipientCount: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' },
   muted: { fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-sm)', opacity: 0.9 },
+  historyList: { listStyle: 'none', margin: 0, padding: 0 },
+  historyItem: { borderBottom: '1px solid var(--color-border)', padding: 'var(--space-md) 0', fontSize: 'var(--font-size-sm)' },
+  historyHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 'var(--space-md)', marginBottom: 'var(--space-xs)' },
+  historyTitle: { fontWeight: 600, color: 'var(--color-text-primary)' },
+  historyDate: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' },
+  historyBody: { color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xs)', whiteSpace: 'pre-wrap' },
+  historyMeta: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' },
 };

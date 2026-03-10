@@ -41,6 +41,9 @@ TTSGolfApp/GoogleService-Info.plist
 # Backend keys
 backend/config/keys/*.p8
 
+# Firebase Admin service account (Twilio/Firestore credentials)
+backend/config/firebase-service-account.json
+
 # ============================================================================
 # Dependencies
 # ============================================================================

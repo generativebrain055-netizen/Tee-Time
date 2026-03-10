@@ -75,6 +75,21 @@ router.patch("/reports/:id", authenticateAdmin, adminController.updateReport);
 // ---------- System settings (read-only status) ----------
 router.get("/settings", authenticateAdmin, adminController.getSystemSettings);
 
+// ---------- Twilio: save credentials to Firestore (admin only) ----------
+router.put(
+  "/settings/twilio",
+  authenticateAdmin,
+  [
+    body("accountSid").optional().isString(),
+    body("authToken").optional().isString(),
+    body("fromNumber").optional().isString(),
+    body("apiKeySid").optional().isString(),
+    body("apiKeySecret").optional().isString(),
+    body("verifyServiceSid").optional().isString(),
+  ],
+  adminController.updateTwilioSettings
+);
+
 // ---------- Twilio test (admin only; for testing/trial accounts) ----------
 router.post(
   "/twilio/test-sms",
@@ -120,5 +135,6 @@ router.post(
   validateRequest,
   adminController.sendBroadcast
 );
+router.get("/notifications/broadcast/history", authenticateAdmin, adminController.getBroadcastHistory);
 
 module.exports = router;

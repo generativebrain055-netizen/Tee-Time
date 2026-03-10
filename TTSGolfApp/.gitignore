@@ -18,6 +18,7 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 *service-account.json
+firebase-service-account.json
 *google-play-service-account.json
 google-play-service-account.json
 *google-services.json

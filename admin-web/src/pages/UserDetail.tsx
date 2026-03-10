@@ -11,6 +11,21 @@ import {
 } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 
+/** Restrict to E.164: optional leading + then digits only, max 15 digits. */
+function restrictPhone(value: string): string {
+  const plus = value.startsWith('+') ? '+' : '';
+  const digits = value.replace(/\D/g, '').slice(0, 15);
+  return plus + digits;
+}
+
+/** Restrict to numeric handicap: digits and at most one decimal, 0–54 range allowed in UI, max 5 chars. */
+function restrictHandicap(value: string): string {
+  const allowed = value.replace(/[^0-9.]/g, '');
+  const parts = allowed.split('.');
+  const oneDecimal = parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 1) : parts[0];
+  return oneDecimal.slice(0, 5);
+}
+
 export function UserDetail() {
   const notify = useNotification();
   const { id } = useParams<{ id: string }>();
@@ -278,6 +293,7 @@ export function UserDetail() {
                     value={String(editForm[key] ?? '')}
                     onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
                     style={styles.input}
+                    maxLength={key === 'username' ? 80 : 100}
                   />
                 </label>
               ))}
@@ -285,10 +301,12 @@ export function UserDetail() {
                 phone number
                 <input
                   type="tel"
+                  inputMode="numeric"
                   value={String(editForm.phone_number ?? '')}
-                  onChange={(e) => setEditForm((f) => ({ ...f, phone_number: e.target.value }))}
+                  onChange={(e) => setEditForm((f) => ({ ...f, phone_number: restrictPhone(e.target.value) }))}
                   style={{ ...styles.input, ...(fieldErrors.phone_number ? styles.inputError : {}) }}
                   placeholder="+15551234567"
+                  maxLength={16}
                 />
                 {fieldErrors.phone_number && <span style={styles.fieldError}>{fieldErrors.phone_number}</span>}
               </label>
@@ -308,9 +326,12 @@ export function UserDetail() {
                   type="text"
                   inputMode="decimal"
                   value={String(editForm.handicap ?? '')}
-                  onChange={(e) => setEditForm((f) => ({ ...f, handicap: e.target.value }))}
+                  onChange={(e) => setEditForm((f) => ({ ...f, handicap: restrictHandicap(e.target.value) }))}
                   style={{ ...styles.input, ...(fieldErrors.handicap ? styles.inputError : {}) }}
                   placeholder="0–54 or empty"
+                  maxLength={5}
+                  pattern="[0-9]+\.?[0-9]*"
+                  title="Numbers only, e.g. 12 or 12.5"
                 />
                 {fieldErrors.handicap && <span style={styles.fieldError}>{fieldErrors.handicap}</span>}
               </label>
@@ -322,12 +343,13 @@ export function UserDetail() {
                     value={String(editForm[key] ?? '')}
                     onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
                     style={styles.input}
+                    maxLength={200}
                   />
                 </label>
               ))}
               <label style={styles.label}>
                 bio
-                <textarea value={String(editForm.bio ?? '')} onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))} style={styles.textarea} rows={3} />
+                <textarea value={String(editForm.bio ?? '')} onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))} style={styles.textarea} rows={3} maxLength={1000} />
               </label>
             </div>
             <div style={styles.modalActions}>

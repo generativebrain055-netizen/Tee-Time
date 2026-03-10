@@ -1,19 +1,12 @@
 const jwt = require("jsonwebtoken");
 const jwksClient = require("jwks-rsa");
 const logger = require("../config/logger");
-const admin = require("firebase-admin");
+const admin = require("../config/firebaseAdmin");
 
 /**
  * OAuth Service
  * Handles OAuth token verification for Google (via Firebase) and Apple
  */
-
-// Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || "teetime-db29d",
-  });
-}
 
 // Apple JWKS client for token verification
 const appleJwksClient = jwksClient({

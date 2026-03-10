@@ -197,11 +197,15 @@ export function ReportedIssues() {
 }
 
 const reportBadge = (status: string): React.CSSProperties => ({
-  padding: '2px 8px',
-  borderRadius: 'var(--radius-xs)',
-  fontSize: 'var(--font-size-xs)',
+  padding: '10px 18px',
+  borderRadius: 'var(--radius-md)',
+  fontSize: '1.125rem',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'capitalize',
   background: status === 'resolved' ? 'var(--color-success-container)' : status === 'dismissed' ? 'var(--color-text-muted)' : 'var(--color-warning-container)',
   color: status === 'resolved' ? 'var(--color-on-success-container)' : 'var(--color-text-primary)',
+  boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
 });
 
 const styles: Record<string, React.CSSProperties> = {

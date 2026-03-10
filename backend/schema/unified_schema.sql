@@ -81,6 +81,7 @@ DROP TABLE IF EXISTS conversations CASCADE;
 DROP TABLE IF EXISTS user_devices CASCADE;
 DROP TABLE IF EXISTS rate_limits CASCADE;
 DROP TABLE IF EXISTS analytics_events CASCADE;
+DROP TABLE IF EXISTS broadcast_history CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS login_logs CASCADE;
 DROP TABLE IF EXISTS waiver_wire CASCADE;
@@ -935,6 +936,20 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_status ON notifications(status);
+
+-- ============================================================================
+-- 24b. BROADCAST_HISTORY TABLE (admin broadcast push log for history UI)
+-- ============================================================================
+CREATE TABLE broadcast_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    sent INT NOT NULL DEFAULT 0,
+    failed INT NOT NULL DEFAULT 0,
+    total INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_broadcast_history_created_at ON broadcast_history(created_at DESC);
 
 -- ============================================================================
 -- 25. ANALYTICS_EVENTS TABLE

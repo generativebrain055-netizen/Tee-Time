@@ -10,6 +10,42 @@ import {
 import { getStatesForCountry, COUNTRIES } from '../constants/locations';
 import { useNotification } from '../context/NotificationContext';
 
+/** Allow only digits, +, spaces, dashes, parentheses for phone display. */
+function restrictCoursePhone(value: string): string {
+  return value.replace(/[^\d+\s\-()]/g, '').slice(0, 30);
+}
+
+/** Allow only letters, digits, space, hyphen for postal code. */
+function restrictPostalCode(value: string): string {
+  return value.replace(/[^A-Za-z0-9\s\-]/g, '').slice(0, 20);
+}
+
+/** Allow only numeric input for latitude: digits, minus, one decimal. Clamp to -90..90. */
+function restrictLatitude(value: string): string {
+  if (value === '' || value === '-') return value;
+  const allowed = value.replace(/[^0-9.\-]/g, '');
+  const parts = allowed.split('.');
+  const oneDecimal = parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 6) : parts[0];
+  const n = Number(oneDecimal);
+  if (Number.isNaN(n)) return oneDecimal;
+  if (n < -90) return '-90';
+  if (n > 90) return '90';
+  return oneDecimal;
+}
+
+/** Allow only numeric input for longitude: digits, minus, one decimal. Clamp to -180..180. */
+function restrictLongitude(value: string): string {
+  if (value === '' || value === '-') return value;
+  const allowed = value.replace(/[^0-9.\-]/g, '');
+  const parts = allowed.split('.');
+  const oneDecimal = parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 6) : parts[0];
+  const n = Number(oneDecimal);
+  if (Number.isNaN(n)) return oneDecimal;
+  if (n < -180) return '-180';
+  if (n > 180) return '180';
+  return oneDecimal;
+}
+
 export function CourseManagement() {
   const notify = useNotification();
   const [courses, setCourses] = useState<CsvCourse[]>([]);
@@ -255,7 +291,26 @@ export function CourseManagement() {
                     <td style={styles.td}>{c.city ?? '—'}</td>
                     <td style={styles.td}>{c.state ?? '—'}</td>
                     <td style={styles.td}>{c.telephone ?? '—'}</td>
-                    <td style={styles.td}>{typeof c.ongoingBooked === 'number' ? c.ongoingBooked : '—'}</td>
+                    <td style={styles.td}>
+                      {Array.isArray(c.ongoingTeeTimes) && c.ongoingTeeTimes.length > 0 ? (
+                        <span style={styles.ongoingTeeTimes}>
+                          <span style={styles.ongoingTeeTimesCount}>{c.ongoingTeeTimes.length} booked</span>
+                          {c.ongoingTeeTimes.map((tt, i) => {
+                            const dateStr = tt.tee_date ? new Date(tt.tee_date + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+                            const timeStr = tt.tee_time || '—';
+                            return (
+                              <span key={i} style={styles.ongoingTeeTimeItem}>
+                                {dateStr} {timeStr}{tt.status ? ` (${tt.status})` : ''}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      ) : typeof c.ongoingBooked === 'number' && c.ongoingBooked === 0 ? (
+                        '0'
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td style={styles.td}>{c.id}</td>
                     <td style={styles.td}>
                       <div style={styles.cellActions}>
@@ -306,16 +361,17 @@ export function CourseManagement() {
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   style={{ ...styles.input, ...(fieldErrors.name ? styles.inputError : {}) }}
                   placeholder="Required"
+                  maxLength={255}
                 />
                 {fieldErrors.name && <span style={styles.fieldError}>{fieldErrors.name}</span>}
               </label>
               <label style={styles.label}>
                 address
-                <input type="text" value={form.address ?? ''} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} style={styles.input} />
+                <input type="text" value={form.address ?? ''} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} style={styles.input} maxLength={500} />
               </label>
               <label style={styles.label}>
                 city
-                <input type="text" value={form.city ?? ''} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} style={styles.input} />
+                <input type="text" value={form.city ?? ''} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} style={styles.input} maxLength={100} />
               </label>
               <label style={styles.label}>
                 state / province
@@ -344,6 +400,7 @@ export function CourseManagement() {
                       onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
                       style={styles.input}
                       placeholder="State, province, or region"
+                      maxLength={50}
                     />
                   );
                 })()}
@@ -365,25 +422,25 @@ export function CourseManagement() {
               </label>
               <label style={styles.label}>
                 postal code
-                <input type="text" value={form.postal_code ?? ''} onChange={(e) => setForm((f) => ({ ...f, postal_code: e.target.value }))} style={styles.input} />
+                <input type="text" value={form.postal_code ?? ''} onChange={(e) => setForm((f) => ({ ...f, postal_code: restrictPostalCode(e.target.value) }))} style={styles.input} maxLength={20} placeholder="Letters, numbers, hyphen" />
               </label>
               <label style={styles.label}>
                 phone
-                <input type="text" value={form.phone ?? ''} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} style={styles.input} />
+                <input type="tel" inputMode="tel" value={form.phone ?? ''} onChange={(e) => setForm((f) => ({ ...f, phone: restrictCoursePhone(e.target.value) }))} style={styles.input} maxLength={30} placeholder="Digits, +, spaces, dashes" />
               </label>
               <label style={styles.label}>
                 website
-                <input type="url" value={form.website ?? ''} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.website ? styles.inputError : {}) }} placeholder="https://..." />
+                <input type="url" value={form.website ?? ''} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.website ? styles.inputError : {}) }} placeholder="https://..." maxLength={2048} />
                 {fieldErrors.website && <span style={styles.fieldError}>{fieldErrors.website}</span>}
               </label>
               <label style={styles.label}>
                 latitude
-                <input type="number" step="any" value={form.latitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.latitude ? styles.inputError : {}) }} placeholder="-90 to 90" />
+                <input type="text" inputMode="decimal" value={form.latitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, latitude: restrictLatitude(e.target.value) }))} style={{ ...styles.input, ...(fieldErrors.latitude ? styles.inputError : {}) }} placeholder="-90 to 90" />
                 {fieldErrors.latitude && <span style={styles.fieldError}>{fieldErrors.latitude}</span>}
               </label>
               <label style={styles.label}>
                 longitude
-                <input type="number" step="any" value={form.longitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.longitude ? styles.inputError : {}) }} placeholder="-180 to 180" />
+                <input type="text" inputMode="decimal" value={form.longitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, longitude: restrictLongitude(e.target.value) }))} style={{ ...styles.input, ...(fieldErrors.longitude ? styles.inputError : {}) }} placeholder="-180 to 180" />
                 {fieldErrors.longitude && <span style={styles.fieldError}>{fieldErrors.longitude}</span>}
               </label>
             </div>
@@ -432,6 +489,9 @@ const styles: Record<string, React.CSSProperties> = {
   th: { textAlign: 'left', padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-text-secondary)' },
   tr: { borderBottom: '1px solid var(--color-border)' },
   td: { padding: 'var(--space-md) var(--space-lg)' },
+  ongoingTeeTimes: { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 'var(--font-size-xs)' },
+  ongoingTeeTimesCount: { fontWeight: 600, fontSize: 'var(--font-size-sm)', marginBottom: 2 },
+  ongoingTeeTimeItem: { whiteSpace: 'nowrap' },
   pagination: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)' },
   pageInfo: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },

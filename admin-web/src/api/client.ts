@@ -369,6 +369,25 @@ export async function sendBroadcast(title: string, body: string): Promise<{ succ
   return { success: false, message: 'Invalid response' };
 }
 
+export type BroadcastHistoryItem = {
+  id: string;
+  title: string;
+  body: string;
+  sent: number;
+  failed: number;
+  total: number;
+  created_at: string;
+};
+
+export async function getBroadcastHistory(limit?: number): Promise<{ success: true; data: BroadcastHistoryItem[] } | { success: false; message: string }> {
+  const params = limit != null ? `?limit=${limit}` : '';
+  const res = await authFetch(`/api/admin/notifications/broadcast/history${params}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load history' };
+  if (data.success && Array.isArray(data.data)) return { success: true, data: data.data };
+  return { success: false, message: 'Invalid response' };
+}
+
 // --- System settings (read-only status) ---
 export type FirebaseSettingsStatus = {
   configured: boolean;
@@ -382,6 +401,7 @@ export type TwilioSettingsStatus = {
   availableForTest?: boolean;
   accountSidMasked: string | null;
   fromNumberMasked: string | null;
+  storedInFirestore?: boolean;
   envVars: string[];
   description: string;
 };
@@ -409,6 +429,31 @@ export async function sendTwilioTestSms(to: string): Promise<{ success: true; da
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to send test SMS' };
   if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
+}
+
+/** Twilio credentials to save to Firestore (all optional; at least one required). */
+export type TwilioSettingsUpdate = {
+  accountSid?: string;
+  authToken?: string;
+  fromNumber?: string;
+  apiKeySid?: string;
+  apiKeySecret?: string;
+  verifyServiceSid?: string;
+};
+
+/** Save Twilio credentials to Firestore. Overrides .env when set. */
+export async function updateTwilioSettings(
+  config: TwilioSettingsUpdate
+): Promise<{ success: true } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/settings/twilio', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to save Twilio settings' };
+  if (data.success) return { success: true };
   return { success: false, message: data.message || 'Invalid response' };
 }
 
@@ -501,8 +546,10 @@ export type CsvCourse = {
   telephone?: string | null;
   phone?: string | null;
   website?: string | null;
-  /** Ongoing booked tee times (pending/confirmed/in_progress, date >= today). */
+  /** Ongoing booked tee times count (pending/confirmed/in_progress, date >= today). */
   ongoingBooked?: number;
+  /** Exact booked tee times for this course: date, time, status. */
+  ongoingTeeTimes?: { tee_date: string; tee_time: string; status: string }[];
 };
 
 function normalizeCourse(c: Record<string, unknown>): CsvCourse {

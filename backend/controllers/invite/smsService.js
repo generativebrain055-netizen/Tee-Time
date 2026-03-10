@@ -1,55 +1,12 @@
 /**
- * SMS service for invite notifications
+ * SMS service for invite notifications.
+ * Uses shared twilioService (Firestore then env for credentials).
  */
-const twilio = require("twilio");
 const logger = require("../../config/logger");
 const { twilioLogger } = require("../../config/logger");
 const inviteRepository = require("../../repositories/inviteRepository");
+const twilioService = require("../../services/twilioService");
 const { formatDateLocal } = require("../../utils/dateUtils");
-
-let twilioClient = null;
-
-// Initialize Twilio client with proper credentials
-const initTwilioClient = () => {
-    if (twilioClient) return twilioClient;
-
-    try {
-        const accountSid = process.env.TWILIO_ACCOUNT_SID;
-        const authToken = process.env.TWILIO_AUTH_TOKEN;
-        const apiKeySid = process.env.TWILIO_API_KEY_SID;
-        const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
-
-        // Try API Key authentication first
-        if (accountSid && apiKeySid && apiKeySecret) {
-            if (!accountSid.startsWith('AC')) {
-                logger.warn("TWILIO_ACCOUNT_SID must start with AC. SMS features will be disabled.");
-                return null;
-            }
-            twilioClient = twilio(apiKeySid, apiKeySecret, { accountSid });
-            logger.info("Twilio SMS client initialized with API Key credentials");
-        } 
-        // Fallback to Auth Token authentication
-        else if (accountSid && authToken) {
-            if (!accountSid.startsWith('AC')) {
-                logger.warn("TWILIO_ACCOUNT_SID appears to be an API Key (SK). SMS features will be disabled. Please provide the actual Account SID (starts with AC).");
-                return null;
-            }
-            twilioClient = twilio(accountSid, authToken);
-            logger.info("Twilio SMS client initialized with Auth Token");
-        } 
-        else {
-            logger.warn("Twilio credentials not configured - SMS features will be disabled");
-        }
-    } catch (error) {
-        logger.error("Failed to initialize Twilio SMS client:", error.message);
-        twilioClient = null;
-    }
-
-    return twilioClient;
-};
-
-// Initialize on module load
-initTwilioClient();
 
 /**
  * Format tee time date for SMS display
@@ -57,14 +14,12 @@ initTwilioClient();
  */
 const formatTeeTimeDate = (teeDate) => {
     if (!teeDate) return '';
-    // If it's already a string in YYYY-MM-DD format, parse it correctly
     const dateStr = typeof teeDate === 'string' ? teeDate : formatDateLocal(teeDate);
-    // Parse as UTC to avoid timezone shift
     const [year, month, day] = dateStr.split('-').map(Number);
     const date = new Date(Date.UTC(year, month - 1, day));
     return date.toLocaleDateString('en-US', {
         weekday: 'short', month: 'short', day: 'numeric',
-        timeZone: 'UTC' // Use UTC to prevent shift
+        timeZone: 'UTC'
     });
 };
 
@@ -79,8 +34,7 @@ const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours, deadline 
             `Location: ${teeTime.course_name}\n` +
             `Date: ${dateStr} at ${teeTime.tee_time}\n\n` +
             `First to accept get the spots!`;
-        
-        // Add deadline information if provided
+
         if (deadline) {
             const deadlineDate = new Date(deadline);
             const deadlineStr = deadlineDate.toLocaleString('en-US', {
@@ -92,7 +46,7 @@ const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours, deadline 
             });
             message += `\n\nDeadline: ${deadlineStr}`;
         }
-        
+
         message += `\n\nTap to respond: https://teetime.app/invite/${invite.id}`;
         return message;
     }
@@ -112,11 +66,12 @@ const buildSmsMessage = (invite, teeTime, isFCFS, responseWindowHours, deadline 
 };
 
 /**
- * Send SMS invite
+ * Send SMS invite via shared Twilio service (credentials from Firestore or .env).
  */
 const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHours = null, deadline = null) => {
     try {
-        if (!twilioClient) {
+        const configured = await twilioService.isConfiguredAsync();
+        if (!configured) {
             logger.warn(`SMS not sent to ${invite.invitee_phone} - Twilio not configured`);
             twilioLogger.warn("[TWILIO] Invite SMS skipped - Twilio not configured", {
                 feature: "invite",
@@ -128,13 +83,7 @@ const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHour
         }
 
         const message = buildSmsMessage(invite, teeTime, isFCFS, responseWindowHours, deadline);
-        const fromNumber = process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
-
-        await twilioClient.messages.create({
-            body: message,
-            from: fromNumber,
-            to: invite.invitee_phone
-        });
+        await twilioService.sendSMS(invite.invitee_phone, message);
 
         await inviteRepository.markSmsSent(invite.id);
         logger.info(`SMS invite sent to ${invite.invitee_phone}`);
@@ -162,5 +111,4 @@ const sendInviteSms = async (invite, teeTime, isFCFS = false, responseWindowHour
 
 module.exports = {
     sendInviteSms,
-    initTwilioClient
 };

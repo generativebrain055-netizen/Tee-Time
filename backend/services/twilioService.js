@@ -2,97 +2,91 @@ const twilio = require("twilio");
 const crypto = require("crypto");
 const logger = require("../config/logger");
 const { twilioLogger } = require("../config/logger");
+const twilioConfigService = require("./twilioConfigService");
 
 /**
  * Twilio Service
- * Handles all Twilio-related operations: OTP sending/verification, SMS
+ * Credentials: Firestore only (config/twilio). Manage via admin Settings page.
+ * Handles OTP and SMS.
  */
 
-let twilioClient = null;
-let verifyService = null;
+let cached = { credsKey: null, client: null, verify: null };
 
 /**
- * Initialize Twilio client
+ * Get Twilio config from Firestore. No .env fallback; Twilio is managed in Firestore.
+ * @returns {Promise<{ accountSid?: string, authToken?: string, fromNumber?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string }>}
  */
-const initializeTwilioClient = () => {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const apiKeySid = process.env.TWILIO_API_KEY_SID;
-  const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
-  const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
+async function getCredentials() {
+  const fromFirestore = await twilioConfigService.getTwilioConfigFromFirestore();
+  return fromFirestore || {};
+}
 
-  logger.info("[TWILIO INIT] Checking credentials...", {
-    hasAccountSid: !!accountSid,
-    hasAuthToken: !!authToken,
-    hasApiKeySid: !!apiKeySid,
-    hasApiKeySecret: !!apiKeySecret,
-    accountSidPrefix: accountSid?.substring(0, 2),
-  });
+/**
+ * Build Twilio client and verify service from credentials object.
+ */
+function buildClientFromCreds(creds) {
+  const { accountSid, authToken, apiKeySid, apiKeySecret, verifyServiceSid } = creds;
 
-  // Check if using API Key authentication
   if (apiKeySid && apiKeySecret && accountSid) {
     if (!accountSid.startsWith("AC")) {
-      logger.warn("TWILIO_ACCOUNT_SID must start with AC. SMS features will be disabled.");
+      logger.warn("TWILIO account SID must start with AC. SMS features disabled.");
       return { client: null, verify: null };
     }
-
     try {
-      // Use API Key authentication
-      logger.info("[TWILIO INIT] Initializing with API Key authentication...");
       const client = twilio(apiKeySid, apiKeySecret, { accountSid });
       const verify = verifyServiceSid ? client.verify.v2.services(verifyServiceSid) : null;
-
-      if (!verify) {
-        logger.info("TWILIO_VERIFY_SERVICE_SID not configured. Using manual OTP method.");
-      } else {
-        logger.info("Twilio initialized with API Key authentication and Verify service.");
-      }
-
-      logger.info("[TWILIO INIT] Successfully initialized with API Key!");
-      twilioLogger.info("[TWILIO INIT] Initialized with API Key", { verify: !!verifyServiceSid });
       return { client, verify };
     } catch (error) {
       logger.error("Failed to initialize Twilio with API Key:", error);
-      twilioLogger.warn("[TWILIO INIT] API Key init failed", { error: error?.message });
       return { client: null, verify: null };
     }
   }
 
-  // Fallback to Auth Token authentication
-  if (!accountSid || !authToken) {
-    logger.warn("Twilio credentials not configured - SMS features will be disabled");
-    twilioLogger.warn("[TWILIO INIT] Not configured - no credentials");
-    return { client: null, verify: null };
-  }
-
+  if (!accountSid || !authToken) return { client: null, verify: null };
   if (!accountSid.startsWith("AC")) {
-    logger.warn("TWILIO_ACCOUNT_SID appears to be an API Key (SK) instead of Account SID (AC). Using fallback OTP method.");
+    logger.warn("TWILIO account SID must start with AC. SMS features disabled.");
     return { client: null, verify: null };
   }
-
   try {
-    logger.info("[TWILIO INIT] Initializing with Auth Token authentication...");
     const client = twilio(accountSid, authToken);
     const verify = verifyServiceSid ? client.verify.v2.services(verifyServiceSid) : null;
-
-    if (!verify) {
-      logger.warn("TWILIO_VERIFY_SERVICE_SID not configured. Using fallback OTP method.");
-    }
-
-    logger.info("[TWILIO INIT] Successfully initialized with Auth Token!");
-    twilioLogger.info("[TWILIO INIT] Initialized with Auth Token", { verify: !!verifyServiceSid });
     return { client, verify };
   } catch (error) {
     logger.error("Failed to initialize Twilio client:", error);
-    twilioLogger.warn("[TWILIO INIT] Auth Token init failed", { error: error?.message });
     return { client: null, verify: null };
   }
-};
+}
 
-// Initialize on module load
-const twilioInit = initializeTwilioClient();
-twilioClient = twilioInit.client;
-verifyService = twilioInit.verify;
+/**
+ * Cache key from creds (no secrets).
+ */
+function credsKey(creds) {
+  return [creds.accountSid || "", creds.fromNumber || ""].join("|");
+}
+
+/**
+ * Get Twilio client and verify service (async). Uses Firestore then env, caches by accountSid+fromNumber.
+ */
+async function getClientAsync() {
+  const creds = await getCredentials();
+  const key = credsKey(creds);
+  if (cached.credsKey === key && (cached.client || cached.verify !== undefined)) {
+    return { client: cached.client, verify: cached.verify };
+  }
+  const { client, verify } = buildClientFromCreds(creds);
+  cached = { credsKey: key, client, verify };
+  if (client && !cached.credsKey) {
+    logger.info("[TWILIO] Client initialized (Firestore or env)");
+  }
+  return { client, verify };
+}
+
+/**
+ * Clear cached client so next call re-reads Firestore/env. Call after admin saves Twilio to Firestore.
+ */
+function clearCache() {
+  cached = { credsKey: null, client: null, verify: null };
+}
 
 /**
  * Generate a 6-digit OTP
@@ -105,14 +99,15 @@ const generateOTP = () => {
  * Send OTP via Twilio Verify API or fallback to SMS
  */
 const sendOTP = async (phoneNumber) => {
-  // Method 1: Use Twilio Verify API (Recommended)
+  const { client: twilioClient, verify: verifyService } = await getClientAsync();
+  const creds = await getCredentials();
+
   if (verifyService) {
     try {
       const verification = await verifyService.verifications.create({
         to: phoneNumber,
         channel: "sms",
       });
-
       logger.info(`OTP sent via Verify API to ${phoneNumber}. Status: ${verification.status}`);
       twilioLogger.info("[TWILIO] OTP sent via Verify API", {
         feature: "otp",
@@ -133,39 +128,25 @@ const sendOTP = async (phoneNumber) => {
         to: phoneNumber,
         error: error?.message,
       });
-
       if (process.env.NODE_ENV === "development") {
         const otp = generateOTP();
         logger.info(`[VERIFY API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
-        twilioLogger.info("[TWILIO] OTP dev fallback (Verify API failed)", {
-          feature: "otp",
-          to: phoneNumber,
-          mode: "console_fallback",
-        });
         return { success: true, mode: "console_fallback", otp };
       }
-
       throw error;
     }
   }
 
-  // Method 2: Manual OTP with Messages API (Fallback)
   if (twilioClient) {
-    const fromNumber = process.env.TWILIO_FROM_NUMBER;
-
-    if (!fromNumber) {
-      throw new Error("TWILIO_FROM_NUMBER not configured");
-    }
-
+    const fromNumber = creds.fromNumber;
+    if (!fromNumber) throw new Error("Twilio from number not configured");
     const otp = generateOTP();
-
     try {
       const message = await twilioClient.messages.create({
         body: `Your TeeTime Golf verification code is: ${otp}. Valid for 5 minutes.`,
         from: fromNumber,
         to: phoneNumber,
       });
-
       logger.info(`OTP sent via Messages API to ${phoneNumber}. SID: ${message.sid}`);
       twilioLogger.info("[TWILIO] OTP sent via Messages API", {
         feature: "otp",
@@ -175,27 +156,14 @@ const sendOTP = async (phoneNumber) => {
       return { success: true, mode: "messages_api", sid: message.sid, otp };
     } catch (error) {
       logger.error(`Twilio Messages API error for ${phoneNumber}:`, error);
-      twilioLogger.warn("[TWILIO] OTP Messages API error", {
-        feature: "otp",
-        to: phoneNumber,
-        error: error?.message,
-      });
-
       if (process.env.NODE_ENV === "development") {
         logger.info(`[MESSAGES API FAILED - FALLBACK] OTP for ${phoneNumber}: ${otp}`);
-        twilioLogger.info("[TWILIO] OTP dev fallback (Messages API failed)", {
-          feature: "otp",
-          to: phoneNumber,
-          mode: "console_fallback",
-        });
         return { success: true, mode: "console_fallback", otp };
       }
-
       throw error;
     }
   }
 
-  // Method 3: Development mode - log OTP to console
   const otp = generateOTP();
   logger.info(`[DEVELOPMENT MODE] OTP for ${phoneNumber}: ${otp}`);
   twilioLogger.info("[TWILIO] OTP dev mode (no Twilio)", { feature: "otp", to: phoneNumber, mode: "console" });
@@ -206,16 +174,13 @@ const sendOTP = async (phoneNumber) => {
  * Verify OTP via Twilio Verify API
  */
 const verifyOTP = async (phoneNumber, otp) => {
-  if (!verifyService) {
-    return null; // Will use manual verification
-  }
-
+  const { verify: verifyService } = await getClientAsync();
+  if (!verifyService) return null;
   try {
     const verificationCheck = await verifyService.verificationChecks.create({
       to: phoneNumber,
       code: otp,
     });
-
     logger.info(`OTP verification for ${phoneNumber}. Status: ${verificationCheck.status}`);
     twilioLogger.info("[TWILIO] OTP verified", {
       feature: "otp_verify",
@@ -230,7 +195,7 @@ const verifyOTP = async (phoneNumber, otp) => {
       to: phoneNumber,
       error: error?.message,
     });
-    return null; // Will fallback to manual verification
+    return null;
   }
 };
 
@@ -238,6 +203,9 @@ const verifyOTP = async (phoneNumber, otp) => {
  * Send SMS message
  */
 const sendSMS = async (phoneNumber, message) => {
+  const { client: twilioClient } = await getClientAsync();
+  const creds = await getCredentials();
+
   if (!twilioClient) {
     logger.info(`[SMS - DEV MODE] to ${phoneNumber}: ${message}`);
     twilioLogger.info("[TWILIO] SMS dev mode (no Twilio)", {
@@ -249,13 +217,13 @@ const sendSMS = async (phoneNumber, message) => {
     return { success: true, mode: "console" };
   }
 
-  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+  const fromNumber = creds.fromNumber;
   if (!fromNumber) {
-    twilioLogger.warn("[TWILIO] SMS skipped - TWILIO_FROM_NUMBER not configured", {
+    twilioLogger.warn("[TWILIO] SMS skipped - from number not configured", {
       feature: "sms",
       to: phoneNumber,
     });
-    throw new Error("TWILIO_FROM_NUMBER not configured");
+    throw new Error("Twilio from number not configured");
   }
 
   try {
@@ -264,7 +232,6 @@ const sendSMS = async (phoneNumber, message) => {
       from: fromNumber,
       to: phoneNumber,
     });
-
     logger.info(`SMS sent to ${phoneNumber}. SID: ${result.sid}`);
     twilioLogger.info("[TWILIO] SMS sent", {
       feature: "sms",
@@ -281,7 +248,6 @@ const sendSMS = async (phoneNumber, message) => {
       error: error?.message,
       bodyPreview: message.slice(0, 80),
     });
-
     if (process.env.NODE_ENV === "development") {
       logger.info(`[SMS FAILED - FALLBACK] to ${phoneNumber}: ${message}`);
       twilioLogger.info("[TWILIO] SMS dev fallback (send failed)", {
@@ -292,20 +258,31 @@ const sendSMS = async (phoneNumber, message) => {
       });
       return { success: true, mode: "console_fallback" };
     }
-
     throw error;
   }
 };
 
 /**
- * Get Twilio client instance
+ * Get Twilio client instance (async). Prefer getClientAsync for internal use.
  */
-const getClient = () => twilioClient;
+const getClient = async () => {
+  const { client } = await getClientAsync();
+  return client;
+};
 
 /**
- * Check if Twilio is configured
+ * Check if Twilio is configured (async). Uses Firestore then env.
  */
-const isConfigured = () => !!twilioClient;
+const isConfiguredAsync = async () => {
+  const creds = await getCredentials();
+  const hasAuth =
+    (creds.accountSid && creds.authToken && creds.accountSid.startsWith("AC")) ||
+    (creds.accountSid && creds.apiKeySid && creds.apiKeySecret && creds.accountSid.startsWith("AC"));
+  return !!(hasAuth && creds.fromNumber);
+};
+
+/** @deprecated Use isConfiguredAsync. Sync version returns false until first async load. */
+const isConfigured = () => false;
 
 module.exports = {
   generateOTP,
@@ -313,5 +290,9 @@ module.exports = {
   verifyOTP,
   sendSMS,
   getClient,
+  getClientAsync,
+  getCredentials,
   isConfigured,
+  isConfiguredAsync,
+  clearCache,
 };
