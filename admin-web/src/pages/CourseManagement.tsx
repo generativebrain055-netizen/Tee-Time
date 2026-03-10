@@ -7,7 +7,7 @@ import {
   PAGE_SIZE_OPTIONS,
   type CsvCourse,
 } from '../api/client';
-import { US_STATES, COUNTRIES } from '../constants/locations';
+import { getStatesForCountry, COUNTRIES } from '../constants/locations';
 
 export function CourseManagement() {
   const [courses, setCourses] = useState<CsvCourse[]>([]);
@@ -302,16 +302,46 @@ export function CourseManagement() {
                 <input type="text" value={form.city ?? ''} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} style={styles.input} />
               </label>
               <label style={styles.label}>
-                state
-                <select value={form.state ?? ''} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} style={styles.select}>
-                  {US_STATES.map((s) => (
-                    <option key={s.code || 'empty'} value={s.code}>{s.name}</option>
-                  ))}
-                </select>
+                state / province
+                {(() => {
+                  const stateList = getStatesForCountry(form.country ?? 'USA');
+                  if (stateList) {
+                    const currentState = form.state ?? '';
+                    const validOption = stateList.some((s) => s.code === currentState);
+                    const value = validOption ? currentState : '';
+                    return (
+                      <select
+                        value={value}
+                        onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                        style={styles.select}
+                      >
+                        {stateList.map((s) => (
+                          <option key={s.code || 'empty'} value={s.code}>{s.name}</option>
+                        ))}
+                      </select>
+                    );
+                  }
+                  return (
+                    <input
+                      type="text"
+                      value={form.state ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                      style={styles.input}
+                      placeholder="State, province, or region"
+                    />
+                  );
+                })()}
               </label>
               <label style={styles.label}>
                 country
-                <select value={form.country ?? 'USA'} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} style={styles.select}>
+                <select
+                  value={form.country ?? 'USA'}
+                  onChange={(e) => {
+                    const newCountry = e.target.value;
+                    setForm((f) => ({ ...f, country: newCountry, state: '' }));
+                  }}
+                  style={styles.select}
+                >
                   {COUNTRIES.map((c) => (
                     <option key={c.code || 'empty'} value={c.code}>{c.name}</option>
                   ))}

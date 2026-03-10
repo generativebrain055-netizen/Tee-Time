@@ -4,6 +4,13 @@ import { listReports, updateReport, PAGE_SIZE_OPTIONS, type UserReport } from '.
 
 const ADMIN_NOTES_MAX = 2000;
 
+const REPORT_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'reviewing', label: 'Reviewing' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'dismissed', label: 'Dismissed' },
+];
+
 export function ReportedIssues() {
   const [reports, setReports] = useState<UserReport[]>([]);
   const [total, setTotal] = useState(0);
@@ -155,21 +162,19 @@ export function ReportedIssues() {
                 </button>
               )}
               <div style={styles.actions}>
-                {r.status === 'pending' && (
-                  <button type="button" onClick={() => handleStatusChange(r.id, 'reviewing')} style={styles.secondaryBtn} disabled={updatingId === r.id}>
-                    Mark reviewing
-                  </button>
-                )}
-                {(r.status === 'pending' || r.status === 'reviewing') && (
-                  <>
-                    <button type="button" onClick={() => handleStatusChange(r.id, 'resolved')} style={styles.primaryBtn} disabled={updatingId === r.id}>
-                      Resolve
-                    </button>
-                    <button type="button" onClick={() => handleStatusChange(r.id, 'dismissed')} style={styles.secondaryBtn} disabled={updatingId === r.id}>
-                      Dismiss
-                    </button>
-                  </>
-                )}
+                <label style={styles.statusLabel}>
+                  <span style={styles.statusLabelText}>Status</span>
+                  <select
+                    value={r.status}
+                    onChange={(e) => handleStatusChange(r.id, e.target.value)}
+                    disabled={updatingId === r.id}
+                    style={styles.select}
+                  >
+                    {REPORT_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
           ))}
@@ -210,7 +215,9 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: { width: '100%', padding: 'var(--space-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-sm)' },
   notesActions: { display: 'flex', gap: 'var(--space-sm)' },
   smallBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', marginTop: 'var(--space-sm)' },
-  actions: { display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', marginTop: 'var(--space-lg)' },
+  actions: { display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', marginTop: 'var(--space-lg)', alignItems: 'center' },
+  statusLabel: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
+  statusLabelText: { fontWeight: 500 },
   primaryBtn: { padding: 'var(--space-sm) var(--space-lg)', background: 'var(--color-primary)', color: 'var(--color-on-primary)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500 },
   secondaryBtn: { padding: 'var(--space-sm) var(--space-lg)', background: 'var(--color-surface-tertiary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
 };
