@@ -456,3 +456,44 @@ export async function deleteCourse(id: string): Promise<{ success: true } | { su
   if (data.success) return { success: true };
   return { success: false, message: data.message || 'Delete failed' };
 }
+
+// --- Golf courses CSV (backend/data/clubs.csv) ---
+export type CsvCourse = {
+  id: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  telephone?: string | null;
+  phone?: string | null;
+  website?: string | null;
+};
+
+export async function listCsvCourses(q?: string, limit?: number, offset?: number): Promise<{ success: true; data: CsvCourse[]; total: number } | { success: false; message: string }> {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+  const url = params.toString() ? `/api/admin/courses/csv?${params}` : '/api/admin/courses/csv';
+  const res = await authFetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load CSV courses' };
+  if (data.success && Array.isArray(data.data)) return { success: true, data: data.data, total: data.total ?? data.data.length };
+  return { success: false, message: 'Invalid response' };
+}
+
+export async function addCsvCourse(body: { name: string; address?: string; city?: string; state?: string; country?: string; postal_code?: string; latitude?: number; longitude?: number; phone?: string; website?: string }): Promise<{ success: true; data: CsvCourse } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/courses/csv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to add course to CSV' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
+}

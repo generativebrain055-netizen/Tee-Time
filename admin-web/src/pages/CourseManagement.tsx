@@ -5,10 +5,14 @@ import {
   createCourse,
   updateCourse,
   deleteCourse,
+  listCsvCourses,
+  addCsvCourse,
   type GolfCourse,
+  type CsvCourse,
 } from '../api/client';
 
 const PAGE_SIZE = 20;
+const CSV_PAGE_SIZE = 20;
 
 export function CourseManagement() {
   const [courses, setCourses] = useState<GolfCourse[]>([]);
@@ -41,6 +45,29 @@ export function CourseManagement() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // CSV file (backend/data/clubs.csv) state
+  const [csvCourses, setCsvCourses] = useState<CsvCourse[]>([]);
+  const [csvTotal, setCsvTotal] = useState(0);
+  const [csvLoading, setCsvLoading] = useState(true);
+  const [csvSearch, setCsvSearch] = useState('');
+  const [csvPage, setCsvPage] = useState(0);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [csvForm, setCsvForm] = useState<Record<string, string>>({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    country: 'USA',
+    postal_code: '',
+    latitude: '',
+    longitude: '',
+    phone: '',
+    website: '',
+  });
+  const [csvSaving, setCsvSaving] = useState(false);
+  const [csvActionError, setCsvActionError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -55,6 +82,21 @@ export function CourseManagement() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadCsv = useCallback(async () => {
+    setCsvLoading(true);
+    setCsvError(null);
+    const res = await listCsvCourses(csvSearch || undefined, CSV_PAGE_SIZE, csvPage * CSV_PAGE_SIZE);
+    setCsvLoading(false);
+    if (res.success) {
+      setCsvCourses(res.data);
+      setCsvTotal(res.total);
+    } else setCsvError(res.message || 'Failed to load CSV courses');
+  }, [csvSearch, csvPage]);
+
+  useEffect(() => {
+    loadCsv();
+  }, [loadCsv]);
 
   const openAdd = () => {
     setForm({
@@ -164,12 +206,49 @@ export function CourseManagement() {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const csvTotalPages = Math.max(1, Math.ceil(csvTotal / CSV_PAGE_SIZE));
+
+  const openCsvAdd = () => {
+    setCsvForm({ name: '', address: '', city: '', state: '', country: 'USA', postal_code: '', latitude: '', longitude: '', phone: '', website: '' });
+    setCsvModalOpen(true);
+    setCsvActionError(null);
+  };
+
+  const handleCsvSave = async () => {
+    const name = (csvForm.name || '').trim();
+    if (!name) {
+      setCsvActionError('Name is required');
+      return;
+    }
+    setCsvSaving(true);
+    setCsvActionError(null);
+    const res = await addCsvCourse({
+      name,
+      address: csvForm.address?.trim() || undefined,
+      city: csvForm.city?.trim() || undefined,
+      state: csvForm.state?.trim() || undefined,
+      country: csvForm.country?.trim() || undefined,
+      postal_code: csvForm.postal_code?.trim() || undefined,
+      latitude: csvForm.latitude ? Number(csvForm.latitude) : undefined,
+      longitude: csvForm.longitude ? Number(csvForm.longitude) : undefined,
+      phone: csvForm.phone?.trim() || undefined,
+      website: csvForm.website?.trim() || undefined,
+    });
+    setCsvSaving(false);
+    if (res.success) {
+      setCsvModalOpen(false);
+      loadCsv();
+    } else setCsvActionError(res.message || 'Failed to add to CSV');
+  };
 
   return (
     <div style={styles.wrapper}>
       <h2 style={styles.title}>Golf courses</h2>
       <p style={styles.subtitle}>
-        Manage the US golf course database used for autocomplete. Add, edit, or remove courses to keep results current.
+        Course list from the database used for autocomplete. Add, edit, or remove courses to keep results current.
+        {!loading && total >= 0 && (
+          <span style={styles.count}> — {total} course{total !== 1 ? 's' : ''} total</span>
+        )}
       </p>
       <div style={styles.toolbar}>
         <input
@@ -196,6 +275,7 @@ export function CourseManagement() {
               <thead>
                 <tr>
                   <th style={styles.th}>Name</th>
+                  <th style={styles.th}>Address</th>
                   <th style={styles.th}>City</th>
                   <th style={styles.th}>State</th>
                   <th style={styles.th}>Phone</th>
@@ -206,7 +286,8 @@ export function CourseManagement() {
               <tbody>
                 {courses.map((c) => (
                   <tr key={c.id} style={styles.tr}>
-                    <td style={styles.td}>{c.name}</td>
+                    <td style={styles.td}>{c.name ?? '—'}</td>
+                    <td style={styles.td}>{c.address ?? '—'}</td>
                     <td style={styles.td}>{c.city ?? '—'}</td>
                     <td style={styles.td}>{c.state ?? '—'}</td>
                     <td style={styles.td}>{c.phone ?? '—'}</td>
@@ -289,6 +370,104 @@ export function CourseManagement() {
           </div>
         </div>
       )}
+
+      <hr style={styles.sectionDivider} />
+      <h3 style={styles.sectionTitle}>Courses from CSV file (backend/data/clubs.csv)</h3>
+      <p style={styles.subtitle}>
+        Read and add courses to backend/data/clubs.csv used for club search. New rows are appended to the file.
+        {!csvLoading && csvTotal >= 0 && (
+          <span style={styles.count}> — {csvTotal} course{csvTotal !== 1 ? 's' : ''} in file</span>
+        )}
+      </p>
+      <div style={styles.toolbar}>
+        <input
+          type="text"
+          value={csvSearch}
+          onChange={(e) => { setCsvSearch(e.target.value); setCsvPage(0); }}
+          placeholder="Search CSV by name, city, state..."
+          style={styles.input}
+        />
+        <button type="button" onClick={openCsvAdd} style={styles.primaryBtn}>
+          Add to CSV
+        </button>
+      </div>
+      {csvError && <div style={styles.error}>{csvError}</div>}
+      {csvActionError && <div style={styles.error}>{csvActionError}</div>}
+      {csvLoading ? (
+        <p style={styles.muted}>Loading CSV…</p>
+      ) : csvCourses.length === 0 ? (
+        <p style={styles.muted}>{csvSearch ? 'No CSV courses match your search.' : 'CSV file is empty or not loaded.'}</p>
+      ) : (
+        <>
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Name</th>
+                  <th style={styles.th}>Address</th>
+                  <th style={styles.th}>City</th>
+                  <th style={styles.th}>State</th>
+                  <th style={styles.th}>Phone</th>
+                  <th style={styles.th}>ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {csvCourses.map((c) => (
+                  <tr key={c.id} style={styles.tr}>
+                    <td style={styles.td}>{c.name ?? '—'}</td>
+                    <td style={styles.td}>{c.address ?? '—'}</td>
+                    <td style={styles.td}>{c.city ?? '—'}</td>
+                    <td style={styles.td}>{c.state ?? '—'}</td>
+                    <td style={styles.td}>{c.telephone ?? '—'}</td>
+                    <td style={styles.td}>{c.id}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {csvTotalPages > 1 && (
+            <div style={styles.pagination}>
+              <button type="button" onClick={() => setCsvPage((p) => Math.max(0, p - 1))} disabled={csvPage === 0} style={styles.smallBtn}>
+                Previous
+              </button>
+              <span style={styles.pageInfo}>Page {csvPage + 1} of {csvTotalPages} ({csvTotal} total)</span>
+              <button type="button" onClick={() => setCsvPage((p) => Math.min(csvTotalPages - 1, p + 1))} disabled={csvPage >= csvTotalPages - 1} style={styles.smallBtn}>
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {csvModalOpen && (
+        <div style={styles.modalOverlay} onClick={() => !csvSaving && setCsvModalOpen(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Add course to CSV</h3>
+            {csvActionError && <div style={styles.error}>{csvActionError}</div>}
+            <div style={styles.form}>
+              {(['name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'website', 'latitude', 'longitude'] as const).map((key) => (
+                <label key={key} style={styles.label}>
+                  {key.replace(/_/g, ' ')}
+                  <input
+                    type={key === 'latitude' || key === 'longitude' ? 'number' : 'text'}
+                    step={key === 'latitude' || key === 'longitude' ? 'any' : undefined}
+                    value={csvForm[key] ?? ''}
+                    onChange={(e) => setCsvForm((f) => ({ ...f, [key]: e.target.value }))}
+                    style={styles.input}
+                    placeholder={key === 'name' ? 'Required' : ''}
+                  />
+                </label>
+              ))}
+            </div>
+            <div style={styles.modalActions}>
+              <button type="button" onClick={() => !csvSaving && setCsvModalOpen(false)} style={styles.secondaryBtn}>Cancel</button>
+              <button type="button" onClick={handleCsvSave} style={styles.primaryBtn} disabled={csvSaving}>
+                {csvSaving ? 'Adding…' : 'Add to CSV'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -297,6 +476,9 @@ const styles: Record<string, React.CSSProperties> = {
   wrapper: { fontFamily: 'var(--font-family)' },
   title: { fontSize: 'var(--font-size-2xl)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-sm)' },
   subtitle: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-lg)' },
+  count: { color: 'var(--color-text-muted)', fontWeight: 500 },
+  sectionDivider: { border: 'none', borderTop: '1px solid var(--color-border)', margin: 'var(--space-2xl) 0' },
+  sectionTitle: { fontSize: 'var(--font-size-xl)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-sm)' },
   toolbar: { display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' },
   input: {
     padding: 'var(--space-sm) var(--space-md)',

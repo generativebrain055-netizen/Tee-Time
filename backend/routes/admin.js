@@ -83,6 +83,14 @@ router.delete("/ad-slots/:slotKey/asset", authenticateAdmin, adminController.rem
 
 // ---------- Golf courses (US database for autocomplete) ----------
 router.get("/courses", authenticateAdmin, adminController.listCourses);
+router.get("/courses/csv", authenticateAdmin, adminController.listCsvCourses);
+router.post(
+  "/courses/csv",
+  authenticateAdmin,
+  [body("name").trim().notEmpty().withMessage("Name is required")],
+  validateRequest,
+  adminController.addCsvCourse
+);
 router.get("/courses/:id", authenticateAdmin, adminController.getCourse);
 router.post(
   "/courses",

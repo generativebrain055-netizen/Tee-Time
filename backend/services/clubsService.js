@@ -285,6 +285,90 @@ class ClubsService {
       loaded: this.loaded,
     };
   }
+
+  /**
+   * Get path to the clubs CSV file
+   */
+  getCsvPath() {
+    return path.resolve(__dirname, "../data/clubs.csv");
+  }
+
+  /**
+   * Escape a value for CSV (quote if contains comma, newline, or double quote)
+   */
+  escapeCsvValue(val) {
+    if (val == null || val === "") return "";
+    const s = String(val).trim();
+    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  /**
+   * Append a new club/course to the CSV file. Reloads in-memory data after write.
+   * @param {Object} club - { name, address?, city?, postalCode?, state?, country?, latitude?, longitude?, website?, telephone? }
+   * @returns {Promise<Object>} The added club with id
+   */
+  async appendClubToCsv(club) {
+    const csvPath = this.getCsvPath();
+    if (!fs.existsSync(csvPath)) {
+      throw new Error("Clubs CSV file not found");
+    }
+    const clubId = String(club.id || Date.now());
+    const row = [
+      this.escapeCsvValue(clubId),
+      this.escapeCsvValue(club.name || ""),
+      this.escapeCsvValue(club.address || ""),
+      this.escapeCsvValue(club.city || ""),
+      this.escapeCsvValue(club.postalCode || club.postal_code || ""),
+      this.escapeCsvValue(club.state || ""),
+      this.escapeCsvValue(club.country || "USA"),
+      this.escapeCsvValue(club.latitude != null ? club.latitude : ""),
+      this.escapeCsvValue(club.longitude != null ? club.longitude : ""),
+      this.escapeCsvValue(club.website || ""),
+      this.escapeCsvValue(club.email || ""),
+      this.escapeCsvValue(club.telephone || club.phone || ""),
+      this.escapeCsvValue(club.continent || "North America"),
+    ].join(",") + "\n";
+
+    fs.appendFileSync(csvPath, row, "utf-8");
+    this.loaded = false;
+    await this.loadClubs();
+    const added = this.getClubById(clubId) || this.clubs[this.clubs.length - 1];
+    return added || { id: clubId, name: club.name, address: club.address, city: club.city, state: club.state, country: club.country || "USA", latitude: club.latitude, longitude: club.longitude, website: club.website, telephone: club.telephone || club.phone };
+  }
+
+  /**
+   * Reload clubs from CSV file (e.g. after external edit)
+   */
+  async reload() {
+    this.loaded = false;
+    await this.loadClubs();
+  }
+
+  /**
+   * Get clubs for admin list with optional pagination and search
+   * @param {string} [q] - Optional search filter (name, city, state)
+   * @param {number} [limit=50]
+   * @param {number} [offset=0]
+   */
+  getClubsForAdmin(q, limit = 50, offset = 0) {
+    if (!this.loaded) return { clubs: [], total: 0 };
+    let list = this.clubs;
+    if (q && typeof q === "string" && q.trim().length >= 1) {
+      const term = q.trim().toLowerCase();
+      list = list.filter(
+        (c) =>
+          (c.name && c.name.toLowerCase().includes(term)) ||
+          (c.city && c.city.toLowerCase().includes(term)) ||
+          (c.state && c.state.toLowerCase().includes(term))
+      );
+    }
+    const total = list.length;
+    const clubs = list.slice(offset, offset + limit);
+    return { clubs, total };
+  }
 }
 
 // Singleton instance

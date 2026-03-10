@@ -3,6 +3,7 @@ const speakeasy = require("speakeasy");
 const userRepository = require("../../repositories/userRepository");
 const userReportRepository = require("../../repositories/userReportRepository");
 const courseRepository = require("../../repositories/courseRepository");
+const clubsService = require("../../services/clubsService");
 const adSlotRepository = require("../../repositories/adSlotRepository");
 const adCreativeUploadService = require("../../services/adCreativeUploadService");
 const deviceRepository = require("../../repositories/deviceRepository");
@@ -599,6 +600,49 @@ const deleteCourse = async (req, res, next) => {
   }
 };
 
+// ---------- Golf courses CSV (read from / add to backend/data/clubs.csv) ----------
+const listCsvCourses = async (req, res, next) => {
+  try {
+    await clubsService.loadClubs();
+    const q = String(req.query.q || "").trim();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { clubs, total } = clubsService.getClubsForAdmin(q || undefined, limit, offset);
+    return res.json({ success: true, data: clubs, total });
+  } catch (error) {
+    logger.error("Admin listCsvCourses error:", error);
+    next(error);
+  }
+};
+
+const addCsvCourse = async (req, res, next) => {
+  try {
+    const { name, address, city, state, country, postal_code, postalCode, latitude, longitude, phone, telephone, website } = req.body || {};
+    const nameTrimmed = (name && String(name).trim()) || "";
+    if (!nameTrimmed) {
+      return res.status(400).json({ success: false, message: "Name is required." });
+    }
+    await clubsService.loadClubs();
+    const club = await clubsService.appendClubToCsv({
+      name: nameTrimmed,
+      address: address ? String(address).trim() : undefined,
+      city: city ? String(city).trim() : undefined,
+      state: state ? String(state).trim() : undefined,
+      country: (country && String(country).trim()) || "USA",
+      postal_code: postal_code || postalCode,
+      latitude: latitude != null ? parseFloat(latitude) : undefined,
+      longitude: longitude != null ? parseFloat(longitude) : undefined,
+      phone: phone || telephone,
+      telephone: telephone || phone,
+      website: website ? String(website).trim() : undefined,
+    });
+    return res.status(201).json({ success: true, data: club, message: "Course added to CSV." });
+  } catch (error) {
+    logger.error("Admin addCsvCourse error:", error);
+    next(error);
+  }
+};
+
 // ---------- Ad slots (4 placements: loading screen + 3 banners) ----------
 const VALID_SLOT_KEYS = ["loading_screen", "banner_1", "banner_2", "banner_3"];
 
@@ -703,6 +747,8 @@ module.exports = {
   createCourse,
   updateCourse,
   deleteCourse,
+  listCsvCourses,
+  addCsvCourse,
   listAdSlots,
   updateAdSlot,
   uploadAdSlotAsset,
