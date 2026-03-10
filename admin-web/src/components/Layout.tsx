@@ -26,7 +26,7 @@ export function Layout() {
     <div style={styles.container}>
       <aside style={styles.sidebar}>
         <div style={styles.logo}>
-          <span style={styles.logoText}>Tee Time</span>
+          <img src="/logo.png" alt="Tee Time" style={styles.logoImg} />
           <span style={styles.logoSub}>Admin</span>
         </div>
         <nav style={styles.nav}>
@@ -78,17 +78,18 @@ const styles: Record<string, React.CSSProperties> = {
   logo: {
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'flex-start',
     marginBottom: 'var(--space-3xl)',
   },
-  logoText: {
-    fontSize: 'var(--font-size-xl)',
-    fontWeight: 700,
-    color: 'var(--color-primary)',
+  logoImg: {
+    height: 40,
+    width: 'auto',
+    objectFit: 'contain',
   },
   logoSub: {
     fontSize: 'var(--font-size-sm)',
     color: 'var(--color-text-secondary)',
-    marginTop: 2,
+    marginTop: 4,
   },
   nav: {
     flex: 1,

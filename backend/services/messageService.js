@@ -199,6 +199,8 @@ async function deleteMessage(conversationId, messageId, userId) {
 
   return await messageRepository.deleteOne(messageId, conversationId);
 }
+
+module.exports = {
   getOrCreateConversation,
   listConversations,
   getMessages,

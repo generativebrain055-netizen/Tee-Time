@@ -71,7 +71,7 @@ export function Login() {
     <div style={styles.page}>
       <div style={styles.card}>
         <div style={styles.logo}>
-          <span style={styles.logoText}>Tee Time</span>
+          <img src="/logo.png" alt="Tee Time" style={styles.logoImg} />
           <span style={styles.logoSub}>Admin</span>
         </div>
         {!mfaStep ? (
@@ -170,12 +170,13 @@ const styles: Record<string, React.CSSProperties> = {
   logo: {
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'center',
     marginBottom: 'var(--space-2xl)',
   },
-  logoText: {
-    fontSize: 'var(--font-size-2xl)',
-    fontWeight: 700,
-    color: 'var(--color-primary)',
+  logoImg: {
+    height: 56,
+    width: 'auto',
+    objectFit: 'contain',
   },
   logoSub: {
     fontSize: 'var(--font-size-sm)',
