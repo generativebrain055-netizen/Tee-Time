@@ -61,7 +61,6 @@ const securityScannerBlocker = require("./middleware/securityScanner");
 
 // Import services
 const schedulerService = require("./services/schedulerService");
-const clubsService = require("./services/clubsService");
 const avatarUploadService = require("./services/avatarUploadService");
 
 // Import routes
@@ -256,11 +255,6 @@ const startServer = async () => {
     const adCreativeUploadService = require("./services/adCreativeUploadService");
     adCreativeUploadService.ensureBucketExists().catch((e) => {
       logger.warn("Ad-creatives bucket check skipped:", e.message);
-    });
-
-    // Load golf clubs from CSV (non-blocking)
-    clubsService.loadClubs().catch((e) => {
-      logger.warn("Clubs load skipped:", e.message);
     });
 
     // Start scheduler for background tasks

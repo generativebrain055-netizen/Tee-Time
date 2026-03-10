@@ -76,9 +76,13 @@ const login = async (req, res, next) => {
       rememberMe: rememberMe || false,
     });
 
-    // Update last login
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    await userRepository.updateLastLogin(user.id, ipAddress, device?.id);
+    // Update last login (non-blocking; don't fail sign-in if this errors)
+    try {
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      await userRepository.updateLastLogin(user.id, ipAddress, device?.id);
+    } catch (err) {
+      logger.error("Error updating last login:", err);
+    }
 
     return res.json({
       success: true,

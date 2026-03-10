@@ -3,7 +3,6 @@ const speakeasy = require("speakeasy");
 const userRepository = require("../../repositories/userRepository");
 const userReportRepository = require("../../repositories/userReportRepository");
 const courseRepository = require("../../repositories/courseRepository");
-const clubsService = require("../../services/clubsService");
 const adSlotRepository = require("../../repositories/adSlotRepository");
 const adCreativeUploadService = require("../../services/adCreativeUploadService");
 const deviceRepository = require("../../repositories/deviceRepository");
@@ -642,128 +641,6 @@ const deleteCourse = async (req, res, next) => {
   }
 };
 
-// ---------- Golf courses CSV (read from / add to backend/data/clubs.csv) ----------
-/** Normalize course name for matching (trim, lower). */
-const norm = (s) => (s && String(s).trim().toLowerCase()) || "";
-
-const listCsvCourses = async (req, res, next) => {
-  try {
-    await clubsService.loadClubs();
-    const q = String(req.query.q || "").trim();
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-    const { clubs, total } = clubsService.getClubsForAdmin(q || undefined, limit, offset);
-
-    // Ongoing booked tee times: pending, confirmed, in_progress, tee_date >= today
-    const today = new Date().toISOString().slice(0, 10);
-    let ongoingCounts = []; // { course_id, course_name, count }
-    try {
-      const { data: ttRows, error: ttError } = await supabaseAdmin
-        .from("tee_times")
-        .select("course_id, course_name")
-        .in("status", ["pending", "confirmed", "in_progress"])
-        .gte("tee_date", today);
-      if (!ttError && Array.isArray(ttRows)) {
-        const map = new Map(); // key "course_id|course_name" -> count
-        for (const row of ttRows) {
-          const cid = (row.course_id && String(row.course_id).trim()) || "";
-          const cname = (row.course_name && String(row.course_name).trim()) || "";
-          const key = `${cid}\t${cname}`;
-          map.set(key, (map.get(key) || 0) + 1);
-        }
-        ongoingCounts = Array.from(map.entries()).map(([key, count]) => {
-          const [course_id, course_name] = key.split("\t");
-          return { course_id, course_name, count };
-        });
-      }
-    } catch (err) {
-      logger.warn("Admin listCsvCourses: could not load ongoing tee time counts", err);
-    }
-
-    const clubsWithCounts = clubs.map((club) => {
-      let ongoingBooked = 0;
-      for (const row of ongoingCounts) {
-        const matchById = row.course_id && String(club.id) === String(row.course_id);
-        const matchByName = !row.course_id && norm(row.course_name) === norm(club.name);
-        if (matchById || matchByName) ongoingBooked += row.count;
-      }
-      return { ...club, ongoingBooked };
-    });
-
-    return res.json({ success: true, data: clubsWithCounts, total });
-  } catch (error) {
-    logger.error("Admin listCsvCourses error:", error);
-    next(error);
-  }
-};
-
-const addCsvCourse = async (req, res, next) => {
-  try {
-    const { name, address, city, state, country, postal_code, postalCode, latitude, longitude, phone, telephone, website } = req.body || {};
-    const nameTrimmed = (name && String(name).trim()) || "";
-    if (!nameTrimmed) {
-      return res.status(400).json({ success: false, message: "Name is required." });
-    }
-    await clubsService.loadClubs();
-    const club = await clubsService.appendClubToCsv({
-      name: nameTrimmed,
-      address: address ? String(address).trim() : undefined,
-      city: city ? String(city).trim() : undefined,
-      state: state ? String(state).trim() : undefined,
-      country: (country && String(country).trim()) || "USA",
-      postal_code: postal_code || postalCode,
-      latitude: latitude != null ? parseFloat(latitude) : undefined,
-      longitude: longitude != null ? parseFloat(longitude) : undefined,
-      phone: phone || telephone,
-      telephone: telephone || phone,
-      website: website ? String(website).trim() : undefined,
-    });
-    return res.status(201).json({ success: true, data: club, message: "Course added to CSV." });
-  } catch (error) {
-    logger.error("Admin addCsvCourse error:", error);
-    next(error);
-  }
-};
-
-const updateCsvCourse = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { name, address, city, state, country, postal_code, postalCode, latitude, longitude, phone, telephone, website } = req.body || {};
-    if (!id) return res.status(400).json({ success: false, message: "Course ID is required." });
-    // Only CSV columns are passed to the service; ongoingBooked (tee time count) is display-only and never written to clubs.csv
-    const updates = {};
-    if (name !== undefined) updates.name = String(name).trim();
-    if (address !== undefined) updates.address = String(address).trim();
-    if (city !== undefined) updates.city = String(city).trim();
-    if (state !== undefined) updates.state = String(state).trim();
-    if (country !== undefined) updates.country = (country && String(country).trim()) || "USA";
-    if (postal_code !== undefined || postalCode !== undefined) updates.postal_code = (postal_code || postalCode || "").toString().trim();
-    if (latitude !== undefined) updates.latitude = latitude != null ? parseFloat(latitude) : null;
-    if (longitude !== undefined) updates.longitude = longitude != null ? parseFloat(longitude) : null;
-    if (phone !== undefined || telephone !== undefined) updates.telephone = (telephone || phone || "").toString().trim();
-    if (website !== undefined) updates.website = website ? String(website).trim() : null;
-    const club = await clubsService.updateClubInCsv(id, updates);
-    if (!club) return res.status(404).json({ success: false, message: "Course not found." });
-    return res.json({ success: true, data: club, message: "Course updated." });
-  } catch (error) {
-    logger.error("Admin updateCsvCourse error:", error);
-    next(error);
-  }
-};
-
-const deleteCsvCourse = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    if (!id) return res.status(400).json({ success: false, message: "Course ID is required." });
-    const deleted = await clubsService.deleteClubFromCsv(id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Course not found." });
-    return res.json({ success: true, message: "Course deleted." });
-  } catch (error) {
-    logger.error("Admin deleteCsvCourse error:", error);
-    next(error);
-  }
-};
-
 // ---------- Ad slots (4 placements: loading screen + 3 banners) ----------
 const VALID_SLOT_KEYS = ["loading_screen", "banner_1", "banner_2", "banner_3"];
 
@@ -868,10 +745,6 @@ module.exports = {
   createCourse,
   updateCourse,
   deleteCourse,
-  listCsvCourses,
-  addCsvCourse,
-  updateCsvCourse,
-  deleteCsvCourse,
   listAdSlots,
   updateAdSlot,
   uploadAdSlotAsset,

@@ -5,7 +5,7 @@
 const rosterRepository = require("../repositories/rosterRepository");
 const rosterFormatter = require("../formatters/rosterFormatter");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
-const clubsService = require("./clubsService");
+const courseRepository = require("../repositories/courseRepository");
 
 const PER_SECTION_LIMIT = 10;
 
@@ -19,7 +19,7 @@ async function searchAll(query, userId) {
     rosterRepository.searchUsers(q, userId).then((list) => list.map(rosterFormatter.formatUserSearchResult)),
     teeTimeRepository.searchTeeTimes(userId, q, PER_SECTION_LIMIT),
     rosterRepository.searchGroups(userId, q, PER_SECTION_LIMIT),
-    Promise.resolve(clubsService.searchClubs(q, PER_SECTION_LIMIT)),
+    courseRepository.searchClubs(q, PER_SECTION_LIMIT),
   ]);
 
   const teeTimes = teeTimeRows.map((t) => ({

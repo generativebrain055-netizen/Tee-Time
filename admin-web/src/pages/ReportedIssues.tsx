@@ -72,13 +72,24 @@ export function ReportedIssues() {
               ))}
             </select>
           </label>
-          {!loading && reports.length > 0 && total > pageSize && (
-            <div style={styles.pagination}>
-              <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={styles.smallBtn}>Previous</button>
-              <span style={styles.pageInfo}>Page {page + 1} of {Math.max(1, Math.ceil(total / pageSize))} ({total} total)</span>
-              <button type="button" onClick={() => setPage((p) => Math.min(Math.ceil(total / pageSize) - 1, p + 1))} disabled={page >= Math.ceil(total / pageSize) - 1} style={styles.smallBtn}>Next</button>
-            </div>
-          )}
+          {!loading && reports.length > 0 && total > pageSize && (() => {
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            return (
+              <div style={styles.pagination}>
+                <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={styles.smallBtn}>Previous</button>
+                <span style={styles.pageInfo}>Page {page + 1} of {totalPages} ({total} total)</span>
+                <label style={styles.pageJumpLabel}>
+                  Go to page
+                  <select value={page + 1} onChange={(e) => setPage(Number((e.target as HTMLSelectElement).value) - 1)} style={styles.select}>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={styles.smallBtn}>Next</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
       {error && <div style={styles.error}>{error}</div>}
@@ -168,6 +179,7 @@ const styles: Record<string, React.CSSProperties> = {
   toolbar: { display: 'flex', gap: 'var(--space-xl)', flexWrap: 'wrap', marginBottom: 'var(--space-lg)', alignItems: 'center', justifyContent: 'space-between' },
   toolbarRight: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginLeft: 'auto', flexWrap: 'wrap' },
   label: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
+  pageJumpLabel: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
   pagination: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)' },
   pageInfo: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
   select: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' },

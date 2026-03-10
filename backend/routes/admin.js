@@ -81,18 +81,8 @@ router.put("/ad-slots/:slotKey", authenticateAdmin, adminController.updateAdSlot
 router.post("/ad-slots/:slotKey/asset", authenticateAdmin, adminController.uploadAdSlotAsset);
 router.delete("/ad-slots/:slotKey/asset", authenticateAdmin, adminController.removeAdSlotAsset);
 
-// ---------- Golf courses (US database for autocomplete) ----------
+// ---------- Golf courses (database: golf_courses table) ----------
 router.get("/courses", authenticateAdmin, adminController.listCourses);
-router.get("/courses/csv", authenticateAdmin, adminController.listCsvCourses);
-router.post(
-  "/courses/csv",
-  authenticateAdmin,
-  [body("name").trim().notEmpty().withMessage("Name is required")],
-  validateRequest,
-  adminController.addCsvCourse
-);
-router.put("/courses/csv/:id", authenticateAdmin, adminController.updateCsvCourse);
-router.delete("/courses/csv/:id", authenticateAdmin, adminController.deleteCsvCourse);
 router.get("/courses/:id", authenticateAdmin, adminController.getCourse);
 router.post(
   "/courses",

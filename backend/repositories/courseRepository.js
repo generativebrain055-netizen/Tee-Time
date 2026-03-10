@@ -1,4 +1,5 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
+const logger = require("../config/logger");
 
 /**
  * Course Repository - Supabase REST API
@@ -22,6 +23,126 @@ class CourseRepository {
             return data || [];
         } catch (error) {
             handleError(error, "searchCourses");
+        }
+    }
+
+    // ---------- API-compatible with legacy clubs (CSV) shape for mobile/admin ----------
+    // Search clubs (same response shape as former clubsService.searchClubs)
+    async searchClubs(query, limit = 20) {
+        try {
+            const rows = await this.searchCourses(query, limit);
+            return (rows || []).map((row) => ({
+                id: row.id,
+                name: row.name,
+                location: [row.city, row.state].filter(Boolean).join(", ") || row.country || "USA",
+                address: row.address || null,
+                city: row.city || null,
+                state: row.state || null,
+                latitude: row.latitude != null ? parseFloat(row.latitude) : null,
+                longitude: row.longitude != null ? parseFloat(row.longitude) : null,
+                website: row.website || null,
+                telephone: row.phone || null,
+            }));
+        } catch (error) {
+            logger.error("searchClubs error:", error?.message || error);
+            return [];
+        }
+    }
+
+    // Search cities (distinct city, state from golf_courses)
+    async searchCities(query, limit = 20) {
+        try {
+            if (!query || String(query).trim().length < 2) return [];
+            const pattern = `%${String(query).trim()}%`;
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .select("city, state")
+                .or(`city.ilike.${pattern},state.ilike.${pattern}`)
+                .not("city", "is", null)
+                .limit(500);
+            if (error) throw error;
+            const seen = new Set();
+            const out = [];
+            for (const row of data || []) {
+                const name = [row.city, row.state].filter(Boolean).join(", ");
+                if (!name || seen.has(name)) continue;
+                seen.add(name);
+                out.push({
+                    id: name.replace(/\s+/g, "-").toLowerCase(),
+                    name,
+                    city: row.city,
+                    state: row.state,
+                });
+                if (out.length >= limit) break;
+            }
+            return out;
+        } catch (error) {
+            logger.error("searchCities error:", error?.message || error);
+            return [];
+        }
+    }
+
+    // Popular cities (by course count)
+    async getPopularCities(limit = 20) {
+        try {
+            const { data, error } = await supabaseAdmin
+                .from("golf_courses")
+                .select("city, state")
+                .not("city", "is", null)
+                .not("state", "is", null)
+                .limit(5000);
+            if (error) throw error;
+            const countByKey = new Map();
+            for (const row of data || []) {
+                const key = `${row.city}|${row.state}`;
+                countByKey.set(key, (countByKey.get(key) || 0) + 1);
+            }
+            const entries = Array.from(countByKey.entries())
+                .map(([key, clubCount]) => {
+                    const [city, state] = key.split("|");
+                    const name = `${city}, ${state}`;
+                    return {
+                        id: key.replace(/\s+/g, "-"),
+                        name,
+                        city,
+                        state: (state || "").toUpperCase(),
+                        clubCount,
+                    };
+                })
+                .sort((a, b) => b.clubCount - a.clubCount)
+                .slice(0, limit);
+            return entries;
+        } catch (error) {
+            logger.error("getPopularCities error:", error?.message || error);
+            return [];
+        }
+    }
+
+    // Stats for clubs/courses (database)
+    async getCourseStats() {
+        try {
+            const { count: totalClubs, error: e1 } = await supabaseAdmin
+                .from("golf_courses")
+                .select("id", { count: "exact", head: true });
+            if (e1) throw e1;
+            const { data: cityRows, error: e2 } = await supabaseAdmin
+                .from("golf_courses")
+                .select("city, state")
+                .not("city", "is", null);
+            if (e2) throw e2;
+            const citySet = new Set();
+            for (const row of cityRows || []) {
+                citySet.add([row.city, row.state].filter(Boolean).join(", "));
+            }
+            return {
+                totalClubs: totalClubs ?? 0,
+                totalCities: citySet.size,
+                totalStates: new Set((cityRows || []).map((r) => r.state).filter(Boolean)).size,
+                loaded: true,
+            };
+        } catch (error) {
+            logger.error("getCourseStats error:", error?.message || error);
+            return { totalClubs: 0, totalCities: 0, totalStates: 0, loaded: false };
         }
     }
 

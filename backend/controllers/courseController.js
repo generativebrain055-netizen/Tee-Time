@@ -1,5 +1,4 @@
 const courseRepository = require("../repositories/courseRepository");
-const clubsService = require("../services/clubsService");
 const logger = require("../config/logger");
 
 // Google Places API integration (uses GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY)
@@ -22,7 +21,7 @@ class CourseController {
     this.getClubStats = this.getClubStats.bind(this);
   }
 
-  // GET /api/courses/clubs/search - Search golf clubs from CSV database
+  // GET /api/courses/clubs/search - Search golf clubs from database
   async searchClubs(req, res) {
     try {
       const { q, limit = 20 } = req.query;
@@ -35,8 +34,8 @@ class CourseController {
         });
       }
 
-      const clubs = clubsService.searchClubs(q, parseInt(limit));
-      res.json({ success: true, clubs, source: "csv" });
+      const clubs = await courseRepository.searchClubs(q, parseInt(limit));
+      res.json({ success: true, clubs, source: "database" });
     } catch (error) {
       logger.error("Search clubs error:", error);
       res
@@ -45,7 +44,7 @@ class CourseController {
     }
   }
 
-  // GET /api/courses/cities/search - Search cities with golf clubs
+  // GET /api/courses/cities/search - Search cities with golf clubs (database)
   async searchCities(req, res) {
     try {
       const { q, limit = 20 } = req.query;
@@ -58,7 +57,7 @@ class CourseController {
         });
       }
 
-      const cities = clubsService.searchCities(q, parseInt(limit));
+      const cities = await courseRepository.searchCities(q, parseInt(limit));
       res.json({ success: true, cities });
     } catch (error) {
       logger.error("Search cities error:", error);
@@ -68,11 +67,11 @@ class CourseController {
     }
   }
 
-  // GET /api/courses/cities/popular - Get cities with most golf clubs
+  // GET /api/courses/cities/popular - Get cities with most golf clubs (database)
   async getPopularCities(req, res) {
     try {
       const { limit = 20 } = req.query;
-      const cities = clubsService.getPopularCities(parseInt(limit));
+      const cities = await courseRepository.getPopularCities(parseInt(limit));
       res.json({ success: true, cities });
     } catch (error) {
       logger.error("Get popular cities error:", error);
@@ -82,10 +81,10 @@ class CourseController {
     }
   }
 
-  // GET /api/courses/clubs/stats - Get club database statistics
+  // GET /api/courses/clubs/stats - Get club/course statistics (database)
   async getClubStats(req, res) {
     try {
-      const stats = clubsService.getStats();
+      const stats = await courseRepository.getCourseStats();
       res.json({ success: true, stats });
     } catch (error) {
       logger.error("Get club stats error:", error);
