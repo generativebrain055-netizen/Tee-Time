@@ -7,6 +7,7 @@ import {
   PAGE_SIZE_OPTIONS,
   type CsvCourse,
 } from '../api/client';
+import { US_STATES, COUNTRIES } from '../constants/locations';
 
 export function CourseManagement() {
   const [courses, setCourses] = useState<CsvCourse[]>([]);
@@ -34,6 +35,7 @@ export function CourseManagement() {
   const [editingCourse, setEditingCourse] = useState<CsvCourse | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [courseToDelete, setCourseToDelete] = useState<CsvCourse | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,7 @@ export function CourseManagement() {
     });
     setModalOpen(true);
     setActionError(null);
+    setFieldErrors({});
   };
 
   const openEdit = (c: CsvCourse) => {
@@ -84,16 +87,34 @@ export function CourseManagement() {
     });
     setModalOpen(true);
     setActionError(null);
+    setFieldErrors({});
+  };
+
+  const validateCourseForm = (): boolean => {
+    const err: Record<string, string> = {};
+    const name = (form.name || '').trim();
+    if (!name) err.name = 'Name is required';
+    if (form.website?.trim()) {
+      try {
+        new URL(form.website.trim().startsWith('http') ? form.website.trim() : `https://${form.website.trim()}`);
+      } catch {
+        err.website = 'Enter a valid URL';
+      }
+    }
+    const lat = form.latitude ? Number(form.latitude) : NaN;
+    if (form.latitude !== '' && (Number.isNaN(lat) || lat < -90 || lat > 90)) err.latitude = 'Latitude must be between -90 and 90';
+    const lng = form.longitude ? Number(form.longitude) : NaN;
+    if (form.longitude !== '' && (Number.isNaN(lng) || lng < -180 || lng > 180)) err.longitude = 'Longitude must be between -180 and 180';
+    setFieldErrors(err);
+    return Object.keys(err).length === 0;
   };
 
   const handleSave = async () => {
-    const name = (form.name || '').trim();
-    if (!name) {
-      setActionError('Name is required');
-      return;
-    }
-    setSaving(true);
     setActionError(null);
+    if (!validateCourseForm()) return;
+    const name = (form.name || '').trim();
+    setSaving(true);
+    setFieldErrors({});
     const payload = {
       name,
       address: form.address?.trim() || undefined,
@@ -261,19 +282,64 @@ export function CourseManagement() {
             <h3 style={styles.modalTitle}>{editingCourse ? 'Edit course' : 'Add course'}</h3>
             {actionError && <div style={styles.error}>{actionError}</div>}
             <div style={styles.form}>
-              {(['name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'website', 'latitude', 'longitude'] as const).map((key) => (
-                <label key={key} style={styles.label}>
-                  {key.replace(/_/g, ' ')}
-                  <input
-                    type={key === 'latitude' || key === 'longitude' ? 'number' : 'text'}
-                    step={key === 'latitude' || key === 'longitude' ? 'any' : undefined}
-                    value={form[key] ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    style={styles.input}
-                    placeholder={key === 'name' ? 'Required' : ''}
-                  />
-                </label>
-              ))}
+              <label style={styles.label}>
+                name <span style={styles.required}>*</span>
+                <input
+                  type="text"
+                  value={form.name ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  style={{ ...styles.input, ...(fieldErrors.name ? styles.inputError : {}) }}
+                  placeholder="Required"
+                />
+                {fieldErrors.name && <span style={styles.fieldError}>{fieldErrors.name}</span>}
+              </label>
+              <label style={styles.label}>
+                address
+                <input type="text" value={form.address ?? ''} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} style={styles.input} />
+              </label>
+              <label style={styles.label}>
+                city
+                <input type="text" value={form.city ?? ''} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} style={styles.input} />
+              </label>
+              <label style={styles.label}>
+                state
+                <select value={form.state ?? ''} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} style={styles.select}>
+                  {US_STATES.map((s) => (
+                    <option key={s.code || 'empty'} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.label}>
+                country
+                <select value={form.country ?? 'USA'} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} style={styles.select}>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code || 'empty'} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.label}>
+                postal code
+                <input type="text" value={form.postal_code ?? ''} onChange={(e) => setForm((f) => ({ ...f, postal_code: e.target.value }))} style={styles.input} />
+              </label>
+              <label style={styles.label}>
+                phone
+                <input type="text" value={form.phone ?? ''} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} style={styles.input} />
+              </label>
+              <label style={styles.label}>
+                website
+                <input type="url" value={form.website ?? ''} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.website ? styles.inputError : {}) }} placeholder="https://..." />
+                {fieldErrors.website && <span style={styles.fieldError}>{fieldErrors.website}</span>}
+              </label>
+              <label style={styles.label}>
+                latitude
+                <input type="number" step="any" value={form.latitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.latitude ? styles.inputError : {}) }} placeholder="-90 to 90" />
+                {fieldErrors.latitude && <span style={styles.fieldError}>{fieldErrors.latitude}</span>}
+              </label>
+              <label style={styles.label}>
+                longitude
+                <input type="number" step="any" value={form.longitude ?? ''} onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))} style={{ ...styles.input, ...(fieldErrors.longitude ? styles.inputError : {}) }} placeholder="-180 to 180" />
+                {fieldErrors.longitude && <span style={styles.fieldError}>{fieldErrors.longitude}</span>}
+              </label>
             </div>
             <div style={styles.modalActions}>
               <button type="button" onClick={() => !saving && setModalOpen(false)} style={styles.secondaryBtn}>Cancel</button>
@@ -327,5 +393,8 @@ const styles: Record<string, React.CSSProperties> = {
   modalTitle: { marginBottom: 'var(--space-lg)' },
   form: { display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' },
   label: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--font-size-sm)' },
+  required: { color: 'var(--color-error)' },
+  fieldError: { fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' },
+  inputError: { borderColor: 'var(--color-error)' },
   modalActions: { display: 'flex', gap: 'var(--space-md)', justifyContent: 'flex-end', marginTop: 'var(--space-xl)' },
 };

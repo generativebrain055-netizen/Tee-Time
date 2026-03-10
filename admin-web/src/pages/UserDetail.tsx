@@ -20,6 +20,7 @@ export function UserDetail() {
   const [editForm, setEditForm] = useState<Record<string, string | number>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -27,9 +28,10 @@ export function UserDetail() {
     setError(null);
     const res = await getUserProfile(id);
     setLoading(false);
-    if (res.success) {
+        if (res.success) {
       setData(res.data);
       const u = res.data.user as Record<string, unknown>;
+      setFieldErrors({});
       setEditForm({
         first_name: (u.first_name as string) ?? '',
         last_name: (u.last_name as string) ?? '',
@@ -48,10 +50,32 @@ export function UserDetail() {
     load();
   }, [load]);
 
+  const validateUserEditForm = (): boolean => {
+    const err: Record<string, string> = {};
+    const phone = String(editForm.phone_number ?? '').trim();
+    if (phone) {
+      const e164 = /^\+[1-9]\d{1,14}$/;
+      if (!e164.test(phone)) err.phone_number = 'Use E.164 format (e.g. +15551234567)';
+    }
+    const email = String(editForm.email ?? '').trim();
+    if (email) {
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(email) || email.length > 255) err.email = 'Enter a valid email address';
+    }
+    const handicapVal = editForm.handicap;
+    if (handicapVal !== '' && handicapVal !== undefined && handicapVal !== null) {
+      const n = Number(handicapVal);
+      if (Number.isNaN(n) || n < 0 || n > 54) err.handicap = 'Handicap must be 0–54 or empty';
+    }
+    setFieldErrors(err);
+    return Object.keys(err).length === 0;
+  };
+
   const handleSaveEdit = async () => {
     if (!id) return;
-    setSaving(true);
     setActionError(null);
+    if (!validateUserEditForm()) return;
+    setSaving(true);
     const res = await updateUser(id, {
       first_name: editForm.first_name || undefined,
       last_name: editForm.last_name || undefined,
@@ -114,7 +138,7 @@ export function UserDetail() {
       <div style={styles.card}>
         <div style={styles.cardTitle}>
           Full profile
-          <button type="button" onClick={() => setEditOpen(true)} style={styles.smallBtn}>
+          <button type="button" onClick={() => { setEditOpen(true); setFieldErrors({}); }} style={styles.smallBtn}>
             Edit details
           </button>
         </div>
@@ -220,11 +244,55 @@ export function UserDetail() {
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 style={styles.modalTitle}>Edit user</h3>
             <div style={styles.form}>
-              {(['first_name', 'last_name', 'username', 'phone_number', 'email', 'handicap', 'location', 'home_course'] as const).map((key) => (
+              {(['first_name', 'last_name', 'username'] as const).map((key) => (
                 <label key={key} style={styles.label}>
                   {key.replace(/_/g, ' ')}
                   <input
-                    type={key === 'email' ? 'email' : 'text'}
+                    type="text"
+                    value={String(editForm[key] ?? '')}
+                    onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
+                    style={styles.input}
+                  />
+                </label>
+              ))}
+              <label style={styles.label}>
+                phone number
+                <input
+                  type="tel"
+                  value={String(editForm.phone_number ?? '')}
+                  onChange={(e) => setEditForm((f) => ({ ...f, phone_number: e.target.value }))}
+                  style={{ ...styles.input, ...(fieldErrors.phone_number ? styles.inputError : {}) }}
+                  placeholder="+15551234567"
+                />
+                {fieldErrors.phone_number && <span style={styles.fieldError}>{fieldErrors.phone_number}</span>}
+              </label>
+              <label style={styles.label}>
+                email
+                <input
+                  type="email"
+                  value={String(editForm.email ?? '')}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  style={{ ...styles.input, ...(fieldErrors.email ? styles.inputError : {}) }}
+                />
+                {fieldErrors.email && <span style={styles.fieldError}>{fieldErrors.email}</span>}
+              </label>
+              <label style={styles.label}>
+                handicap
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={String(editForm.handicap ?? '')}
+                  onChange={(e) => setEditForm((f) => ({ ...f, handicap: e.target.value }))}
+                  style={{ ...styles.input, ...(fieldErrors.handicap ? styles.inputError : {}) }}
+                  placeholder="0–54 or empty"
+                />
+                {fieldErrors.handicap && <span style={styles.fieldError}>{fieldErrors.handicap}</span>}
+              </label>
+              {(['location', 'home_course'] as const).map((key) => (
+                <label key={key} style={styles.label}>
+                  {key.replace(/_/g, ' ')}
+                  <input
+                    type="text"
                     value={String(editForm[key] ?? '')}
                     onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
                     style={styles.input}
@@ -285,4 +353,6 @@ const styles: Record<string, React.CSSProperties> = {
   input: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' },
   textarea: { padding: 'var(--space-sm) var(--space-md)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', resize: 'vertical' },
   modalActions: { display: 'flex', gap: 'var(--space-md)', justifyContent: 'flex-end', marginTop: 'var(--space-xl)' },
+  fieldError: { fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' },
+  inputError: { borderColor: 'var(--color-error)' },
 };

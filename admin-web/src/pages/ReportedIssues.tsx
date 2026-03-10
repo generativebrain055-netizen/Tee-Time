@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { listReports, updateReport, PAGE_SIZE_OPTIONS, type UserReport } from '../api/client';
 
+const ADMIN_NOTES_MAX = 2000;
+
 export function ReportedIssues() {
   const [reports, setReports] = useState<UserReport[]>([]);
   const [total, setTotal] = useState(0);
@@ -13,6 +15,7 @@ export function ReportedIssues() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editNotesId, setEditNotesId] = useState<string | null>(null);
   const [notesValue, setNotesValue] = useState('');
+  const [notesError, setNotesError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,14 +131,26 @@ export function ReportedIssues() {
               )}
               {editNotesId === r.id ? (
                 <div style={styles.notesSection}>
-                  <textarea value={notesValue} onChange={(e) => setNotesValue(e.target.value)} style={styles.textarea} rows={2} placeholder="Admin notes" />
+                  <textarea
+                    value={notesValue}
+                    onChange={(e) => { setNotesValue(e.target.value); setNotesError(null); }}
+                    style={{ ...styles.textarea, ...(notesError ? styles.textareaError : {}) }}
+                    rows={2}
+                    placeholder="Admin notes"
+                  />
+                  <div style={styles.notesMeta}>
+                    <span style={notesValue.length > ADMIN_NOTES_MAX ? styles.notesCountError : styles.notesCount}>
+                      {notesValue.length} / {ADMIN_NOTES_MAX}
+                    </span>
+                    {notesError && <span style={styles.fieldError}>{notesError}</span>}
+                  </div>
                   <div style={styles.notesActions}>
-                    <button type="button" onClick={() => handleSaveNotes(r.id)} style={styles.primaryBtn} disabled={updatingId === r.id}>Save</button>
-                    <button type="button" onClick={() => { setEditNotesId(null); setNotesValue(''); }} style={styles.secondaryBtn}>Cancel</button>
+                    <button type="button" onClick={() => handleSaveNotes(r.id)} style={styles.primaryBtn} disabled={updatingId === r.id || notesValue.length > ADMIN_NOTES_MAX}>Save</button>
+                    <button type="button" onClick={() => { setEditNotesId(null); setNotesValue(''); setNotesError(null); }} style={styles.secondaryBtn}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button type="button" onClick={() => { setEditNotesId(r.id); setNotesValue(r.admin_notes || ''); }} style={styles.smallBtn}>
+                <button type="button" onClick={() => { setEditNotesId(r.id); setNotesValue(r.admin_notes || ''); setNotesError(null); }} style={styles.smallBtn}>
                   {r.admin_notes ? 'Edit notes' : 'Add notes'}
                 </button>
               )}
