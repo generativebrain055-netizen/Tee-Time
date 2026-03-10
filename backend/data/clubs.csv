@@ -1,5 +1,5 @@
 ClubID,ClubName,Address,City,PostalCode,State,Country,Latitude,Longitude,Website,Email,Telephone,Continent
-1082077398755,"Woodland Hills Golf Club","592 Day Lake Drive",Midland,31820,GA,USA,32.5865594,-84.8124369,,,,"North America"
+1082077398755,Woodland Hills Golf Club,592 Day Lake Drive,Midland,31820,GA,USA,32.5865594,-84.8124369,,,1,North America
 1082163681245,"Fort Moore Golf Course","7471 Baltzell Avenue","Fort Moore",31905,GA,USA,32.3588509,-84.9454997,https://moore.armymwr.com/programs/fort-moore-golf-course,,"+1 706-545-0397","North America"
 1084731658843,"Pumpkin Ridge Golf Club","12930 Northwest Old Pumpkin Ridge Road","North Plains",97133,OR,USA,45.6135749,-123.0022747,https://www.pumpkinridge.com/,info@pumpkinridge.com,"+1 503-647-4747","North America"
 1086472827081,"Lake Shastina Golf Resort","5925 Country Club Drive",Weed,96094,CA,USA,41.5101187,-122.3670757,https://lakeshastinagolf.com/,,"+1 530-938-3201","North America"
@@ -161,7 +161,7 @@ ClubID,ClubName,Address,City,PostalCode,State,Country,Latitude,Longitude,Website
 1175538467570,"Timber Creek Golf Course","7050 Del Webb Boulevard",Roseville,95747,CA,USA,38.7772436,-121.3477182,https://www.timbercreekgc.com/,,"+1 916-774-3851","North America"
 1175885261986,"Town Park Villas Golf Course","6301 Gullstrand Street","San Diego",92122,CA,USA,32.851731,-117.190349,,,"+1 858-558-7273","North America"
 1176219044217,"North Park Par-3","810 East Ingomar Road",Wexford,15090,PA,USA,40.5897048,-80.0181671,https://www.northparkbattingrange.com/,,"+1 412-364-2363","North America"
-1176397051872,"Woodland Hills Golf Club","256 Summit Ridge Drive Southeast",Cartersville,30120,GA,USA,34.0937437,-84.834237,https://www.woodlandhills-golf.com/,,"+1 678-605-8585","North America"
+1176397051872,Woodland Hills Golf Club,592 Day Lake Drive,Midland,30120,GA,USA,32.5865594,-84.8124369,https://www.woodlandhills-golf.com/,,1,North America
 1176566138646,"Shadow Hills Golf Club","80875 Avenue 40",Indio,92203,CA,USA,33.7573865,-116.2526102,https://www.shadowhillsgolfclub.com/,,"+1 760-200-3375","North America"
 1177035122108,"Ram Rock Golf Course","200 Hi Circle North","Horseshoe Bay",78657,TX,USA,30.5440357,-98.4001039,https://www.hsbresort.com/golf/ram-rock/,,"+1 830-598-6561","North America"
 1177173770876,"Biltmore Golf Course Miami","1210 Anastasia Avenue","Coral Gables",33134,FL,USA,25.7405442,-80.2800652,https://www.biltmorehotel.com/golf/biltmore-golf,,"+1 305-460-5364","North America"
@@ -379,7 +379,7 @@ ClubID,ClubName,Address,City,PostalCode,State,Country,Latitude,Longitude,Website
 1245954158876,"Red Tail Golf Club","7900 RedTail Drive",Lakewood,60014,IL,USA,42.213892,-88.374643,www.redtailgolf.com,,815-477-0055,"North America"
 1245979334432,"McDaniel College Golf Club","207 Pennsylvania Avenue",Westminster,21157,MD,USA,39.5883909,-76.9995964,https://www.mcdanielathletics.com/information/facilities/golf,,"+1 410-848-7667","North America"
 1246207458225,"The Meadows of Six Mile Creek","800 North Century Avenue",Waunakee,53597,WI,USA,43.1998503,-89.4628623,https://golfsixmilecreek.com/,,"+1 608-849-9000","North America"
-1246218657288,"Yule Golf Club","1800 Harrison St",Alexandria,46001,IN,USA,40.244849,-85.671462,,,765-724-3229,"North America"
+1246218657288,Yule Golf Club,1800 Harrison St,Alexandria,46001,IN,USA,40.244849,-85.671462,,765-724-3229
 1246476846813,"The Preserve On Rathbun","10468 185th Ave",Moravia,52571,IA,USA,40.877581,-92.930356,www.honeycreekresort.com,,877-677-3344,"North America"
 1246559268601,"Golden Bear Golf Club","72 Golden Bear Way","Hilton Head Island",29926,SC,USA,32.208517,-80.732875,www.goldenbear-indigorun.com,,"(843) 689-2200","North America"
 1246597131256,"Marietta Country Club","1400 Marietta Country Club Drive",Kennesaw,30152,GA,USA,33.98496,-84.623308,http://www.mariettacountryclub.com/,,+17704261808,"North America"
@@ -700,7 +700,6 @@ ClubID,ClubName,Address,City,PostalCode,State,Country,Latitude,Longitude,Website
 166535506230302,"Oakhurst Golf & Country Club","7000 Oakhurst Lane","City of the Village of Clarkst",48348,MI,USA,42.7430918,-83.3469212,https://www.invitedclubs.com/clubs/oakhurst-golf-country-club,,"+1 248-391-3300","North America"
 167380920762863,"The Country Club","191 Clyde Street",Brookline,02467,MA,USA,42.314817,-71.147826,https://tcc1882.org/,,"+1 617-566-0240","North America"
 167743369918243,"Isle Dauphine Golf Course","100 Orleans Drive","Dauphin Island",36528,AL,USA,30.2473472,-88.1162577,https://m.facebook.com/IsleDauphine,dipoaoffice@gmail.com,"+1 251-533-0398","North America"
-167869302660205,"Woodland Hills Golf Club","320 North Gates Road",Sandusky,48471,MI,USA,43.429985,-82.850296,https://www.woodlandhillsclub.com/,,"+1 810-648-2400","North America"
 168010029470065,"Lake D'Arbonne Golf Course","180 Country Club Road",Farmerville,71241,LA,USA,32.7267196,-92.3412705,https://farmerville.org/countryclub/,,"+1 318-368-2474","North America"
 168247256033424,"Olde Mill Golf Club","6101 West X Y Avenue",Schoolcraft,49087,MI,USA,42.0891189,-85.6670684,https://www.oldemillgolfcourse.com/,pgustafson@gmail.com,"+1 269-679-5625","North America"
 168490155629451,"Crescent Bar Golf Course",6,Quincy,98848,WA,USA,47.2123379,-119.9952048,https://www.crescentbarrecreation.com/golfing,cresentbarrecreationarea@outlook.com,"+1 509-754-5002","North America"

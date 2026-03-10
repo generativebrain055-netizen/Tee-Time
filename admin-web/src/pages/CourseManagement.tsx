@@ -33,6 +33,7 @@ export function CourseManagement() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState<CsvCourse | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [courseToDelete, setCourseToDelete] = useState<CsvCourse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +51,7 @@ export function CourseManagement() {
   }, [load]);
 
   const openAdd = () => {
+    setEditingCourse(null);
     setForm({
       name: '',
       address: '',
@@ -66,6 +68,24 @@ export function CourseManagement() {
     setActionError(null);
   };
 
+  const openEdit = (c: CsvCourse) => {
+    setEditingCourse(c);
+    setForm({
+      name: c.name ?? '',
+      address: c.address ?? '',
+      city: c.city ?? '',
+      state: c.state ?? '',
+      country: c.country ?? 'USA',
+      postal_code: c.postalCode ?? '',
+      latitude: c.latitude != null ? String(c.latitude) : '',
+      longitude: c.longitude != null ? String(c.longitude) : '',
+      phone: c.telephone ?? c.phone ?? '',
+      website: c.website ?? '',
+    });
+    setModalOpen(true);
+    setActionError(null);
+  };
+
   const handleSave = async () => {
     const name = (form.name || '').trim();
     if (!name) {
@@ -74,7 +94,7 @@ export function CourseManagement() {
     }
     setSaving(true);
     setActionError(null);
-    const res = await addCsvCourse({
+    const payload = {
       name,
       address: form.address?.trim() || undefined,
       city: form.city?.trim() || undefined,
@@ -85,23 +105,46 @@ export function CourseManagement() {
       longitude: form.longitude ? Number(form.longitude) : undefined,
       phone: form.phone?.trim() || undefined,
       website: form.website?.trim() || undefined,
-    });
+    };
+    const res = editingCourse
+      ? await updateCsvCourse(editingCourse.id, payload)
+      : await addCsvCourse(payload);
     setSaving(false);
     if (res.success) {
       setModalOpen(false);
+      setEditingCourse(null);
       load();
-    } else setActionError(res.message || 'Failed to add course');
+    } else setActionError(res.message || (editingCourse ? 'Failed to update course' : 'Failed to add course'));
+  };
+
+  const openDeleteConfirm = (c: CsvCourse) => {
+    setCourseToDelete(c);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!courseToDelete) return;
+    const idToDelete = courseToDelete.id;
+    setDeletingId(idToDelete);
+    const res = await deleteCsvCourse(idToDelete);
+    setDeletingId(null);
+    setCourseToDelete(null);
+    if (res.success) {
+      setActionError(null);
+      setCourses((prev) => prev.filter((c) => c.id !== idToDelete));
+      setTotal((prev) => Math.max(0, prev - 1));
+      await load();
+    } else setActionError(res.message || 'Failed to delete course');
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div style={styles.wrapper}>
-      <h2 style={styles.title}>Golf courses (clubs.csv)</h2>
+      <h2 style={styles.title}>Golf courses</h2>
       <p style={styles.subtitle}>
-        Single clubs.csv file used by both the mobile app and admin for club search. Add courses here; they appear in the app immediately.
+        Courses are stored in the database (golf_courses table). Add, edit, or remove courses here.
         {!loading && total >= 0 && (
-          <span style={styles.count}> — {total} course{total !== 1 ? 's' : ''} in file</span>
+          <span style={styles.count}> — {total} course{total !== 1 ? 's' : ''}</span>
         )}
       </p>
       <div style={styles.toolbar}>
@@ -154,6 +197,7 @@ export function CourseManagement() {
                   <th style={styles.th}>City</th>
                   <th style={styles.th}>State</th>
                   <th style={styles.th}>Phone</th>
+                  <th style={styles.th}>Ongoing booked</th>
                   <th style={styles.th}>ID</th>
                   <th style={styles.th}></th>
                 </tr>
@@ -166,11 +210,12 @@ export function CourseManagement() {
                     <td style={styles.td}>{c.city ?? '—'}</td>
                     <td style={styles.td}>{c.state ?? '—'}</td>
                     <td style={styles.td}>{c.telephone ?? '—'}</td>
+                    <td style={styles.td}>{typeof c.ongoingBooked === 'number' ? c.ongoingBooked : '—'}</td>
                     <td style={styles.td}>{c.id}</td>
                     <td style={styles.td}>
                       <div style={styles.cellActions}>
                         <button type="button" onClick={() => openEdit(c)} style={styles.linkBtn}>Edit</button>
-                        <button type="button" onClick={() => handleDelete(c)} style={styles.deleteBtn} disabled={deletingId === c.id}>
+                        <button type="button" onClick={() => openDeleteConfirm(c)} style={styles.deleteBtn} disabled={deletingId === c.id}>
                           {deletingId === c.id ? 'Deleting…' : 'Delete'}
                         </button>
                       </div>
@@ -183,10 +228,29 @@ export function CourseManagement() {
         </>
       )}
 
+      {courseToDelete && (
+        <div style={styles.modalOverlay} onClick={() => !deletingId && setCourseToDelete(null)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Delete course</h3>
+            <p style={styles.confirmMessage}>
+              Delete course &quot;{courseToDelete.name ?? courseToDelete.id}&quot;? This cannot be undone.
+            </p>
+            <div style={styles.modalActions}>
+              <button type="button" onClick={() => !deletingId && setCourseToDelete(null)} style={styles.secondaryBtn} disabled={!!deletingId}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleDeleteConfirm} style={styles.deleteConfirmBtn} disabled={!!deletingId}>
+                {deletingId ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalOpen && (
         <div style={styles.modalOverlay} onClick={() => !saving && setModalOpen(false)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h3 style={styles.modalTitle}>Add course to clubs.csv</h3>
+            <h3 style={styles.modalTitle}>{editingCourse ? 'Edit course' : 'Add course'}</h3>
             {actionError && <div style={styles.error}>{actionError}</div>}
             <div style={styles.form}>
               {(['name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'website', 'latitude', 'longitude'] as const).map((key) => (
@@ -206,7 +270,7 @@ export function CourseManagement() {
             <div style={styles.modalActions}>
               <button type="button" onClick={() => !saving && setModalOpen(false)} style={styles.secondaryBtn}>Cancel</button>
               <button type="button" onClick={handleSave} style={styles.primaryBtn} disabled={saving}>
-                {saving ? 'Adding…' : 'Add course'}
+                {saving ? (editingCourse ? 'Saving…' : 'Adding…') : (editingCourse ? 'Save' : 'Add course')}
               </button>
             </div>
           </div>
@@ -238,6 +302,8 @@ const styles: Record<string, React.CSSProperties> = {
   cellActions: { display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' },
   linkBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', border: 'none', background: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline' },
   deleteBtn: { padding: 'var(--space-xs) var(--space-md)', fontSize: 'var(--font-size-sm)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: 'var(--color-surface)', color: 'var(--color-error)' },
+  confirmMessage: { marginBottom: 'var(--space-lg)', color: 'var(--color-text-primary)' },
+  deleteConfirmBtn: { padding: 'var(--space-md) var(--space-xl)', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: 'var(--color-on-primary)', fontWeight: 600, cursor: 'pointer' },
   error: { padding: 'var(--space-md)', background: 'var(--color-error-container)', color: 'var(--color-error)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-lg)' },
   muted: { color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' },
   tableWrap: { overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' },

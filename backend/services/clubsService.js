@@ -375,12 +375,14 @@ class ClubsService {
       Latitude: header.indexOf("Latitude") >= 0 ? header.indexOf("Latitude") : 7,
       Longitude: header.indexOf("Longitude") >= 0 ? header.indexOf("Longitude") : 8,
       Website: header.indexOf("Website") >= 0 ? header.indexOf("Website") : 9,
-      Telephone: header.indexOf("Telephone") >= 0 ? header.indexOf("Telephone") : 10,
+      Email: header.indexOf("Email") >= 0 ? header.indexOf("Email") : 10,
+      Telephone: header.indexOf("Telephone") >= 0 ? header.indexOf("Telephone") : 11,
+      Continent: header.indexOf("Continent") >= 0 ? header.indexOf("Continent") : 12,
     };
   }
 
   /**
-   * Build a single CSV data row (11 columns matching loadClubs)
+   * Build a single CSV data row (13 columns to match clubs.csv header)
    */
   _buildCsvRow(club) {
     return [
@@ -394,43 +396,95 @@ class ClubsService {
       this.escapeCsvValue(club.latitude != null ? club.latitude : ""),
       this.escapeCsvValue(club.longitude != null ? club.longitude : ""),
       this.escapeCsvValue(club.website ?? ""),
+      this.escapeCsvValue(club.email ?? ""),
       this.escapeCsvValue(club.telephone ?? club.phone ?? ""),
+      this.escapeCsvValue(club.continent ?? "North America"),
     ].join(",");
   }
 
+  _normName(s) {
+    return (s && String(s).trim().toLowerCase()) || "";
+  }
+
+  /** Keys allowed when updating a row in CSV (ongoingBooked and other non-CSV fields are ignored). */
+  static get CsvUpdateKeys() {
+    return ["name", "address", "city", "state", "country", "postal_code", "postalCode", "latitude", "longitude", "website", "email", "telephone", "phone", "continent"];
+  }
+
   /**
-   * Update a club in the CSV by id. Reloads in-memory data after write.
+   * Update a club in the CSV: find the matching row by id (or by name if id not found) and replace it with the changed course data.
+   * Only CSV column data is written; display-only fields like ongoingBooked are never added to clubs.csv.
    * @param {string} id - ClubID
-   * @param {Object} updates - { name?, address?, city?, state?, country?, postal_code?, latitude?, longitude?, website?, telephone? }
+   * @param {Object} updates - { name?, address?, city?, state?, country?, postal_code?, latitude?, longitude?, website?, telephone? } (ongoingBooked etc. ignored)
    * @returns {Promise<Object|null>} Updated club or null if not found
    */
   async updateClubInCsv(id, updates) {
+    const allowedKeys = this.constructor.CsvUpdateKeys;
+    const csvOnlyUpdates = {};
+    for (const key of Object.keys(updates || {})) {
+      if (allowedKeys.includes(key)) csvOnlyUpdates[key] = updates[key];
+    }
+    updates = csvOnlyUpdates;
     const csvPath = this.getCsvPath();
     if (!fs.existsSync(csvPath)) throw new Error("Clubs CSV file not found");
     const parsed = this._readCsvLines();
     if (!parsed) throw new Error("Could not read CSV");
     const { headerLine, dataLines } = parsed;
     const columnIndex = this._getColumnIndex(headerLine);
+    const idStr = String(id).trim();
+    const matchByName = this._normName(updates.name);
+
+    const getVal = (values, key) => {
+      const idx = columnIndex[key];
+      if (idx == null || idx < 0 || idx >= values.length) return "";
+      const v = values[idx];
+      return v != null ? String(v).trim() : "";
+    };
+    const getNum = (values, key) => {
+      const v = getVal(values, key);
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    let foundById = false;
+    for (let i = 0; i < dataLines.length; i++) {
+      const values = this.parseCSVLine(dataLines[i]);
+      if (values.length === 0) continue;
+      const rowId = getVal(values, "ClubID");
+      if (rowId && idStr && rowId === idStr) {
+        foundById = true;
+        break;
+      }
+    }
+
     let found = false;
+    let resolvedId = idStr;
     const newDataLines = dataLines.map((line) => {
       const values = this.parseCSVLine(line);
-      const rowId = (values[columnIndex.ClubID] || "").trim();
-      if (rowId !== String(id)) return line;
+      if (values.length === 0) return line;
+      const rowId = getVal(values, "ClubID");
+      const rowName = this._normName(getVal(values, "ClubName"));
+      const matchById = rowId && idStr && rowId === idStr;
+      const matchByNameFallback = !foundById && matchByName && rowName && rowName === matchByName;
+      if (!matchById && !matchByNameFallback) return line;
       found = true;
+      resolvedId = rowId || idStr;
       const existing = {
-        id: rowId,
-        name: (values[columnIndex.ClubName] || "").trim(),
-        address: (values[columnIndex.Address] || "").trim(),
-        city: (values[columnIndex.City] || "").trim(),
-        postalCode: (values[columnIndex.PostalCode] || "").trim(),
-        state: (values[columnIndex.State] || "").trim(),
-        country: (values[columnIndex.Country] || "").trim() || "USA",
-        latitude: parseFloat(values[columnIndex.Latitude]) || null,
-        longitude: parseFloat(values[columnIndex.Longitude]) || null,
-        website: (values[columnIndex.Website] || "").trim() || null,
-        telephone: (values[columnIndex.Telephone] || "").trim() || null,
+        id: resolvedId,
+        name: getVal(values, "ClubName"),
+        address: getVal(values, "Address"),
+        city: getVal(values, "City"),
+        postalCode: getVal(values, "PostalCode"),
+        state: getVal(values, "State"),
+        country: getVal(values, "Country") || "USA",
+        latitude: getNum(values, "Latitude"),
+        longitude: getNum(values, "Longitude"),
+        website: getVal(values, "Website") || null,
+        email: getVal(values, "Email") || null,
+        telephone: getVal(values, "Telephone") || null,
+        continent: getVal(values, "Continent") || "North America",
       };
-      const merged = { ...existing, ...updates, id: rowId };
+      const merged = { ...existing, ...updates, id: existing.id };
       return this._buildCsvRow(merged);
     });
     if (!found) return null;
@@ -438,12 +492,12 @@ class ClubsService {
     fs.writeFileSync(csvPath, newContent, "utf-8");
     this.loaded = false;
     await this.loadClubs();
-    return this.getClubById(String(id));
+    return this.getClubById(resolvedId) || this.clubs.find((c) => this._normName(c.name) === matchByName) || null;
   }
 
   /**
-   * Delete a club from the CSV by id. Reloads in-memory data after write.
-   * @param {string} id - ClubID
+   * Delete a club from the CSV: remove the row whose ClubID matches the given id.
+   * @param {string} id - ClubID (from the course row on admin website)
    * @returns {Promise<boolean>} true if deleted, false if not found
    */
   async deleteClubFromCsv(id) {
@@ -453,10 +507,11 @@ class ClubsService {
     if (!parsed) throw new Error("Could not read CSV");
     const { headerLine, dataLines } = parsed;
     const columnIndex = this._getColumnIndex(headerLine);
-    const idStr = String(id);
+    const idStr = String(id).trim();
     const newDataLines = dataLines.filter((line) => {
       const values = this.parseCSVLine(line);
-      const rowId = (values[columnIndex.ClubID] || "").trim();
+      if (values.length === 0) return true;
+      const rowId = (values[columnIndex.ClubID] != null ? String(values[columnIndex.ClubID]) : "").trim();
       return rowId !== idStr;
     });
     if (newDataLines.length === dataLines.length) return false;

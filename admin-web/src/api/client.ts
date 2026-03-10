@@ -472,7 +472,7 @@ export async function deleteCourse(id: string): Promise<{ success: true } | { su
   return { success: false, message: data.message || 'Delete failed' };
 }
 
-// --- Golf courses CSV (backend/data/clubs.csv) ---
+// --- Golf courses (database table golf_courses) ---
 export type CsvCourse = {
   id: string;
   name: string;
@@ -486,47 +486,61 @@ export type CsvCourse = {
   telephone?: string | null;
   phone?: string | null;
   website?: string | null;
+  /** Ongoing booked tee times (pending/confirmed/in_progress, date >= today). */
+  ongoingBooked?: number;
 };
+
+function normalizeCourse(c: Record<string, unknown>): CsvCourse {
+  return {
+    ...c,
+    id: String(c.id ?? ''),
+    telephone: (c.telephone ?? c.phone) as string | null | undefined,
+    postalCode: (c.postalCode ?? c.postal_code) as string | null | undefined,
+  } as CsvCourse;
+}
 
 export async function listCsvCourses(q?: string, limit?: number, offset?: number): Promise<{ success: true; data: CsvCourse[]; total: number } | { success: false; message: string }> {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (limit != null) params.set('limit', String(limit));
   if (offset != null) params.set('offset', String(offset));
-  const url = params.toString() ? `/api/admin/courses/csv?${params}` : '/api/admin/courses/csv';
+  const url = params.toString() ? `/api/admin/courses?${params}` : '/api/admin/courses';
   const res = await authFetch(url);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { success: false, message: data.message || 'Failed to load CSV courses' };
-  if (data.success && Array.isArray(data.data)) return { success: true, data: data.data, total: data.total ?? data.data.length };
+  if (!res.ok) return { success: false, message: data.message || 'Failed to load courses' };
+  if (data.success && Array.isArray(data.data)) {
+    const list = data.data.map((c: Record<string, unknown>) => normalizeCourse(c));
+    return { success: true, data: list, total: data.total ?? list.length };
+  }
   return { success: false, message: 'Invalid response' };
 }
 
 export async function addCsvCourse(body: { name: string; address?: string; city?: string; state?: string; country?: string; postal_code?: string; latitude?: number; longitude?: number; phone?: string; website?: string }): Promise<{ success: true; data: CsvCourse } | { success: false; message: string }> {
-  const res = await authFetch('/api/admin/courses/csv', {
+  const res = await authFetch('/api/admin/courses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { success: false, message: data.message || 'Failed to add course to CSV' };
-  if (data.success && data.data) return { success: true, data: data.data };
+  if (!res.ok) return { success: false, message: data.message || 'Failed to add course' };
+  if (data.success && data.data) return { success: true, data: normalizeCourse(data.data) };
   return { success: false, message: data.message || 'Invalid response' };
 }
 
 export async function updateCsvCourse(id: string, body: { name?: string; address?: string; city?: string; state?: string; country?: string; postal_code?: string; latitude?: number; longitude?: number; phone?: string; website?: string }): Promise<{ success: true; data: CsvCourse } | { success: false; message: string }> {
-  const res = await authFetch(`/api/admin/courses/csv/${encodeURIComponent(id)}`, {
+  const res = await authFetch(`/api/admin/courses/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to update course' };
-  if (data.success && data.data) return { success: true, data: data.data };
+  if (data.success && data.data) return { success: true, data: normalizeCourse(data.data) };
   return { success: false, message: data.message || 'Invalid response' };
 }
 
 export async function deleteCsvCourse(id: string): Promise<{ success: true } | { success: false; message: string }> {
-  const res = await authFetch(`/api/admin/courses/csv/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const res = await authFetch(`/api/admin/courses/${encodeURIComponent(id)}`, { method: 'DELETE' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to delete course' };
   if (data.success) return { success: true };

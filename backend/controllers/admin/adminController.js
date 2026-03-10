@@ -540,14 +540,53 @@ const getSystemSettings = async (req, res, next) => {
   }
 };
 
-// ---------- Golf courses (admin CRUD for autocomplete database) ----------
+// ---------- Golf courses (admin CRUD from database table golf_courses) ----------
 const listCourses = async (req, res, next) => {
   try {
     const q = String(req.query.q || "").trim();
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const result = await courseRepository.listCourses(q, limit, offset);
-    return res.json({ success: true, data: result?.courses || [], total: result?.total ?? 0 });
+    const courses = result?.courses || [];
+    const total = result?.total ?? 0;
+
+    // Ongoing booked tee times: pending, confirmed, in_progress, tee_date >= today (match by course_id)
+    const today = new Date().toISOString().slice(0, 10);
+    let ongoingCounts = [];
+    try {
+      const { data: ttRows, error: ttError } = await supabaseAdmin
+        .from("tee_times")
+        .select("course_id, course_name")
+        .in("status", ["pending", "confirmed", "in_progress"])
+        .gte("tee_date", today);
+      if (!ttError && Array.isArray(ttRows)) {
+        const map = new Map();
+        for (const row of ttRows) {
+          const cid = (row.course_id && String(row.course_id).trim()) || "";
+          const cname = (row.course_name && String(row.course_name).trim()) || "";
+          const key = `${cid}\t${cname}`;
+          map.set(key, (map.get(key) || 0) + 1);
+        }
+        ongoingCounts = Array.from(map.entries()).map(([key, count]) => {
+          const [course_id, course_name] = key.split("\t");
+          return { course_id, course_name, count };
+        });
+      }
+    } catch (err) {
+      logger.warn("Admin listCourses: could not load ongoing tee time counts", err);
+    }
+
+    const coursesWithCounts = courses.map((course) => {
+      let ongoingBooked = 0;
+      const courseIdStr = course.id && String(course.id);
+      for (const row of ongoingCounts) {
+        const matchById = row.course_id && courseIdStr && row.course_id === courseIdStr;
+        if (matchById) ongoingBooked += row.count;
+      }
+      return { ...course, ongoingBooked };
+    });
+
+    return res.json({ success: true, data: coursesWithCounts, total });
   } catch (error) {
     logger.error("Admin listCourses error:", error);
     next(error);
@@ -604,6 +643,9 @@ const deleteCourse = async (req, res, next) => {
 };
 
 // ---------- Golf courses CSV (read from / add to backend/data/clubs.csv) ----------
+/** Normalize course name for matching (trim, lower). */
+const norm = (s) => (s && String(s).trim().toLowerCase()) || "";
+
 const listCsvCourses = async (req, res, next) => {
   try {
     await clubsService.loadClubs();
@@ -611,7 +653,44 @@ const listCsvCourses = async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const { clubs, total } = clubsService.getClubsForAdmin(q || undefined, limit, offset);
-    return res.json({ success: true, data: clubs, total });
+
+    // Ongoing booked tee times: pending, confirmed, in_progress, tee_date >= today
+    const today = new Date().toISOString().slice(0, 10);
+    let ongoingCounts = []; // { course_id, course_name, count }
+    try {
+      const { data: ttRows, error: ttError } = await supabaseAdmin
+        .from("tee_times")
+        .select("course_id, course_name")
+        .in("status", ["pending", "confirmed", "in_progress"])
+        .gte("tee_date", today);
+      if (!ttError && Array.isArray(ttRows)) {
+        const map = new Map(); // key "course_id|course_name" -> count
+        for (const row of ttRows) {
+          const cid = (row.course_id && String(row.course_id).trim()) || "";
+          const cname = (row.course_name && String(row.course_name).trim()) || "";
+          const key = `${cid}\t${cname}`;
+          map.set(key, (map.get(key) || 0) + 1);
+        }
+        ongoingCounts = Array.from(map.entries()).map(([key, count]) => {
+          const [course_id, course_name] = key.split("\t");
+          return { course_id, course_name, count };
+        });
+      }
+    } catch (err) {
+      logger.warn("Admin listCsvCourses: could not load ongoing tee time counts", err);
+    }
+
+    const clubsWithCounts = clubs.map((club) => {
+      let ongoingBooked = 0;
+      for (const row of ongoingCounts) {
+        const matchById = row.course_id && String(club.id) === String(row.course_id);
+        const matchByName = !row.course_id && norm(row.course_name) === norm(club.name);
+        if (matchById || matchByName) ongoingBooked += row.count;
+      }
+      return { ...club, ongoingBooked };
+    });
+
+    return res.json({ success: true, data: clubsWithCounts, total });
   } catch (error) {
     logger.error("Admin listCsvCourses error:", error);
     next(error);
@@ -651,6 +730,7 @@ const updateCsvCourse = async (req, res, next) => {
     const { id } = req.params;
     const { name, address, city, state, country, postal_code, postalCode, latitude, longitude, phone, telephone, website } = req.body || {};
     if (!id) return res.status(400).json({ success: false, message: "Course ID is required." });
+    // Only CSV columns are passed to the service; ongoingBooked (tee time count) is display-only and never written to clubs.csv
     const updates = {};
     if (name !== undefined) updates.name = String(name).trim();
     if (address !== undefined) updates.address = String(address).trim();
