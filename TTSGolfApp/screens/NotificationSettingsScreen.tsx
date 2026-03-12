@@ -39,11 +39,14 @@ const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: stri
     { type: 'tee_time_invite', label: 'Tee Time Invites', description: 'When someone invites you to a tee time' },
     { type: 'tee_time_response', label: 'Tee Time Responses', description: 'When someone responds to your invite' },
     { type: 'player_cancelled', label: 'Player Cancelled', description: 'When a player cancels their spot in your tee time' },
+    { type: 'spot_opened', label: 'Spot Opened', description: 'When a spot opens in a tee time' },
     { type: 'friend_request', label: 'Friend Requests', description: 'When someone sends you a friend request' },
+    { type: 'friend_accepted', label: 'Friend Request Accepted', description: 'When someone accepts your friend request' },
+    { type: 'group_invite', label: 'Group Invites', description: 'When someone invites you to a roster group' },
+    { type: 'group_invite_accepted', label: 'Group Invite Accepted', description: 'When someone accepts your group invitation' },
     { type: 'roster_add', label: 'Roster Adds', description: 'When someone adds you to their roster' },
     { type: 'waiver_wire', label: 'Waiver Wire (Matching Availability)', description: 'When roster members with matching availability post on Waiver Wire' },
     { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
-    { type: 'spot_opened', label: 'Spot Opened', description: 'When a spot opens in a tee time' },
 ];
 
 export default function NotificationSettingsScreen({ navigation }: any) {
@@ -246,32 +249,31 @@ export default function NotificationSettingsScreen({ navigation }: any) {
                 {/* Per-Type Notification Settings */}
                 {typeSettings.length > 0 && (
                     <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
-                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                            Notification Types
-                        </Text>
-                        <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                            Turn push and in-app on or off for each notification type
-                        </Text>
-                        
+                        <View style={styles.sectionHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                                Notification Types
+                            </Text>
+                            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                                Turn push and in-app on or off for each notification type
+                            </Text>
+                        </View>
                         {typeSettings.map((typeSetting, index) => (
-                            <View key={typeSetting.id}>
-                                <View style={[
-                                    styles.typeSettingHeader,
+                            <View
+                                key={typeSetting.id}
+                                style={[
+                                    styles.typeSettingBlock,
                                     index < typeSettings.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: 1 },
-                                ]}>
-                                    <View style={styles.typeSettingContent}>
-                                        <Text style={[styles.typeSettingLabel, { color: colors.textPrimary }]}>
-                                            {typeSetting.label}
-                                        </Text>
-                                        <Text style={[styles.typeSettingDescription, { color: colors.textSecondary }]}>
-                                            {typeSetting.description}
-                                        </Text>
-                                    </View>
+                                ]}
+                            >
+                                <View style={styles.typeSettingLabelBlock}>
+                                    <Text style={[styles.typeSettingLabel, { color: colors.textPrimary }]}>
+                                        {typeSetting.label}
+                                    </Text>
+                                    <Text style={[styles.typeSettingDescription, { color: colors.textSecondary }]}>
+                                        {typeSetting.description}
+                                    </Text>
                                 </View>
-                                <View style={[
-                                    styles.typeSettingToggles,
-                                    index < typeSettings.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: 1 },
-                                ]}>
+                                <View style={styles.typeSettingToggles}>
                                     <View style={styles.toggleRow}>
                                         <Text style={[styles.toggleLabel, { color: colors.textSecondary }]}>
                                             Push
@@ -378,6 +380,11 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: spacing.md,
     },
+    sectionHeader: {
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.sm,
+    },
     sectionTitle: {
         fontFamily: fontFamily.bold,
         fontSize: fontSize.lg,
@@ -386,13 +393,14 @@ const styles = StyleSheet.create({
     sectionSubtitle: {
         fontFamily: fontFamily.regular,
         fontSize: fontSize.sm,
-        marginBottom: spacing.md,
     },
-    typeSettingHeader: {
-        padding: spacing.lg,
+    typeSettingBlock: {
+        paddingHorizontal: spacing.lg,
     },
-    typeSettingContent: {
-        flex: 1,
+    typeSettingLabelBlock: {
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.sm,
+        minWidth: 0,
     },
     typeSettingLabel: {
         fontFamily: fontFamily.semiBold,
@@ -402,9 +410,9 @@ const styles = StyleSheet.create({
     typeSettingDescription: {
         fontFamily: fontFamily.regular,
         fontSize: fontSize.sm,
+        lineHeight: 20,
     },
     typeSettingToggles: {
-        paddingHorizontal: spacing.lg,
         paddingBottom: spacing.md,
     },
     toggleRow: {
