@@ -90,4 +90,14 @@ export const notificationApi = {
       `${API_ENDPOINTS.NOTIFICATIONS}/read`,
       { method: "DELETE" },
     ),
+
+  /**
+   * Register device push token with backend for FCM/Expo broadcast and in-app push.
+   * Call after login so admin broadcast and in-app notifications reach this device.
+   */
+  registerPushToken: (pushToken: string, pushPlatform: string = "expo") =>
+    apiCall<{ success: boolean; message: string }>(API_ENDPOINTS.NOTIFICATIONS_PUSH_TOKEN, {
+      method: "POST",
+      body: JSON.stringify({ pushToken, pushPlatform }),
+    }),
 };

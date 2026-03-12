@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
+const deviceFingerprint = require("../utils/deviceFingerprint");
 
 class NotificationController {
   constructor() {
@@ -11,6 +12,41 @@ class NotificationController {
     this.markAllAsRead = this.markAllAsRead.bind(this);
     this.deleteNotification = this.deleteNotification.bind(this);
     this.deleteAllRead = this.deleteAllRead.bind(this);
+    this.registerPushToken = this.registerPushToken.bind(this);
+  }
+
+  /**
+   * POST /api/notifications/push-token
+   * Register device push token (Expo or FCM) for the current user so admin broadcast and in-app push work.
+   * Requires captureDeviceInfo so the backend can match the device by fingerprint.
+   */
+  async registerPushToken(req, res) {
+    try {
+      const userId = req.user.id;
+      const pushToken = req.body.pushToken && String(req.body.pushToken).trim();
+      const pushPlatform = (req.body.pushPlatform && String(req.body.pushPlatform).trim()) || "expo";
+
+      if (!pushToken) {
+        return res.status(400).json({ success: false, message: "pushToken is required." });
+      }
+
+      const deviceInfo = req.deviceInfo || deviceFingerprint.extractDeviceInfo(req);
+      const device = await deviceFingerprint.saveDevice(userId, {
+        ...deviceInfo,
+        pushToken,
+        pushPlatform,
+      });
+
+      if (!device) {
+        return res.status(500).json({ success: false, message: "Failed to register push token." });
+      }
+
+      logger.info("[NOTIFICATIONS] Push token registered", { userId, pushPlatform: pushPlatform.substring(0, 10) + "…" });
+      return res.json({ success: true, message: "Push token registered." });
+    } catch (error) {
+      logger.error("Register push token error:", error.message);
+      return res.status(500).json({ success: false, message: "Failed to register push token." });
+    }
   }
 
   // GET /api/notifications

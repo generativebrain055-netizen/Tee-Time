@@ -93,6 +93,7 @@ export interface ApiEndpoints {
   NOTIFICATIONS: string;
   NOTIFICATIONS_UNREAD_COUNT: string;
   NOTIFICATIONS_READ_ALL: string;
+  NOTIFICATIONS_PUSH_TOKEN: string;
   // Global search (Figma 795-6009, 791-*)
   SEARCH: string;
   // Draft (QR Code)
@@ -173,6 +174,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   NOTIFICATIONS: `${API_URL}/api/notifications`,
   NOTIFICATIONS_UNREAD_COUNT: `${API_URL}/api/notifications/unread-count`,
   NOTIFICATIONS_READ_ALL: `${API_URL}/api/notifications/read-all`,
+  NOTIFICATIONS_PUSH_TOKEN: `${API_URL}/api/notifications/push-token`,
   SEARCH: `${API_URL}/api/search`,
   // Draft (QR Code)
   DRAFT_QR: `${API_URL}/api/draft/qr`,

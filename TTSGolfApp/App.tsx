@@ -1,5 +1,5 @@
 import "./global.css";
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PaperProvider } from "react-native-paper";
@@ -10,6 +10,7 @@ import { fontAssets } from "./theme/fonts";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { logger } from "./utils/logger";
+import { registerPushTokenIfNeeded } from "./utils/registerPushToken";
 
 // New design system imports
 import {
@@ -166,6 +167,16 @@ export default function App(): React.ReactElement {
         setFontsLoaded(true); // Continue even if fonts fail
       });
   }, []);
+
+  // Register push token when user is in main app so admin broadcast and in-app push work (FCM/Expo)
+  const pushTokenRegisteredRef = useRef(false);
+  useEffect(() => {
+    const mainScreens: ScreenName[] = ["Home", "Invites", "Messages", "Profile", "AvailabilityOnboarding"];
+    if (!mainScreens.includes(currentScreen)) return;
+    if (pushTokenRegisteredRef.current) return;
+    pushTokenRegisteredRef.current = true;
+    registerPushTokenIfNeeded();
+  }, [currentScreen]);
 
   // Set up session expired handler
   useEffect(() => {

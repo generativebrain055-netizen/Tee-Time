@@ -54,6 +54,16 @@
       "expo-apple-authentication",
       "expo-location",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/AppIcon.png",
+          "color": "#16A34A",
+          "sounds": [],
+          "mode": "production",
+          "defaultChannelId": "default"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "This app uses the camera to scan QR codes and take profile photos."

@@ -31,6 +31,10 @@ const extractDeviceInfo = (req) => {
   // Parse user agent as fallback
   const parsedInfo = parseUserAgent(userAgent);
 
+  // Merge push token from body (for login/register so device gets token on first auth)
+  const bodyPushToken = req.body?.pushToken;
+  const bodyPushPlatform = req.body?.pushPlatform;
+
   // If we have explicit device info from mobile app, use that
   if (explicitDeviceName || bodyDeviceInfo) {
     const mobileInfo = bodyDeviceInfo || {};
@@ -62,7 +66,7 @@ const extractDeviceInfo = (req) => {
       deviceId: explicitDeviceId || mobileInfo.deviceId,
     });
 
-    return {
+    const info = {
       userAgent,
       ipAddress,
       acceptLanguage,
@@ -76,16 +80,22 @@ const extractDeviceInfo = (req) => {
       appVersion: explicitAppVersion || mobileInfo.appVersion,
       isNativeApp: true,
     };
+    if (bodyPushToken !== undefined) info.pushToken = bodyPushToken;
+    if (bodyPushPlatform !== undefined) info.pushPlatform = bodyPushPlatform;
+    return info;
   }
 
   // Fallback to user-agent parsing for web requests
-  return {
+  const fallback = {
     userAgent,
     ipAddress,
     acceptLanguage,
     ...parsedInfo,
     isNativeApp: false,
   };
+  if (bodyPushToken !== undefined) fallback.pushToken = bodyPushToken;
+  if (bodyPushPlatform !== undefined) fallback.pushPlatform = bodyPushPlatform;
+  return fallback;
 };
 
 /**
@@ -245,19 +255,26 @@ const saveDevice = async (userId, deviceInfo) => {
     }
 
     if (existing) {
-      // Update existing device
+      // Update existing device (including push token when provided for FCM/Expo)
+      const updates = {
+        last_seen_at: new Date().toISOString(),
+        last_ip_address: deviceInfo.ipAddress,
+        user_agent: deviceInfo.userAgent,
+        device_name: deviceInfo.deviceName || undefined,
+        app_version: deviceInfo.appVersion || undefined,
+        is_native_app: deviceInfo.isNativeApp || false,
+      };
+      if (deviceInfo.pushToken !== undefined) {
+        updates.push_token = deviceInfo.pushToken && String(deviceInfo.pushToken).trim() ? String(deviceInfo.pushToken).trim() : null;
+      }
+      if (deviceInfo.pushPlatform !== undefined) {
+        updates.push_platform = deviceInfo.pushPlatform && String(deviceInfo.pushPlatform).trim() ? String(deviceInfo.pushPlatform).trim() : null;
+      }
       const { data, error } = await supabaseAdmin
         .from("devices")
-        .update({
-          last_seen_at: new Date().toISOString(),
-          last_ip_address: deviceInfo.ipAddress,
-          user_agent: deviceInfo.userAgent,
-          device_name: deviceInfo.deviceName || undefined,
-          app_version: deviceInfo.appVersion || undefined,
-          is_native_app: deviceInfo.isNativeApp || false,
-        })
+        .update(updates)
         .eq("id", existing.id)
-        .select("id, device_name, device_type, os, browser, is_native_app")
+        .select("id, device_name, device_type, os, browser, is_native_app, push_token, push_platform")
         .single();
 
       if (error) {
@@ -269,7 +286,9 @@ const saveDevice = async (userId, deviceInfo) => {
       return data;
     }
 
-    // Create new device
+    // Create new device (include push token when provided for FCM/Expo)
+    const pushTokenVal = deviceInfo.pushToken && String(deviceInfo.pushToken).trim() ? String(deviceInfo.pushToken).trim() : null;
+    const pushPlatformVal = deviceInfo.pushPlatform && String(deviceInfo.pushPlatform).trim() ? String(deviceInfo.pushPlatform).trim() : null;
     const { data, error } = await supabaseAdmin
       .from("devices")
       .insert({
@@ -285,8 +304,10 @@ const saveDevice = async (userId, deviceInfo) => {
         user_agent: deviceInfo.userAgent,
         last_ip_address: deviceInfo.ipAddress,
         is_native_app: deviceInfo.isNativeApp || false,
+        push_token: pushTokenVal,
+        push_platform: pushPlatformVal,
       })
-      .select("id, device_name, device_type, os, browser, is_native_app")
+      .select("id, device_name, device_type, os, browser, is_native_app, push_token, push_platform")
       .single();
 
     if (error) {

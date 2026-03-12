@@ -3,40 +3,68 @@ const logger = require("../config/logger");
 const { invitesLogger } = require("../config/logger");
 const deviceRepository = require("../repositories/deviceRepository");
 
+/** Expo push tokens start with this prefix. Others are treated as FCM tokens. */
+const EXPO_PUSH_TOKEN_PREFIX = "ExponentPushToken[";
+
 /**
  * Notification Service
- * Handles creating in-app notifications for various events
+ * Handles creating in-app notifications and sending push via Expo and/or Firebase FCM.
+ * Admin broadcast uses this; FCM is used when devices register FCM tokens.
  */
 class NotificationService {
   /**
-   * Send push notification via Expo Push Notification API
-   * @param {Array} pushTokens - Array of Expo push tokens
+   * Send push notifications: Expo tokens → Expo Push API; other tokens → Firebase FCM.
+   * @param {string[]} pushTokens - Array of Expo or FCM push tokens
    * @param {string} title - Notification title
    * @param {string} body - Notification body
-   * @param {Object} data - Additional data
+   * @param {Object} data - Additional data (flat string values for FCM)
    */
   async sendPushNotifications(pushTokens, title, body, data = {}) {
     if (!pushTokens || pushTokens.length === 0) {
       return { sent: 0, failed: 0 };
     }
 
+    const expoTokens = pushTokens.filter((t) => t && t.startsWith(EXPO_PUSH_TOKEN_PREFIX));
+    const fcmTokens = pushTokens.filter((t) => t && typeof t === "string" && !t.startsWith(EXPO_PUSH_TOKEN_PREFIX));
+
+    let sent = 0;
+    let failed = 0;
+
+    if (expoTokens.length > 0) {
+      const expoResult = await this._sendExpoPush(expoTokens, title, body, data);
+      sent += expoResult.sent;
+      failed += expoResult.failed;
+    }
+
+    if (fcmTokens.length > 0) {
+      const fcmResult = await this._sendFcmPush(fcmTokens, title, body, data);
+      sent += fcmResult.sent;
+      failed += fcmResult.failed;
+    }
+
+    return { sent, failed };
+  }
+
+  /**
+   * Send via Expo Push API (ExponentPushToken[...])
+   */
+  async _sendExpoPush(pushTokens, title, body, data) {
     try {
-      // Use Expo Push Notification API
-      const messages = pushTokens.map(token => ({
+      const messages = pushTokens.map((token) => ({
         to: token,
-        sound: 'default',
-        title: title,
-        body: body,
-        data: data,
-        priority: 'high',
+        sound: "default",
+        title,
+        body,
+        data: data || {},
+        priority: "high",
       }));
 
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
         headers: {
-          'Accept': 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(messages),
       });
@@ -46,19 +74,59 @@ class NotificationService {
       }
 
       const result = await response.json();
-      // Expo Push API returns an array directly, or { data: [...] } format
-      const results = Array.isArray(result) ? result : (result.data || []);
-      const sent = results.filter(r => r.status === 'ok').length || 0;
-      const failed = results.filter(r => r.status === 'error').length || 0;
-
+      const results = Array.isArray(result) ? result : result.data || [];
+      const sent = results.filter((r) => r.status === "ok").length;
+      const failed = results.filter((r) => r.status === "error").length;
       if (failed > 0) {
-        logger.warn(`Some push notifications failed: ${failed} of ${pushTokens.length}`);
+        logger.warn(`Expo push: ${failed} of ${pushTokens.length} failed`);
       }
-
       return { sent, failed };
     } catch (error) {
-      logger.error("Error sending push notifications:", error.message);
+      logger.error("Expo push error:", error.message);
       return { sent: 0, failed: pushTokens.length };
+    }
+  }
+
+  /**
+   * Send via Firebase Cloud Messaging (FCM). Requires Firebase Admin with a service account that has FCM.
+   * @param {string[]} tokens - FCM registration tokens
+   */
+  async _sendFcmPush(tokens, title, body, data) {
+    if (!tokens.length) return { sent: 0, failed: 0 };
+    try {
+      const admin = require("../config/firebaseAdmin");
+      if (!admin.messaging) {
+        logger.warn("Firebase Admin messaging not available; skipping FCM send.");
+        return { sent: 0, failed: tokens.length };
+      }
+      const dataPayload = {};
+      if (data && typeof data === "object") {
+        for (const [k, v] of Object.entries(data)) {
+          dataPayload[k] = String(v ?? "");
+        }
+      }
+      const message = {
+        notification: { title, body },
+        data: dataPayload,
+        android: {
+          priority: "high",
+          notification: { sound: "default", channelId: "default" },
+        },
+        apns: { payload: { aps: { sound: "default" } } },
+      };
+      const batch = await admin.messaging().sendEachForMulticast({
+        tokens,
+        ...message,
+      });
+      const sent = batch.successCount;
+      const failed = batch.failureCount;
+      if (failed > 0) {
+        logger.warn(`FCM push: ${failed} of ${tokens.length} failed`);
+      }
+      return { sent, failed };
+    } catch (error) {
+      logger.error("FCM push error:", error.message);
+      return { sent: 0, failed: tokens.length };
     }
   }
 

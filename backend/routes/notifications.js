@@ -1,13 +1,31 @@
 const { Router } = require("express");
-const { query } = require("express-validator");
+const { query, body } = require("express-validator");
 const notificationController = require("../controllers/notificationController");
 const { authenticate } = require("../middleware/auth");
 const { validateRequest } = require("../middleware/validator");
+const { captureDeviceInfo } = require("../utils/deviceFingerprint");
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+/**
+ * @route   POST /api/notifications/push-token
+ * @desc    Register device push token (Expo or FCM) for broadcast and in-app push
+ * @body    pushToken (required), pushPlatform (optional, e.g. 'expo' or 'fcm')
+ * @access  Private
+ */
+router.post(
+  "/push-token",
+  captureDeviceInfo,
+  [
+    body("pushToken").trim().notEmpty().withMessage("pushToken is required"),
+    body("pushPlatform").optional().trim().isLength({ max: 20 }),
+  ],
+  validateRequest,
+  notificationController.registerPushToken,
+);
 
 /**
  * @route   GET /api/notifications
