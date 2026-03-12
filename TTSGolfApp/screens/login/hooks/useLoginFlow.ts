@@ -5,11 +5,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Animated, Keyboard, TextInput as RNTextInput } from "react-native";
 import * as Linking from "expo-linking";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { requestSmsMagicLinkForLogin, verifySmsMagicLink } from "../../../utils/smsMagicLink";
 import { LoginStep } from "../constants";
 import { Country, COUNTRIES } from "../../../components/CountryPicker";
 import { logger } from "../../../utils/logger";
+import { sessionManager } from "../../../utils/sessionManager";
+import { availabilityApi } from "../../../services/api/availabilityApi";
 
 export const useLoginFlow = (navigation: any) => {
     // State
@@ -69,10 +70,21 @@ export const useLoginFlow = (navigation: any) => {
 
                 if (result.success && result.accessToken && result.refreshToken && result.user) {
                     logger.info("[LoginFlow] Magic link verified successfully, saving session");
-                    await AsyncStorage.setItem("accessToken", result.accessToken);
-                    await AsyncStorage.setItem("refreshToken", result.refreshToken);
-                    await AsyncStorage.setItem("user", JSON.stringify(result.user));
-                    navigation?.navigate("Home", { user: result.user });
+                    await sessionManager.saveSession({
+                        accessToken: result.accessToken,
+                        refreshToken: result.refreshToken,
+                        user: result.user,
+                    });
+                    try {
+                        const response = await availabilityApi.getUserAvailability();
+                        if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) {
+                            navigation?.replace("AvailabilityOnboarding", {});
+                        } else {
+                            navigation?.replace("Home");
+                        }
+                    } catch {
+                        navigation?.replace("Home");
+                    }
                 } else if (!result.success) {
                     logger.error("[LoginFlow] Magic link verification failed", { error: result.error });
                     setHasError(true);

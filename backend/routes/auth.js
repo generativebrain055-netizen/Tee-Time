@@ -17,6 +17,30 @@ const { captureDeviceInfo } = require("../utils/deviceFingerprint");
 const router = Router();
 
 /**
+ * @route   POST /auth/register-username
+ * @desc    Register with username and password (no phone required)
+ * @access  Public
+ */
+router.post(
+  "/register-username",
+  captureDeviceInfo,
+  rateLimiter.login,
+  [
+    body("username")
+      .trim()
+      .isLength({ min: 3, max: 50 })
+      .withMessage("Username must be between 3 and 50 characters"),
+    body("password").trim().notEmpty().withMessage("Password is required"),
+    body("firstName").optional().trim().isLength({ max: 50 }),
+    body("lastName").optional().trim().isLength({ max: 50 }),
+    body("email").optional().trim().isEmail().normalizeEmail(),
+  ],
+  validateRequest,
+  logAuthEvent("user_registered"),
+  authController.registerWithUsername,
+);
+
+/**
  * @route   POST /api/auth/request-otp
  * @desc    Request OTP for phone number (not used for sign-up/sign-in; app uses magic link)
  * @access  Public
@@ -110,6 +134,17 @@ router.post(
       .isBoolean()
       .withMessage("rememberMe must be a boolean"),
   ],
+  (req, res, next) => {
+    const hasUsername = req.body.username && req.body.username.trim().length >= 3;
+    const hasPhone = req.body.phoneNumber && /^\+[1-9]\d{1,14}$/.test(String(req.body.phoneNumber).trim());
+    if (!hasUsername && !hasPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number or username is required.",
+      });
+    }
+    next();
+  },
   validateRequest,
   logAuthEvent("login"),
   authController.login,

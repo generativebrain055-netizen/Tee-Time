@@ -54,6 +54,7 @@ export interface ApiEndpoints {
   REQUEST_SMS_MAGIC_LINK_LOGIN: string;
   VERIFY_SMS_MAGIC_LINK: string;
   REGISTER: string;
+  REGISTER_USERNAME: string;
   UPDATE_PROFILE: string;
   GOOGLE_SIGNIN: string;
   // Roster
@@ -133,6 +134,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   REQUEST_SMS_MAGIC_LINK_LOGIN: `${API_URL}/auth/sms-magic-link-login`,
   VERIFY_SMS_MAGIC_LINK: `${API_URL}/auth/verify-sms-magic`,
   REGISTER: `${API_URL}/auth/register`,
+  REGISTER_USERNAME: `${API_URL}/auth/register-username`,
   UPDATE_PROFILE: `${API_URL}/auth/profile`,
   GOOGLE_SIGNIN: `${API_URL}/auth/google`,
   // Roster

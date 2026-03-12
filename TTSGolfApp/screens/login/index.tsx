@@ -1,8 +1,9 @@
 /**
  * Login Screen - iOS Keyboard Fixed Implementation
  * Keyboard overlays on top without pushing content
+ * Supports: phone magic link, username+password sign in, username+password sign up, OAuth
  */
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,6 +13,8 @@ import {
   StyleSheet,
   TouchableWithoutFeedback,
   Linking,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -23,13 +26,45 @@ import { LOGIN_COLORS } from "./constants";
 import { maskPhoneDisplay } from "../../utils/smsMagicLink";
 import { OAuthButtons, AdContainerPlaceholder } from "../../components";
 import { logger } from "../../utils/logger";
+import {
+  loginWithUsernamePassword,
+  registerWithUsernamePassword,
+} from "../../services/api/authApi";
+import { availabilityApi } from "../../services/api/availabilityApi";
+
+type AuthMode = "phone" | "usernameSignIn" | "usernameSignUp";
 
 interface Props {
   navigation: any;
 }
 
+async function navigateAfterAuth(navigation: any) {
+  try {
+    const response = await availabilityApi.getUserAvailability();
+    if (
+      !response.data ||
+      (Array.isArray(response.data) && response.data.length === 0)
+    ) {
+      navigation.replace("AvailabilityOnboarding", {});
+    } else {
+      navigation.replace("Home");
+    }
+  } catch {
+    navigation.replace("Home");
+  }
+}
+
 export default function LoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+
+  const [authMode, setAuthMode] = useState<AuthMode>("phone");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [usernameLoading, setUsernameLoading] = useState(false);
+  const [usernameError, setUsernameError] = useState("");
 
   const {
     phoneNumber,
@@ -56,6 +91,77 @@ export default function LoginScreen({ navigation }: Props) {
     setError,
   } = useLoginFlow(navigation);
 
+  const handleBackWithAuthMode = useCallback(() => {
+    if (authMode !== "phone") {
+      setAuthMode("phone");
+      setUsernameError("");
+      setUsername("");
+      setPassword("");
+      setConfirmPassword("");
+      setFirstName("");
+      setLastName("");
+    } else {
+      handleBack();
+    }
+  }, [authMode, handleBack]);
+
+  const handleUsernameSignIn = useCallback(async () => {
+    const u = username.trim();
+    if (!u || u.length < 3) {
+      setUsernameError("Username must be at least 3 characters.");
+      return;
+    }
+    if (!password) {
+      setUsernameError("Password is required.");
+      return;
+    }
+    setUsernameLoading(true);
+    setUsernameError("");
+    const result = await loginWithUsernamePassword(u, password);
+    setUsernameLoading(false);
+    if (result.success) {
+      navigateAfterAuth(navigation);
+    } else {
+      setUsernameError(result.error);
+    }
+  }, [username, password, navigation]);
+
+  const handleUsernameSignUp = useCallback(async () => {
+    const u = username.trim();
+    if (!u || u.length < 3) {
+      setUsernameError("Username must be at least 3 characters.");
+      return;
+    }
+    if (!password) {
+      setUsernameError("Password is required.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setUsernameError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      setUsernameError(
+        "Password must be at least 8 characters with uppercase, lowercase, number, and special character."
+      );
+      return;
+    }
+    setUsernameLoading(true);
+    setUsernameError("");
+    const result = await registerWithUsernamePassword({
+      username: u,
+      password,
+      firstName: firstName.trim() || undefined,
+      lastName: lastName.trim() || undefined,
+    });
+    setUsernameLoading(false);
+    if (result.success) {
+      navigateAfterAuth(navigation);
+    } else {
+      setUsernameError(result.error);
+    }
+  }, [username, password, confirmPassword, firstName, lastName, navigation]);
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -63,7 +169,7 @@ export default function LoginScreen({ navigation }: Props) {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackWithAuthMode}>
             <ArrowLeft size={24} color="#111827" strokeWidth={1.5} />
           </TouchableOpacity>
         </View>
@@ -76,15 +182,125 @@ export default function LoginScreen({ navigation }: Props) {
               { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
             ]}
           >
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>
-              {currentStep === "phone"
-                ? "Already created an account? Sign in here."
-                : `Check your phone - tap the sign-in link we sent to ${maskPhoneDisplay(fullPhoneNumber)}`}
-            </Text>
-
-            {currentStep === "phone" ? (
-              <View style={styles.phoneStepColumn}>
+            {authMode === "usernameSignIn" || authMode === "usernameSignUp" ? (
+              <>
+                <Text style={styles.title}>
+                  {authMode === "usernameSignUp" ? "Create account" : "Sign in"}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {authMode === "usernameSignUp"
+                    ? "Choose a username and password."
+                    : "Sign in with your username and password."}
+                </Text>
+                <View style={styles.phoneStepColumn}>
+                  <TextInput
+                    style={[styles.textInput, usernameError ? styles.textInputError : null]}
+                    placeholder="Username"
+                    placeholderTextColor="#9CA3AF"
+                    value={username}
+                    onChangeText={(t) => {
+                      setUsername(t);
+                      setUsernameError("");
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!usernameLoading}
+                  />
+                  <TextInput
+                    style={[styles.textInput, usernameError ? styles.textInputError : null]}
+                    placeholder="Password"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={(t) => {
+                      setPassword(t);
+                      setUsernameError("");
+                    }}
+                    secureTextEntry
+                    editable={!usernameLoading}
+                  />
+                  {authMode === "usernameSignUp" && (
+                    <>
+                      <TextInput
+                        style={[styles.textInput, usernameError ? styles.textInputError : null]}
+                        placeholder="Confirm password"
+                        placeholderTextColor="#9CA3AF"
+                        value={confirmPassword}
+                        onChangeText={(t) => {
+                          setConfirmPassword(t);
+                          setUsernameError("");
+                        }}
+                        secureTextEntry
+                        editable={!usernameLoading}
+                      />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="First name (optional)"
+                        placeholderTextColor="#9CA3AF"
+                        value={firstName}
+                        onChangeText={setFirstName}
+                        editable={!usernameLoading}
+                      />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Last name (optional)"
+                        placeholderTextColor="#9CA3AF"
+                        value={lastName}
+                        onChangeText={setLastName}
+                        editable={!usernameLoading}
+                      />
+                    </>
+                  )}
+                  {usernameError ? (
+                    <Text style={styles.errorText}>{usernameError}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[
+                      styles.nextButton,
+                      styles.nextButtonInContent,
+                      usernameLoading && styles.nextButtonDisabled,
+                    ]}
+                    onPress={
+                      authMode === "usernameSignUp"
+                        ? handleUsernameSignUp
+                        : handleUsernameSignIn
+                    }
+                    disabled={usernameLoading}
+                    activeOpacity={0.8}
+                  >
+                    {usernameLoading ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.nextButtonText}>
+                        {authMode === "usernameSignUp" ? "Sign up" : "Sign in"}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setAuthMode(authMode === "usernameSignUp" ? "usernameSignIn" : "usernameSignUp");
+                      setUsernameError("");
+                      setConfirmPassword("");
+                    }}
+                    style={styles.signupContainer}
+                  >
+                    <Text style={styles.signupText}>
+                      {authMode === "usernameSignUp"
+                        ? "Already have an account? "
+                        : "Don't have an account? "}
+                    </Text>
+                    <Text style={styles.signupLink}>
+                      {authMode === "usernameSignUp" ? "Sign in" : "Create account"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : currentStep === "phone" ? (
+              <>
+                <Text style={styles.title}>Welcome back</Text>
+                <Text style={styles.subtitle}>
+                  Sign in with your phone number, Google, Apple, or username.
+                </Text>
+                <View style={styles.phoneStepColumn}>
                 <PhoneInput
                   value={phoneNumber}
                   onChange={setPhoneNumber}
@@ -121,6 +337,7 @@ export default function LoginScreen({ navigation }: Props) {
                   <View style={styles.dividerLine} />
                 </View>
                 <OAuthButtons
+                  onError={(message) => setError(message)}
                   onSuccess={async (data) => {
                     logger.debug("[LoginScreen] OAuth onSuccess received", {
                       status: data.status,
@@ -188,11 +405,26 @@ export default function LoginScreen({ navigation }: Props) {
                     }
                   }}
                 />
+                <TouchableOpacity
+                  onPress={() => setAuthMode("usernameSignIn")}
+                  style={[styles.signupContainer, { marginTop: 8 }]}
+                >
+                  <Text style={styles.signupText}>Sign in with username</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setAuthMode("usernameSignUp")}
+                  style={styles.signupContainer}
+                >
+                  <Text style={styles.signupText}>Don't have an account? </Text>
+                  <Text style={styles.signupLink}>Create account</Text>
+                </TouchableOpacity>
               </View>
+              </>
             ) : (
               <View style={{ alignItems: "center", marginTop: 16 }}>
+                <Text style={styles.title}>Check your phone</Text>
                 <Text style={[styles.subtitle, { marginBottom: 24 }]}>
-                  Tap the link in your SMS to sign in.
+                  Tap the sign-in link we sent to {maskPhoneDisplay(fullPhoneNumber)} to sign in.
                 </Text>
                 {error ? (
                   <Text style={[styles.subtitle, { color: "#EF4444", marginBottom: 16 }]}>
@@ -361,5 +593,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 8,
+  },
+  textInput: {
+    height: 54,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: "#111827",
+    backgroundColor: "#FFFFFF",
+  },
+  textInputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#EF4444",
+    marginTop: -4,
   },
 });

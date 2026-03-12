@@ -39,6 +39,7 @@ module.exports = {
   // Registration operations
   setPassword: registerController.setPassword,
   registerUser: registerController.registerUser,
+  registerWithUsername: registerController.registerWithUsername,
   uploadAvatar: registerController.uploadAvatar,
 
   // Magic link operations

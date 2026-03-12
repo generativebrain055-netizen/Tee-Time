@@ -286,8 +286,84 @@ const uploadAvatar = async (req, res, next) => {
   }
 };
 
+/**
+ * Register with username and password (no phone required)
+ * Creates user and returns session tokens.
+ */
+const registerWithUsername = async (req, res, next) => {
+  try {
+    const { username, password, firstName, lastName, email } = req.body;
+
+    const validation = require("../../utils/validation");
+    const passwordValidation = validation.validatePassword(password);
+
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: passwordValidation.errors[0],
+        errors: passwordValidation.errors,
+      });
+    }
+
+    const trimmedUsername = (username || "").trim();
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: "Username must be between 3 and 50 characters.",
+      });
+    }
+
+    const existingUser = await userRepository.findByUsername(trimmedUsername);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "This username is already taken. Please choose another.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await userRepository.create({
+      username: trimmedUsername,
+      firstName: (firstName || "").trim() || null,
+      lastName: (lastName || "").trim() || null,
+      email: (email || "").trim() || null,
+      passwordHash,
+      isVerified: true,
+    });
+
+    const { accessToken, refreshToken } = await sessionService.createSession({
+      userId: user.id,
+      req,
+      rememberMe: false,
+    });
+
+    return res.json({
+      success: true,
+      message: "Account created successfully.",
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phoneNumber: user.phone_number,
+        email: user.email,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        handicap: user.handicap,
+        socialRate: user.social_rate,
+        avatarUrl: user.avatar_url || null,
+      },
+    });
+  } catch (error) {
+    logger.error("Error in registerWithUsername:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   setPassword,
   registerUser,
+  registerWithUsername,
   uploadAvatar,
 };
