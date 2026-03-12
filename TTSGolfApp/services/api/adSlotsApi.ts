@@ -6,10 +6,15 @@
 import { API_ENDPOINTS } from "../../config/api";
 import { logger } from "../../utils/logger";
 
+/** Matches admin "Ads preview": image as background + description overlay. Max description length matches admin. */
+export const AD_DESCRIPTION_MAX_LENGTH = 80;
+
 export type AdSlotItem = {
   slot_key: string;
   image_url: string | null;
   link_url: string | null;
+  /** Alt text / tagline shown with the ad (same as admin description). */
+  description: string | null;
 };
 
 export type AdSlotsResponse = {

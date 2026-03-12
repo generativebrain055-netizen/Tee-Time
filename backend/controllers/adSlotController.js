@@ -1,6 +1,7 @@
 /**
  * Public ad slots API – used by the mobile app (no auth).
- * Returns only active slots with image_url set (slot_key, image_url, link_url).
+ * Returns active slots with image_url set: slot_key, image_url, link_url, description (alt_text).
+ * App renders same content as admin "Ads preview": image as background + description overlay.
  */
 const adSlotRepository = require("../repositories/adSlotRepository");
 

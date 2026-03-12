@@ -2,16 +2,25 @@ import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Image,
+  ImageBackground,
   Dimensions,
   Animated,
   Easing,
   TouchableOpacity,
   Linking,
+  Text,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logger } from "../utils/logger";
-import { fetchAdSlots, type AdSlotItem } from "../services/api/adSlotsApi";
+import { fetchAdSlots, type AdSlotItem, AD_DESCRIPTION_MAX_LENGTH } from "../services/api/adSlotsApi";
+
+function truncateDescription(text: string | null | undefined): string {
+  if (text == null || text === "") return "";
+  if (text.length <= AD_DESCRIPTION_MAX_LENGTH) return text;
+  return text.slice(0, AD_DESCRIPTION_MAX_LENGTH) + "…";
+}
 
 const { width, height } = Dimensions.get("window");
 
@@ -222,19 +231,28 @@ export default function SplashScreen({
           resizeMode="contain"
         />
         {loadingScreenAd?.image_url && (
-          <View style={{ marginTop: 24, alignItems: "center" }}>
+          <View style={{ marginTop: 24, alignItems: "center", width: width * 0.85, maxWidth: 320 }}>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.9}
               onPress={() => {
                 if (loadingScreenAd.link_url) Linking.openURL(loadingScreenAd.link_url);
               }}
-              style={{ alignItems: "center" }}
+              style={{ width: "100%", height: 120, borderRadius: 8, overflow: "hidden" }}
             >
-              <Image
+              <ImageBackground
                 source={{ uri: loadingScreenAd.image_url }}
-                style={{ width: width * 0.5, height: Math.min(48, height * 0.06) }}
-                resizeMode="contain"
-              />
+                style={{ width: "100%", height: "100%", justifyContent: "flex-end" }}
+                resizeMode="cover"
+              >
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.75)"]}
+                  style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 8, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 12, lineHeight: 16 }} numberOfLines={3}>
+                    {truncateDescription(loadingScreenAd.description) || "— No description —"}
+                  </Text>
+                </LinearGradient>
+              </ImageBackground>
             </TouchableOpacity>
           </View>
         )}
