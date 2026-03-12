@@ -93,7 +93,7 @@ export function SystemSettings() {
     <div style={styles.wrapper}>
       <h2 style={styles.title}>System settings</h2>
       <p style={styles.subtitle}>
-        Configuration status for Firebase (push notifications) and Twilio (SMS). Twilio is managed in Firestore from this page; Firebase uses backend <code style={styles.code}>.env</code>.
+        Firebase (push) is configured in the backend. Twilio (SMS) is configured here via Firestore.
       </p>
 
       {loading && <p style={styles.muted}>Loading…</p>}
@@ -104,35 +104,43 @@ export function SystemSettings() {
       <>
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={styles.cardTitle}>Firebase (OAuth and push notifications)</h3>
-          <span style={{ ...styles.badge, ...(settings.firebase.configured ? styles.badgeOk : styles.badgeWarn) }}>
-            {settings.firebase.configured ? 'Configured' : 'Not configured'}
-          </span>
+          <h3 style={styles.cardTitle}>Firebase (push notifications)</h3>
+          {settings.firebase && (
+            <span style={{ ...styles.badge, ...(settings.firebase.configured ? styles.badgeOk : styles.badgeWarn) }}>
+              {settings.firebase.configured ? 'Configured' : 'Not configured'}
+            </span>
+          )}
         </div>
-        <p style={styles.desc}>{settings.firebase.description}</p>
-        {settings.firebase.configured && settings.firebase.projectIdMasked && (
-          <p style={styles.masked}>Project ID: <code style={styles.code}>{settings.firebase.projectIdMasked}</code></p>
-        )}
+        <p style={styles.desc}>
+          So that <strong>Broadcast</strong> push notifications from this admin site reach the mobile app, configure the backend with your Firebase project. The backend sends via Expo Push API and, when configured, via Firebase Cloud Messaging (FCM).
+        </p>
         <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>Push notifications</h4>
-          <p style={styles.desc}>
-            For mobile push to be delivered correctly, configure the backend and ensure the app is set up with the same Firebase project.
-          </p>
+          <h4 style={styles.sectionTitle}>Configuration steps</h4>
           <ol style={styles.stepsList}>
-            <li>Set <code style={styles.code}>FIREBASE_PROJECT_ID</code> in the backend <code style={styles.code}>.env</code> to your Firebase project ID.</li>
-            <li>In Firebase Console → Project settings → Cloud Messaging: enable the API if you use FCM (e.g. for Android with Expo).</li>
-            <li>In your Expo/mobile app, use the same Firebase project (e.g. <code style={styles.code}>googleServicesFile</code> / Firebase config) so device push tokens are valid.</li>
+            <li>
+              Open <a href={FIREBASE_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>Firebase Console</a> and select your project (or create one). Use the same project as your mobile app.
+            </li>
+            <li>
+              In Firebase Console, go to <strong>Project settings</strong> (gear icon) → <strong>Service accounts</strong>. Click <strong>Generate new private key</strong> and download the JSON file. Place it in your backend (e.g. <code style={styles.code}>backend/config/firebase-service-account.json</code>).
+            </li>
+            <li>
+              In the backend <code style={styles.code}>.env</code> file, set:
+              <ul style={styles.envList}>
+                <li style={styles.envItem}><code style={styles.code}>GOOGLE_APPLICATION_CREDENTIALS=./config/firebase-service-account.json</code> (or the path to your JSON file)</li>
+                <li style={styles.envItem}><code style={styles.code}>FIREBASE_PROJECT_ID=your-project-id</code> (optional if the JSON already contains the project)</li>
+              </ul>
+            </li>
+            <li>
+              In Firebase Console → Project settings → <strong>Cloud Messaging</strong>, ensure the API is enabled (needed for FCM). The mobile app must use the same project (<code style={styles.code}>google-services.json</code> / app config) so push tokens are valid.
+            </li>
           </ol>
-          <p style={styles.desc}>
-            The backend sends push via Expo Push API; Expo delivers to FCM (Android) and APNs (iOS). A valid <code style={styles.code}>FIREBASE_PROJECT_ID</code> ensures OAuth and app push registration stay in sync.
-          </p>
         </div>
-        <p style={styles.envLabel}>Environment variables:</p>
-        <ul style={styles.envList}>
-          {settings.firebase.envVars.map((v) => (
-            <li key={v} style={styles.envItem}><code style={styles.code}>{v}</code></li>
-          ))}
-        </ul>
+        {settings.firebase?.projectIdMasked && (
+          <p style={styles.muted}>Backend project ID: <code style={styles.code}>{settings.firebase.projectIdMasked}</code></p>
+        )}
+        {settings.firebase?.configured === false && (
+          <p style={styles.warn}>Backend is not configured for Firebase. Set the variables above in backend <code style={styles.code}>.env</code> and restart the backend. Until then, push is sent only via Expo Push API (no FCM).</p>
+        )}
         <a href={FIREBASE_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>
           Open Firebase Console →
         </a>
@@ -312,6 +320,7 @@ const styles: Record<string, React.CSSProperties> = {
   stepsList: { margin: '0 0 var(--space-md)', paddingLeft: 'var(--space-xl)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' },
   link: { fontSize: 'var(--font-size-sm)', color: 'var(--color-primary)', textDecoration: 'none' },
   error: { padding: 'var(--space-md)', background: 'var(--color-error-container)', color: 'var(--color-error)', borderRadius: 'var(--radius-sm)' },
+  warn: { padding: 'var(--space-md)', background: 'var(--color-warning-container, #fef3c7)', color: 'var(--color-on-warning-container, #92400e)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-md)' },
   muted: { color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' },
   testSection: { marginTop: 'var(--space-lg)', paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-border)' },
   testRow: { display: 'flex', gap: 'var(--space-md)', alignItems: 'center', flexWrap: 'wrap' },

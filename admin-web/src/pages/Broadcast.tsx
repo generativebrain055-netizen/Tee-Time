@@ -14,6 +14,7 @@ export function Broadcast() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [history, setHistory] = useState<BroadcastHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [deviceCount, setDeviceCount] = useState<number | null>(null);
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -25,6 +26,15 @@ export function Broadcast() {
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  // Load how many devices have push tokens (so admin sees why 0 might be delivered)
+  useEffect(() => {
+    previewBroadcast('', '')
+      .then((res) => {
+        if (res.success && res.data?.recipientCount != null) setDeviceCount(res.data.recipientCount);
+      })
+      .catch(() => {});
+  }, []);
 
   const handlePreview = async () => {
     setPreview(null);
@@ -72,6 +82,21 @@ export function Broadcast() {
       <p style={styles.subtitle}>
         Send push notifications to all users for platform-wide updates or announcements.
       </p>
+
+      {deviceCount !== null && deviceCount === 0 && (
+        <div style={styles.zeroDevices}>
+          <strong>No devices registered for push.</strong> Broadcasts will show 0 delivered until at least one device has registered.
+          <ul style={styles.zeroDevicesList}>
+            <li>Users must open the <strong>mobile app</strong> on a <strong>physical device</strong> (not a simulator).</li>
+            <li>They must <strong>allow notifications</strong> when prompted.</li>
+            <li>They must be logged in and reach a main screen (e.g. Home). The app then registers their device with the backend.</li>
+          </ul>
+          <p style={styles.muted}>Simulators and users who denied notifications do not register. After one or more users do this, the count above will increase and broadcasts will be delivered.</p>
+        </div>
+      )}
+      {deviceCount !== null && deviceCount > 0 && (
+        <p style={styles.deviceCount}>Devices registered for push: <strong>{deviceCount}</strong></p>
+      )}
 
       <div style={styles.card}>
         <h3 style={styles.cardTitle}>Compose</h3>
@@ -130,6 +155,9 @@ export function Broadcast() {
           <strong>Broadcast sent</strong>
           <p>{sendResult.message}</p>
           <p style={styles.muted}>Delivered: {sendResult.sent} · Failed: {sendResult.failed} · Total: {sendResult.total}</p>
+          {sendResult.total === 0 && (
+            <p style={styles.zeroDevicesHint}>No devices had a push token registered. See the note above for how users register (open app on a real device, allow notifications, reach Home).</p>
+          )}
         </div>
       )}
 
@@ -185,4 +213,8 @@ const styles: Record<string, React.CSSProperties> = {
   historyDate: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' },
   historyBody: { color: 'var(--color-text-secondary)', marginBottom: 'var(--space-xs)', whiteSpace: 'pre-wrap' },
   historyMeta: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' },
+  zeroDevices: { padding: 'var(--space-lg)', background: 'var(--color-warning-container, #fef3c7)', color: 'var(--color-on-warning-container, #92400e)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-xl)', border: '1px solid var(--color-warning, #f59e0b)' },
+  zeroDevicesList: { margin: 'var(--space-sm) 0', paddingLeft: 'var(--space-lg)', fontSize: 'var(--font-size-sm)' },
+  deviceCount: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-md)' },
+  zeroDevicesHint: { marginTop: 'var(--space-md)', fontSize: 'var(--font-size-sm)', opacity: 0.95 },
 };

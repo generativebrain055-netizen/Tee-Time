@@ -392,6 +392,7 @@ export async function getBroadcastHistory(limit?: number): Promise<{ success: tr
 export type FirebaseSettingsStatus = {
   configured: boolean;
   projectIdMasked: string | null;
+  credsFilePresent?: boolean;
   envVars: string[];
   description: string;
 };
@@ -407,7 +408,7 @@ export type TwilioSettingsStatus = {
 };
 
 export type SystemSettings = {
-  firebase: FirebaseSettingsStatus;
+  firebase?: FirebaseSettingsStatus;
   twilio: TwilioSettingsStatus;
 };
 

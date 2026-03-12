@@ -537,7 +537,16 @@ function maskPhone(val) {
 const getSystemSettings = async (req, res, next) => {
   try {
     const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || "";
-    const firebaseConfigured = !!firebaseProjectId.trim();
+    const googleCredsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || "";
+    const fs = require("fs");
+    const path = require("path");
+    const credsPathResolved = googleCredsPath.trim()
+      ? (path.isAbsolute(googleCredsPath.trim())
+          ? googleCredsPath.trim()
+          : path.resolve(process.cwd(), googleCredsPath.trim()))
+      : "";
+    const firebaseCredsFileExists = !!credsPathResolved && fs.existsSync(credsPathResolved);
+    const firebaseConfigured = !!firebaseProjectId.trim() && firebaseCredsFileExists;
 
     const twilioCreds = await twilioService.getCredentials();
     const twilioConfigured =
@@ -554,9 +563,10 @@ const getSystemSettings = async (req, res, next) => {
       data: {
         firebase: {
           configured: firebaseConfigured,
-          projectIdMasked: firebaseConfigured ? maskValue(firebaseProjectId) : null,
-          envVars: ["FIREBASE_PROJECT_ID"],
-          description: "Used for OAuth and push notification configuration. Set in backend .env.",
+          projectIdMasked: firebaseProjectId.trim() ? maskValue(firebaseProjectId) : null,
+          credsFilePresent: firebaseCredsFileExists,
+          envVars: ["GOOGLE_APPLICATION_CREDENTIALS", "FIREBASE_PROJECT_ID"],
+          description: "Required for FCM push (and OAuth). Set in backend .env. GOOGLE_APPLICATION_CREDENTIALS = path to Firebase service account JSON; FIREBASE_PROJECT_ID = your project ID.",
         },
         twilio: {
           configured: twilioConfigured,
