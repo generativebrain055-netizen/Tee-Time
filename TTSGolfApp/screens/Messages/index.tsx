@@ -10,10 +10,12 @@ import {
   StyleSheet,
 } from "react-native";
 import { Edit3, MessageCircle } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { messagesApi } from "../../services/api";
 import type { ConversationListItem } from "../../services/api/messagesApi";
 import { ScreenShell, AppHeader, AppBottomNav } from "../../ui";
-import { AdContainerPlaceholder, AD_CONTAINER_HEIGHT, AD_CONTAINER_MARGIN_TOP, AD_CONTAINER_MARGIN_BOTTOM } from "../../components";
+import { AD_CONTAINER_HEIGHT, AD_CONTAINER_MARGIN_TOP, AD_CONTAINER_MARGIN_BOTTOM } from "../../components";
+import { BannerAd } from "../../components/BannerAd";
 import { useColors } from "../../ui/theme/ThemeContext";
 import { spacing, fontSize, palette, radii } from "../../ui/theme/tokens";
 import type {
@@ -225,8 +227,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   staticAdStrip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
     backgroundColor: palette.white,
     paddingVertical: 0,
+    zIndex: 10,
   },
   row: {
     flexDirection: "row",
@@ -429,6 +435,9 @@ function MessagesScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  // Keep ad fixed just above the absolute bottom nav.
+  const bottomNavHeight = spacing.md + 52 + Math.max(insets.bottom, spacing.md);
 
   const loadData = useCallback(async () => {
     try {
@@ -613,7 +622,7 @@ function MessagesScreen({ navigation }: any) {
           contentContainerStyle={
             currentList.length === 0
               ? { flex: 1 }
-              : { paddingBottom: STATIC_AD_STRIP_HEIGHT + 100 }
+              : { paddingBottom: STATIC_AD_STRIP_HEIGHT + bottomNavHeight + spacing.md }
           }
           style={[styles.list, { backgroundColor: palette.white }]}
           showsVerticalScrollIndicator={false}
@@ -629,8 +638,8 @@ function MessagesScreen({ navigation }: any) {
         )}
       </View>
 
-      <View style={styles.staticAdStrip}>
-        <AdContainerPlaceholder />
+      <View style={[styles.staticAdStrip, { bottom: bottomNavHeight }]}>
+        <BannerAd slotKey="banner_1" />
       </View>
 
       <AppBottomNav activeTab="Messages" navigation={navigation} />

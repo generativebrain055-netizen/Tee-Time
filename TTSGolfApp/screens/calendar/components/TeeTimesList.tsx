@@ -1,9 +1,11 @@
 import React, { memo } from "react";
 import { View, Text, ActivityIndicator, ScrollView, RefreshControl } from "react-native";
 import { Calendar } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import TeeTimeCard from "./TeeTimeCard";
+import { BannerAd } from "../../../components/BannerAd";
 import { spacing, fontSize, fontFamily } from "../../../ui/theme/tokens";
 
 interface TeeTimesListProps {
@@ -41,12 +43,17 @@ const TeeTimesList = memo(({
   onTeeTimePress,
   onCancelSuccess,
 }: TeeTimesListProps) => {
+  const insets = useSafeAreaInsets();
   if (!selectedDate) return null;
 
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ paddingHorizontal: spacing.md, paddingVertical: spacing.md }}
+      contentContainerStyle={{
+        paddingHorizontal: spacing.md,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.md + Math.max(insets.bottom, spacing.sm),
+      }}
       showsVerticalScrollIndicator
       refreshControl={
         onRefresh ? (
@@ -59,6 +66,7 @@ const TeeTimesList = memo(({
         ) : undefined
       }
     >
+      <BannerAd slotKey="banner_2" />
       {loading ? (
         <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={{ marginTop: spacing.xl }} />
       ) : teeTimes.length > 0 ? (

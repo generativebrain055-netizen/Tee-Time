@@ -68,7 +68,7 @@ router.post("/users/:id/suspend", authenticateAdmin, adminController.suspendUser
 router.post("/users/:id/unsuspend", authenticateAdmin, adminController.unsuspendUser);
 router.post("/users/:id/ban", authenticateAdmin, adminController.banUser);
 
-// ---------- User-reported issues ----------
+// ---------- User-reported issues (includes app_support rows from mobile Help & Support) ----------
 router.get("/reports", authenticateAdmin, adminController.listReports);
 router.patch("/reports/:id", authenticateAdmin, adminController.updateReport);
 

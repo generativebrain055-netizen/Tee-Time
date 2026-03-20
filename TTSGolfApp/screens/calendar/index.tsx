@@ -4,12 +4,12 @@
 import React, { useCallback, memo, useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useCalendar, StatusFilter, RoleFilter } from "./hooks/useCalendar";
 import { CalendarGrid, TeeTimesList } from "./components";
 import { CALENDAR_COLORS } from "./constants";
 import { ScreenShell, AppHeader } from "../../ui";
-import { BannerAd } from "../../components/BannerAd";
 import { spacing, fontSize, fontFamily, radii } from "../../ui/theme/tokens";
 
 const PRIMARY_GREEN = CALENDAR_COLORS.primary;
@@ -154,6 +154,7 @@ const FilterDropdown = memo(
 );
 
 export default function FullCalendarScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const {
     currentMonth,
     currentYear,
@@ -224,7 +225,8 @@ export default function FullCalendarScreen({ navigation }: Props) {
             flex: 0.52,
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.lg,
-            paddingBottom: 80,
+            // Keep details fully visible above device bottom safe area.
+            paddingBottom: Math.max(insets.bottom, spacing.lg),
           }}
         >
           <View
@@ -272,7 +274,6 @@ export default function FullCalendarScreen({ navigation }: Props) {
                   }}
                 />
               </View>
-              <BannerAd slotKey="banner_2" />
             </View>
 
             <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>

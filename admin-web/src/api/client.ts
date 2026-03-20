@@ -290,11 +290,13 @@ export async function banUser(id: string): Promise<{ success: true; data: AdminU
   return { success: false, message: 'Invalid response' };
 }
 
-// --- Reported issues ---
+// --- Reported issues (user_reports: user_vs_user OR app_support from mobile Help & Support) ---
+export type ReportSource = 'user_vs_user' | 'app_support';
+
 export type UserReport = {
   id: string;
   reporter_id: string;
-  reported_user_id: string;
+  reported_user_id: string | null;
   reason: string;
   description?: string;
   status: string;
@@ -302,15 +304,26 @@ export type UserReport = {
   resolved_at?: string;
   created_at: string;
   updated_at: string;
-  reporter?: { first_name?: string; last_name?: string; username?: string; phone_number?: string } | null;
-  reported_user?: { first_name?: string; last_name?: string; username?: string; phone_number?: string } | null;
+  report_source?: ReportSource;
+  support_category?: string | null;
+  support_subject?: string | null;
+  email_delivered?: boolean;
+  email_error?: string | null;
+  reporter?: { first_name?: string; last_name?: string; username?: string; phone_number?: string; email?: string } | null;
+  reported_user?: { first_name?: string; last_name?: string; username?: string; phone_number?: string; email?: string } | null;
 };
 
-export async function listReports(status?: string, limit?: number, offset?: number): Promise<{ success: true; data: UserReport[]; total: number } | { success: false; message: string }> {
+export async function listReports(
+  status?: string,
+  limit?: number,
+  offset?: number,
+  reportSource?: ReportSource,
+): Promise<{ success: true; data: UserReport[]; total: number } | { success: false; message: string }> {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (limit != null) params.set('limit', String(limit));
   if (offset != null) params.set('offset', String(offset));
+  if (reportSource) params.set('report_source', reportSource);
   const url = params.toString() ? `/api/admin/reports?${params}` : '/api/admin/reports';
   const res = await authFetch(url);
   const data = await res.json().catch(() => ({}));

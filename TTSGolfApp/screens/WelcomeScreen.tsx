@@ -8,7 +8,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { PrimaryButton, SecondaryButton, AdContainerPlaceholder } from "../components";
+import { PrimaryButton, SecondaryButton } from "../components";
+import { BannerAd } from "../components/BannerAd";
 
 const { width } = Dimensions.get("window");
 
@@ -70,7 +71,7 @@ export default function WelcomeScreen({
             transform: [{ translateY: buttonsSlideAnim }],
           }}
         >
-          <AdContainerPlaceholder />
+          <BannerAd slotKey="banner_1" />
           <PrimaryButton
             title="Create account"
             onPress={() => navigation.navigate("Onboarding")}

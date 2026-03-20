@@ -16,9 +16,9 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from "react-native";
-import { Mail, ChevronDown, ChevronUp, HelpCircle, Bug, MessageSquare } from "lucide-react-native";
+import { Mail, ChevronDown, ChevronUp, HelpCircle } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../ui";
-import { useColors, useTheme } from "../ui/theme";
+import { useColors } from "../ui/theme";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { supportApi } from "../services/api";
 
@@ -73,56 +73,29 @@ const FAQ_DATA = [
     },
 ];
 
-const COMPANY_SUPPORT_EMAIL = "support@teetimesocial.com";
-
-type FeedbackModalType = "bug" | "feedback" | "general";
-
-const MODAL_CONFIG: Record<FeedbackModalType, { subject: string; placeholder: string; title: string }> = {
-    bug: {
-        subject: "Bug Report",
-        placeholder: "Describe the bug (what happened, steps to reproduce, device or app version if relevant)...",
-        title: "Report a bug",
-    },
-    feedback: {
-        subject: "App Feedback",
-        placeholder: "Share your feedback or suggestions to help us improve the app...",
-        title: "Send feedback",
-    },
-    general: {
-        subject: "",
-        placeholder: "Enter your message...",
-        title: "Email Support",
-    },
-};
+/** Fallback mailto when API cannot be used — should match team inbox */
+const CONTACT_EMAIL = "contact@teetimesocial.app";
 
 export default function HelpSupportScreen({ navigation }: any) {
     const colors = useColors();
-    const theme = useTheme();
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
     const [showEmailModal, setShowEmailModal] = useState(false);
-    const [modalType, setModalType] = useState<FeedbackModalType>("general");
     const [emailSubject, setEmailSubject] = useState("");
     const [emailBody, setEmailBody] = useState("");
     const [emailSending, setEmailSending] = useState(false);
 
-    const openModal = (type: FeedbackModalType) => {
-        const config = MODAL_CONFIG[type];
-        setModalType(type);
-        setEmailSubject(config.subject);
+    const openContactModal = () => {
+        setEmailSubject("");
         setEmailBody("");
         setShowEmailModal(true);
     };
-
-    const handleReportBugPress = () => openModal("bug");
-    const handleSendFeedbackPress = () => openModal("feedback");
-    const handleSendEmailPress = () => openModal("general");
 
     const toggleFAQ = (index: number) => {
         setExpandedIndex(expandedIndex === index ? null : index);
     };
 
     const sendEmailToSupport = async () => {
-        const subject = (emailSubject || MODAL_CONFIG[modalType].subject || "Support Request").trim();
+        const subject = (emailSubject || "Support Request").trim();
         const body = emailBody.trim();
         if (!body) {
             Alert.alert("Error", "Please enter your message.");
@@ -131,51 +104,48 @@ export default function HelpSupportScreen({ navigation }: any) {
         setEmailSending(true);
         try {
             try {
-                await supportApi.sendSupportEmail({ subject: subject || undefined, message: body });
+                await supportApi.sendSupportEmail({
+                    subject: subject || undefined,
+                    message: body,
+                    category: "support",
+                });
                 setShowEmailModal(false);
                 setEmailSubject("");
                 setEmailBody("");
-                Alert.alert(
-                    "Thank you",
-                    modalType === "bug"
-                        ? "Your bug report has been sent. We'll look into it."
-                        : modalType === "feedback"
-                        ? "Your feedback has been sent. We appreciate it!"
-                        : "Your message has been sent to our support team."
-                );
+                Alert.alert("Thank you", "Your message has been sent to our team.");
                 return;
             } catch (apiError: any) {
                 if (apiError?.statusCode === 401 || apiError?.code === "NETWORK_ERROR") {
                     throw apiError;
                 }
             }
-            const mailtoUrl = `mailto:${COMPANY_SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const mailtoUrl = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             const canOpen = await Linking.canOpenURL(mailtoUrl);
             if (!canOpen) {
-                Alert.alert("Error", "Unable to send. Please email us at " + COMPANY_SUPPORT_EMAIL);
+                Alert.alert("Error", "Unable to send. Please email us at " + CONTACT_EMAIL);
                 return;
             }
             await Linking.openURL(mailtoUrl);
             setShowEmailModal(false);
             setEmailSubject("");
             setEmailBody("");
-            Alert.alert("Success", "Your email app will open. Send the email to contact support.");
+            Alert.alert("Success", "Your email app will open. Send the email to contact us.");
         } catch (error: any) {
             if (error?.statusCode === 401) {
                 Alert.alert("Error", "Please sign in again and try sending.");
             } else if (error?.code === "NETWORK_ERROR" || !error?.statusCode) {
-                const mailtoUrl = `mailto:${COMPANY_SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                const mailtoUrl = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                 try {
                     await Linking.openURL(mailtoUrl);
                     setShowEmailModal(false);
                     setEmailSubject("");
                     setEmailBody("");
-                    Alert.alert("Success", "Your email app will open. Send the email to contact support.");
+                    Alert.alert("Success", "Your email app will open. Send the email to contact us.");
                 } catch {
-                    Alert.alert("Error", "Unable to send. Please check your connection or email us at " + COMPANY_SUPPORT_EMAIL);
+                    Alert.alert("Error", "Unable to send. Please check your connection or email us at " + CONTACT_EMAIL);
                 }
             } else {
-                Alert.alert("Error", "Failed to send. Please try again or email us at " + COMPANY_SUPPORT_EMAIL);
+                Alert.alert("Error", "Failed to send. Please try again or email us at " + CONTACT_EMAIL);
             }
         } finally {
             setEmailSending(false);
@@ -206,54 +176,6 @@ export default function HelpSupportScreen({ navigation }: any) {
                     </Text>
                 </View>
 
-                {/* Report bug / Send feedback */}
-                <View style={[styles.contactCard, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                        Report bugs & feedback
-                    </Text>
-                    <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                        Help us improve the app
-                    </Text>
-                    <View style={[styles.contactRow, { backgroundColor: colors.surfaceSecondary, marginBottom: spacing.sm }]}>
-                        <View style={styles.contactContent}>
-                            <View style={[styles.contactIcon, { backgroundColor: '#FEF3C7' }]}>
-                                <Bug size={24} color="#D97706" strokeWidth={2} />
-                            </View>
-                            <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
-                                Report a bug
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleReportBugPress}
-                            style={[styles.emailButton, { backgroundColor: colors.primary }]}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={[styles.emailButtonText, { color: colors.surface }]}>
-                                Report
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={[styles.contactRow, { backgroundColor: colors.surfaceSecondary }]}>
-                        <View style={styles.contactContent}>
-                            <View style={[styles.contactIcon, { backgroundColor: '#DBEAFE' }]}>
-                                <MessageSquare size={24} color="#3B82F6" strokeWidth={2} />
-                            </View>
-                            <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
-                                Send feedback
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleSendFeedbackPress}
-                            style={[styles.emailButton, { backgroundColor: colors.primary }]}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={[styles.emailButtonText, { color: colors.surface }]}>
-                                Send
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
                 {/* Contact Us Section */}
                 <View style={[styles.contactCard, { backgroundColor: colors.surface }]}>
                     <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -265,12 +187,17 @@ export default function HelpSupportScreen({ navigation }: any) {
                             <View style={[styles.contactIcon, { backgroundColor: colors.primaryContainer }]}>
                                 <Mail size={24} color={colors.primary} strokeWidth={2} />
                             </View>
-                            <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
-                                Email Support
-                            </Text>
+                            <View style={styles.contactTextCol}>
+                                <Text style={[styles.contactLabel, { color: colors.textPrimary }]}>
+                                    Email us
+                                </Text>
+                                <Text style={[styles.contactEmailHint, { color: colors.textSecondary }]}>
+                                    {CONTACT_EMAIL}
+                                </Text>
+                            </View>
                         </View>
                         <TouchableOpacity
-                            onPress={handleSendEmailPress}
+                            onPress={openContactModal}
                             style={[styles.emailButton, { backgroundColor: colors.primary }]}
                             activeOpacity={0.8}
                         >
@@ -355,7 +282,7 @@ export default function HelpSupportScreen({ navigation }: any) {
                                 <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
                             <View style={styles.modalHeader}>
                                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                                    {MODAL_CONFIG[modalType].title}
+                                    Contact us
                                 </Text>
                                 <TouchableOpacity
                                     onPress={() => {
@@ -371,10 +298,20 @@ export default function HelpSupportScreen({ navigation }: any) {
                             </View>
 
                             <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-                                {modalType === "general"
-                                    ? "Your message will be sent to our support team. Subject is optional."
-                                    : "Your message will be sent to our team. Thanks for helping improve the app."}
+                                Your message will be sent to our team. Subject is optional.
                             </Text>
+
+                            <TextInput
+                                style={[styles.subjectInput, {
+                                    backgroundColor: colors.surfaceSecondary,
+                                    color: colors.textPrimary,
+                                    borderColor: colors.border,
+                                }]}
+                                value={emailSubject}
+                                onChangeText={setEmailSubject}
+                                placeholder="Subject (optional)"
+                                placeholderTextColor={colors.textMuted}
+                            />
 
                             <TextInput
                                 style={[styles.feedbackInput, { 
@@ -384,7 +321,7 @@ export default function HelpSupportScreen({ navigation }: any) {
                                 }]}
                                 value={emailBody}
                                 onChangeText={setEmailBody}
-                                placeholder={MODAL_CONFIG[modalType].placeholder}
+                                placeholder="Enter your message..."
                                 placeholderTextColor={colors.textMuted}
                                 multiline
                                 numberOfLines={6}
@@ -467,11 +404,6 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontFamily: fontFamily.bold,
         fontSize: fontSize.lg,
-        marginBottom: spacing.xs,
-    },
-    sectionSubtitle: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.sm,
         marginBottom: spacing.md,
     },
     contactRow: {
@@ -485,6 +417,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
+        minWidth: 0,
+        paddingRight: spacing.sm,
     },
     contactIcon: {
         width: 48,
@@ -494,14 +428,24 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginRight: spacing.md,
     },
+    contactTextCol: {
+        flex: 1,
+        minWidth: 0,
+    },
     contactLabel: {
         fontFamily: fontFamily.semiBold,
         fontSize: fontSize.base,
+    },
+    contactEmailHint: {
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.xs,
+        marginTop: spacing['2xs'],
     },
     emailButton: {
         borderRadius: radii.md,
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.sm,
+        flexShrink: 0,
     },
     emailButtonText: {
         fontFamily: fontFamily.semiBold,
@@ -572,6 +516,14 @@ const styles = StyleSheet.create({
         fontSize: fontSize.sm,
         marginBottom: spacing.md,
         lineHeight: fontSize.base * 1.4,
+    },
+    subjectInput: {
+        borderWidth: 1,
+        borderRadius: radii.md,
+        padding: spacing.md,
+        fontFamily: fontFamily.regular,
+        fontSize: fontSize.base,
+        marginBottom: spacing.md,
     },
     feedbackInput: {
         borderWidth: 1,

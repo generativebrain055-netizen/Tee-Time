@@ -29,6 +29,11 @@ if (fs.existsSync(envPath)) {
       process.exit(1);
     }
     console.log("[ENV] Required vars present: SUPABASE_URL, SUPABASE_ANON_KEY, JWT_SECRET");
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !String(process.env.SUPABASE_SERVICE_ROLE_KEY).trim()) {
+      console.warn(
+        "[ENV] SUPABASE_SERVICE_ROLE_KEY is missing — backend inserts/updates may fail (RLS). Set it from Supabase → Project Settings → API (service_role)."
+      );
+    }
   }
 } else {
   console.error("[ENV] File not found:", envPath);

@@ -355,31 +355,45 @@ const listReports = async (req, res, next) => {
   try {
     const status = req.query.status;
     const reported_user_id = req.query.reported_user_id;
+    const report_source = req.query.report_source;
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     let listResult;
     try {
-      listResult = await userReportRepository.list({ status, reported_user_id, limit, offset });
+      listResult = await userReportRepository.list({
+        status,
+        reported_user_id,
+        report_source: report_source === "app_support" || report_source === "user_vs_user" ? report_source : undefined,
+        limit,
+        offset,
+      });
     } catch (err) {
       logger.warn("Admin listReports (table may not exist):", err?.message);
       listResult = { data: [], total: 0 };
     }
-    const reports = Array.isArray(listResult?.data) ? listResult.data : (listResult?.data ? [listResult.data] : []);
+    const reports = Array.isArray(listResult?.data) ? listResult.data : listResult?.data ? [listResult.data] : [];
     const totalReports = typeof listResult?.total === "number" ? listResult.total : reports.length;
     const reporterIds = [...new Set(reports.map((r) => r.reporter_id))];
-    const reportedIds = [...new Set(reports.map((r) => r.reported_user_id))];
+    const reportedIds = [...new Set(reports.map((r) => r.reported_user_id).filter(Boolean))];
     const userIds = [...new Set([...reporterIds, ...reportedIds])];
     const users = {};
     for (const uid of userIds) {
       try {
         const u = await userRepository.findById(uid);
-        if (u) users[uid] = { first_name: u.first_name, last_name: u.last_name, username: u.username, phone_number: u.phone_number };
+        if (u)
+          users[uid] = {
+            first_name: u.first_name,
+            last_name: u.last_name,
+            username: u.username,
+            phone_number: u.phone_number,
+            email: u.email,
+          };
       } catch (_) {}
     }
     const enriched = reports.map((r) => ({
       ...r,
       reporter: users[r.reporter_id] || null,
-      reported_user: users[r.reported_user_id] || null,
+      reported_user: r.reported_user_id ? users[r.reported_user_id] || null : null,
     }));
     return res.json({ success: true, data: enriched, total: totalReports });
   } catch (error) {

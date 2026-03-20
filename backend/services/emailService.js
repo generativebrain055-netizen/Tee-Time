@@ -96,11 +96,19 @@ const sendMagicLinkEmail = async ({ email, token, purpose }) => {
 };
 
 /**
- * Send support/contact email from app (from sendgrid_from_email to sendgrid_to_email)
- * @param {Object} params - { subject, body, userEmail? }
+ * Send support/contact email from app (from SENDGRID_FROM_EMAIL to SENDGRID_TO_EMAIL).
+ * @param {Object} params
+ * @param {string} params.subject
+ * @param {string} params.body - Plain message (also used as main body)
+ * @param {string} [params.userEmail] - Submitter contact hint
+ * @param {Object} [params.meta] - Structured fields for admin inbox
+ * @param {string} [params.meta.feedbackId]
+ * @param {string} [params.meta.userId]
+ * @param {string} [params.meta.displayName]
+ * @param {string} [params.meta.category]
  * @returns {Promise<Object>} { success, message? }
  */
-const sendSupportEmail = async ({ subject, body, userEmail }) => {
+const sendSupportEmail = async ({ subject, body, userEmail, meta = {} }) => {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL;
   const toEmail = process.env.SENDGRID_TO_EMAIL;
 
@@ -109,20 +117,43 @@ const sendSupportEmail = async ({ subject, body, userEmail }) => {
     return { success: false, message: "Support email not configured." };
   }
 
+  const metaLines = [];
+  if (meta.feedbackId) metaLines.push(`Submission ID: ${meta.feedbackId}`);
+  if (meta.userId) metaLines.push(`User ID: ${meta.userId}`);
+  if (meta.displayName) metaLines.push(`Name: ${meta.displayName}`);
+  if (meta.category) metaLines.push(`Category: ${meta.category}`);
+  if (userEmail) metaLines.push(`Contact: ${userEmail}`);
+  const metaBlock = metaLines.length ? `${metaLines.join("\n")}\n\n` : userEmail ? `Contact: ${userEmail}\n\n` : "";
+
+  const safeBody = String(body || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fullText = metaBlock + body;
+  const escapeCell = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  const metaHtmlRows = metaLines
+    .map((line) => {
+      const [k, ...rest] = line.split(": ");
+      const v = rest.join(": ");
+      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;color:#444;">${escapeCell(k)}</td><td style="padding:4px 0;">${escapeCell(v)}</td></tr>`;
+    })
+    .join("");
+
   if (!isConfigured()) {
     logger.warn("SendGrid API key not configured. Support email logged to console.");
-    logger.info(`\n📧 [SUPPORT EMAIL] to ${toEmail}\nSubject: ${subject}\nFrom user: ${userEmail || "unknown"}\n\n${body}\n`);
+    logger.info(`\n📧 [SUPPORT EMAIL] to ${toEmail}\nSubject: ${subject}\n\n${fullText}\n`);
     return { success: true, mode: "console" };
   }
 
   initializeSendGrid();
 
   const fromName = process.env.SENDGRID_FROM_NAME || "TeeTime Golf App";
-  const text = (userEmail ? `From: ${userEmail}\n\n` : "") + body;
+  const text = fullText;
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px;">
-      ${userEmail ? `<p><strong>From user:</strong> ${userEmail}</p>` : ""}
-      <p style="white-space: pre-wrap;">${body.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+    <div style="font-family: Arial, sans-serif; max-width: 640px;">
+      ${metaHtmlRows ? `<table style="margin-bottom:16px;border-collapse:collapse;">${metaHtmlRows}</table>` : ""}
+      <p style="white-space: pre-wrap; color: #222;">${safeBody}</p>
     </div>
   `;
 
@@ -139,7 +170,26 @@ const sendSupportEmail = async ({ subject, body, userEmail }) => {
     logger.info(`Support email sent to ${toEmail}`);
     return { success: true };
   } catch (error) {
-    logger.error("SendGrid support email error:", error);
+    const httpStatus = error?.code || error?.response?.code;
+    const sgMsg = error?.response?.body?.errors?.[0]?.message;
+    logger.error("SendGrid support email error:", {
+      httpStatus,
+      sendGridMessage: sgMsg,
+      hint:
+        httpStatus === 401
+          ? "SENDGRID_API_KEY is invalid, expired, or revoked — create a new key in SendGrid (Settings → API Keys) with Mail Send permission."
+          : undefined,
+    });
+
+    // 401 = bad API key (not an app bug). Return a clear message so /api/support/email can still mark DB + respond 503 cleanly.
+    if (httpStatus === 401) {
+      return {
+        success: false,
+        message:
+          "SendGrid rejected the API key (invalid, expired, or revoked). Update SENDGRID_API_KEY in backend .env with a valid key from https://app.sendgrid.com/settings/api_keys (enable Mail Send).",
+      };
+    }
+
     throw error;
   }
 };
