@@ -12,8 +12,6 @@ import {
     StyleSheet,
     Alert,
     ScrollView,
-    KeyboardAvoidingView,
-    Platform,
     Dimensions,
 } from "react-native";
 import * as Application from "expo-application";
@@ -116,14 +114,11 @@ export default function AccountSettingsScreen({ navigation }: any) {
                 title="Account Settings"
                 onBack={() => navigation?.goBack()}
             />
-            <KeyboardAvoidingView
-                style={styles.keyboard}
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-            >
-                <ScrollView
+            <ScrollView
                     style={styles.scroll}
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
                     showsVerticalScrollIndicator={true}
                     bounces={true}
                     alwaysBounceVertical={false}
@@ -196,15 +191,11 @@ export default function AccountSettingsScreen({ navigation }: any) {
 
                     <Text style={styles.versionText}>Tee Time Social v{appVersion}</Text>
                 </ScrollView>
-            </KeyboardAvoidingView>
         </ScreenShell>
     );
 }
 
 const styles = StyleSheet.create({
-    keyboard: {
-        flex: 1,
-    },
     scroll: {
         flex: 1,
     },

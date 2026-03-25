@@ -5,7 +5,7 @@
  * - Pull-to-refresh
  * - Consistent padding from tokens
  * - Bottom padding for BottomNav clearance
- * - Keyboard-aware behavior
+ * - Scroll + taps during keyboard (inset lift is handled by ScreenShell)
  *
  * Usage:
  *   <ScreenShell>
@@ -98,7 +98,7 @@ function ContentAreaInner({
       refreshControl={refreshCtrl}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      automaticallyAdjustKeyboardInsets={false}
     >
       {children}
     </ScrollView>

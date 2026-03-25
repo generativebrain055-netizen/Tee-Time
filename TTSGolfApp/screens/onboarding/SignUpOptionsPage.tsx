@@ -5,8 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput as RNTextInput,
-  KeyboardAvoidingView,
-  Platform,
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
@@ -79,10 +77,7 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
     <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={styles.keyboardView}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.content}>
             {/* Header */}
@@ -194,7 +189,7 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
             <AdContainerPlaceholder />
           </View>
         </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

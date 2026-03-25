@@ -162,6 +162,8 @@ export default function HelpSupportScreen({ navigation }: any) {
             <ScrollView
                 style={styles.container}
                 contentContainerStyle={styles.contentContainer}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
             >
                 {/* Header Section */}
                 <View style={[styles.headerSection, { backgroundColor: colors.surface }]}>

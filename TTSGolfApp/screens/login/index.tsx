@@ -15,6 +15,9 @@ import {
   Linking,
   TextInput,
   ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -163,19 +166,29 @@ export default function LoginScreen({ navigation }: Props) {
   }, [username, password, confirmPassword, firstName, lastName, navigation]);
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="dark" />
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={{ flex: 1 }}>
+          <StatusBar style="dark" />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBackWithAuthMode}>
-            <ArrowLeft size={24} color="#111827" strokeWidth={1.5} />
-          </TouchableOpacity>
-        </View>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={handleBackWithAuthMode}>
+              <ArrowLeft size={24} color="#111827" strokeWidth={1.5} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Main Content - Fixed position, keyboard overlays */}
-        <View style={styles.mainContent}>
+          <ScrollView
+            style={styles.mainContent}
+            contentContainerStyle={{ flexGrow: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
           <Animated.View
             style={[
               styles.animatedContent,
@@ -460,7 +473,7 @@ export default function LoginScreen({ navigation }: Props) {
               </View>
             )}
           </Animated.View>
-        </View>
+          </ScrollView>
 
         {/* Bottom Section - Ad container (Figma) + fixed at bottom */}
         <View
@@ -482,8 +495,9 @@ export default function LoginScreen({ navigation }: Props) {
 
 
         </View>
-      </View>
-    </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

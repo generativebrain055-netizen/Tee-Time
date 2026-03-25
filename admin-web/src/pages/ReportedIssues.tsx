@@ -70,10 +70,37 @@ export function ReportedIssues() {
   const [feedbackNotesValue, setFeedbackNotesValue] = useState('');
   const [feedbackNotesError, setFeedbackNotesError] = useState<string | null>(null);
 
+  const [userSearchInput, setUserSearchInput] = useState('');
+  const [userSearchDebounced, setUserSearchDebounced] = useState('');
+  const [feedbackSearchInput, setFeedbackSearchInput] = useState('');
+  const [feedbackSearchDebounced, setFeedbackSearchDebounced] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setUserSearchDebounced(userSearchInput.trim());
+      setPage(0);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [userSearchInput]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFeedbackSearchDebounced(feedbackSearchInput.trim());
+      setFeedbackPage(0);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [feedbackSearchInput]);
+
   const loadReports = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await listReports(statusFilter || undefined, pageSize, page * pageSize, 'user_vs_user');
+    const res = await listReports(
+      statusFilter || undefined,
+      pageSize,
+      page * pageSize,
+      'user_vs_user',
+      userSearchDebounced || undefined,
+    );
     setLoading(false);
     if (res.success) {
       setReports(res.data);
@@ -83,7 +110,7 @@ export function ReportedIssues() {
       setError(msg);
       notify.error(msg);
     }
-  }, [statusFilter, page, pageSize, notify]);
+  }, [statusFilter, page, pageSize, userSearchDebounced, notify]);
 
   const loadFeedback = useCallback(async () => {
     setFeedbackLoading(true);
@@ -93,6 +120,7 @@ export function ReportedIssues() {
       feedbackPageSize,
       feedbackPage * feedbackPageSize,
       'app_support',
+      feedbackSearchDebounced || undefined,
     );
     setFeedbackLoading(false);
     if (res.success) {
@@ -103,7 +131,7 @@ export function ReportedIssues() {
       setFeedbackError(msg);
       notify.error(msg);
     }
-  }, [feedbackStatusFilter, feedbackPage, feedbackPageSize, notify]);
+  }, [feedbackStatusFilter, feedbackPage, feedbackPageSize, feedbackSearchDebounced, notify]);
 
   useEffect(() => {
     if (mainTab === 'user_reports') loadReports();
@@ -190,16 +218,29 @@ export function ReportedIssues() {
       {mainTab === 'user_reports' && (
         <>
           <div style={styles.toolbar}>
-            <label style={styles.label}>
-              Status
-              <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }} style={styles.select}>
-                <option value="">All</option>
-                <option value="pending">Pending</option>
-                <option value="reviewing">Reviewing</option>
-                <option value="resolved">Resolved</option>
-                <option value="dismissed">Dismissed</option>
-              </select>
-            </label>
+            <div style={styles.toolbarLeft}>
+              <label style={styles.label}>
+                Status
+                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }} style={styles.select}>
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="reviewing">Reviewing</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="dismissed">Dismissed</option>
+                </select>
+              </label>
+              <label style={styles.searchLabel}>
+                Search
+                <input
+                  type="search"
+                  value={userSearchInput}
+                  onChange={(e) => setUserSearchInput(e.target.value)}
+                  placeholder="Reason, description, admin notes (text in the report)…"
+                  style={styles.searchInput}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
             <div style={styles.toolbarRight}>
               <label style={styles.label}>
                 Per page
@@ -233,7 +274,11 @@ export function ReportedIssues() {
           {loading ? (
             <p style={styles.muted}>Loading…</p>
           ) : reports.length === 0 ? (
-            <p style={styles.muted}>No reports found. If the user_reports table is not created yet, run the migration 006_user_reports.sql.</p>
+            <p style={styles.muted}>
+              {userSearchDebounced
+                ? 'No reports match your search.'
+                : 'No reports found. If the user_reports table is not created yet, run the migration 006_user_reports.sql.'}
+            </p>
           ) : (
             <div style={styles.list}>
               {reports.map((r) => (
@@ -323,16 +368,29 @@ export function ReportedIssues() {
             <code>SENDGRID_TO_EMAIL</code>; each row is also stored here for triage.
           </p>
           <div style={styles.toolbar}>
-            <label style={styles.label}>
-              Status
-              <select value={feedbackStatusFilter} onChange={(e) => { setFeedbackStatusFilter(e.target.value); setFeedbackPage(0); }} style={styles.select}>
-                <option value="">All</option>
-                <option value="pending">Pending</option>
-                <option value="reviewing">Reviewing</option>
-                <option value="resolved">Resolved</option>
-                <option value="dismissed">Dismissed</option>
-              </select>
-            </label>
+            <div style={styles.toolbarLeft}>
+              <label style={styles.label}>
+                Status
+                <select value={feedbackStatusFilter} onChange={(e) => { setFeedbackStatusFilter(e.target.value); setFeedbackPage(0); }} style={styles.select}>
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="reviewing">Reviewing</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="dismissed">Dismissed</option>
+                </select>
+              </label>
+              <label style={styles.searchLabel}>
+                Search
+                <input
+                  type="search"
+                  value={feedbackSearchInput}
+                  onChange={(e) => setFeedbackSearchInput(e.target.value)}
+                  placeholder="Subject, message body, category, notes (text in the report)…"
+                  style={styles.searchInput}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
             <div style={styles.toolbarRight}>
               <label style={styles.label}>
                 Per page
@@ -367,7 +425,13 @@ export function ReportedIssues() {
             <p style={styles.muted}>Loading…</p>
           ) : feedback.length === 0 ? (
             <p style={styles.muted}>
-              No app support submissions yet. Run migration <code>012_user_reports_app_support.sql</code> if the new columns are missing.
+              {feedbackSearchDebounced
+                ? 'No submissions match your search.'
+                : (
+                  <>
+                    No app support submissions yet. Run migration <code>012_user_reports_app_support.sql</code> if the new columns are missing.
+                  </>
+                )}
             </p>
           ) : (
             <div style={styles.list}>
@@ -496,9 +560,26 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-on-primary-container)',
   },
   hint: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-md)', lineHeight: 1.5 },
-  toolbar: { display: 'flex', gap: 'var(--space-xl)', flexWrap: 'wrap', marginBottom: 'var(--space-lg)', alignItems: 'center', justifyContent: 'space-between' },
+  toolbar: { display: 'flex', gap: 'var(--space-xl)', flexWrap: 'wrap', marginBottom: 'var(--space-lg)', alignItems: 'flex-end', justifyContent: 'space-between' },
+  toolbarLeft: { display: 'flex', flexWrap: 'wrap', gap: 'var(--space-lg)', alignItems: 'flex-end', flex: '1 1 240px' },
   toolbarRight: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginLeft: 'auto', flexWrap: 'wrap' },
   label: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
+  searchLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-xs)',
+    fontSize: 'var(--font-size-sm)',
+    minWidth: 'min(100%, 280px)',
+    flex: '1 1 220px',
+  },
+  searchInput: {
+    padding: 'var(--space-sm) var(--space-md)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--font-size-sm)',
+    width: '100%',
+    maxWidth: '420px',
+  },
   pageJumpLabel: { display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', fontSize: 'var(--font-size-sm)' },
   pagination: { display: 'flex', alignItems: 'center', gap: 'var(--space-md)' },
   pageInfo: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },

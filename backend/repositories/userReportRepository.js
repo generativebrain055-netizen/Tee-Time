@@ -4,6 +4,17 @@ const LIST_COLS =
   "id, reporter_id, reported_user_id, reason, description, status, admin_notes, resolved_at, created_at, updated_at, report_source, support_category, support_subject, email_delivered, email_error";
 
 /**
+ * PostgREST: use * as ILIKE/LIKE wildcard in filter strings (not % — % breaks URL / parser).
+ * Double-quote so values with . , : ( ) don't split the filter. See postgrest.org URL grammar.
+ */
+function postgrestIlikePattern(sanitizedText) {
+  const inner = String(sanitizedText)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+  return `"*${inner}*"`;
+}
+
+/**
  * True when error indicates pre-migration schema (012 not applied) or NOT NULL on reported_user_id.
  */
 function shouldTryLegacyAppSupportInsert(error) {
@@ -26,10 +37,26 @@ function shouldTryLegacyAppSupportInsert(error) {
 
 /**
  * List user reports (for admin)
- * @param {Object} filters - status, reported_user_id, report_source ('user_vs_user' | 'app_support'), limit, offset
+ * @param {Object} filters - status, reported_user_id, report_source ('user_vs_user' | 'app_support'), limit, offset, search (substring must appear in reason, description, admin_notes, or support fields)
  */
 const list = async (filters = {}) => {
   try {
+    const searchRaw = typeof filters.search === "string" ? filters.search.trim() : "";
+    // Avoid commas in ilike patterns (PostgREST uses comma as OR separator in .or())
+    const sanitizedText =
+      searchRaw.length > 0
+        ? searchRaw
+            .replace(/%/g, "")
+            .replace(/_/g, "")
+            .replace(/,/g, " ")
+            .trim()
+        : "";
+
+    // Non-empty search but nothing left to match → no rows (previously we omitted .or() and returned everything)
+    if (searchRaw.length > 0 && sanitizedText.length === 0) {
+      return { data: [], total: 0 };
+    }
+
     let query = supabaseAdmin
       .from("user_reports")
       .select(LIST_COLS, { count: "exact" })
@@ -39,9 +66,22 @@ const list = async (filters = {}) => {
     if (filters.reported_user_id) query = query.eq("reported_user_id", filters.reported_user_id);
 
     if (filters.report_source === "app_support") {
-      query = query.or("report_source.eq.app_support,reason.like.app_support:%");
+      query = query.or("report_source.eq.app_support,reason.like.app_support:*");
     } else if (filters.report_source === "user_vs_user") {
-      query = query.eq("report_source", "user_vs_user").not("reason", "like", "app_support:%");
+      query = query.eq("report_source", "user_vs_user").not("reason", "like", "app_support:*");
+    }
+
+    if (sanitizedText.length > 0) {
+      const term = postgrestIlikePattern(sanitizedText);
+      query = query.or(
+        [
+          `reason.ilike.${term}`,
+          `description.ilike.${term}`,
+          `admin_notes.ilike.${term}`,
+          `support_subject.ilike.${term}`,
+          `support_category.ilike.${term}`,
+        ].join(","),
+      );
     }
 
     const limit = Math.min(filters.limit || 50, 200);

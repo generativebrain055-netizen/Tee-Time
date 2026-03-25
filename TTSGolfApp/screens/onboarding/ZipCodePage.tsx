@@ -5,8 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
@@ -49,10 +47,7 @@ export const ZipCodePage: React.FC<ZipCodePageProps> = ({
   return (
     <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={styles.keyboardView}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.content}>
             <View style={styles.header}>
@@ -97,7 +92,7 @@ export const ZipCodePage: React.FC<ZipCodePageProps> = ({
             </View>
           </View>
         </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

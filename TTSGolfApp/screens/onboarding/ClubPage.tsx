@@ -6,8 +6,6 @@ import {
   TextInput,
   ScrollView,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -167,11 +165,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
-      >
+      <View className="flex-1">
         <View className="flex-1 px-6">
           {/* Header */}
           <View className="h-14 flex-row items-center justify-between">
@@ -188,7 +182,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
             className="flex-1 pt-4"
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            automaticallyAdjustKeyboardInsets={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 24 }}
           >
@@ -336,7 +330,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

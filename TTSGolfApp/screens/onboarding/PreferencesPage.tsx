@@ -4,8 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -185,10 +183,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View className="flex-1">
         <View className="flex-1 px-6">
           <View className="h-14 flex-row items-center justify-between">
             <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
@@ -210,6 +205,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
           <ScrollView 
             className="flex-1 pt-4"
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
           >
@@ -269,7 +265,7 @@ export const PreferencesPage: React.FC<PreferencesPageProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

@@ -5,8 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   TouchableWithoutFeedback,
   Keyboard,
   Image,
@@ -136,10 +134,7 @@ export const PhotoZipPage: React.FC<PhotoZipPageProps> = ({
     <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={styles.keyboardView}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.content}>
             {/* Header */}
@@ -216,7 +211,7 @@ export const PhotoZipPage: React.FC<PhotoZipPageProps> = ({
             </View>
           </View>
         </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

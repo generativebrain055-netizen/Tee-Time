@@ -532,14 +532,18 @@ class FriendRepository {
       else if (sentRequest) friendship_status = "requested";
       else if (receivedRequest) friendship_status = "pending";
 
-      // Get recent completed tee times (last 3)
+      // Get completed tee-time aggregates for unified stats logic:
+      // - roundsCount: total completed rounds
+      // - coursesCount: unique completed courses
+      // - recentRounds: latest 3 completed rounds
       let recentRounds = [];
       let uniqueCourses = new Set();
+      let completedRoundsCount = 0;
       
       try {
-        // Get completed tee times where user is a participant
-        // Note: Ordering by foreign table columns may not work directly, so we'll sort in JS
-        const { data: completedTeeTimes, error: completedError } = await supabaseAdmin
+        // Get completed tee times where user is a participant.
+        // Note: Ordering by foreign table columns may not work directly, so we'll sort in JS.
+        const { data: allCompleted, error: allCompletedError } = await supabaseAdmin
           .from("tee_time_participants")
           .select(
             `
@@ -555,9 +559,11 @@ class FriendRepository {
           .eq("user_id", userId)
           .eq("tee_times.status", "completed");
 
-        if (!completedError && completedTeeTimes && completedTeeTimes.length > 0) {
-          // Extract and sort tee times by date (most recent first)
-          const teeTimes = completedTeeTimes
+        if (!allCompletedError && allCompleted && allCompleted.length > 0) {
+          completedRoundsCount = allCompleted.length;
+
+          // Extract, normalize, and sort tee times by date (most recent first)
+          const teeTimes = allCompleted
             .map((p) => {
               const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
               return tt;
@@ -577,21 +583,11 @@ class FriendRepository {
             date: round.tee_date,
           }));
 
-          // Get unique courses count from all completed tee times
-          const { data: allCompleted, error: allCompletedError } = await supabaseAdmin
-            .from("tee_time_participants")
-            .select("tee_times!inner(course_name)")
-            .eq("user_id", userId)
-            .eq("tee_times.status", "completed");
-
-          if (!allCompletedError && allCompleted) {
-            allCompleted.forEach((p) => {
-              const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
-              if (tt?.course_name) {
-                uniqueCourses.add(tt.course_name);
-              }
-            });
-          }
+          // Compute unique courses from all completed tee times
+          allCompleted.forEach((p) => {
+            const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
+            if (tt?.course_name) uniqueCourses.add(tt.course_name);
+          });
         }
       } catch (roundsError) {
         // Continue without recent rounds data - not critical
@@ -604,7 +600,7 @@ class FriendRepository {
         ...data,
         ...profile,
         friendship_status,
-        roundsCount: profile.rounds_played || recentRounds.length,
+        roundsCount: profile.rounds_played ?? completedRoundsCount,
         coursesCount: uniqueCourses.size,
         recentRounds: recentRounds,
         golfVibe: profile.playing_partner_preference,

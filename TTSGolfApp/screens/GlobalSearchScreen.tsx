@@ -167,6 +167,7 @@ export default function GlobalSearchScreen({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {result.users.length > 0 && (
             <View style={styles.section}>

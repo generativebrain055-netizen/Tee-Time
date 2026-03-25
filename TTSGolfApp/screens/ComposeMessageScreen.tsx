@@ -263,7 +263,12 @@ export default function ComposeMessageScreen({ navigation }: any) {
             </Text>
           </View>
         ) : (
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {displayRecipients.map((recipient) => {
               const isSelected = selectedIds.has(recipient.id);
               const displayName = `${recipient.firstName} ${recipient.lastName}`.trim() || "Unknown";

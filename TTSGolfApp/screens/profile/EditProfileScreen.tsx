@@ -13,6 +13,9 @@ import {
     InteractionManager,
     Linking,
     Keyboard,
+    Pressable,
+    Dimensions,
+    type KeyboardEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Device from "expo-device";
@@ -230,6 +233,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
     const [selectedClub, setSelectedClub] = useState<any>(null);
+    const [addClubKeyboardHeight, setAddClubKeyboardHeight] = useState(0);
     const [handicap, setHandicap] = useState(initialProfile.handicap?.toString() || "");
     const [preferredTeeTime, setPreferredTeeTime] = useState(
         initialProfile.preferences?.preferredTeeTime || "afternoon"
@@ -259,6 +263,27 @@ export default function EditProfileScreen({ navigation, route }: Props) {
             setClubs(validClubs);
         }
     }, [contextProfile?.clubs]);
+
+    useEffect(() => {
+        if (!showAddClubModal) {
+            setAddClubKeyboardHeight(0);
+            return;
+        }
+        const showEvt =
+            Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+        const hideEvt =
+            Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+        const onShow = (e: KeyboardEvent) => {
+            setAddClubKeyboardHeight(e.endCoordinates?.height ?? 0);
+        };
+        const onHide = () => setAddClubKeyboardHeight(0);
+        const subShow = Keyboard.addListener(showEvt, onShow);
+        const subHide = Keyboard.addListener(hideEvt, onHide);
+        return () => {
+            subShow.remove();
+            subHide.remove();
+        };
+    }, [showAddClubModal]);
 
     const handleSave = useCallback(async () => {
         setSaving(true);
@@ -487,23 +512,27 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     const initials = `${initialProfile.firstName?.[0] || ""}${initialProfile.lastName?.[0] || ""}`.toUpperCase() || "JS";
     const colors = useColors();
 
+    const windowH = Dimensions.get("window").height;
+    const kbH = addClubKeyboardHeight;
+    const addClubSheetMaxH =
+        kbH > 0
+            ? Math.max(240, windowH - kbH - insets.bottom - 16)
+            : windowH * 0.88;
+    const addClubListReserved =
+        24 * 2 + 52 + 16 + 52 + 16 + 56 + 8;
+    const addClubListMaxH = Math.max(100, addClubSheetMaxH - addClubListReserved);
+
     return (
         <ScreenShell>
             <AppHeader
                 title="Edit Profile"
                 onBack={() => navigation.goBack()}
             />
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
-            >
                 <ScrollView
-                    style={{ backgroundColor: '#F3F4F6' }}
+                    style={{ flex: 1, backgroundColor: '#F3F4F6' }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
-                    automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
                     contentContainerStyle={{ paddingBottom: 120 }}
                 >
                     {/* Profile Photo Section */}
@@ -760,7 +789,6 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
-            </KeyboardAvoidingView>
 
             <ConfirmModal
                 visible={showSuccessModal}
@@ -796,37 +824,44 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 cancelText="Choose from Library"
             />
 
-            {/* Add Club Modal */}
+            {/* Add Club Modal — backdrop + sheet; keyboard height sizes sheet so list stays visible */}
             <Modal
                 visible={showAddClubModal}
                 transparent
                 animationType="slide"
                 onRequestClose={() => setShowAddClubModal(false)}
             >
-                <KeyboardAvoidingView
+                <View
                     style={{
                         flex: 1,
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        justifyContent: 'flex-end',
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        justifyContent: "flex-end",
                     }}
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
                 >
-                    <TouchableOpacity
-                        activeOpacity={1}
-                        onPress={Keyboard.dismiss}
+                    <Pressable
                         style={{
-                            flex: 1,
-                            justifyContent: 'flex-end',
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                        }}
+                        onPress={Keyboard.dismiss}
+                    />
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === "ios" ? "padding" : undefined}
+                        keyboardVerticalOffset={insets.bottom}
+                    >
+                    <View
+                        style={{
+                            backgroundColor: "#FFFFFF",
+                            borderTopLeftRadius: 24,
+                            borderTopRightRadius: 24,
+                            padding: 24,
+                            paddingBottom: Math.max(24, insets.bottom + 12),
+                            maxHeight: addClubSheetMaxH,
                         }}
                     >
-                    <View style={{
-                        backgroundColor: '#FFFFFF',
-                        borderTopLeftRadius: 24,
-                        borderTopRightRadius: 24,
-                        padding: 24,
-                        maxHeight: '85%',
-                    }}>
                         <View style={{
                             flexDirection: 'row',
                             justifyContent: 'space-between',
@@ -871,9 +906,14 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                         </View>
 
                         <ScrollView
-                            style={{ maxHeight: 300, marginBottom: 16 }}
+                            style={{ maxHeight: addClubListMaxH, marginBottom: 16 }}
                             keyboardShouldPersistTaps="handled"
                             keyboardDismissMode="on-drag"
+                            nestedScrollEnabled
+                            automaticallyAdjustKeyboardInsets={
+                                Platform.OS === "ios"
+                            }
+                            indicatorStyle="black"
                         >
                             {searching ? (
                                 <ActivityIndicator size="small" color="#5EBC68" />
@@ -947,8 +987,8 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                             </Text>
                         </TouchableOpacity>
                     </View>
-                    </TouchableOpacity>
-                </KeyboardAvoidingView>
+                    </KeyboardAvoidingView>
+                </View>
             </Modal>
         </ScreenShell>
     );

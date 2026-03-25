@@ -56,7 +56,7 @@ const create = async (userId, profileData = {}) => {
             .insert({
                 user_id: userId,
                 handicap: handicap || null,
-                social_rate: socialRate || 5.0,
+                social_rate: socialRate ?? 100,
                 avatar_url: avatarUrl || null,
                 bio: bio || null,
                 location: location || null,

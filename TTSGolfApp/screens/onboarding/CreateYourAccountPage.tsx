@@ -9,8 +9,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
@@ -88,11 +86,7 @@ export function CreateYourAccountPage({
       pointerEvents="box-none"
     >
       <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
+      <View className="flex-1">
         <View className="flex-1 px-6" pointerEvents="box-none">
           <View className="h-14 flex-row items-center">
             <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
@@ -205,7 +199,7 @@ export function CreateYourAccountPage({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }

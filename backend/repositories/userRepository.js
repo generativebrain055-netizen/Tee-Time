@@ -231,7 +231,7 @@ const create = async (userData) => {
     return {
       ...user,
       handicap: handicap ? parseFloat(handicap) : null,
-      social_rate: 5.0,
+      social_rate: 100,
       location,
       home_course: clubsArray.length > 0 ? clubsArray[0].name : (homeCourse || null),
       clubs: clubsArray.length > 0 ? clubsArray : [], // Use empty array to match schema default

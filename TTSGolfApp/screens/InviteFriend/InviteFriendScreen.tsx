@@ -7,8 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Phone, X } from "lucide-react-native";
@@ -75,11 +73,7 @@ export default function InviteFriendScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <View style={styles.container}>
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -136,7 +130,7 @@ export default function InviteFriendScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </ScreenShell>
   );
 }

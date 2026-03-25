@@ -356,6 +356,12 @@ const listReports = async (req, res, next) => {
     const status = req.query.status;
     const reported_user_id = req.query.reported_user_id;
     const report_source = req.query.report_source;
+    const pickSearchParam = (v) => {
+      if (v == null) return "";
+      if (Array.isArray(v)) return typeof v[0] === "string" ? v[0] : "";
+      return typeof v === "string" ? v : "";
+    };
+    const search = pickSearchParam(req.query.q) || pickSearchParam(req.query.search);
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     let listResult;
@@ -364,6 +370,7 @@ const listReports = async (req, res, next) => {
         status,
         reported_user_id,
         report_source: report_source === "app_support" || report_source === "user_vs_user" ? report_source : undefined,
+        search: search.trim() || undefined,
         limit,
         offset,
       });

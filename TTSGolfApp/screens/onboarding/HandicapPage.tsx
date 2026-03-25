@@ -4,8 +4,6 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
@@ -59,10 +57,7 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
       <StatusBar style="dark" />
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View className="flex-1">
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View className="flex-1 px-6">
             {/* Header */}
@@ -143,7 +138,7 @@ export const HandicapPage: React.FC<HandicapPageProps> = ({
             </View>
           </View>
         </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 };

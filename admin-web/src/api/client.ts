@@ -318,12 +318,15 @@ export async function listReports(
   limit?: number,
   offset?: number,
   reportSource?: ReportSource,
+  search?: string,
 ): Promise<{ success: true; data: UserReport[]; total: number } | { success: false; message: string }> {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (limit != null) params.set('limit', String(limit));
   if (offset != null) params.set('offset', String(offset));
   if (reportSource) params.set('report_source', reportSource);
+  const q = typeof search === 'string' ? search.trim() : '';
+  if (q) params.set('q', q);
   const url = params.toString() ? `/api/admin/reports?${params}` : '/api/admin/reports';
   const res = await authFetch(url);
   const data = await res.json().catch(() => ({}));

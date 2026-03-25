@@ -14,8 +14,14 @@
  *   </ScreenShell>
  */
 import React, { memo, type ReactNode } from 'react';
-import { View, type ViewStyle, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  View,
+  type ViewStyle,
+  StatusBar,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { animation } from '../theme/tokens';
 import { useColors } from '../theme/ThemeContext';
@@ -57,6 +63,20 @@ function ScreenShellInner({
 }: ScreenShellProps) {
   const colors = useColors();
   const bg = backgroundColor ?? colors.background;
+  const insets = useSafeAreaInsets();
+
+  const inner = animate ? (
+    <MotiView
+      from={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: 'timing', duration: animation.duration.fast }}
+      style={{ flex: 1 }}
+    >
+      {children}
+    </MotiView>
+  ) : (
+    <View style={{ flex: 1 }}>{children}</View>
+  );
 
   return (
     <SafeAreaView
@@ -68,18 +88,13 @@ function ScreenShellInner({
         barStyle={statusBarStyle === 'dark' ? 'dark-content' : 'light-content'}
         backgroundColor={bg}
       />
-      {animate ? (
-        <MotiView
-          from={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ type: 'timing', duration: animation.duration.fast }}
-          style={{ flex: 1 }}
-        >
-          {children}
-        </MotiView>
-      ) : (
-        <View style={{ flex: 1 }}>{children}</View>
-      )}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        {inner}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

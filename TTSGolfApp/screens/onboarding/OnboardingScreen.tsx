@@ -6,6 +6,8 @@ import {
   Alert,
   ActivityIndicator,
   Text,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -892,9 +894,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           initialData={userData as OnboardingData}
           initialEmail={userData.email}
           initialProfilePhotoUri={userData.profilePhotoUri}
-          initialZipCode={userData.zipCode}
-          initialLocation={userData.location?.name}
           initialZipCode={userData.zipCode ?? undefined}
+          initialLocation={userData.location?.name}
           initialClub={userData.club?.name}
           initialHandicap={userData.handicap?.toString() || ""}
           initialPreferences={userData.preferences}
@@ -908,17 +909,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Progress Bar */}
-      {currentStepIndex > 0 && (
-        <View style={styles.progressBarContainer}>
-          <View
-            style={[styles.progressBar, { width: `${progressPercentage}%` }]}
-          />
-        </View>
-      )}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={0}
+      >
+        {/* Progress Bar */}
+        {currentStepIndex > 0 && (
+          <View style={styles.progressBarContainer}>
+            <View
+              style={[styles.progressBar, { width: `${progressPercentage}%` }]}
+            />
+          </View>
+        )}
 
-      {/* Step Content */}
-      {renderStep()}
+        {/* Step Content */}
+        {renderStep()}
+      </KeyboardAvoidingView>
 
       {/* Loading Overlay */}
       {isRegistering && (
