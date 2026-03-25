@@ -12,7 +12,9 @@ import {
     Modal,
     InteractionManager,
     Linking,
+    Keyboard,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Device from "expo-device";
 import * as ImagePicker from "expo-image-picker";
 import { ChevronDown, Trash2, Camera, X, MapPin } from "lucide-react-native";
@@ -205,11 +207,14 @@ const FormInput = memo(({
             placeholder={placeholder}
             placeholderTextColor={COLORS.placeholder}
             keyboardType={keyboardType}
+            showSoftInputOnFocus
+            autoCorrect={false}
         />
     </View>
 ));
 
 export default function EditProfileScreen({ navigation, route }: Props) {
+    const insets = useSafeAreaInsets();
     const { profile: contextProfile, updateProfile: updateContextProfile } = useUser();
     const initialProfile = route.params?.profile || contextProfile || {};
 
@@ -491,12 +496,15 @@ export default function EditProfileScreen({ navigation, route }: Props) {
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
             >
                 <ScrollView
                     style={{ backgroundColor: '#F3F4F6' }}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ paddingBottom: 100 }}
+                    keyboardDismissMode="on-drag"
+                    automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+                    contentContainerStyle={{ paddingBottom: 120 }}
                 >
                     {/* Profile Photo Section */}
                     <View style={{
@@ -795,17 +803,29 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 animationType="slide"
                 onRequestClose={() => setShowAddClubModal(false)}
             >
-                <View style={{
-                    flex: 1,
-                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                    justifyContent: 'flex-end',
-                }}>
+                <KeyboardAvoidingView
+                    style={{
+                        flex: 1,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        justifyContent: 'flex-end',
+                    }}
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+                >
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={Keyboard.dismiss}
+                        style={{
+                            flex: 1,
+                            justifyContent: 'flex-end',
+                        }}
+                    >
                     <View style={{
                         backgroundColor: '#FFFFFF',
                         borderTopLeftRadius: 24,
                         borderTopRightRadius: 24,
                         padding: 24,
-                        maxHeight: '80%',
+                        maxHeight: '85%',
                     }}>
                         <View style={{
                             flexDirection: 'row',
@@ -844,10 +864,17 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                                 placeholderTextColor="#9CA3AF"
                                 value={clubSearch}
                                 onChangeText={handleSearchClubs}
+                                returnKeyType="search"
+                                blurOnSubmit={false}
+                                showSoftInputOnFocus
                             />
                         </View>
 
-                        <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
+                        <ScrollView
+                            style={{ maxHeight: 300, marginBottom: 16 }}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
+                        >
                             {searching ? (
                                 <ActivityIndicator size="small" color="#5EBC68" />
                             ) : Array.isArray(searchResults) && searchResults.length > 0 ? (
@@ -920,7 +947,8 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                             </Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                    </TouchableOpacity>
+                </KeyboardAvoidingView>
             </Modal>
         </ScreenShell>
     );

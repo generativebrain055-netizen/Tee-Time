@@ -47,6 +47,7 @@ const OtpInput = memo(({
                         onChangeText={(text) => onChange(text, index)}
                         onKeyPress={({ nativeEvent }) => onKeyPress(nativeEvent.key, index)}
                         autoFocus={index === 0}
+                        showSoftInputOnFocus
                     />
                 </View>
             ))}

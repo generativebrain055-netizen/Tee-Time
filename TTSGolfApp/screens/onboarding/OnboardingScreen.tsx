@@ -23,7 +23,6 @@ import { MagicLinkPage } from "./MagicLinkPage";
 import { NamePage } from "./NamePage";
 import { EmailPage } from "./EmailPage";
 import { ProfileImagePage } from "./ProfileImagePage";
-import { ZipCodePage } from "./ZipCodePage";
 import { LocationPage } from "./LocationPage";
 import { ClubPage } from "./ClubPage";
 import { HandicapPage } from "./HandicapPage";
@@ -780,8 +779,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         return EmailPage as unknown as StepComponent;
       case ONBOARDING_STEPS.PROFILE_IMAGE:
         return ProfileImagePage as unknown as StepComponent;
-      case ONBOARDING_STEPS.ZIP_CODE:
-        return ZipCodePage as unknown as StepComponent;
       case ONBOARDING_STEPS.LOCATION:
         return LocationPage as unknown as StepComponent;
       case ONBOARDING_STEPS.CLUB:
@@ -897,6 +894,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           initialProfilePhotoUri={userData.profilePhotoUri}
           initialZipCode={userData.zipCode}
           initialLocation={userData.location?.name}
+          initialZipCode={userData.zipCode ?? undefined}
           initialClub={userData.club?.name}
           initialHandicap={userData.handicap?.toString() || ""}
           initialPreferences={userData.preferences}

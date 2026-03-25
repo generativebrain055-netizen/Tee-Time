@@ -117,11 +117,11 @@ export default function ProfileScreen({ navigation }: any) {
 
 
 
-    // Fetch recent rounds with scores
+    // Fetch completed rounds (for accurate stats) and render up to 3 as "recent rounds"
     useEffect(() => {
         const fetchRounds = async () => {
             try {
-                const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 3 });
+                const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 200 });
                 if (historyRes.success) {
                     setRecentRounds(historyRes.history);
                 }
@@ -145,7 +145,7 @@ export default function ProfileScreen({ navigation }: any) {
             fetchProfile(true), // Force refresh
             (async () => {
                 try {
-                    const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 3 });
+                    const historyRes = await teeTimeApi.getHistory({ filter: "completed", limit: 200 });
                     if (historyRes.success) {
                         setRecentRounds(historyRes.history);
                     }
@@ -254,6 +254,7 @@ export default function ProfileScreen({ navigation }: any) {
     const fullName = getFullName(profile?.firstName, profile?.lastName);
     const initials = getInitials(profile?.firstName, profile?.lastName);
     const avatarUri = (profile?.avatarUrl || (profile as { avatar?: string })?.avatar || "").trim();
+    const roundsPlayed = profile?.roundsPlayed ?? recentRounds.length;
     const coursesPlayed = recentRounds.length > 0
         ? new Set(recentRounds.map(r => r.courseName)).size
         : 0;
@@ -618,7 +619,7 @@ export default function ProfileScreen({ navigation }: any) {
                                     color: '#3B82F6',
                                     marginBottom: 4,
                                 }}>
-                                    {profile?.roundsPlayed || "24"}
+                                    {roundsPlayed}
                                 </Text>
                                 <Text style={{
                                     fontFamily: 'Inter_600SemiBold',
@@ -642,7 +643,7 @@ export default function ProfileScreen({ navigation }: any) {
                                     color: '#10B981',
                                     marginBottom: 4,
                                 }}>
-                                    {coursesPlayed || "12"}
+                                    {coursesPlayed}
                                 </Text>
                                 <Text style={{
                                     fontFamily: 'Inter_600SemiBold',
@@ -709,7 +710,7 @@ export default function ProfileScreen({ navigation }: any) {
                                 <ActivityIndicator size="small" color="#22C55E" />
                             </View>
                         ) : recentRounds.length > 0 ? (
-                            recentRounds.map((round, index) => (
+                            recentRounds.slice(0, 3).map((round, index) => (
                                 <TouchableOpacity
                                     key={round.id || index}
                                     activeOpacity={0.7}

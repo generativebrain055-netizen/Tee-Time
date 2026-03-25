@@ -29,6 +29,7 @@ function AppTextInputInner({
   errorMessage,
   error,
   style,
+  showSoftInputOnFocus = true,
   ...rest
 }: AppTextInputProps) {
   const Wrapper = animateEntry ? MotiView : View;
@@ -48,6 +49,7 @@ function AppTextInputInner({
         contentStyle={{ fontFamily: fontFamilies.regular }}
         error={error}
         style={[{ backgroundColor: "transparent" }, style as any]}
+        showSoftInputOnFocus={showSoftInputOnFocus}
         {...rest}
       />
       {error && errorMessage ? (

@@ -56,6 +56,7 @@ const PhoneInput = memo(({
                 maxLength={selectedCountry.maxLength}
                 onFocus={onFocus}
                 onBlur={onBlur}
+                showSoftInputOnFocus
             />
             {value.length > 0 && (
                 <TouchableOpacity style={styles.clearButton} onPress={onClear}>

@@ -140,6 +140,7 @@ export function Input({
           className={cn(inputTextVariants({ size, centered }), className)}
           placeholderTextColor="#9CA3AF"
           editable={editable}
+          showSoftInputOnFocus={editable}
           onFocus={handleFocus}
           onBlur={handleBlur}
           {...props}
@@ -198,6 +199,7 @@ export function OTPInput({
           keyboardType="number-pad"
           maxLength={length}
           autoFocus
+          showSoftInputOnFocus
         />
       </View>
       

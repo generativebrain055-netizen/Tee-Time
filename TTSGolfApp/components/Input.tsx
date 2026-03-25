@@ -84,6 +84,7 @@ export const TextInput: React.FC<TextInputProps> = ({
         autoCorrect={autoCorrect}
         maxLength={maxLength}
         editable={editable}
+        showSoftInputOnFocus={editable}
         multiline={multiline}
         numberOfLines={numberOfLines}
       />
@@ -125,6 +126,7 @@ export const OTPInput: React.FC<OTPInputProps> = ({
         keyboardType="number-pad"
         maxLength={actualMaxLength}
         autoFocus
+        showSoftInputOnFocus
       />
     </View>
   );

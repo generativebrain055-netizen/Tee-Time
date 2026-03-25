@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { ArrowLeft, Search, X, MapPin, CheckCircle } from "lucide-react-native";
+import { ArrowLeft, Search, X, MapPin } from "lucide-react-native";
 import type { LocationPageProps, Location } from "../../types";
 import { API_URL } from "../../config/api";
 import { ONBOARDING_COLORS as COLORS } from "./constants";
@@ -30,14 +30,29 @@ export const LocationPage: React.FC<LocationPageProps> = ({
   onNext,
   onBack,
   initialLocation = "",
+  initialZipCode = "",
 }) => {
   const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState<string>(initialLocation);
+  const initialQuery = useMemo(() => {
+    const z = (initialZipCode || "").trim();
+    return z.length > 0 ? z : initialLocation;
+  }, [initialLocation, initialZipCode]);
+
+  const [searchQuery, setSearchQuery] = useState<string>(initialQuery);
   const [selectedLocation, setSelectedLocation] =
     useState<LocationSuggestion | null>(null);
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const extractZip = useCallback((value: string): string | undefined => {
+    const trimmed = value.trim();
+    // supports "92114" or "92114 - San Diego, CA"
+    const firstToken = trimmed.split(/\s|-/)[0] || "";
+    const digits = firstToken.replace(/\D/g, "");
+    if (digits.length === 5) return digits;
+    return undefined;
+  }, []);
 
   // Search cities using backend API (fast, based on golf club locations)
   const searchLocations = useCallback(async (query: string) => {
@@ -108,6 +123,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
 
   const handleSearch = useCallback(
     (text: string): void => {
+      // allow typing zip code; keep only digits/spaces/dash/comma/letters
       setSearchQuery(text);
       setSelectedLocation(null);
 
@@ -129,15 +145,18 @@ export const LocationPage: React.FC<LocationPageProps> = ({
   const handleSelectLocation = useCallback(
     (location: LocationSuggestion): void => {
       setSelectedLocation(location);
-      setSearchQuery(location.name);
+      const zip = extractZip(searchQuery);
+      setSearchQuery(zip ? `${zip} - ${location.name}` : location.name);
       setSuggestions([]);
       Keyboard.dismiss();
     },
-    [],
+    [extractZip, searchQuery],
   );
 
   const handleNext = useCallback((): void => {
-    if (!selectedLocation && searchQuery.trim().length < 2) return;
+    const zipCode = extractZip(searchQuery);
+    const hasAnyInput = (searchQuery || "").trim().length > 0;
+    if (!selectedLocation && !zipCode && !hasAnyInput) return;
 
     const locationData: Location = selectedLocation
       ? {
@@ -145,10 +164,13 @@ export const LocationPage: React.FC<LocationPageProps> = ({
           name: selectedLocation.name,
           description: selectedLocation.description,
         }
-      : { name: searchQuery.trim() };
+      : { name: searchQuery.trim().replace(/^\d{5}\s*-\s*/g, "") };
 
-    onNext({ location: locationData });
-  }, [selectedLocation, searchQuery, onNext]);
+    onNext({
+      zipCode: zipCode ?? undefined,
+      location: locationData.name ? locationData : undefined,
+    });
+  }, [selectedLocation, searchQuery, onNext, extractZip]);
 
   const handleClear = useCallback(() => {
     setSearchQuery("");
@@ -156,7 +178,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
     setSuggestions([]);
   }, []);
 
-  const isValid = selectedLocation !== null || searchQuery.trim().length >= 2;
+  const isValid = (extractZip(searchQuery) != null) || selectedLocation !== null || searchQuery.trim().length >= 2;
 
   return (
     <View className="flex-1 bg-white" style={{ paddingTop: insets.top > 0 ? 0 : 16 }}>
@@ -165,6 +187,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
       >
         <View className="flex-1 px-6">
           {/* Header */}
@@ -172,18 +195,22 @@ export const LocationPage: React.FC<LocationPageProps> = ({
             <TouchableOpacity className="w-10 h-10 justify-center items-start" onPress={onBack}>
               <ArrowLeft size={24} color={COLORS.black} strokeWidth={1.5} />
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => onNext({ zipCode: undefined, location: undefined })} hitSlop={10}>
+              <Text className="text-[15px] font-semibold text-gray-500">Skip</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Main Content */}
           <ScrollView
             className="flex-1 pt-4"
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 24 }}
           >
             <Text className="text-[28px] font-bold text-gray-900 mb-2">Where are you based?</Text>
-            <Text className="text-[15px] text-gray-500 leading-[22px] mb-8">
-              Enter your city, state, zip code, or country
-            </Text>
+            <Text className="text-[13px] font-semibold text-gray-500 mb-2">Zip code</Text>
 
             {/* Search Input with Dropdown */}
             <View style={{ position: 'relative', zIndex: 1000 }}>
@@ -191,13 +218,14 @@ export const LocationPage: React.FC<LocationPageProps> = ({
                 <Search size={20} color={COLORS.textSub} />
                 <TextInput
                   className="flex-1 text-base text-gray-900"
-                  placeholder="e.g., Miami, FL or 33101 or USA"
+                  placeholder=" "
                   placeholderTextColor={COLORS.textPlaceholder}
                   value={searchQuery}
                   onChangeText={handleSearch}
                   autoCapitalize="words"
                   autoCorrect={false}
                   returnKeyType="search"
+                  showSoftInputOnFocus
                 />
                 {loading && (
                   <ActivityIndicator size="small" color={COLORS.primary} />
@@ -254,7 +282,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
                         <MapPin size={20} color={COLORS.primary} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 2 }}>
-                            {item.name}
+                            {extractZip(searchQuery) ? `${extractZip(searchQuery)} - ${item.name}` : item.name}
                           </Text>
                           <Text style={{ fontSize: 14, color: '#6B7280' }}>
                             {item.description}
@@ -266,27 +294,6 @@ export const LocationPage: React.FC<LocationPageProps> = ({
                 </View>
               )}
             </View>
-
-            {/* Selected Location */}
-            {selectedLocation && (
-              <View className="flex-row items-center p-4 bg-green-50 rounded-md border-2 border-primary mb-4 gap-3">
-                <MapPin size={24} color={COLORS.primary} />
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-gray-900 mb-[2px]">
-                    {selectedLocation.name}
-                  </Text>
-                  <Text className="text-sm text-gray-500">
-                    {selectedLocation.description}
-                  </Text>
-                </View>
-                <CheckCircle size={24} color={COLORS.primary} />
-              </View>
-            )}
-
-            {/* Help Text */}
-            <Text className="text-sm text-gray-500 text-center">
-              We'll show you tee times and golfers in this area
-            </Text>
           </ScrollView>
 
           {/* Bottom Section */}

@@ -44,6 +44,7 @@ function AppInputInner({
   helperText,
   wrapperClassName,
   style,
+  showSoftInputOnFocus = true,
   ...rest
 }: AppInputProps) {
   const h = componentTokens.input.height[size];
@@ -60,6 +61,7 @@ function AppInputInner({
         }}
         style={[{ backgroundColor: 'transparent' }, style]}
         error={error || !!errorMessage}
+        showSoftInputOnFocus={showSoftInputOnFocus}
         {...rest}
       />
       {displayText ? (

@@ -170,6 +170,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 8 : 0}
       >
         <View className="flex-1 px-6">
           {/* Header */}
@@ -186,7 +187,10 @@ export const ClubPage: React.FC<ClubPageProps> = ({
           <ScrollView
             className="flex-1 pt-4"
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 24 }}
           >
             <Text className="text-[28px] font-bold text-gray-900 mb-2">Home clubs or memberships</Text>
             <Text className="text-[15px] text-gray-500 leading-[22px] mb-6">
@@ -228,6 +232,7 @@ export const ClubPage: React.FC<ClubPageProps> = ({
                   autoCapitalize="words"
                   autoCorrect={false}
                   returnKeyType="search"
+                  showSoftInputOnFocus
                 />
                 {loading && (
                   <ActivityIndicator size="small" color={COLORS.primary} />

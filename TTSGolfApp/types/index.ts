@@ -104,6 +104,7 @@ export interface ProfileImagePageProps extends OnboardingPageProps {
 
 export interface LocationPageProps extends OnboardingPageProps {
   initialLocation?: string;
+  initialZipCode?: string;
 }
 
 export interface ClubPageProps extends OnboardingPageProps {

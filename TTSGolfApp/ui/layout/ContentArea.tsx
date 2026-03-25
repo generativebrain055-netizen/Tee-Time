@@ -16,7 +16,13 @@
  *   </ScreenShell>
  */
 import React, { memo, useMemo, type ReactNode } from 'react';
-import { ScrollView, RefreshControl, View, type ViewStyle } from 'react-native';
+import {
+  ScrollView,
+  RefreshControl,
+  View,
+  Platform,
+  type ViewStyle,
+} from 'react-native';
 import { spacing, componentTokens } from '../theme/tokens';
 import { useColors } from '../theme/ThemeContext';
 
@@ -91,6 +97,8 @@ function ContentAreaInner({
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       refreshControl={refreshCtrl}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
     >
       {children}
     </ScrollView>
