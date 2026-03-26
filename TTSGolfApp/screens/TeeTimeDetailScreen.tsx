@@ -20,6 +20,7 @@ import { Alert } from "react-native";
 import { useAuthStore } from "../stores";
 import { useUser } from "../contexts/UserContext";
 import { logger } from "../utils/logger";
+import { formatRemainingClock } from "../utils/formatting";
 
 // Import tick and cross assets
 const TickIcon = require('../assets/Tick.png');
@@ -273,12 +274,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         const diff = expires.getTime() - currentTime.getTime();
         if (diff <= 0) return null;
         
-        const totalSeconds = Math.floor(diff / 1000);
-        const totalMinutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        
-        // Format as MM:SS (e.g., 09:43 or 117:38)
-        return `${String(totalMinutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        return formatRemainingClock(diff, true);
     }, [currentTime]);
 
     const fetchTeeTimeDetails = useCallback(async () => {

@@ -30,6 +30,7 @@ import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
 import { useAuthStore } from "../stores";
 import logger from "../utils/logger";
+import { formatRemainingClock } from "../utils/formatting";
 
 interface InviteDetailScreenProps {
     navigation?: any;
@@ -47,7 +48,7 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [responding, setResponding] = useState(false);
-    const [countdown, setCountdown] = useState<{ days: number; hours: number; mins: number; secs: number } | null>(null);
+    const [countdown, setCountdown] = useState<string | null>(null);
     const [isUrgent, setIsUrgent] = useState(false);
     const [isExpired, setIsExpired] = useState(false);
 
@@ -80,13 +81,8 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
             }
 
             const totalSecs = Math.floor(diffMs / 1000);
-            const days = Math.floor(totalSecs / 86400);
-            const hours = Math.floor((totalSecs % 86400) / 3600);
-            const mins = Math.floor((totalSecs % 3600) / 60);
-            const secs = totalSecs % 60;
-
             setIsUrgent(totalSecs < 3600);
-            setCountdown({ days, hours, mins, secs });
+            setCountdown(formatRemainingClock(diffMs, true));
         };
 
         calculateCountdown();
@@ -205,8 +201,6 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
             year: "numeric",
         });
     };
-
-    const padZero = (num: number) => num.toString().padStart(2, '0');
 
     const getInitials = (firstName?: string, lastName?: string) => {
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -361,31 +355,6 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
 
                             {!isExpired && countdown && (
                                 <View style={styles.countdownContainer}>
-                                    {countdown.days > 0 && (
-                                        <>
-                                            <View style={[
-                                                styles.countdownBox,
-                                                { backgroundColor: isUrgent ? "#FEE2E2" : "#FEF3C7" }
-                                            ]}>
-                                                <Text style={[
-                                                    styles.countdownNumber,
-                                                    { color: isUrgent ? "#DC2626" : "#D97706" }
-                                                ]}>
-                                                    {countdown.days}
-                                                </Text>
-                                                <Text style={[
-                                                    styles.countdownLabel,
-                                                    { color: isUrgent ? "#991B1B" : "#92400E" }
-                                                ]}>
-                                                    DAY{countdown.days > 1 ? 'S' : ''}
-                                                </Text>
-                                            </View>
-                                            <Text style={[
-                                                styles.countdownSeparator,
-                                                { color: isUrgent ? "#DC2626" : "#D97706" }
-                                            ]}>:</Text>
-                                        </>
-                                    )}
                                     <View style={[
                                         styles.countdownBox,
                                         { backgroundColor: isUrgent ? "#FEE2E2" : "#FEF3C7" }
@@ -394,50 +363,8 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
                                             styles.countdownNumber,
                                             { color: isUrgent ? "#DC2626" : "#D97706" }
                                         ]}>
-                                            {padZero(countdown.hours)}
+                                            {countdown}
                                         </Text>
-                                        <Text style={[
-                                            styles.countdownLabel,
-                                            { color: isUrgent ? "#991B1B" : "#92400E" }
-                                        ]}>HRS</Text>
-                                    </View>
-                                    <Text style={[
-                                        styles.countdownSeparator,
-                                        { color: isUrgent ? "#DC2626" : "#D97706" }
-                                    ]}>:</Text>
-                                    <View style={[
-                                        styles.countdownBox,
-                                        { backgroundColor: isUrgent ? "#FEE2E2" : "#FEF3C7" }
-                                    ]}>
-                                        <Text style={[
-                                            styles.countdownNumber,
-                                            { color: isUrgent ? "#DC2626" : "#D97706" }
-                                        ]}>
-                                            {padZero(countdown.mins)}
-                                        </Text>
-                                        <Text style={[
-                                            styles.countdownLabel,
-                                            { color: isUrgent ? "#991B1B" : "#92400E" }
-                                        ]}>MIN</Text>
-                                    </View>
-                                    <Text style={[
-                                        styles.countdownSeparator,
-                                        { color: isUrgent ? "#DC2626" : "#D97706" }
-                                    ]}>:</Text>
-                                    <View style={[
-                                        styles.countdownBox,
-                                        { backgroundColor: isUrgent ? "#FEE2E2" : "#FEF3C7" }
-                                    ]}>
-                                        <Text style={[
-                                            styles.countdownNumber,
-                                            { color: isUrgent ? "#DC2626" : "#D97706" }
-                                        ]}>
-                                            {padZero(countdown.secs)}
-                                        </Text>
-                                        <Text style={[
-                                            styles.countdownLabel,
-                                            { color: isUrgent ? "#991B1B" : "#92400E" }
-                                        ]}>SEC</Text>
                                     </View>
                                 </View>
                             )}

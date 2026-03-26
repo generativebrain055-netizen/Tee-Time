@@ -22,6 +22,7 @@ import { useToast } from "../../ui/feedback";
 import { useUser } from "../../contexts/UserContext";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
+import { formatRemainingClock } from "../../utils/formatting";
 
 type TabType = 'activity' | 'invites';
 type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled';
@@ -38,6 +39,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const [activeTab, setActiveTab] = useState<TabType>('activity');
     const [typeFilter, setTypeFilter] = useState<NotificationTypeFilter>('all');
     const [showTypeFilter, setShowTypeFilter] = useState(false);
+    const [nowTick, setNowTick] = useState(Date.now());
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -475,17 +477,17 @@ export default function NotificationsScreen({ navigation }: any) {
         }
     }, []);
 
+    useEffect(() => {
+        const interval = setInterval(() => setNowTick(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     const getDeadlineText = (expiresAt?: string): string | null => {
         if (!expiresAt) return null;
         const deadline = new Date(expiresAt);
-        const now = new Date();
-        const diffMs = deadline.getTime() - now.getTime();
+        const diffMs = deadline.getTime() - nowTick;
         if (diffMs <= 0) return "Expired";
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        if (diffHours >= 24) return `${Math.floor(diffHours / 24)}d left`;
-        if (diffHours >= 1) return `${diffHours}h left`;
-        return `${diffMins}m left`;
+        return formatRemainingClock(diffMs, true);
     };
 
     const showReadUnreadMenu = useCallback((item: AppNotification) => {
@@ -598,7 +600,8 @@ export default function NotificationsScreen({ navigation }: any) {
             const dateTimeStr = [teeDate, teeTime].filter(Boolean).join(teeTime ? " at " : "");
             const maxPlayers = d?.maxPlayers as number | undefined;
             const deadlineText = getDeadlineText(d?.expiresAt as string | undefined);
-            const isUrgent = deadlineText !== null && deadlineText !== "Expired" && deadlineText.startsWith("m");
+            const expiresAtMs = d?.expiresAt ? new Date(d.expiresAt as string).getTime() : 0;
+            const isUrgent = expiresAtMs > Date.now() && (expiresAtMs - Date.now()) < 3600000;
 
             return (
                 <TouchableOpacity

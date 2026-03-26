@@ -90,3 +90,23 @@ export function getAvatarColor(id: string): string {
 export function padZero(num: number): string {
   return num.toString().padStart(2, "0");
 }
+
+/**
+ * Format remaining milliseconds as a countdown clock.
+ * Always returns HH:MM or HH:MM:SS (hours can exceed 24).
+ */
+export function formatRemainingClock(
+  diffMs: number,
+  includeSeconds = false,
+): string {
+  if (diffMs <= 0) return "Expired";
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const totalHours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return includeSeconds
+    ? `${padZero(totalHours)}:${padZero(minutes)}:${padZero(seconds)}`
+    : `${padZero(totalHours)}:${padZero(minutes)}`;
+}

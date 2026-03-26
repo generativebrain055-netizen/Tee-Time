@@ -24,6 +24,7 @@ import { useColors } from "../ui/theme/ThemeContext";
 import { useToast } from "../ui/feedback";
 import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
+import { formatRemainingClock } from "../utils/formatting";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -190,7 +191,7 @@ export default function InvitesScreen({ navigation }: any) {
         const handleCardPress = () => {
             navigation?.navigate("InviteDetail", { inviteId: invite.id });
         };
-        const [countdown, setCountdown] = useState<{ days: number; hours: number; mins: number; secs: number } | null>(null);
+        const [countdown, setCountdown] = useState<string | null>(null);
         const [isUrgent, setIsUrgent] = useState(false);
         const [isExpired, setIsExpired] = useState(false);
 
@@ -214,21 +215,14 @@ export default function InvitesScreen({ navigation }: any) {
                 }
 
                 const totalSecs = Math.floor(diffMs / 1000);
-                const days = Math.floor(totalSecs / 86400);
-                const hours = Math.floor((totalSecs % 86400) / 3600);
-                const mins = Math.floor((totalSecs % 3600) / 60);
-                const secs = totalSecs % 60;
-
                 setIsUrgent(totalSecs < 3600); // Urgent if < 1 hour
-                setCountdown({ days, hours, mins, secs });
+                setCountdown(formatRemainingClock(diffMs, true));
             };
 
             calculateCountdown();
             const interval = setInterval(calculateCountdown, 1000);
             return () => clearInterval(interval);
         }, [invite.expiresAt]);
-
-        const padZero = (num: number) => num.toString().padStart(2, '0');
 
         return (
             <TouchableOpacity
@@ -313,50 +307,13 @@ export default function InvitesScreen({ navigation }: any) {
 
                     {invite.expiresAt && !isExpired && countdown && (
                         <View className="flex-row items-center justify-center">
-                            {countdown.days > 0 && (
-                                <>
-                                    <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
-                                        <Text 
-                                            className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
-                                            style={{ fontVariant: ["tabular-nums"] }}
-                                        >
-                                            {countdown.days}
-                                        </Text>
-                                        <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>
-                                            DAY{countdown.days > 1 ? 'S' : ''}
-                                        </Text>
-                                    </View>
-                                    <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
-                                </>
-                            )}
-                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
-                                <Text 
-                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
+                            <View className={`rounded-md py-3 px-4 min-w-[180px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
+                                <Text
+                                    className={`text-[30px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
                                     style={{ fontVariant: ["tabular-nums"] }}
                                 >
-                                    {padZero(countdown.hours)}
+                                    {countdown}
                                 </Text>
-                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>HRS</Text>
-                            </View>
-                            <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
-                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
-                                <Text 
-                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
-                                    style={{ fontVariant: ["tabular-nums"] }}
-                                >
-                                    {padZero(countdown.mins)}
-                                </Text>
-                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>MIN</Text>
-                            </View>
-                            <Text className={`text-[26px] font-bold mx-1 mb-4 ${isUrgent ? "text-red-600" : "text-amber-800"}`}>:</Text>
-                            <View className={`rounded-md py-2 px-2.5 min-w-[52px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
-                                <Text 
-                                    className={`text-[26px] font-bold ${isUrgent ? "text-red-600" : "text-amber-800"}`}
-                                    style={{ fontVariant: ["tabular-nums"] }}
-                                >
-                                    {padZero(countdown.secs)}
-                                </Text>
-                                <Text className={`text-[9px] font-semibold mt-0.5 tracking-wide ${isUrgent ? "text-red-800" : "text-amber-700"}`}>SEC</Text>
                             </View>
                         </View>
                     )}

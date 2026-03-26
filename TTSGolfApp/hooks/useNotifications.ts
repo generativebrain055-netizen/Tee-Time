@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Alert } from "react-native";
 import { notificationApi, friendApi, AppNotification } from "../services/api";
 import { logger } from "../utils/logger";
+import { formatRemainingClock } from "../utils/formatting";
 
 interface UseNotificationsReturn {
   notifications: AppNotification[];
@@ -230,23 +231,14 @@ export function useDeadlineTimer(expiresAt: string | undefined) {
         return;
       }
 
-      const diffMins = Math.floor(diffMs / 60000);
       const diffHours = Math.floor(diffMs / 3600000);
 
       setIsUrgent(diffHours < 1);
-
-      if (diffHours >= 24) {
-        const days = Math.floor(diffHours / 24);
-        setDeadlineText(`${days}d left`);
-      } else if (diffHours >= 1) {
-        setDeadlineText(`${diffHours}h left`);
-      } else {
-        setDeadlineText(`${diffMins}m left`);
-      }
+      setDeadlineText(formatRemainingClock(diffMs, true));
     };
 
     calculateDeadline();
-    const interval = setInterval(calculateDeadline, 60000);
+    const interval = setInterval(calculateDeadline, 1000);
 
     return () => clearInterval(interval);
   }, [expiresAt]);
