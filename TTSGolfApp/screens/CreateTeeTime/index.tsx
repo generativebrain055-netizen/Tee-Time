@@ -668,9 +668,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         // No invites to send - tee time is open to community
       }
 
-      Alert.alert("Success", "Tee time created and invites sent!", [
-        { text: "OK", onPress: () => navigation?.goBack() },
-      ]);
+      navigation?.replace("TeeTimeDetail", { teeTimeId });
     } catch (error: any) {
       logger.error("Create tee time error", error);
       // Try to get more detailed error info
@@ -696,25 +694,21 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
       setSelectedPlayers((prev) =>
         prev.includes(id)
           ? prev.filter((p) => p !== id)
-          : prev.length < groupSize - 1
-          ? [...prev, id]
-          : prev
+          : [...prev, id]
       );
     },
-    [groupSize]
+    []
   );
 
   // Handle selecting multiple players from a group
   const handleSelectGroupMembers = useCallback(
     (memberIds: string[]) => {
       setSelectedPlayers((prev) => {
-        const spotsLeft = groupSize - 1 - prev.length;
         const newIds = memberIds.filter((id) => !prev.includes(id));
-        const toAdd = newIds.slice(0, spotsLeft);
-        return [...prev, ...toAdd];
+        return [...prev, ...newIds];
       });
     },
-    [groupSize]
+    []
   );
 
   const handleSelectDate = (day: number) => {

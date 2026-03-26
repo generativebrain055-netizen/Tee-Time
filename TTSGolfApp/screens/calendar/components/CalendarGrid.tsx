@@ -49,7 +49,13 @@ const DayCell = memo(({ item, onPress }: DayCellProps) => {
           alignItems: "center",
           justifyContent: "center",
           borderRadius: radii.md,
-          backgroundColor: item.isSelected ? PRIMARY_GREEN : "transparent",
+          backgroundColor: item.isSelected
+            ? PRIMARY_GREEN
+            : item.isToday && !item.isOtherMonth
+              ? "#F3F4F6"
+              : "transparent",
+          borderWidth: item.isToday && !item.isSelected && !item.isOtherMonth ? 1 : 0,
+          borderColor: item.isToday && !item.isSelected && !item.isOtherMonth ? "#D1D5DB" : "transparent",
         }}
       >
         <Text

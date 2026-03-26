@@ -151,8 +151,6 @@ export default function ManualInviteStep({
     const [loadingGroup, setLoadingGroup] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
 
-    const spotsLeft = groupSize - 1 - selectedPlayers.length;
-
     // Load group members when expanding a group
     const loadGroupMembers = useCallback(async (groupId: string) => {
         if (groupMembersMap[groupId]) {
@@ -227,11 +225,8 @@ export default function ManualInviteStep({
     }, [groupMembersMap, selectedPlayers]);
 
     const handleToggle = useCallback((id: string) => {
-        const isSelected = selectedPlayers.includes(id);
-        if (isSelected || spotsLeft > 0) {
-            onTogglePlayer(id);
-        }
-    }, [selectedPlayers, spotsLeft, onTogglePlayer]);
+        onTogglePlayer(id);
+    }, [onTogglePlayer]);
 
     const getInitials = (firstName: string, lastName: string): string => {
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
@@ -239,14 +234,12 @@ export default function ManualInviteStep({
 
     const renderPlayer = useCallback((item: Friend) => {
         const isSelected = selectedPlayers.includes(item.id);
-        const canSelect = isSelected || spotsLeft > 0;
         
         return (
             <TouchableOpacity
                 key={item.id}
-                style={[styles.playerRow, { opacity: canSelect ? 1 : 0.5 }]}
+                style={styles.playerRow}
                 onPress={() => handleToggle(item.id)}
-                disabled={!canSelect}
                 activeOpacity={0.7}
             >
                 {/* Avatar – Figma 1269-3055 49px */}
@@ -276,7 +269,7 @@ export default function ManualInviteStep({
                 </View>
             </TouchableOpacity>
         );
-    }, [selectedPlayers, spotsLeft, handleToggle]);
+    }, [selectedPlayers, handleToggle]);
 
     const renderGroup = useCallback((item: RosterGroup) => {
         const isExpanded = expandedGroupId === item.id;
@@ -385,7 +378,7 @@ export default function ManualInviteStep({
                 )}
             </View>
         );
-    }, [expandedGroupId, groupMembersMap, loadingGroup, selectedPlayers, spotsLeft, handleToggle, handleSelectAllGroup, loadGroupMembers, getGroupSelectedCount, renderPlayer]);
+    }, [expandedGroupId, groupMembersMap, loadingGroup, selectedPlayers, handleToggle, handleSelectAllGroup, loadGroupMembers, getGroupSelectedCount, renderPlayer]);
 
     const getDisplayList = () => {
         switch (activeTab) {

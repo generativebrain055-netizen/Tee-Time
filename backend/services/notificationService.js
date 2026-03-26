@@ -535,6 +535,7 @@ class NotificationService {
         spotsRemaining,
         action: "SELECT_ON_DECK",
       },
+      sendPush: true,
     });
   }
 
@@ -638,6 +639,7 @@ class NotificationService {
         urgent: true,
         unfilledSlotAlert: true,
       },
+      sendPush: true,
     });
   }
 
@@ -665,6 +667,7 @@ class NotificationService {
         action: "SELECT_ON_DECK",
         unfilledSlotAlert: true,
       },
+      sendPush: true,
     });
   }
 
