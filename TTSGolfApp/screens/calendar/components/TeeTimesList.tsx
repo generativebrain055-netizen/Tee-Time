@@ -16,6 +16,10 @@ interface TeeTimesListProps {
   onRefresh?: () => void;
   onTeeTimePress?: (teeTimeId: string) => void;
   onCancelSuccess?: () => void;
+  /**
+   * When true, render as embedded content (no inner ScrollView) so parent can own page scrolling.
+   */
+  embedded?: boolean;
 }
 
 const EmptyState = memo(() => (
@@ -42,9 +46,44 @@ const TeeTimesList = memo(({
   onRefresh,
   onTeeTimePress,
   onCancelSuccess,
+  embedded = false,
 }: TeeTimesListProps) => {
   const insets = useSafeAreaInsets();
   if (!selectedDate) return null;
+
+  const content = (
+    <>
+      <BannerAd slotKey="banner_2" />
+      {loading ? (
+        <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={{ marginTop: spacing.xl }} />
+      ) : teeTimes.length > 0 ? (
+        teeTimes.map((teeTime) => (
+          <TeeTimeCard
+            key={teeTime.id}
+            teeTime={teeTime}
+            onPress={onTeeTimePress}
+            onCancelSuccess={onCancelSuccess}
+          />
+        ))
+      ) : (
+        <EmptyState />
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <View
+        style={{
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+          paddingBottom: spacing.md + Math.max(insets.bottom, spacing.sm),
+        }}
+      >
+        {content}
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -66,21 +105,7 @@ const TeeTimesList = memo(({
         ) : undefined
       }
     >
-      <BannerAd slotKey="banner_2" />
-      {loading ? (
-        <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={{ marginTop: spacing.xl }} />
-      ) : teeTimes.length > 0 ? (
-        teeTimes.map((teeTime) => (
-          <TeeTimeCard
-            key={teeTime.id}
-            teeTime={teeTime}
-            onPress={onTeeTimePress}
-            onCancelSuccess={onCancelSuccess}
-          />
-        ))
-      ) : (
-        <EmptyState />
-      )}
+      {content}
     </ScrollView>
   );
 });

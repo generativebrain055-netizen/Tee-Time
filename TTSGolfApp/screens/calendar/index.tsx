@@ -2,7 +2,7 @@
  * Full Calendar Screen - Schedule (Figma 565-* full schedule / month view)
  */
 import React, { useCallback, memo, useState } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -191,12 +191,22 @@ export default function FullCalendarScreen({ navigation }: Props) {
     <ScreenShell>
       <AppHeader title="Schedule" onBack={handleBack} />
 
-      <View style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#F3F4F6" }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, spacing.lg) }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[PRIMARY_GREEN]}
+            tintColor={PRIMARY_GREEN}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         {/* Month calendar (Figma 565-*) */}
         <View
           style={{
-            flex: 0.48,
-            minHeight: 200,
             marginHorizontal: spacing.lg,
             marginTop: spacing.lg,
             backgroundColor: "#FFFFFF",
@@ -222,11 +232,9 @@ export default function FullCalendarScreen({ navigation }: Props) {
         {/* Tee times for selected day */}
         <View
           style={{
-            flex: 0.52,
             paddingHorizontal: spacing.lg,
             paddingTop: spacing.lg,
-            // Keep details fully visible above device bottom safe area.
-            paddingBottom: Math.max(insets.bottom, spacing.lg),
+            paddingBottom: spacing.lg,
           }}
         >
           <View
@@ -238,7 +246,6 @@ export default function FullCalendarScreen({ navigation }: Props) {
               shadowOpacity: 0.05,
               shadowRadius: 8,
               elevation: 2,
-              flex: 1,
               overflow: "hidden",
             }}
           >
@@ -276,20 +283,19 @@ export default function FullCalendarScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
+            <View style={{ backgroundColor: "#F9FAFB" }}>
               <TeeTimesList
                 selectedDate={selectedDate}
                 teeTimes={selectedDateTeeTimes}
                 loading={loading}
-                refreshing={refreshing}
-                onRefresh={onRefresh}
+                embedded
                 onTeeTimePress={handleTeeTimePress}
                 onCancelSuccess={onRefresh}
               />
             </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </ScreenShell>
   );
 }
