@@ -35,6 +35,9 @@ interface SearchUser {
     avatar?: string;
 }
 
+const UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const GROUP_COLORS = [
     "#5EBC68",
     "#3B82F6",
@@ -281,18 +284,52 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                 }
             }
 
-            const memberIds = Array.from(selectedFriends);
+            const selectedIds = Array.from(selectedFriends);
+            const memberUserIds = Array.from(
+                new Set(
+                    selectedIds
+                        .map((id) => {
+                            const friend = friends.find((f) => f.id === id) as (Friend & { userId?: string }) | undefined;
+                            if (friend?.userId) return friend.userId;
+                            if (friend?.id) return friend.id;
+                            const user = searchUsers.find((u) => u.id === id) as (SearchUser & { userId?: string }) | undefined;
+                            if (user?.userId) return user.userId;
+                            if (user?.id) return user.id;
+                            return id;
+                        })
+                        .filter((id): id is string => !!id && UUID_REGEX.test(id) && id !== currentUser?.id)
+                )
+            );
+
+            if (memberUserIds.length === 0) {
+                Alert.alert("Invalid Members", "Please select valid members and try again.");
+                setCreating(false);
+                return;
+            }
+
             const createResponse = await rosterApi.createGroup({
                 name: groupName.trim(),
                 description: "",
                 color: groupColor,
-                memberIds: memberIds,
                 icon: iconUrl,
             });
 
             if (createResponse.success && createResponse.group) {
                 const groupId = createResponse.group.id;
-                logger.info("[CreateGroupScreen] Group created successfully", { groupId, memberCount: memberIds.length });
+                logger.info("[CreateGroupScreen] Group created successfully", {
+                    groupId,
+                    selectedCount: selectedIds.length,
+                    inviteCount: memberUserIds.length,
+                });
+
+                // Invite selected members to join the new group.
+                // Fallback to direct add if invite endpoint fails for any reason.
+                try {
+                    await rosterApi.inviteToGroup(groupId, memberUserIds);
+                } catch (inviteErr) {
+                    logger.warn("[CreateGroupScreen] inviteToGroup failed, falling back to addMembersToGroup", inviteErr);
+                    await rosterApi.addMembersToGroup(groupId, memberUserIds);
+                }
 
                 Alert.alert("Success", "Group created successfully", [
                     {

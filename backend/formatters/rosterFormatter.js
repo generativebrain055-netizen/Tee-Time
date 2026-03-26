@@ -75,6 +75,8 @@ const formatGroup = (g) => ({
   description: g.description,
   color: g.color,
   icon: g.icon,
+  // Keep both fields for frontend compatibility; icon is used as avatar URL.
+  avatar: g.avatar_url || g.icon || null,
   position: g.position,
   memberCount: parseInt(g.member_count) || 0,
   onDeckCount: parseInt(g.on_deck_count) || 0,

@@ -382,9 +382,9 @@ class RosterRepository {
         if (r.contact_user_id) groupMemberUserIds[r.group_id].add(r.contact_user_id);
       });
 
-      // Only show groups where the user still has at least one roster entry (exclude left groups)
-      const groupIdsUserIsIn = new Set((rosterGroupMembers || []).map((r) => r.group_id));
-      const dataFiltered = (data || []).filter((g) => groupIdsUserIsIn.has(g.id));
+      // Show all owned groups (including newly-created empty groups).
+      // Filtering by roster membership here can hide valid groups right after create.
+      const dataFiltered = data || [];
 
       const upcomingCountByGroup = {};
       Object.keys(groupMemberUserIds || {}).forEach((gid) => {
@@ -484,14 +484,35 @@ class RosterRepository {
       if (icon != null && String(icon).trim() !== "") {
         insertPayload.icon = String(icon).trim();
       }
-      const { data: group, error } = await supabaseAdmin
-        .from("roster_groups")
-        .insert(insertPayload)
-        .select()
-        .single();
+      let createdGroup;
+      {
+        const { data: group, error } = await supabaseAdmin
+          .from("roster_groups")
+          .insert(insertPayload)
+          .select()
+          .single();
 
-      if (error) throw error;
-      return group;
+        // Backward-compatible fallback: some DBs still have icon as VARCHAR(50).
+        // If a long URL is provided, retry create without icon instead of failing.
+        if (
+          error &&
+          error.code === "22001" &&
+          insertPayload.icon
+        ) {
+          delete insertPayload.icon;
+          const retry = await supabaseAdmin
+            .from("roster_groups")
+            .insert(insertPayload)
+            .select()
+            .single();
+          if (retry.error) throw retry.error;
+          createdGroup = retry.data;
+        } else {
+          if (error) throw error;
+          createdGroup = group;
+        }
+      }
+      return createdGroup;
     } catch (error) {
       handleError(error, "createGroup");
     }
@@ -536,16 +557,38 @@ class RosterRepository {
       if (sortPreference !== undefined)
         updates.sort_preference = sortPreference;
 
-      const { data: group, error } = await supabaseAdmin
-        .from("roster_groups")
-        .update(updates)
-        .eq("id", groupId)
-        .eq("user_id", userId)
-        .select()
-        .single();
+      let updatedGroup;
+      {
+        const { data: group, error } = await supabaseAdmin
+          .from("roster_groups")
+          .update(updates)
+          .eq("id", groupId)
+          .eq("user_id", userId)
+          .select()
+          .single();
 
-      if (error) throw error;
-      return group;
+        // Backward-compatible fallback: if icon overflows old VARCHAR(50), retry without it.
+        if (
+          error &&
+          error.code === "22001" &&
+          Object.prototype.hasOwnProperty.call(updates, "icon")
+        ) {
+          const { icon: _droppedIcon, ...updatesWithoutIcon } = updates;
+          const retry = await supabaseAdmin
+            .from("roster_groups")
+            .update(updatesWithoutIcon)
+            .eq("id", groupId)
+            .eq("user_id", userId)
+            .select()
+            .single();
+          if (retry.error) throw retry.error;
+          updatedGroup = retry.data;
+        } else {
+          if (error) throw error;
+          updatedGroup = group;
+        }
+      }
+      return updatedGroup;
     } catch (error) {
       handleError(error, "updateGroup");
     }
@@ -698,17 +741,62 @@ class RosterRepository {
 
   async getGroupWithAccess(userId, groupId) {
     try {
-      const { data, error } = await supabaseAdmin
+      // Owner access first
+      const { data: ownerGroup, error: ownerError } = await supabaseAdmin
         .from("roster_groups")
         .select("*")
         .eq("id", groupId)
         .eq("user_id", userId)
         .single();
 
-      if (error && error.code !== "PGRST116") throw error;
-      if (!data) return null;
+      if (ownerError && ownerError.code !== "PGRST116") throw ownerError;
 
-      return { ...data, is_owner: true };
+      let data = ownerGroup || null;
+      let isOwner = !!ownerGroup;
+
+      // If not owner, allow access for members in this group
+      if (!data) {
+        const { data: membership, error: membershipError } = await supabaseAdmin
+          .from("roster")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("group_id", groupId)
+          .limit(1)
+          .maybeSingle();
+
+        if (membershipError && membershipError.code !== "PGRST116") throw membershipError;
+        if (!membership) return null;
+
+        const { data: groupById, error: groupError } = await supabaseAdmin
+          .from("roster_groups")
+          .select("*")
+          .eq("id", groupId)
+          .single();
+
+        if (groupError && groupError.code !== "PGRST116") throw groupError;
+        if (!groupById) return null;
+
+        data = groupById;
+        isOwner = false;
+      }
+
+      const { count: memberCount } = await supabaseAdmin
+        .from("roster")
+        .select("*", { count: "exact", head: true })
+        .eq("group_id", groupId);
+
+      const { count: onDeckCount } = await supabaseAdmin
+        .from("roster")
+        .select("*", { count: "exact", head: true })
+        .eq("group_id", groupId)
+        .eq("is_on_deck", true);
+
+      return {
+        ...data,
+        member_count: memberCount || 0,
+        on_deck_count: onDeckCount || 0,
+        is_owner: isOwner,
+      };
     } catch (error) {
       handleError(error, "getGroupWithAccess");
     }

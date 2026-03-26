@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Users, Edit2, Trash2, Calendar } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { RosterGroup } from "../../../../services/api";
@@ -13,13 +13,21 @@ interface GroupCardProps {
 
 export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardProps) => {
     const upcomingCount = group.upcomingTeeTimeCount ?? 0;
+    const avatarUri = group.avatar || group.icon;
     return (
     <TouchableOpacity className="flex-row items-center bg-white rounded-md p-4 my-2 border border-gray-100 shadow-sm" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 }} onPress={onPress}>
-        <View className="w-12 h-12 rounded-full justify-center items-center" style={{ backgroundColor: group.color + "20" }}>
-            <Text className="text-base font-bold" style={{ color: group.color }}>
-                {group.name.substring(0, 2).toUpperCase()}
-            </Text>
-        </View>
+        {avatarUri ? (
+            <Image
+                source={{ uri: avatarUri }}
+                className="w-12 h-12 rounded-full"
+            />
+        ) : (
+            <View className="w-12 h-12 rounded-full justify-center items-center" style={{ backgroundColor: group.color + "20" }}>
+                <Text className="text-base font-bold" style={{ color: group.color }}>
+                    {group.name.substring(0, 2).toUpperCase()}
+                </Text>
+            </View>
+        )}
         <View className="flex-1 ml-3.5">
             <View className="flex-row items-center gap-2">
                 <Text className="text-base font-semibold text-gray-900">{group.name}</Text>

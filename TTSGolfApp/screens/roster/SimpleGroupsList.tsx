@@ -26,7 +26,8 @@ const getInitials = (name: string): string => {
 };
 
 const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress: () => void; colors: any; theme: any; }) => {
-    const hasAvatar = group.avatar || (group.members && group.members.length > 0 && group.members[0].avatar);
+    const avatarUri = group.avatar || group.icon || (group.members && group.members.length > 0 && group.members[0].avatar);
+    const hasAvatar = !!avatarUri;
     
     return (
         <TouchableOpacity 
@@ -43,7 +44,7 @@ const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress
             {/* Avatar or Initials */}
             {hasAvatar ? (
                 <Image 
-                    source={{ uri: group.avatar || group.members[0].avatar }} 
+                    source={{ uri: avatarUri }} 
                     style={{
                         width: 56,
                         height: 56,

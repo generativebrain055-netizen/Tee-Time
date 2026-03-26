@@ -642,7 +642,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             </View>
                         )}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {!isAccepted && !isDeclined && (
+                        {activeTab === "invites" && !isAccepted && !isDeclined && (
                             <View style={styles.actionRow}>
                                 <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => handleAccept(item.id, item.type, item.data)} activeOpacity={0.8}>
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
@@ -696,7 +696,7 @@ export default function NotificationsScreen({ navigation }: any) {
                         <Text style={styles.cardTitle}>{senderName}</Text>
                         <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {!groupInviteResponded && (
+                        {activeTab === "invites" && !groupInviteResponded && (
                             <View style={styles.actionRow}>
                                 <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={(e) => { e.stopPropagation(); handleAcceptGroupInvite(item); }} activeOpacity={0.8}>
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
@@ -792,7 +792,7 @@ export default function NotificationsScreen({ navigation }: any) {
                         <Text style={styles.cardTitle}>{senderName}</Text>
                         {location ? <Text style={styles.cardSubtext}>{location}</Text> : null}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {!isAccepted && !isDeclined && (
+                        {activeTab === "invites" && !isAccepted && !isDeclined && (
                             <View style={styles.actionRow}>
                                 <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => handleAccept(item.id, item.type, item.data)} activeOpacity={0.8}>
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
@@ -857,7 +857,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             <Text style={styles.ctaButtonText}>Invite from On-Deck</Text>
                         </TouchableOpacity>
                     )}
-                    {isInvite && !isAccepted && !isDeclined && !isUnfilledSlotAlert && (
+                    {activeTab === "invites" && isInvite && !isAccepted && !isDeclined && !isUnfilledSlotAlert && (
                         <View style={styles.actionRow}>
                             <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => handleAccept(item.id, item.type, item.data)} activeOpacity={0.8}>
                                 <Text style={styles.actionButtonPrimaryText}>Accept</Text>

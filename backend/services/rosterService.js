@@ -181,8 +181,7 @@ async function getGroups(userId) {
  * @throws {RosterServiceError} If group not found
  */
 async function getGroup(userId, groupId) {
-  const groups = await rosterRepository.getGroups(userId);
-  const group = (groups || []).find((g) => g.id === groupId);
+  const group = await rosterRepository.getGroupWithAccess(userId, groupId);
 
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
