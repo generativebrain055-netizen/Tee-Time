@@ -44,15 +44,14 @@ const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: stri
     { type: 'friend_accepted', label: 'Friend Request Accepted', description: 'When someone accepts your friend request' },
     { type: 'group_invite', label: 'Group Invites', description: 'When someone invites you to a roster group' },
     { type: 'group_invite_accepted', label: 'Group Invite Accepted', description: 'When someone accepts your group invitation' },
-    { type: 'roster_add', label: 'Roster Adds', description: 'When someone adds you to their roster' },
-    { type: 'waiver_wire', label: 'Waiver Wire (Matching Availability)', description: 'When roster members with matching availability post on Waiver Wire' },
+    { type: 'waiver_wire', label: 'Availability (Matching Availability)', description: 'When roster members with matching availability post their availability' },
     { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
 ];
 
 export default function NotificationSettingsScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
-    const { profile, fetchProfile } = useUser();
+    const { profile, updateProfile } = useUser();
     const [loading, setLoading] = useState(false);
     const [settings, setSettings] = useState<NotificationSetting[]>([
         {
@@ -80,37 +79,42 @@ export default function NotificationSettingsScreen({ navigation }: any) {
     const [typeSettings, setTypeSettings] = useState<NotificationTypeSetting[]>([]);
 
     useEffect(() => {
-        // Load current notification preferences from profile
-        if (profile?.notificationPreferences) {
+        const pref = profile?.notificationPreferences;
+        if (pref) {
             setSettings(prev => prev.map(setting => ({
                 ...setting,
-                enabled: profile.notificationPreferences?.[setting.key] ?? setting.enabled,
+                // Keep current UI value if backend omits a key to avoid flip-back.
+                enabled: pref?.[setting.key] ?? setting.enabled,
             })));
-            
-            // Load per-type preferences
-            const types = profile.notificationPreferences?.types || {};
-            const typeSettingsList = NOTIFICATION_TYPES.map(nt => ({
-                id: nt.type,
-                type: nt.type,
-                label: nt.label,
-                description: nt.description,
-                pushEnabled: types[nt.type]?.push ?? true,
-                inAppEnabled: types[nt.type]?.inApp ?? true,
-            }));
-            setTypeSettings(typeSettingsList);
-        } else {
-            // Initialize with defaults
-            const typeSettingsList = NOTIFICATION_TYPES.map(nt => ({
-                id: nt.type,
-                type: nt.type,
-                label: nt.label,
-                description: nt.description,
-                pushEnabled: true,
-                inAppEnabled: true,
-            }));
-            setTypeSettings(typeSettingsList);
+            setTypeSettings(prev => {
+                const types = pref.types || {};
+                return NOTIFICATION_TYPES.map(nt => {
+                    const existing = prev.find(p => p.type === nt.type);
+                    return {
+                        id: nt.type,
+                        type: nt.type,
+                        label: nt.label,
+                        description: nt.description,
+                        pushEnabled: types[nt.type]?.push ?? existing?.pushEnabled ?? true,
+                        inAppEnabled: types[nt.type]?.inApp ?? existing?.inAppEnabled ?? true,
+                    };
+                });
+            });
+            return;
         }
-    }, [profile]);
+        // Initialize with defaults when no preferences exist.
+        setTypeSettings(prev => NOTIFICATION_TYPES.map(nt => {
+            const existing = prev.find(p => p.type === nt.type);
+            return {
+                id: nt.type,
+                type: nt.type,
+                label: nt.label,
+                description: nt.description,
+                pushEnabled: existing?.pushEnabled ?? true,
+                inAppEnabled: existing?.inAppEnabled ?? true,
+            };
+        }));
+    }, [profile?.notificationPreferences]);
 
     const handleToggle = useCallback(async (key: 'email' | 'sms' | 'push') => {
         const setting = settings.find(s => s.key === key);
@@ -133,7 +137,8 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             };
             
             await profileApi.updateNotificationPreferences(preferences);
-            await fetchProfile(true); // Force refresh so context and UI show persisted values
+            // Keep local user context in sync immediately to prevent UI toggles jumping back.
+            updateProfile({ notificationPreferences: preferences });
         } catch (error: any) {
             // Revert on error
             setSettings(settings);
@@ -141,7 +146,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
         } finally {
             setLoading(false);
         }
-    }, [settings, fetchProfile, profile]);
+    }, [settings, profile, updateProfile]);
 
     const handleTypeToggle = useCallback(async (type: string, toggleType: 'push' | 'inApp') => {
         const typeSetting = typeSettings.find(ts => ts.type === type);
@@ -183,7 +188,8 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             };
             
             await profileApi.updateNotificationPreferences(preferences);
-            await fetchProfile(true); // Force refresh so context and UI show persisted values
+            // Keep local user context in sync immediately to prevent UI toggles jumping back.
+            updateProfile({ notificationPreferences: preferences });
         } catch (error: any) {
             // Revert on error
             setTypeSettings(typeSettings);
@@ -191,7 +197,7 @@ export default function NotificationSettingsScreen({ navigation }: any) {
         } finally {
             setLoading(false);
         }
-    }, [typeSettings, settings, fetchProfile, profile]);
+    }, [typeSettings, settings, profile, updateProfile]);
 
     return (
         <ScreenShell>
