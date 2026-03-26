@@ -218,7 +218,16 @@ class InviteRepository {
 
       if (error) throw error;
 
-      return (data || []).map((invite) => {
+      // Roster backups are intentionally created as pending with expires_at = null
+      // and should remain hidden until explicitly activated (expires_at gets set).
+      const visibleInvites = (data || []).filter((invite) => {
+        const teeTime = invite.tee_times || {};
+        const isRosterInvite = teeTime.invite_type === "roster";
+        const hasExpiry = !!invite.expires_at;
+        return !isRosterInvite || hasExpiry;
+      });
+
+      return visibleInvites.map((invite) => {
         const teeTime = invite.tee_times || {};
         const user = invite.users || {};
         const profileData = user.user_profiles;
