@@ -9,6 +9,7 @@ import { ScreenShell, AppHeader, AppBottomNav } from "../../ui";
 import { useColors } from "../../ui/theme/ThemeContext";
 import { useTheme } from "../../ui/theme";
 import SimpleRosterList from "./SimpleRosterList";
+import DraggableRosterScreen from "./DraggableRosterScreen";
 import SimpleGroupsList from "./SimpleGroupsList";
 import RequestsList from "./RequestsList";
 import OnDeckList from "./OnDeckList";
@@ -21,6 +22,7 @@ const TABS = ["Roster", "Groups", "On Deck", "Requests"];
 export default function RosterScreen({ navigation, route }: any) {
     const initialTab = route?.params?.initialTab || "Roster";
     const [activeTab, setActiveTab] = useState(initialTab);
+    const [rosterEditMode, setRosterEditMode] = useState(false);
     const [addModalVisible, setAddModalVisible] = useState(false);
     const [addedToRosterUndo, setAddedToRosterUndo] = useState<string[] | null>(null);
     const [rosterRefreshKey, setRosterRefreshKey] = useState(0);
@@ -33,6 +35,12 @@ export default function RosterScreen({ navigation, route }: any) {
             setActiveTab(route.params.initialTab);
         }
     }, [route?.params?.initialTab]);
+
+    useEffect(() => {
+        if (activeTab !== "Roster" && rosterEditMode) {
+            setRosterEditMode(false);
+        }
+    }, [activeTab, rosterEditMode]);
 
     useEffect(() => {
         return () => {
@@ -78,7 +86,9 @@ export default function RosterScreen({ navigation, route }: any) {
     const renderContent = () => {
         switch (activeTab) {
             case "Roster":
-                return (
+                return rosterEditMode ? (
+                    <DraggableRosterScreen navigation={navigation} />
+                ) : (
                     <SimpleRosterList
                         key={rosterRefreshKey}
                         navigation={navigation}
@@ -115,6 +125,24 @@ export default function RosterScreen({ navigation, route }: any) {
             return (
                 <TouchableOpacity style={{ padding: 4 }} onPress={handleFindPlayers}>
                     <Search size={22} color="#111827" strokeWidth={2} />
+                </TouchableOpacity>
+            );
+        }
+        if (activeTab === "Roster") {
+            return (
+                <TouchableOpacity
+                    style={{ padding: 4 }}
+                    onPress={() => setRosterEditMode((v) => !v)}
+                >
+                    <Text
+                        style={{
+                            fontFamily: theme.fontFamily.semiBold,
+                            fontSize: 16,
+                            color: colors.primary,
+                        }}
+                    >
+                        {rosterEditMode ? "Done" : "Edit"}
+                    </Text>
                 </TouchableOpacity>
             );
         }
