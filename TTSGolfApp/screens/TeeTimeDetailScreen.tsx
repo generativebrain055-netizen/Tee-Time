@@ -519,7 +519,12 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const backupDeclined = [...declinedParticipants, ...expiredParticipants];
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
+        // Parse YYYY-MM-DD as local date (not UTC) to avoid day-shift bugs.
+        const parts = dateStr.split(/[-/]/).map(Number);
+        const hasYmd = parts.length >= 3 && Number.isFinite(parts[0]) && Number.isFinite(parts[1]) && Number.isFinite(parts[2]);
+        const date = hasYmd
+            ? new Date(parts[0], (parts[1] ?? 1) - 1, parts[2] ?? 1)
+            : new Date(dateStr);
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return `${days[date.getDay()]}, ${date.getDate()}${date.getDate() === 1 ? 'st' : date.getDate() === 2 ? 'nd' : date.getDate() === 3 ? 'rd' : 'th'} ${months[date.getMonth()]} ${date.getFullYear()}`;
