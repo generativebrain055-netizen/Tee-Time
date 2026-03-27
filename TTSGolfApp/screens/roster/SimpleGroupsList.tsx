@@ -28,6 +28,10 @@ const getInitials = (name: string): string => {
 const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress: () => void; colors: any; theme: any; }) => {
     const avatarUri = group.avatar || group.icon || (group.members && group.members.length > 0 && group.members[0].avatar);
     const hasAvatar = !!avatarUri;
+    const upcomingCount =
+        group.upcomingTeeTimeCount ??
+        group.upcoming_tee_time_count ??
+        (typeof group.upcomingTeeTimes === "number" ? group.upcomingTeeTimes : 0);
     
     return (
         <TouchableOpacity 
@@ -81,12 +85,11 @@ const GroupItem = memo(({ group, onPress, colors, theme }: { group: any; onPress
                     </Text>
                 </View>
 
-                {/* Upcoming Tee Times */}
-                {group.upcomingTeeTimes > 0 && (
+                {upcomingCount > 0 && (
                     <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
                         <Calendar size={13} color="#9CA3AF" strokeWidth={2} />
                         <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 13, color: "#9CA3AF", marginLeft: 6 }}>
-                            {group.upcomingTeeTimes} upcoming tee time{group.upcomingTeeTimes > 1 ? "s" : ""}
+                            {upcomingCount} upcoming tee time{upcomingCount !== 1 ? "s" : ""}
                         </Text>
                     </View>
                 )}

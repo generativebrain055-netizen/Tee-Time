@@ -37,13 +37,13 @@ export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardPr
                     </View>
                 )}
             </View>
-            <View className="flex-row items-center mt-1 gap-3">
+            <View className="mt-1">
                 <View className="flex-row items-center gap-1">
                     <Users size={12} color={COLORS.textSub} />
                     <Text className="text-xs text-gray-500">{group.memberCount} members{group.hasPendingInvites ? " (pending)" : ""}</Text>
                 </View>
                 {upcomingCount > 0 && (
-                    <View className="flex-row items-center gap-1">
+                    <View className="flex-row items-center gap-1 mt-1">
                         <Calendar size={12} color={COLORS.textSub} />
                         <Text className="text-xs text-gray-500">
                             {upcomingCount} upcoming tee time{upcomingCount !== 1 ? "s" : ""}
