@@ -212,6 +212,25 @@ class RosterRepository {
     }
   }
 
+  /**
+   * Minimal row for owner checks (move/toggle) — no joins, avoids PGRST201 and extra latency.
+   */
+  async getRosterOwnerRow(userId, rosterId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("roster")
+        .select("id, is_on_deck, contact_user_id")
+        .eq("id", rosterId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data || null;
+    } catch (error) {
+      handleError(error, "getRosterOwnerRow");
+    }
+  }
+
   async getRosterEntry(userId, rosterId) {
     try {
       // Fetch roster without embedding `users`: roster has two FKs to users (user_id,
@@ -1018,15 +1037,18 @@ class RosterRepository {
 
         if (shiftErr) throw shiftErr;
 
+        // Bump positions highest-first so we never briefly violate unique ordering / duplicates.
         if (itemsToShift && itemsToShift.length > 0) {
-          await Promise.all(
-            itemsToShift.map((item) =>
-              supabaseAdmin
-                .from("roster")
-                .update({ position: item.position + 1 })
-                .eq("id", item.id),
-            ),
+          const sorted = [...itemsToShift].sort(
+            (a, b) => b.position - a.position,
           );
+          for (const row of sorted) {
+            const { error: bumpErr } = await supabaseAdmin
+              .from("roster")
+              .update({ position: row.position + 1 })
+              .eq("id", row.id);
+            if (bumpErr) throw bumpErr;
+          }
         }
       }
 

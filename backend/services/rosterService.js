@@ -23,6 +23,13 @@ const VALID_SORT_OPTIONS = [
   "membership",
 ];
 
+/** Coerce API body / query position to integer (strings from some clients break typeof === "number"). */
+function normalizeNewPosition(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.floor(n) : undefined;
+}
+
 /** Group fields that members should be notified about (not sort-only changes). */
 const GROUP_UPDATE_NOTIFY_FIELDS = [
   "name",
@@ -658,10 +665,10 @@ async function moveMember(
   isOnDeck,
   newPosition,
 ) {
+  const pos = normalizeNewPosition(newPosition);
   const hasGroupUpdate = targetGroupId !== undefined;
   const hasDeckUpdate = typeof isOnDeck === "boolean";
-  const hasPosUpdate =
-    typeof newPosition === "number" && Number.isFinite(newPosition);
+  const hasPosUpdate = typeof pos === "number" && Number.isFinite(pos);
   if (!hasGroupUpdate && !hasDeckUpdate && !hasPosUpdate) {
     throw new RosterServiceError(
       "Provide targetGroupId, isOnDeck, and/or newPosition",
@@ -670,7 +677,7 @@ async function moveMember(
     );
   }
 
-  const before = await rosterRepository.getRosterEntry(userId, rosterId);
+  const before = await rosterRepository.getRosterOwnerRow(userId, rosterId);
   if (!before) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
   }
@@ -679,7 +686,7 @@ async function moveMember(
     rosterId,
     targetGroupId,
     isOnDeck,
-    newPosition,
+    pos,
   );
 
   if (!updated) {
