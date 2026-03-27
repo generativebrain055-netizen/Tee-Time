@@ -1,8 +1,16 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 6.0 (Full project database — all migrations folded in)
+-- Version: 6.1 (Full project database — all migrations folded in)
 -- Last Updated: March 2026
+--
+-- v6.1 FIX (why "database was not perfect" after v6.0):
+--   Row Level Security was ENABLED on ~40 tables but CREATE POLICY existed ONLY
+--   on user_availability. For roles authenticated / anon, Postgres default is DENY
+--   when RLS is on and no policy applies — empty API, failed inserts, confusing UX.
+--   RLS is now ON only for user_availability (where policies exist). Other tables
+--   rely on GRANTs + your API (Express + service_role) for authorization.
+--   Supabase REST: reload schema + grants added at end of this file.
 --
 -- This file is the single source of truth for relational structure used by the
 -- backend (Supabase/Postgres). schema/migrations/*.sql are incremental deltas;
@@ -21,6 +29,7 @@
 --   010_ad_slots_valid_slot_type.sql (valid_slot_type incl. loading_screen, banner)
 --   011_broadcast_history.sql
 --   012_user_reports_app_support.sql (report_source, support_*, email_* on user_reports)
+--   013_disable_rls_except_user_availability.sql (repair DBs created from pre-6.1 unified only)
 --
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables (and listed functions)
@@ -28,6 +37,12 @@
 -- 3. Matches the cumulative state of every migration above
 --
 -- Run this in Supabase SQL Editor only for a controlled reset / greenfield DB.
+-- Does NOT delete auth.users — signups in Supabase Auth remain; public.users is recreated.
+--
+-- CHANGES IN v6.1:
+-- - RLS only on user_availability (tables with policies); fixes deny-all for PostgREST
+-- - Supabase GRANTs + NOTIFY pgrst; safe session_replication_role for DROP phase
+-- - Trigger syntax EXECUTE PROCEDURE (broad Postgres compatibility)
 --
 -- CHANGES IN v6.0:
 -- - user_reports: app_support columns + CHECK (user_vs_user vs app_support targets)
@@ -66,8 +81,9 @@
 -- STEP 1: DROP ALL EXISTING TABLES
 -- ============================================================================
 
--- Disable triggers temporarily
-SET session_replication_role = 'replica';
+-- Best-effort: disable triggers during mass DROP (requires sufficient privilege).
+DO $rl$ BEGIN PERFORM set_config('session_replication_role', 'replica', true); EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'session_replication_role=replica skipped: %', SQLERRM; END $rl$;
 
 -- Drop views first
 DROP VIEW IF EXISTS user_social_rate_summary CASCADE;
@@ -130,8 +146,8 @@ DROP FUNCTION IF EXISTS accept_invite_atomic(UUID, UUID, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS check_onboarding_complete(UUID) CASCADE;
 DROP FUNCTION IF EXISTS update_onboarding_completed() CASCADE;
 
--- Re-enable triggers
-SET session_replication_role = 'origin';
+DO $rl$ BEGIN PERFORM set_config('session_replication_role', 'origin', true); EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'session_replication_role=origin skipped: %', SQLERRM; END $rl$;
 
 -- ============================================================================
 -- STEP 2: ENABLE EXTENSIONS
@@ -1279,55 +1295,55 @@ CREATE INDEX idx_message_read_receipts_user ON message_read_receipts(user_id);
 -- ============================================================================
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_devices_updated_at BEFORE UPDATE ON devices
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_auth_providers_updated_at BEFORE UPDATE ON auth_providers
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_roster_updated_at BEFORE UPDATE ON roster
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_roster_groups_updated_at BEFORE UPDATE ON roster_groups
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_tee_times_updated_at BEFORE UPDATE ON tee_times
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_invites_updated_at BEFORE UPDATE ON invites
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_friend_requests_updated_at BEFORE UPDATE ON friend_requests
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_golf_courses_updated_at BEFORE UPDATE ON golf_courses
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_user_reports_updated_at BEFORE UPDATE ON user_reports
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_ad_slots_updated_at BEFORE UPDATE ON ad_slots
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_rate_limits_updated_at BEFORE UPDATE ON rate_limits
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_attendance_updated_at BEFORE UPDATE ON tee_time_attendance
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_user_availability_updated_at BEFORE UPDATE ON user_availability
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_onboarding_steps_updated_at BEFORE UPDATE ON onboarding_steps
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- ============================================================================
 -- ONBOARDING HELPER FUNCTIONS
@@ -1377,7 +1393,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_update_onboarding_completed
     AFTER UPDATE OF availability_completed, profile_completed ON users
     FOR EACH ROW
-    EXECUTE FUNCTION update_onboarding_completed();
+    EXECUTE PROCEDURE update_onboarding_completed();
 
 -- ============================================================================
 -- STEP 6: CREATE VIEWS
@@ -1506,51 +1522,16 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- STEP 8: ENABLE ROW LEVEL SECURITY
+-- STEP 8: ROW LEVEL SECURITY (only where policies are defined)
 -- ============================================================================
+-- Do NOT enable RLS on tables without policies: default is deny-all for
+-- authenticated/anon and breaks Supabase REST and many clients.
+-- service_role (Express backend) bypasses RLS when it is enabled.
+--
+-- user_availability policies use auth.uid(); they apply when the JWT subject is
+-- the same UUID as user_availability.user_id.
 
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE auth_providers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE otp_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE magic_links ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_group_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tee_times ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tee_time_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invite_responses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE social_rate_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tee_time_attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE blocked_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
-ALTER TABLE golf_courses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_favorite_courses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ad_slots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_member_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE waiver_wire ENABLE ROW LEVEL SECURITY;
-ALTER TABLE login_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE roster_notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE handicap_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE clubs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_club_memberships ENABLE ROW LEVEL SECURITY;
-ALTER TABLE draft_qr_codes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qr_scan_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE game_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_availability ENABLE ROW LEVEL SECURITY;
-ALTER TABLE onboarding_steps ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE message_read_receipts ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- RLS POLICIES (merged from migrations/003_add_user_availability_policies.sql)
@@ -1589,10 +1570,27 @@ CREATE POLICY user_availability_select_friends ON user_availability
     );
 
 -- ============================================================================
+-- STEP 9: SUPABASE API ACCESS & SCHEMA RELOAD
+-- ============================================================================
+-- Ensures PostgREST roles can reach public tables. Lock down anon SELECT per table
+-- if you expose SUPABASE_ANON_KEY in a client (add RLS or revoke as needed).
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
 -- SCHEMA COMPLETE
 -- ============================================================================
 --
--- Version: 6.0 (All migrations represented in this file)
+-- Version: 6.1 (All migrations represented in this file)
 -- Last Updated: March 2026
 -- Total Tables: 38 (+ views, functions, triggers, RLS as above)
 -- 
