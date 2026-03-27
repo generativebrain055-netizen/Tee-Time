@@ -5,6 +5,8 @@
 -- Last Updated: March 2026
 --
 -- v6.1 FIX (why "database was not perfect" after v6.0):
+--   get_course_usage() referenced tee_times before that table existed → 42P01 on run;
+--   function is now created immediately after tee_times + indexes.
 --   Row Level Security was ENABLED on ~40 tables but CREATE POLICY existed ONLY
 --   on user_availability. For roles authenticated / anon, Postgres default is DENY
 --   when RLS is on and no policy applies — empty API, failed inserts, confusing UX.
@@ -192,20 +194,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Admin: course usage by tee time count (for admin dashboard)
-CREATE OR REPLACE FUNCTION get_course_usage(p_limit INT DEFAULT 50)
-RETURNS TABLE(course_name TEXT, course_location TEXT, tee_time_count BIGINT)
-LANGUAGE sql
-STABLE
-AS $$
-    SELECT tt.course_name::TEXT, COALESCE(tt.course_location, '')::TEXT, COUNT(*)::BIGINT
-    FROM tee_times tt
-    GROUP BY tt.course_name, COALESCE(tt.course_location, '')
-    ORDER BY COUNT(*) DESC
-    LIMIT GREATEST(1, LEAST(p_limit, 200));
-$$;
-
-COMMENT ON FUNCTION get_course_usage(INT) IS 'Returns courses by number of tee times (for admin platform usage)';
+-- get_course_usage() is defined after CREATE TABLE tee_times (SQL functions validate relations at CREATE time).
 
 -- ============================================================================
 -- STEP 4: CREATE TABLES
@@ -575,6 +564,21 @@ CREATE INDEX idx_tee_times_status ON tee_times(status);
 CREATE INDEX idx_tee_times_upcoming ON tee_times(tee_date, tee_time) WHERE status IN ('pending', 'confirmed');
 CREATE INDEX idx_tee_times_reminder_sent ON tee_times(check_in_reminder_sent) WHERE check_in_reminder_sent = false;
 CREATE INDEX idx_tee_times_organizer_fill_warning ON tee_times(organizer_fill_warning_sent) WHERE organizer_fill_warning_sent = false;
+
+-- Admin: course usage by tee time count (requires tee_times to exist — migration 009)
+CREATE OR REPLACE FUNCTION get_course_usage(p_limit INT DEFAULT 50)
+RETURNS TABLE(course_name TEXT, course_location TEXT, tee_time_count BIGINT)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT tt.course_name::TEXT, COALESCE(tt.course_location, '')::TEXT, COUNT(*)::BIGINT
+    FROM tee_times tt
+    GROUP BY tt.course_name, COALESCE(tt.course_location, '')
+    ORDER BY COUNT(*) DESC
+    LIMIT GREATEST(1, LEAST(p_limit, 200));
+$$;
+
+COMMENT ON FUNCTION get_course_usage(INT) IS 'Returns courses by number of tee times (for admin platform usage)';
 
 -- ============================================================================
 -- 11. TEE_TIME_PARTICIPANTS TABLE
