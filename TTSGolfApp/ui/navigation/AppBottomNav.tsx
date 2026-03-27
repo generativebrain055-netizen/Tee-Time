@@ -9,8 +9,7 @@
  * Usage (inside ScreenShell, absolutely positioned):
  *   <AppBottomNav activeTab="Home" navigation={navigation} />
  *
- * Messages tab: shows unread count below icon when > 0 (Figma 785-352);
- * when unread, shows dot badge on icon (Figma 503-1081).
+ * Messages tab: when unread, solid green dot on top-right of bubble (matches product nav).
  */
 import React, { memo, useCallback, useEffect, useState } from 'react';
 import { View, TouchableOpacity } from 'react-native';
@@ -29,8 +28,6 @@ import {
   componentTokens,
   fontFamily,
   shadows,
-  fontSize,
-  palette,
 } from '../theme/tokens';
 import { useColors } from '../theme/ThemeContext';
 import { messagesApi } from '../../services/api';
@@ -63,7 +60,7 @@ interface TabItemProps {
   onPress: (tab: TabConfig) => void;
   activeColor: string;
   inactiveColor: string;
-  /** Unread count for Messages tab; shown below icon when > 0 (Figma 785-352) */
+  /** Unread count for Messages tab; dot shown when > 0 */
   messagesUnreadCount?: number;
 }
 
@@ -75,11 +72,12 @@ const TabItem = memo(({
   inactiveColor,
   messagesUnreadCount = 0,
 }: TabItemProps) => {
+  const themeColors = useColors();
   const IconComponent = tab.icon;
   const handlePress = useCallback(() => onPress(tab), [tab, onPress]);
   const color = isActive ? activeColor : inactiveColor;
   const showUnread = tab.name === 'Messages' && messagesUnreadCount > 0;
-  const unreadLabel = messagesUnreadCount > 99 ? '99+' : String(messagesUnreadCount);
+  const unreadDotColor = activeColor;
 
   return (
     <TouchableOpacity
@@ -105,37 +103,24 @@ const TabItem = memo(({
           <View
             style={{
               position: 'absolute',
-              top: -2,
-              right: -4,
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: palette.red500,
-              borderWidth: 1.5,
-              borderColor: palette.white,
+              top: -3,
+              right: -2,
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: unreadDotColor,
+              borderWidth: 2,
+              borderColor: themeColors.surface,
             }}
           />
         ) : null}
       </View>
-      {showUnread ? (
-        <AppText
-          variant="labelSmall"
-          style={{
-            fontFamily: fontFamily.semiBold,
-            fontSize: fontSize['2xs'],
-            color: activeColor,
-            marginTop: 2,
-          }}
-        >
-          {unreadLabel}
-        </AppText>
-      ) : null}
       <AppText
         variant="labelSmall"
         style={{
           fontFamily: isActive ? fontFamily.semiBold : fontFamily.medium,
           color,
-          marginTop: showUnread ? 0 : 3,
+          marginTop: 3,
         }}
       >
         {tab.name}
