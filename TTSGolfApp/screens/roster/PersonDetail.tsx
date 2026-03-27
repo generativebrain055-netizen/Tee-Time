@@ -68,17 +68,18 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await rosterApi.removeFromRoster(person.id);
+                            const id = profile?.id ?? person.id;
+                            await rosterApi.removeFromRoster(id);
                             onRemoved?.();
                             onBack();
-                        } catch (error) {
-                            Alert.alert("Error", "Failed to remove from roster");
+                        } catch (error: any) {
+                            Alert.alert("Error", error?.message || "Failed to remove from roster");
                         }
                     },
                 },
             ]
         );
-    }, [person.id, person.name, onBack, onRemoved]);
+    }, [person.id, person.name, profile?.id, onBack, onRemoved]);
 
     const handleBlock = useCallback(() => {
         const targetUserId = profile?.contact?.userId;
@@ -101,8 +102,8 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            // Remove from roster first
-                            await rosterApi.removeFromRoster(person.id);
+                            const id = profile?.id ?? person.id;
+                            await rosterApi.removeFromRoster(id);
                             // Then block the user
                             await friendApi.blockUser(targetUserId);
                             Alert.alert("Blocked", `${person.name} has been blocked.`);
@@ -115,7 +116,7 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                 },
             ]
         );
-    }, [person.id, person.name, profile, onBack, onRemoved]);
+    }, [person.id, person.name, profile?.id, profile?.contact?.userId, onBack, onRemoved]);
 
     const handleInvite = useCallback(() => {
         // Navigate to create tee time with this person pre-selected

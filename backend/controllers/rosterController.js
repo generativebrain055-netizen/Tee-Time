@@ -290,7 +290,14 @@ class RosterController {
   // PUT /api/roster/:id/move
   async moveMember(req, res) {
     try {
-      const { targetGroupId, isOnDeck, newPosition } = req.body;
+      const { targetGroupId, newPosition } = req.body;
+      const raw = req.body.isOnDeck;
+      const isOnDeck =
+        raw === true || raw === "true"
+          ? true
+          : raw === false || raw === "false"
+            ? false
+            : undefined;
       const entry = await rosterService.moveMember(req.user.id, req.params.id, targetGroupId, isOnDeck, newPosition);
       success(res, { entry });
     } catch (err) {

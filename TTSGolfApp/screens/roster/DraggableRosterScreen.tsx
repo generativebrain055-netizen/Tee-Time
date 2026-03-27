@@ -34,6 +34,11 @@ interface RosterMember {
     membership?: string;
 }
 
+/** Roster row UUID for API calls (row id vs contact user id). */
+function rosterRowIdForApi(m: RosterMember): string | undefined {
+    return m.rosterId ?? (m.id !== m.friendId ? m.id : undefined);
+}
+
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
     { key: "position", label: "Manual Order" },
     { key: "socialRate", label: "Social Rate" },
@@ -307,6 +312,8 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             // Build roster list - friends who are NOT in on-deck
             const roster: RosterMember[] = [];
 
+            const friendIds = new Set(friends.map((f) => f.id));
+
             friends.forEach((friend, idx) => {
                 // Skip if this friend is in on-deck
                 if (onDeckByUserId.has(friend.id)) {
@@ -314,10 +321,11 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 }
 
                 const rosterEntry = rosterByUserId.get(friend.id);
+                const rowId = rosterEntry?.id;
 
                 roster.push({
-                    id: rosterEntry?.id || friend.id,
-                    rosterId: rosterEntry?.id,
+                    id: rowId || friend.id,
+                    rosterId: rowId,
                     firstName: friend.firstName || '',
                     lastName: friend.lastName || '',
                     avatar: rosterEntry?.contact?.avatar || friend.avatar,
@@ -328,6 +336,28 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                     handicap: rosterEntry?.contact?.handicap || friend.handicap,
                     distance: rosterEntry?.distanceToCourse,
                     membership: rosterEntry?.membership,
+                });
+            });
+
+            // Roster rows not tied to the current friends list (still need a real roster id for move/on-deck)
+            rosterEntries.forEach((r: any, idx: number) => {
+                const uid = r.contact?.userId as string | undefined;
+                if (!uid || onDeckByUserId.has(uid) || friendIds.has(uid)) return;
+                const name = (r.contact?.name || "").trim();
+                const [first, ...rest] = name.split(/\s+/).filter(Boolean);
+                roster.push({
+                    id: r.id,
+                    rosterId: r.id,
+                    firstName: first || "",
+                    lastName: rest.join(" "),
+                    avatar: r.contact?.avatar,
+                    isOnDeck: false,
+                    position: r.position ?? roster.length + idx,
+                    friendId: uid,
+                    socialRate: r.contact?.socialRate,
+                    handicap: r.contact?.handicap,
+                    distance: r.distanceToCourse,
+                    membership: r.membership,
                 });
             });
 
@@ -384,7 +414,9 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             const list = isOnDeck ? onDeckMembers : rosterMembers;
             const orderedIds = [...list];
             [orderedIds[index - 1], orderedIds[index]] = [orderedIds[index], orderedIds[index - 1]];
-            await rosterApi.reorderRoster(orderedIds.filter(m => m.rosterId).map(m => m.rosterId!));
+            await rosterApi.reorderRoster(
+                orderedIds.map(rosterRowIdForApi).filter((id): id is string => !!id),
+            );
         } catch (error) {
             logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
         }
@@ -413,7 +445,9 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         try {
             const orderedIds = [...list];
             [orderedIds[index], orderedIds[index + 1]] = [orderedIds[index + 1], orderedIds[index]];
-            await rosterApi.reorderRoster(orderedIds.filter(m => m.rosterId).map(m => m.rosterId!));
+            await rosterApi.reorderRoster(
+                orderedIds.map(rosterRowIdForApi).filter((id): id is string => !!id),
+            );
         } catch (error) {
             logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
         }
@@ -423,6 +457,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
         const movingToOnDeck = !item.isOnDeck;
+        const rosterRowId = rosterRowIdForApi(item);
 
         if (movingToOnDeck) {
             setRosterMembers(prev => prev.filter(m => m.id !== item.id));
@@ -433,19 +468,15 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         }
 
         try {
-            if (item.rosterId) {
-                // Has roster entry - use moveMember
-                await rosterApi.moveMember(item.rosterId, {
+            if (rosterRowId) {
+                await rosterApi.moveMember(rosterRowId, {
                     isOnDeck: movingToOnDeck,
                     newPosition: movingToOnDeck ? onDeckMembers.length : rosterMembers.length,
                 });
             } else {
-                // No roster entry (friend only) - need to add to roster first, then toggle
-                // The friend is already in roster via friendship, so use toggleOnDeck with the friend's user ID
-                // But toggleOnDeck expects a rosterId, so we need to add them to roster first
+                // Friend not on roster yet — add row, then set on-deck / position
                 const addResult = await rosterApi.addToRoster({ contactUserId: item.friendId });
                 if (addResult.success && addResult.entry?.id) {
-                    // Now move to on-deck
                     await rosterApi.moveMember(addResult.entry.id, {
                         isOnDeck: movingToOnDeck,
                         newPosition: movingToOnDeck ? onDeckMembers.length : rosterMembers.length,

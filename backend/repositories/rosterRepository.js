@@ -214,17 +214,11 @@ class RosterRepository {
 
   async getRosterEntry(userId, rosterId) {
     try {
+      // Fetch roster without embedding `users`: roster has two FKs to users (user_id,
+      // contact_user_id), and some PostgREST setups still return PGRST201 for nested selects.
       const { data, error } = await supabaseAdmin
         .from("roster")
-        .select(
-          `
-          *,
-          users!roster_contact_user_id_fkey (
-            first_name, last_name, username,
-            user_profiles (avatar_url)
-          )
-        `
-        )
+        .select("*")
         .eq("id", rosterId)
         .eq("user_id", userId)
         .single();
@@ -232,19 +226,34 @@ class RosterRepository {
       if (error && error.code !== "PGRST116") throw error;
       if (!data) return null;
 
-      const user = data.users || {};
-      const profileData = user.user_profiles;
-      const profile = Array.isArray(profileData)
-        ? profileData[0] || {}
-        : profileData || {};
-      delete data.users;
+      let first_name;
+      let last_name;
+      let username;
+      let avatar_url;
+      if (data.contact_user_id) {
+        const { data: contact, error: contactErr } = await supabaseAdmin
+          .from("users")
+          .select("first_name, last_name, username, user_profiles(avatar_url)")
+          .eq("id", data.contact_user_id)
+          .maybeSingle();
+        if (!contactErr && contact) {
+          first_name = contact.first_name;
+          last_name = contact.last_name;
+          username = contact.username;
+          const profileData = contact.user_profiles;
+          const profile = Array.isArray(profileData)
+            ? profileData[0] || {}
+            : profileData || {};
+          avatar_url = profile.avatar_url;
+        }
+      }
 
       return {
         ...data,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        username: user.username,
-        avatar_url: profile.avatar_url,
+        first_name,
+        last_name,
+        username,
+        avatar_url,
       };
     } catch (error) {
       handleError(error, "getRosterEntry");
@@ -1302,19 +1311,7 @@ class RosterRepository {
     try {
       const { data, error } = await supabaseAdmin
         .from("roster")
-        .select(
-          `
-          *,
-          users!roster_contact_user_id_fkey (
-            first_name, 
-            last_name, 
-            username, 
-            phone_number,
-            user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, playing_partner_preference, rounds_played, average_score, bio, driver, irons, putter, ball)
-          ),
-          roster_groups (name, color)
-        `
-        )
+        .select("*")
         .eq("id", rosterId)
         .eq("user_id", userId)
         .single();
@@ -1322,19 +1319,62 @@ class RosterRepository {
       if (error && error.code !== "PGRST116") throw error;
       if (!data) return null;
 
-      const user = data.users || {};
-      // Handle nested profile
-      const profileData = user.user_profiles;
-      const profile = Array.isArray(profileData)
-        ? profileData[0] || {}
-        : profileData || {};
+      let group_name;
+      let group_color;
+      if (data.group_id) {
+        const { data: g } = await supabaseAdmin
+          .from("roster_groups")
+          .select("name, color")
+          .eq("id", data.group_id)
+          .maybeSingle();
+        group_name = g?.name;
+        group_color = g?.color;
+      }
 
-      const group = data.roster_groups || {};
-      delete data.users;
-      // Profile is inside users now, so we don't need to delete top-level user_profiles
-      delete data.roster_groups;
+      let merged = { ...data };
 
-      // Get history counts
+      if (data.contact_user_id) {
+        const { data: contact, error: cErr } = await supabaseAdmin
+          .from("users")
+          .select(
+            `first_name, last_name, username, phone_number,
+            user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, playing_partner_preference, rounds_played, average_score, bio, driver, irons, putter, ball)`
+          )
+          .eq("id", data.contact_user_id)
+          .maybeSingle();
+
+        if (!cErr && contact) {
+          const profileData = contact.user_profiles;
+          const up = Array.isArray(profileData)
+            ? profileData[0] || {}
+            : profileData || {};
+          merged = {
+            ...merged,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            username: contact.username,
+            phone_number: contact.phone_number,
+            avatar_url: up.avatar_url,
+            user_handicap: up.handicap,
+            profile_social_rate: up.social_rate,
+            location: up.location,
+            home_course: up.home_course,
+            preferred_tee_time: up.preferred_tee_time,
+            walk_or_ride: up.walk_or_ride,
+            playing_partner_preference: up.playing_partner_preference,
+            rounds_played: up.rounds_played,
+            average_score: up.average_score,
+            bio: up.bio,
+            equipment: {
+              driver: up.driver,
+              irons: up.irons,
+              putter: up.putter,
+              ball: up.ball,
+            },
+          };
+        }
+      }
+
       const { count: timesPlayed } = await supabaseAdmin
         .from("roster_member_history")
         .select("*", { count: "exact", head: true })
@@ -1353,12 +1393,10 @@ class RosterRepository {
         .eq("roster_id", rosterId);
 
       return {
-        ...data,
-        ...user,
-        ...profile,
-        group_name: group.name,
-        group_color: group.color,
-        times_played: timesPlayed || 0,
+        ...merged,
+        group_name,
+        group_color,
+        times_played_together: timesPlayed || 0,
         invites_accepted: invitesAccepted || 0,
         total_invites: totalInvites || 0,
       };

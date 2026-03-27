@@ -5,7 +5,7 @@ interface RosterProfileScreenProps {
     navigation: any;
     route: {
         params: {
-            rosterId: string;
+            rosterId?: string;
             person: {
                 id: string;
                 name: string;
@@ -16,7 +16,11 @@ interface RosterProfileScreenProps {
 }
 
 export default function RosterProfileScreen({ navigation, route }: RosterProfileScreenProps) {
-    const { person } = route.params;
+    const { person, rosterId } = route.params;
+    const personWithRosterId = {
+        ...person,
+        id: rosterId ?? person.id,
+    };
     const handleBack = () => {
         if (typeof navigation?.canGoBack === "function" && navigation.canGoBack()) {
             navigation.goBack();
@@ -27,7 +31,7 @@ export default function RosterProfileScreen({ navigation, route }: RosterProfile
 
     return (
         <PersonDetail
-            person={person}
+            person={personWithRosterId}
             navigation={navigation}
             onBack={handleBack}
             onRemoved={() => {

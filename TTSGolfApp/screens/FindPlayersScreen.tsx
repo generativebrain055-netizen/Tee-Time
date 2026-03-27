@@ -113,7 +113,14 @@ const UserListItem: React.FC<{
     }
     switch (user.friendshipStatus) {
       case 'friend':
-        return { text: 'Friends', bg: '#F3F4F6', textColor: '#6B7280', disabled: true, icon: null as any };
+        // Friends must be able to open Add-to-on-deck; roster members were wrongly hidden + button disabled.
+        return {
+          text: user.inRoster ? 'Add to deck' : '+ Add',
+          bg: '#FFFFFF',
+          textColor: '#374151',
+          disabled: !!user.addingToRoster,
+          icon: UserPlus,
+        };
       case 'requested':
       case 'pending':
         return { text: 'Pending', bg: '#F3F4F6', textColor: '#6B7280', disabled: true, icon: null as any };
@@ -259,9 +266,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
       const response = await rosterApi.searchUsers(query.trim());
       if (response.success && response.users) {
         // Normalize name format, mark roster/on-deck status, and exclude users already on roster
-        const usersWithRosterStatus = (response.users as any[])
-          .filter((user: any) => !rosterUserIds.has(user.id))
-          .map((user: any) => {
+        const usersWithRosterStatus = (response.users as any[]).map((user: any) => {
             let firstName = user.firstName || '';
             let lastName = user.lastName || '';
             if (!firstName && !lastName && user.name) {
@@ -273,7 +278,7 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
               ...user,
               firstName,
               lastName,
-              inRoster: false,
+              inRoster: rosterUserIds.has(user.id),
               addingToRoster: addingToRosterIds.has(user.id),
               onDeck: onDeckUserIds.has(user.id),
             };
@@ -308,7 +313,23 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
     try {
       const onDeckRes = await rosterApi.getOnDeck();
       const onDeckList = (onDeckRes.success && onDeckRes.onDeck) ? onDeckRes.onDeck : [];
+      const alreadyOnDeck = onDeckList.some((r: any) => r.contact?.userId === user.id);
+      if (alreadyOnDeck) {
+        setOnDeckUserIds(prev => new Set(prev).add(user.id));
+        setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, onDeck: true } : u)));
+        Alert.alert('Already on deck', 'This player is already on your on-deck list.');
+        return;
+      }
       const newPosition = onDeckList.length;
+
+      const findRosterRowId = async (): Promise<string | null> => {
+        const rosterRes = await rosterApi.getRoster();
+        const roster = rosterRes.success && rosterRes.roster ? rosterRes.roster : [];
+        const offDeck = roster.find((r: any) => r.contact?.userId === user.id);
+        if (offDeck?.id) return offDeck.id;
+        const onDeckHit = onDeckList.find((r: any) => r.contact?.userId === user.id);
+        return onDeckHit?.id ?? null;
+      };
 
       let rosterEntryId: string | null = null;
       const payload: any = {};
@@ -322,13 +343,19 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
         const addRes = await rosterApi.addToRoster(payload);
         if (addRes.success && addRes.entry?.id) rosterEntryId = addRes.entry.id;
       } catch (addErr: any) {
-        if (addErr?.message?.toLowerCase?.().includes('already in roster')) {
-          const rosterRes = await rosterApi.getRoster();
-          const roster = (rosterRes.success && rosterRes.roster) ? rosterRes.roster : [];
-          const entry = roster.find((r: any) => (r.contact?.userId === user.id));
-          if (entry?.id) rosterEntryId = entry.id;
+        const msg = String(addErr?.message || '').toLowerCase();
+        const dup =
+          msg.includes('already in roster') ||
+          addErr?.code === 'DUPLICATE_CONTACT' ||
+          addErr?.statusCode === 409;
+        if (dup) {
+          rosterEntryId = await findRosterRowId();
         }
         if (!rosterEntryId) throw addErr;
+      }
+
+      if (!rosterEntryId) {
+        rosterEntryId = await findRosterRowId();
       }
 
       if (rosterEntryId) {
@@ -346,6 +373,11 @@ export default function FindPlayersScreen({ navigation }: FindPlayersScreenProps
             { text: 'View On Deck', onPress: () => navigation?.goBack?.() },
             { text: 'OK' },
           ]
+        );
+      } else {
+        Alert.alert(
+          'Could not add to deck',
+          'We could not find a roster entry for this player. Try again from your Roster screen.',
         );
       }
     } catch (error: any) {

@@ -69,32 +69,47 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onBlocked }: 
     };
 
     const handleLongPress = useCallback(() => {
-        if (!userId) {
-            Alert.alert("Block", "This contact is not a registered user. You can remove them from your roster instead.");
-            return;
-        }
         const name = contact.name || "This person";
+        const rosterRowId = item.id;
+
         Alert.alert(
-            "Block messages",
-            `Block ${name}? They will no longer be able to message you and will be removed from your Roster.`,
+            name,
+            "Remove this player from your roster, or block messages.",
             [
-                { text: "Cancel", style: "cancel" },
                 {
-                    text: "Block",
+                    text: "Remove from roster",
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await friendApi.blockUser(userId);
+                            await rosterApi.removeFromRoster(rosterRowId);
                             onBlocked?.();
-                        } catch (err) {
-                            logger.error("[SimpleRosterList] Block failed", err);
-                            Alert.alert("Error", "Could not block user. Please try again.");
+                        } catch (err: any) {
+                            logger.error("[SimpleRosterList] Remove from roster failed", err);
+                            Alert.alert("Error", err?.message || "Could not remove from roster.");
                         }
                     },
                 },
+                ...(userId
+                    ? [
+                            {
+                                text: "Block messages",
+                                style: "destructive" as const,
+                                onPress: async () => {
+                                    try {
+                                        await friendApi.blockUser(userId);
+                                        onBlocked?.();
+                                    } catch (err) {
+                                        logger.error("[SimpleRosterList] Block failed", err);
+                                        Alert.alert("Error", "Could not block user. Please try again.");
+                                    }
+                                },
+                            },
+                        ]
+                    : []),
+                { text: "Cancel", style: "cancel" },
             ]
         );
-    }, [userId, contact.name, onBlocked]);
+    }, [userId, contact.name, item.id, onBlocked]);
     
     const handleMessage = useCallback(async (e: any) => {
         e?.stopPropagation();
