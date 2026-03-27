@@ -73,12 +73,14 @@ class NotificationController {
         return res.status(500).json({ success: false, message: "Failed to get notifications" });
       }
 
-      // Filter out notifications that have been responded to (for tee_time_invite types)
+      // Filter out actionable notifications that have been responded to
       const notifications = (data || [])
         .filter(n => {
           const notifData = n.data || {};
-          // Don't show tee_time_invite notifications that have been responded to
           if (notifData.type === "tee_time_invite" && notifData.responded === true) {
+            return false;
+          }
+          if (notifData.type === "friend_request" && notifData.responded === true) {
             return false;
           }
           return true;

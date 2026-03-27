@@ -834,6 +834,51 @@ class NotificationService {
       sendPush: true, // Enable push notifications for Waiver Wire posts
     });
   }
+
+  /**
+   * Mark in-app friend_request rows as responded for the receiver (matches data.requestId).
+   * Called after accept/decline so the notification list stays correct on refresh and other devices.
+   */
+  async markFriendRequestNotificationsResponded(receiverUserId, friendRequestId) {
+    if (!receiverUserId || !friendRequestId) return { updated: 0 };
+    try {
+      const { data: notifications, error: notifError } = await supabaseAdmin
+        .from("notifications")
+        .select("id, data")
+        .eq("user_id", receiverUserId);
+
+      if (notifError || !notifications?.length) {
+        return { updated: 0 };
+      }
+
+      const matching = notifications.filter((notif) => {
+        const d = notif.data || {};
+        return (
+          d.type === "friend_request" &&
+          d.requestId === friendRequestId &&
+          d.responded !== true
+        );
+      });
+
+      for (const notif of matching) {
+        const updatedData = { ...(notif.data || {}), responded: true };
+        await supabaseAdmin
+          .from("notifications")
+          .update({
+            data: updatedData,
+            read_at: new Date().toISOString(),
+            status: "read",
+          })
+          .eq("id", notif.id)
+          .eq("user_id", receiverUserId);
+      }
+
+      return { updated: matching.length };
+    } catch (error) {
+      logger.warn("markFriendRequestNotificationsResponded:", error?.message);
+      return { updated: 0 };
+    }
+  }
 }
 
 module.exports = new NotificationService();

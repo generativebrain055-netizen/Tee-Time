@@ -25,7 +25,7 @@ import { logger } from "../../utils/logger";
 import { formatRemainingClock } from "../../utils/formatting";
 
 type TabType = 'activity' | 'invites';
-type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled' | 'group_updated' | 'group_deleted' | 'roster_removed' | 'on_deck_added' | 'on_deck_removed';
+type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'friend_accepted' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled' | 'group_updated' | 'group_deleted' | 'roster_removed' | 'on_deck_added' | 'on_deck_removed';
 
 interface CategorySection {
     title: string;
@@ -59,6 +59,7 @@ export default function NotificationsScreen({ navigation }: any) {
                 const filteredNotifications = response.notifications.filter(n => {
                     const notifData = n.data || {};
                     if (notifData.type === "tee_time_invite" && notifData.responded === true) return false;
+                    if (notifData.type === "friend_request" && notifData.responded === true) return false;
                     return true;
                 });
                 setNotifications(filteredNotifications);
@@ -150,6 +151,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 const requestId = data?.requestId || notificationId;
                 console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
                 await friendApi.respondToRequest(requestId, "accepted");
+                try {
+                    await notificationApi.markAsResponded(notificationId);
+                } catch (markError) {
+                    console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
+                }
             } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
@@ -208,6 +214,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 const requestId = data?.requestId || notificationId;
                 console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
                 await friendApi.respondToRequest(requestId, "declined");
+                try {
+                    await notificationApi.markAsResponded(notificationId);
+                } catch (markError) {
+                    console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
+                }
             } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
@@ -284,6 +295,7 @@ export default function NotificationsScreen({ navigation }: any) {
             { key: 'on_deck_removed', label: 'On-Deck (removed)' },
             { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
             { key: 'waiver_wire', label: 'Waiver Wire' },
+            { key: 'friend_accepted', label: 'Friend Accepted' },
         ];
     };
 
@@ -313,12 +325,14 @@ export default function NotificationsScreen({ navigation }: any) {
                        t === 'tee_time_not_filled';
             });
         } else {
-            // Activity tab: responses, group invite accepted, waiver wire, player cancelled (organizer)
+            // Activity tab: responses, social/roster activity, reminders, and other non-invite notices
             filtered = notifs.filter(n => {
                 const t = getDataType(n);
                 return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire' || t === 'player_cancelled'
                     || t === 'group_updated' || t === 'group_deleted' || t === 'roster_removed'
-                    || t === 'on_deck_added' || t === 'on_deck_removed';
+                    || t === 'on_deck_added' || t === 'on_deck_removed'
+                    || t === 'friend_accepted' || t === 'check_in_reminder' || t === 'no_show'
+                    || t === 'roster_exhausted' || t === 'fcfs_deadline';
             });
         }
 
@@ -357,6 +371,11 @@ export default function NotificationsScreen({ navigation }: any) {
             else if (type === 'roster_removed') title = 'Removed from Roster';
             else if (type === 'on_deck_added') title = 'On-Deck availability';
             else if (type === 'on_deck_removed') title = 'On-Deck removed';
+            else if (type === 'friend_accepted') title = 'Friend Requests Accepted';
+            else if (type === 'check_in_reminder') title = 'Check-In Reminders';
+            else if (type === 'no_show') title = 'No-Show';
+            else if (type === 'roster_exhausted') title = 'Roster Exhausted';
+            else if (type === 'fcfs_deadline') title = 'FCFS Deadlines';
             else title = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             return {
@@ -370,6 +389,9 @@ export default function NotificationsScreen({ navigation }: any) {
     };
 
     const sections = categorizeNotifications(notifications, activeTab);
+    const visibleNotifications = sections.flatMap((s) => s.items);
+    const hasUnreadInView = visibleNotifications.some((n) => !n.isRead);
+    const hasReadInView = visibleNotifications.some((n) => n.isRead);
 
     const handleDelete = useCallback(async (item: AppNotification) => {
         try {
@@ -922,9 +944,6 @@ export default function NotificationsScreen({ navigation }: any) {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
-    const hasUnread = notifications.some(n => !n.isRead);
-    const hasRead = notifications.some(n => n.isRead);
-
     const invitesUnreadCount = notifications.filter(n => {
         const t = getDataType(n);
         return !n.isRead && (
@@ -956,15 +975,15 @@ export default function NotificationsScreen({ navigation }: any) {
     return (
         <ScreenShell>
             <AppHeader title="Notifications" onBack={() => navigation?.goBack()} />
-            {(hasRead || hasUnread) && (
+            {(hasReadInView || hasUnreadInView) && (
                 <View style={styles.headerActionsRow}>
                     <View style={styles.headerActions}>
-                        {hasRead && (
+                        {hasReadInView && (
                             <TouchableOpacity style={styles.headerActionButton} onPress={handleDeleteAllRead} activeOpacity={0.7}>
                                 <Text style={styles.headerActionDestructiveText}>Delete read</Text>
                             </TouchableOpacity>
                         )}
-                        {hasUnread && (
+                        {hasUnreadInView && (
                             <TouchableOpacity style={styles.headerActionButton} onPress={handleMarkAllAsRead} activeOpacity={0.7}>
                                 <Text style={styles.markAllReadText}>Mark all read</Text>
                             </TouchableOpacity>

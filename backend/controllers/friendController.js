@@ -160,6 +160,15 @@ class FriendController {
                 response,
             );
 
+            try {
+                await notificationService.markFriendRequestNotificationsResponded(
+                    userId,
+                    request.id || requestId,
+                );
+            } catch (markErr) {
+                logger.warn("Mark friend request notification responded:", markErr?.message);
+            }
+
             // Notify sender only on first accept (skip idempotent retries)
             if (
                 response === "accepted" &&
