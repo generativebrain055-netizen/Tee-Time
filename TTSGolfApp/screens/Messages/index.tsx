@@ -429,8 +429,9 @@ const styles = StyleSheet.create({
   },
 });
 
-function MessagesScreen({ navigation }: any) {
-  const [activeTab, setActiveTab] = useState<MessageTab>("All");
+function MessagesScreen({ navigation, route }: any) {
+  const initialTab = (route?.params?.initialTab as MessageTab) || "All";
+  const [activeTab, setActiveTab] = useState<MessageTab>(initialTab);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -454,6 +455,23 @@ function MessagesScreen({ navigation }: any) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const routeTab = route?.params?.initialTab as MessageTab | undefined;
+    if (routeTab && routeTab !== activeTab) {
+      setActiveTab(routeTab);
+    }
+  }, [route?.params?.initialTab]);
+
+  // Persist selected Messages tab so back from chat returns to correct tab.
+  useEffect(() => {
+    if (typeof navigation?.setParams === "function") {
+      navigation.setParams({ initialTab: activeTab });
+    }
+    // Intentionally avoid `navigation` in deps: custom navigation object is recreated
+    // on each render, which can trigger effect loops with setParams.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

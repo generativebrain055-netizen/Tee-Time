@@ -36,6 +36,19 @@ export default function RosterScreen({ navigation, route }: any) {
         }
     }, [route?.params?.initialTab]);
 
+    // Persist current tab in navigation params so returning from a detail screen
+    // restores the exact tab (Roster/Groups/On Deck/Requests).
+    useEffect(() => {
+        const currentParamTab = route?.params?.initialTab;
+        if (currentParamTab === activeTab) return;
+        if (typeof navigation?.setParams === "function") {
+            navigation.setParams({ initialTab: activeTab });
+        }
+        // Intentionally avoid `navigation` in deps: custom navigation object is recreated
+        // on each render, which can trigger effect loops with setParams.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, route?.params?.initialTab]);
+
     useEffect(() => {
         if (activeTab !== "Roster" && rosterEditMode) {
             setRosterEditMode(false);

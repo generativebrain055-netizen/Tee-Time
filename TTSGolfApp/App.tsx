@@ -142,6 +142,7 @@ interface Navigation {
   replace: (screen: ScreenName, params?: NavigationParams) => void;
   goBack: () => void;
   canGoBack: () => boolean;
+  setParams: (params: NavigationParams) => void;
   reset: (options: {
     index: number;
     routes: Array<{ name: ScreenName; params?: NavigationParams }>;
@@ -239,6 +240,26 @@ export default function App(): React.ReactElement {
       }
     },
     canGoBack: () => screenHistory.length > 1,
+    setParams: (params: NavigationParams) => {
+      // Update params for the current screen entry so goBack restores
+      // the exact tab/state the user was on.
+      const incomingParams = params || {};
+      const hasChange = Object.keys(incomingParams).some(
+        (key) => screenParams?.[key] !== incomingParams[key]
+      );
+      if (!hasChange) return;
+
+      setScreenHistory((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const current = next[next.length - 1];
+        const currentParams = current.params || {};
+        const mergedParams = { ...currentParams, ...incomingParams };
+        next[next.length - 1] = { ...current, params: mergedParams };
+        return next;
+      });
+      setScreenParams((prev) => ({ ...(prev || {}), ...incomingParams }));
+    },
     reset: (options: {
       index: number;
       routes: Array<{ name: ScreenName; params?: NavigationParams }>;
@@ -396,6 +417,7 @@ export default function App(): React.ReactElement {
           <MessagesScreen
             key={`messages-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "ChatDetail":
