@@ -59,6 +59,40 @@ router.post(
 );
 
 /**
+ * PATCH /api/messages/conversations/:id/mute
+ * Body: { muted: true | false }
+ */
+router.patch(
+  "/conversations/:id/mute",
+  [
+    param("id").isUUID(),
+    body("muted").custom((value) => {
+      if (value === undefined || value === null) {
+        throw new Error("muted is required");
+      }
+      if (value === true || value === false) return true;
+      if (value === "true" || value === "false") return true;
+      if (value === 1 || value === 0) return true;
+      if (value === "1" || value === "0") return true;
+      throw new Error("muted must be a boolean");
+    }),
+  ],
+  validateRequest,
+  messageController.setMuted
+);
+
+/**
+ * POST /api/messages/conversations/:id/leave
+ * Hide chat from user's list (does not delete for others).
+ */
+router.post(
+  "/conversations/:id/leave",
+  [param("id").isUUID()],
+  validateRequest,
+  messageController.leaveConversation
+);
+
+/**
  * POST /api/messages/conversations/:id/messages
  * Body: { body?: string, imageBase64?: string } — at least one required
  */

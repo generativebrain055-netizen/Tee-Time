@@ -25,6 +25,8 @@ export interface ConversationListItem {
     sender_id: string;
   } | null;
   unreadCount?: number;
+  /** Per-user mute; unread totals exclude this conversation when true */
+  isMuted?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -126,5 +128,19 @@ export const messagesApi = {
     apiCall<{ success: boolean }>(
       API_ENDPOINTS.MESSAGES_DELETE_MESSAGE(conversationId, messageId),
       { method: "DELETE" }
+    ),
+
+  /** Mute or unmute this conversation for the current user (unread badge ignores when muted). */
+  setConversationMuted: (conversationId: string, muted: boolean) =>
+    apiCall<{ success: boolean; muted: boolean }>(
+      API_ENDPOINTS.MESSAGES_CONVERSATION_MUTE(conversationId),
+      { method: "PATCH", body: JSON.stringify({ muted }) }
+    ),
+
+  /** Remove chat from your Messages list (others unaffected; reopen via group/tee time). */
+  leaveConversation: (conversationId: string) =>
+    apiCall<{ success: boolean }>(
+      API_ENDPOINTS.MESSAGES_CONVERSATION_LEAVE(conversationId),
+      { method: "POST" }
     ),
 };

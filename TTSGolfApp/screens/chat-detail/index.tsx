@@ -42,6 +42,9 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         handleSendImage,
         handleConvertToGroupMessage,
         handleDeleteMessage,
+        isMuted,
+        handleMuteToggle,
+        handleLeaveConversation,
     } = useChat(chatInfo);
 
     const [participants, setParticipants] = useState<string[]>([]);
@@ -104,6 +107,31 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
             navigation?.navigate("GroupProfile", { groupId: chatInfo.groupId });
         }
     }, [navigation, chatInfo.isGroup, chatInfo.groupId]);
+
+    const handleDeleteChatFromMenu = useCallback(() => {
+        Alert.alert(
+            "Delete chat?",
+            "This chat will be removed from your Messages list. Other members still have the conversation. You can open it again from the group or tee time.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        const result = await handleLeaveConversation();
+                        if (result.success) {
+                            navigation?.goBack();
+                        } else {
+                            Alert.alert(
+                                "Error",
+                                result.errorMessage || "Could not delete chat. Try again."
+                            );
+                        }
+                    },
+                },
+            ]
+        );
+    }, [handleLeaveConversation, navigation]);
 
     const handleDeleteMessageWithAlert = useCallback(
         async (messageId: string) => {
@@ -188,6 +216,9 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                 visible={showMenu}
                 onClose={handleMenuClose}
                 onCreateGroup={chatInfo.teeTimeId ? handleCreateGroup : undefined}
+                isMuted={isMuted}
+                onMuteToggle={handleMuteToggle}
+                onDeleteChat={handleDeleteChatFromMenu}
             />
         </View>
     );

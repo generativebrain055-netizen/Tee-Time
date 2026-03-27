@@ -1,4 +1,5 @@
 -- Extend user_reports for Help & Support submissions from the mobile app (no separate app_feedback table).
+-- MERGED INTO: backend/schema/unified_schema.sql (v6.0+)
 -- App rows: report_source = 'app_support', reported_user_id IS NULL, message in description, category in support_*.
 
 ALTER TABLE user_reports

@@ -10,9 +10,13 @@ interface ChatActionsMenuProps {
     visible: boolean;
     onClose: () => void;
     onCreateGroup?: () => void;
+    isMuted?: boolean;
+    onMuteToggle?: () => void;
+    onDeleteChat?: () => void;
 }
 
-export const ChatActionsMenu = memo(({ visible, onClose, onCreateGroup }: ChatActionsMenuProps) => (
+export const ChatActionsMenu = memo(
+    ({ visible, onClose, onCreateGroup, isMuted, onMuteToggle, onDeleteChat }: ChatActionsMenuProps) => (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
             {/* Prevent overlay onPress when tapping inside the sheet (Figma 1269-2434) */}
@@ -37,19 +41,36 @@ export const ChatActionsMenu = memo(({ visible, onClose, onCreateGroup }: ChatAc
                         </TouchableOpacity>
                     ) : null}
                     {onCreateGroup ? <View style={styles.separator} /> : null}
-                    <TouchableOpacity style={styles.option}>
-                        <Text style={styles.optionText}>Mute</Text>
-                    </TouchableOpacity>
-                    <View style={styles.separator} />
-                    <TouchableOpacity style={styles.option}>
-                        <Text style={styles.optionDanger}>Delete chat</Text>
-                    </TouchableOpacity>
+                    {onMuteToggle ? (
+                        <TouchableOpacity
+                            style={styles.option}
+                            onPress={() => {
+                                onClose();
+                                onMuteToggle();
+                            }}
+                        >
+                            <Text style={styles.optionText}>{isMuted ? "Unmute" : "Mute"}</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    {onMuteToggle ? <View style={styles.separator} /> : null}
+                    {onDeleteChat ? (
+                        <TouchableOpacity
+                            style={styles.option}
+                            onPress={() => {
+                                onClose();
+                                onDeleteChat();
+                            }}
+                        >
+                            <Text style={styles.optionDanger}>Delete chat</Text>
+                        </TouchableOpacity>
+                    ) : null}
                     <View style={styles.bottomSafe} />
                 </View>
             </TouchableOpacity>
         </TouchableOpacity>
     </Modal>
-));
+    )
+);
 
 const styles = StyleSheet.create({
     overlay: {

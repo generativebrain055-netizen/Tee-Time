@@ -143,15 +143,18 @@ async function listForUser(userId, options = {}) {
 
   const { data: participantRows } = await supabaseAdmin
     .from("conversation_participants")
-    .select("conversation_id, last_read_at")
-    .eq("user_id", userId);
+    .select("conversation_id, last_read_at, is_muted")
+    .eq("user_id", userId)
+    .is("left_at", null);
 
   if (!participantRows || participantRows.length === 0) return [];
 
   const convIds = participantRows.map((r) => r.conversation_id);
   const lastReadByConv = {};
+  const mutedByConv = {};
   for (const r of participantRows) {
     lastReadByConv[r.conversation_id] = r.last_read_at;
+    mutedByConv[r.conversation_id] = !!r.is_muted;
   }
 
   let query = supabaseAdmin
@@ -170,16 +173,18 @@ async function listForUser(userId, options = {}) {
   for (const conv of conversations || []) {
     const lastMessage = await getLastMessage(conv.id);
     const meta = await getConversationMeta(conv, userId, lastMessage);
-    const unreadCount = await getUnreadCountForConversation(
+    const rawUnread = await getUnreadCountForConversation(
       conv.id,
       userId,
       lastReadByConv[conv.id]
     );
+    const unreadCount = mutedByConv[conv.id] ? 0 : rawUnread;
     result.push({
       ...conv,
       ...meta,
       lastMessage: meta.lastMessagePreview,
       unreadCount,
+      isMuted: !!mutedByConv[conv.id],
     });
   }
 
@@ -333,10 +338,11 @@ async function getConversationMeta(conv, userId, lastMessage) {
 async function getById(conversationId, userId) {
   const { data: part } = await supabaseAdmin
     .from("conversation_participants")
-    .select("conversation_id")
+    .select("conversation_id, is_muted")
     .eq("conversation_id", conversationId)
     .eq("user_id", userId)
-    .single();
+    .is("left_at", null)
+    .maybeSingle();
 
   if (!part) return null;
 
@@ -349,17 +355,99 @@ async function getById(conversationId, userId) {
   if (!conv) return null;
   const lastMessage = await getLastMessage(conv.id);
   const meta = await getConversationMeta(conv, userId, lastMessage);
-  return { ...conv, ...meta };
+  return { ...conv, ...meta, isMuted: !!part.is_muted };
 }
 
 /**
  * Ensure user is in conversation (for tee_time/group, add if not already).
  */
 async function ensureParticipant(conversationId, userId) {
-  await supabaseAdmin.from("conversation_participants").upsert(
-    { conversation_id: conversationId, user_id: userId },
-    { onConflict: "conversation_id,user_id" }
-  );
+  const { data: existing } = await supabaseAdmin
+    .from("conversation_participants")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabaseAdmin
+      .from("conversation_participants")
+      .update({ left_at: null })
+      .eq("conversation_id", conversationId)
+      .eq("user_id", userId);
+    if (error) handleError(error, "ensureParticipantUpdate");
+  } else {
+    const { error } = await supabaseAdmin.from("conversation_participants").insert({
+      conversation_id: conversationId,
+      user_id: userId,
+    });
+    if (error) handleError(error, "ensureParticipantInsert");
+  }
+}
+
+/**
+ * User leaves / hides conversation in their list (does not delete messages for others).
+ */
+async function leaveConversation(conversationId, userId) {
+  const { data, error } = await supabaseAdmin
+    .from("conversation_participants")
+    .update({ left_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) handleError(error, "leaveConversation");
+  if (!data) {
+    const err = new Error("You are not a member of this conversation.");
+    err.statusCode = 404;
+    throw err;
+  }
+}
+
+/** Clear left_at so user sees the chat again (e.g. opened by conversationId after leaving). */
+async function reopenConversationForUser(conversationId, userId) {
+  const { error } = await supabaseAdmin
+    .from("conversation_participants")
+    .update({ left_at: null })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId);
+  if (error) handleError(error, "reopenConversationForUser");
+}
+
+/**
+ * Toggle mute for current user; muted conversations contribute 0 to unread totals.
+ */
+async function setConversationMuted(conversationId, userId, muted) {
+  const { data, error } = await supabaseAdmin
+    .from("conversation_participants")
+    .update({ is_muted: !!muted })
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId)
+    .is("left_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    const msg = (error.message || "").toLowerCase();
+    if (
+      error.code === "42703" ||
+      msg.includes("is_muted") ||
+      (msg.includes("column") && msg.includes("does not exist"))
+    ) {
+      const err = new Error(
+        "Database is missing column is_muted on conversation_participants. Run backend/schema/migrations/005_conversation_participant_mute.sql in Supabase SQL Editor."
+      );
+      err.statusCode = 503;
+      throw err;
+    }
+    handleError(error, "setConversationMuted");
+  }
+  if (!data) {
+    const err = new Error(
+      "Cannot update mute: you are not an active member of this conversation."
+    );
+    err.statusCode = 404;
+    throw err;
+  }
 }
 
 /**
@@ -530,19 +618,21 @@ async function getUnreadCountForConversation(conversationId, userId, lastReadAt)
 async function getUnreadCounts(userId) {
   const { data: participantRows } = await supabaseAdmin
     .from("conversation_participants")
-    .select("conversation_id, last_read_at")
-    .eq("user_id", userId);
+    .select("conversation_id, last_read_at, is_muted")
+    .eq("user_id", userId)
+    .is("left_at", null);
   if (!participantRows || participantRows.length === 0) {
     return { total: 0, byConversation: {} };
   }
   const byConversation = {};
   let total = 0;
   for (const r of participantRows) {
-    const count = await getUnreadCountForConversation(
+    const rawCount = await getUnreadCountForConversation(
       r.conversation_id,
       userId,
       r.last_read_at
     );
+    const count = r.is_muted ? 0 : rawCount;
     byConversation[r.conversation_id] = count;
     total += count;
   }
@@ -568,6 +658,9 @@ module.exports = {
   listForUser,
   getById,
   ensureParticipant,
+  leaveConversation,
+  reopenConversationForUser,
+  setConversationMuted,
   createTeeTimeConversationWithParticipants,
   syncTeeTimeConversationParticipants,
   getUnreadCountForConversation,

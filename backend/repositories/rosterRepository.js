@@ -754,19 +754,8 @@ class RosterRepository {
       let data = ownerGroup || null;
       let isOwner = !!ownerGroup;
 
-      // If not owner, allow access for members in this group
+      // If not roster_groups owner, allow group members / chat participants
       if (!data) {
-        const { data: membership, error: membershipError } = await supabaseAdmin
-          .from("roster")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("group_id", groupId)
-          .limit(1)
-          .maybeSingle();
-
-        if (membershipError && membershipError.code !== "PGRST116") throw membershipError;
-        if (!membership) return null;
-
         const { data: groupById, error: groupError } = await supabaseAdmin
           .from("roster_groups")
           .select("*")
@@ -775,6 +764,59 @@ class RosterRepository {
 
         if (groupError && groupError.code !== "PGRST116") throw groupError;
         if (!groupById) return null;
+
+        let hasAccess = false;
+
+        // Roster rows are owned by the group creator (user_id); members appear as contact_user_id
+        const { data: rosterOwnerRow, error: rosterOwnerErr } = await supabaseAdmin
+          .from("roster")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("group_id", groupId)
+          .limit(1)
+          .maybeSingle();
+
+        if (rosterOwnerErr && rosterOwnerErr.code !== "PGRST116") throw rosterOwnerErr;
+        if (rosterOwnerRow) hasAccess = true;
+
+        if (!hasAccess) {
+          const { data: asContact, error: contactErr } = await supabaseAdmin
+            .from("roster")
+            .select("id")
+            .eq("group_id", groupId)
+            .eq("contact_user_id", userId)
+            .limit(1)
+            .maybeSingle();
+
+          if (contactErr && contactErr.code !== "PGRST116") throw contactErr;
+          if (asContact) hasAccess = true;
+        }
+
+        if (!hasAccess) {
+          const { data: conv } = await supabaseAdmin
+            .from("conversations")
+            .select("id")
+            .eq("type", "group")
+            .eq("roster_group_id", groupId)
+            .limit(1)
+            .maybeSingle();
+
+          if (conv?.id) {
+            const { data: part, error: partErr } = await supabaseAdmin
+              .from("conversation_participants")
+              .select("id")
+              .eq("conversation_id", conv.id)
+              .eq("user_id", userId)
+              .is("left_at", null)
+              .limit(1)
+              .maybeSingle();
+
+            if (partErr && partErr.code !== "PGRST116") throw partErr;
+            if (part) hasAccess = true;
+          }
+        }
+
+        if (!hasAccess) return null;
 
         data = groupById;
         isOwner = false;

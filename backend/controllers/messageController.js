@@ -174,6 +174,52 @@ async function convertToGroupMessage(req, res) {
 }
 
 /**
+ * PATCH /api/messages/conversations/:id/mute
+ * Body: { muted: boolean }
+ */
+function coerceMutedBody(raw) {
+  if (raw === true || raw === "true" || raw === 1 || raw === "1") return true;
+  return false;
+}
+
+async function setMuted(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId } = req.params;
+    const muted = coerceMutedBody(req.body?.muted);
+    await messageService.setConversationMuted(conversationId, userId, muted);
+    return res.json({ success: true, muted });
+  } catch (error) {
+    logger.error("Set conversation muted error:", error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to update mute",
+    });
+  }
+}
+
+/**
+ * POST /api/messages/conversations/:id/leave
+ * Remove conversation from user's list (soft leave via left_at).
+ */
+async function leaveConversation(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId } = req.params;
+    await messageService.leaveConversation(conversationId, userId);
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error("Leave conversation error:", error);
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to leave conversation",
+    });
+  }
+}
+
+/**
  * DELETE /api/messages/conversations/:id/messages/:messageId
  * Delete a message. Allowed for sender or tee time organizer (for organization).
  */
@@ -207,4 +253,6 @@ module.exports = {
   markRead,
   convertToGroupMessage,
   deleteMessage,
+  setMuted,
+  leaveConversation,
 };

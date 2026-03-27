@@ -11,11 +11,14 @@ async function getOrCreateConversation(userId, params) {
   const { conversationId, recipientId, teeTimeId, rosterGroupId } = params;
 
   if (conversationId) {
-    const conv = await conversationRepository.getById(conversationId, userId);
+    await conversationRepository.reopenConversationForUser(conversationId, userId);
+    let conv = await conversationRepository.getById(conversationId, userId);
     if (conv) {
       await conversationRepository.ensureParticipant(conversationId, userId);
+      conv = await conversationRepository.getById(conversationId, userId);
       return conv;
     }
+    throw new Error("Conversation not found or you do not have access.");
   }
 
   if (recipientId) {
@@ -35,7 +38,10 @@ async function getOrCreateConversation(userId, params) {
       userId,
       teeTimeId
     );
-    return conversationRepository.getById(conv.id, userId);
+    await conversationRepository.ensureParticipant(conv.id, userId);
+    const loaded = await conversationRepository.getById(conv.id, userId);
+    if (!loaded) throw new Error("Could not load tee time conversation.");
+    return loaded;
   }
 
   if (rosterGroupId) {
@@ -43,7 +49,10 @@ async function getOrCreateConversation(userId, params) {
       userId,
       rosterGroupId
     );
-    return conversationRepository.getById(conv.id, userId);
+    await conversationRepository.ensureParticipant(conv.id, userId);
+    const loaded = await conversationRepository.getById(conv.id, userId);
+    if (!loaded) throw new Error("Could not load group conversation.");
+    return loaded;
   }
 
   throw new Error("Provide conversationId, recipientId, teeTimeId, or rosterGroupId");
@@ -179,6 +188,14 @@ async function convertToGroupMessage(conversationId, messageId, userId) {
  * - User is the message sender, or
  * - Conversation is a tee_time chat and user is the tee time organizer (creator).
  */
+async function leaveConversation(conversationId, userId) {
+  await conversationRepository.leaveConversation(conversationId, userId);
+}
+
+async function setConversationMuted(conversationId, userId, muted) {
+  await conversationRepository.setConversationMuted(conversationId, userId, muted);
+}
+
 async function deleteMessage(conversationId, messageId, userId) {
   const conv = await conversationRepository.getById(conversationId, userId);
   if (!conv) throw new Error("Conversation not found or access denied");
@@ -209,4 +226,6 @@ module.exports = {
   markConversationRead,
   convertToGroupMessage,
   deleteMessage,
+  leaveConversation,
+  setConversationMuted,
 };

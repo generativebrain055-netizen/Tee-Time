@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ScrollView } from "react-native";
+import { ScrollView, Alert } from "react-native";
 import { messagesApi } from "../../../services/api";
+import { ApiError } from "../../../services/api/core";
 import type { ChatMessage, ChatDetailState } from "../types";
 import type { ChatInfo } from "../types";
 import { logger } from "../../../utils/logger";
@@ -14,6 +15,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     currentUser: null,
   });
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Resolve conversation and load messages
@@ -48,6 +50,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
 
         const cid = convRes.conversation.id;
         setConversationId(cid);
+        setIsMuted(!!convRes.conversation.isMuted);
 
         const msgRes = await messagesApi.getMessages(cid, { markRead: true });
         if (cancelled) return;
@@ -193,9 +196,46 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     [conversationId]
   );
 
+  const handleMuteToggle = useCallback(async () => {
+    if (!conversationId) return;
+    const next = !isMuted;
+    try {
+      const res = await messagesApi.setConversationMuted(conversationId, next);
+      if (res.success) {
+        setIsMuted(next);
+      } else {
+        Alert.alert("Error", "Could not update mute. Try again.");
+      }
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Could not update mute. Try again.";
+      Alert.alert("Error", msg);
+    }
+  }, [conversationId, isMuted]);
+
+  const handleLeaveConversation = useCallback(async () => {
+    if (!conversationId) {
+      return { success: false as const, errorMessage: undefined as string | undefined };
+    }
+    try {
+      const res = await messagesApi.leaveConversation(conversationId);
+      return { success: !!res.success, errorMessage: undefined as string | undefined };
+    } catch (err) {
+      logger.warn("[useChat] Leave conversation error", err);
+      return {
+        success: false as const,
+        errorMessage:
+          err instanceof ApiError ? err.message : undefined,
+      };
+    }
+  }, [conversationId]);
+
   return {
     ...state,
     conversationId,
+    isMuted,
     scrollViewRef,
     setMessageText,
     appendToMessageText,
@@ -204,5 +244,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     handleSendImage,
     handleConvertToGroupMessage,
     handleDeleteMessage,
+    handleMuteToggle,
+    handleLeaveConversation,
   };
 };

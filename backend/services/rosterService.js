@@ -409,6 +409,13 @@ async function deleteGroup(userId, groupId) {
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
   }
+  if (!group.is_owner) {
+    throw new RosterServiceError(
+      "Only the group owner can delete this group",
+      "ACCESS_DENIED",
+      403,
+    );
+  }
   const groupName = group.name || "Group";
   const memberIds = await rosterRepository.getContactUserIdsForGroup(
     userId,
@@ -451,10 +458,16 @@ async function getGroupMembers(userId, groupId, sortBy) {
  * @throws {RosterServiceError} If group not found or access denied
  */
 async function addMembersToGroup(userId, groupId, memberUserIds) {
-  // Verify group exists and user owns it
   const group = await rosterRepository.getGroupWithAccess(userId, groupId);
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+  if (!group.is_owner) {
+    throw new RosterServiceError(
+      "Only the group owner can add members",
+      "ACCESS_DENIED",
+      403,
+    );
   }
 
   const addedCount = await rosterRepository.addMembersToGroup(userId, groupId, memberUserIds);
@@ -469,6 +482,13 @@ async function inviteToGroup(userId, groupId, memberUserIds) {
   const group = await rosterRepository.getGroupWithAccess(userId, groupId);
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+  if (!group.is_owner) {
+    throw new RosterServiceError(
+      "Only the group owner can send invites",
+      "ACCESS_DENIED",
+      403,
+    );
   }
   const groupName = group.name || "Group";
   const inviter = await userRepository.findById(userId);

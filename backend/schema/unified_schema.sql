@@ -1,26 +1,37 @@
 -- ============================================================================
 -- TeeTime Golf App - Unified Database Schema
 -- ============================================================================
--- Version: 5.9 (Full project database)
--- Last Updated: February 2026
+-- Version: 6.0 (Full project database — all migrations folded in)
+-- Last Updated: March 2026
 --
--- Merged SQL files:
---   - unified_schema.sql (this file)
---   - migrations/002_add_zip_code_to_user_profiles.sql (zip_code in user_profiles)
---   - migrations/003_add_user_availability_policies.sql (RLS policies for user_availability)
---   - migrations/004_messaging.sql (conversations, messages, etc.)
---   - migrations/005_messages_image_url.sql (image_url on messages)
---   - migrations/006_user_reports.sql (user_reports table)
---   - migrations/007_roster_groups_icon_text.sql (roster_groups.icon as TEXT)
---   - migrations/008_messages_sender_id_nullable.sql (system messages)
---   - migrations/009_course_usage_function.sql (get_course_usage for admin)
+-- This file is the single source of truth for relational structure used by the
+-- backend (Supabase/Postgres). schema/migrations/*.sql are incremental deltas;
+-- keep them in sync when you add tables or columns, and refresh this file.
+--
+-- Merged from schema/migrations/ (apply order preserved in definitions below):
+--   002_add_zip_code_to_user_profiles.sql
+--   003_add_user_availability_policies.sql (RLS block at end of file)
+--   004_messaging.sql
+--   005_messages_image_url.sql
+--   005_conversation_participant_mute.sql (is_muted on conversation_participants)
+--   006_user_reports.sql
+--   007_roster_groups_icon_text.sql (roster_groups.icon TEXT)
+--   008_messages_sender_id_nullable.sql
+--   009_course_usage_function.sql
+--   010_ad_slots_valid_slot_type.sql (valid_slot_type incl. loading_screen, banner)
+--   011_broadcast_history.sql
+--   012_user_reports_app_support.sql (report_source, support_*, email_* on user_reports)
 --
 -- This is a COMPLETE schema that:
--- 1. Drops ALL existing tables
--- 2. Creates all tables fresh
--- 3. Includes all migrations and project tables (user_reports, ad_slots, etc.)
+-- 1. Drops ALL existing tables (and listed functions)
+-- 2. Creates all tables, views, triggers, and RLS fresh
+-- 3. Matches the cumulative state of every migration above
 --
--- Run this in Supabase SQL Editor for a clean setup
+-- Run this in Supabase SQL Editor only for a controlled reset / greenfield DB.
+--
+-- CHANGES IN v6.0:
+-- - user_reports: app_support columns + CHECK (user_vs_user vs app_support targets)
+-- - Documented full migration index in header; conversation is_muted + broadcast_history comments
 --
 -- CHANGES IN v5.9:
 -- - Added user_reports table (admin mediation of reported issues)
@@ -78,7 +89,7 @@ DROP TABLE IF EXISTS message_read_receipts CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS conversation_participants CASCADE;
 DROP TABLE IF EXISTS conversations CASCADE;
-DROP TABLE IF EXISTS user_devices CASCADE;
+DROP TABLE IF EXISTS user_devices CASCADE; -- legacy name; current table is devices
 DROP TABLE IF EXISTS rate_limits CASCADE;
 DROP TABLE IF EXISTS analytics_events CASCADE;
 DROP TABLE IF EXISTS broadcast_history CASCADE;
@@ -882,29 +893,45 @@ CREATE INDEX idx_login_logs_user_id ON login_logs(user_id);
 CREATE INDEX idx_login_logs_attempted_at ON login_logs(attempted_at DESC);
 
 -- ============================================================================
--- 23b. USER_REPORTS TABLE (admin mediation)
+-- 23b. USER_REPORTS TABLE (admin mediation + Help & Support from mobile app)
 -- ============================================================================
+-- Merges migrations/006_user_reports.sql + 012_user_reports_app_support.sql
 CREATE TABLE user_reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reported_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     reason VARCHAR(100) NOT NULL,
     description TEXT,
     status VARCHAR(30) NOT NULL DEFAULT 'pending',
     admin_notes TEXT,
     resolved_at TIMESTAMPTZ,
     resolved_by UUID REFERENCES users(id),
+    report_source VARCHAR(20) NOT NULL DEFAULT 'user_vs_user',
+    support_category VARCHAR(30),
+    support_subject VARCHAR(200),
+    email_delivered BOOLEAN NOT NULL DEFAULT false,
+    email_error TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT valid_report_status CHECK (status IN ('pending', 'reviewing', 'resolved', 'dismissed'))
+    CONSTRAINT valid_report_status CHECK (status IN ('pending', 'reviewing', 'resolved', 'dismissed')),
+    CONSTRAINT user_reports_source_target_ck CHECK (
+        (report_source = 'user_vs_user' AND reported_user_id IS NOT NULL)
+        OR
+        (report_source = 'app_support' AND reported_user_id IS NULL)
+    )
 );
 
 CREATE INDEX idx_user_reports_reporter ON user_reports(reporter_id);
 CREATE INDEX idx_user_reports_reported_user ON user_reports(reported_user_id);
 CREATE INDEX idx_user_reports_status ON user_reports(status);
 CREATE INDEX idx_user_reports_created ON user_reports(created_at DESC);
+CREATE INDEX idx_user_reports_report_source ON user_reports(report_source);
 
-COMMENT ON TABLE user_reports IS 'User-reported issues for admin mediation';
+COMMENT ON TABLE user_reports IS 'User reports for admin; report_source user_vs_user or app_support (Help & Support)';
+COMMENT ON COLUMN user_reports.report_source IS 'user_vs_user = report another user; app_support = Help & Support from mobile';
+COMMENT ON COLUMN user_reports.support_category IS 'For app_support: bug_report | feedback | support';
+COMMENT ON COLUMN user_reports.support_subject IS 'For app_support: user-visible subject line';
+COMMENT ON COLUMN user_reports.email_delivered IS 'For app_support: whether email delivery to ops inbox succeeded';
 
 -- ============================================================================
 -- 24. NOTIFICATIONS TABLE
@@ -950,6 +977,8 @@ CREATE TABLE broadcast_history (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_broadcast_history_created_at ON broadcast_history(created_at DESC);
+
+COMMENT ON TABLE broadcast_history IS 'Admin broadcast push notifications sent to all users (for history UI).';
 
 -- ============================================================================
 -- 25. ANALYTICS_EVENTS TABLE
@@ -1207,11 +1236,14 @@ CREATE TABLE conversation_participants (
     joined_at TIMESTAMPTZ DEFAULT NOW(),
     left_at TIMESTAMPTZ,
     last_read_at TIMESTAMPTZ,
+    is_muted BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT unique_conversation_participant UNIQUE (conversation_id, user_id)
 );
 
 CREATE INDEX idx_conversation_participants_conversation ON conversation_participants(conversation_id);
 CREATE INDEX idx_conversation_participants_user ON conversation_participants(user_id);
+
+COMMENT ON COLUMN conversation_participants.is_muted IS 'When true, user chose Mute; unread counts exclude this conversation.';
 
 -- ============================================================================
 -- 37. MESSAGES TABLE
@@ -1560,9 +1592,9 @@ CREATE POLICY user_availability_select_friends ON user_availability
 -- SCHEMA COMPLETE
 -- ============================================================================
 --
--- Version: 5.8 (All SQL Merged)
--- Last Updated: February 12, 2026
--- Total Tables: 38
+-- Version: 6.0 (All migrations represented in this file)
+-- Last Updated: March 2026
+-- Total Tables: 38 (+ views, functions, triggers, RLS as above)
 -- 
 -- Core Tables:
 --   1. users - User accounts (with onboarding tracking fields)
@@ -1612,19 +1644,14 @@ CREATE POLICY user_availability_select_friends ON user_availability
 --   36. conversation_participants - Conversation membership
 --   37. messages - Chat messages (sender_id nullable for system messages)
 --   38. message_read_receipts - Read receipts for messages
---   23b. user_reports - User-reported issues for admin mediation
+--   23b. user_reports - User reports + Help & Support (report_source, support_*)
+--   24b. broadcast_history - Admin push broadcast log
 --   20b. ad_slots - 4 ad placements (Sign in, Chatting, Tee time type, Calendar)
 --
--- Migrations Included (all merged from schema/migrations/*.sql):
---   - 002: zip_code column on user_profiles
---   - 003: user_availability RLS policies (select/insert/update/delete own, select friends via friendships)
---   - 004: conversations, conversation_participants, messages, message_read_receipts
---   - blocked_users table (user blocking)
---   - cancellation_confirmed reason in social_rate_logs
---   - check_in_reminder_sent column in tee_times
---   - deadline_notification_sent column in invites
---   - user_availability table (weekly scheduling preferences)
---   - onboarding tracking (backend state management)
---   - distance_radius column in tee_times (for Open invites)
+-- Migrations represented (see file header for filenames):
+--   002 zip_code · 003 user_availability RLS · 004 messaging core · 005 image_url ·
+--   005 is_muted · 006 user_reports · 007 roster icon TEXT · 008 nullable sender ·
+--   009 get_course_usage · 010 ad slot_type check · 011 broadcast_history · 012 app_support
+-- Plus tables/columns elsewhere in this file: blocked_users, onboarding, tee_time columns, etc.
 --
 -- ============================================================================

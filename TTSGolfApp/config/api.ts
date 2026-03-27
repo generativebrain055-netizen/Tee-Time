@@ -195,6 +195,10 @@ export const API_ENDPOINTS: ApiEndpoints = {
     `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}/convert-to-group`,
   MESSAGES_DELETE_MESSAGE: (conversationId: string, messageId: string) =>
     `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}`,
+  MESSAGES_CONVERSATION_MUTE: (id: string) =>
+    `${API_URL}/api/messages/conversations/${id}/mute`,
+  MESSAGES_CONVERSATION_LEAVE: (id: string) =>
+    `${API_URL}/api/messages/conversations/${id}/leave`,
   // Health
   HEALTH: `${API_URL}/health`,
   // Support
