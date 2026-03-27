@@ -140,18 +140,100 @@ class FriendRepository {
     }
   }
 
+  /**
+   * Create friendships + roster links after accept (idempotent: ignores duplicate friendship rows).
+   */
+  async applyAcceptedFriendSideEffects(request) {
+    const logger = require("../config/logger");
+    const { sender_id: senderId, receiver_id: receiverId } = request;
+
+    const { error: friendshipError } = await supabaseAdmin
+      .from("friendships")
+      .insert([
+        { user_id: senderId, friend_id: receiverId },
+        { user_id: receiverId, friend_id: senderId },
+      ]);
+
+    if (friendshipError && friendshipError.code !== "23505") throw friendshipError;
+
+    try {
+      const { data: receiverRosterEntry } = await supabaseAdmin
+        .from("roster")
+        .select("id")
+        .eq("user_id", receiverId)
+        .eq("contact_user_id", senderId)
+        .maybeSingle();
+
+      if (!receiverRosterEntry) {
+        await rosterRepository.addToRoster(receiverId, {
+          contactUserId: senderId,
+        });
+      }
+
+      const { data: senderRosterEntry } = await supabaseAdmin
+        .from("roster")
+        .select("id")
+        .eq("user_id", senderId)
+        .eq("contact_user_id", receiverId)
+        .maybeSingle();
+
+      if (!senderRosterEntry) {
+        await rosterRepository.addToRoster(senderId, {
+          contactUserId: receiverId,
+        });
+      }
+    } catch (rosterError) {
+      logger.warn("Failed to add friend to roster after accepting request", {
+        senderId,
+        receiverId,
+        error: rosterError?.message,
+      });
+    }
+  }
+
   // Respond to friend request - COMPLEX: needs transaction
   async respondToRequest(requestId, receiverId, status) {
     try {
       const logger = require("../config/logger");
-      
+
       logger.info("Responding to friend request", {
         requestId,
         receiverId,
         status,
       });
 
-      // Update request status
+      const { data: existing, error: fetchError } = await supabaseAdmin
+        .from("friend_requests")
+        .select("*")
+        .eq("id", requestId)
+        .eq("receiver_id", receiverId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!existing) {
+        const notFoundError = new Error(
+          "Friend request not found or you are not the recipient",
+        );
+        notFoundError.statusCode = 404;
+        throw notFoundError;
+      }
+
+      if (existing.status === "accepted" && status === "accepted") {
+        await this.applyAcceptedFriendSideEffects(existing);
+        return { request: existing, alreadyAccepted: true };
+      }
+      if (existing.status === "declined" && status === "declined") {
+        return { request: existing, alreadyAccepted: false };
+      }
+      if (existing.status !== "pending") {
+        const conflict = new Error(
+          `This friend request was already ${existing.status}`,
+        );
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+
       const { data: updatedRows, error: updateError } = await supabaseAdmin
         .from("friend_requests")
         .update({
@@ -172,16 +254,13 @@ class FriendRepository {
         });
         throw updateError;
       }
-      
+
       if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
-        logger.warn("Friend request not found or already responded", {
-          requestId,
-          receiverId,
-          status,
-        });
-        const notFoundError = new Error("Request not found or already responded");
-        notFoundError.statusCode = 404;
-        throw notFoundError;
+        const race = new Error(
+          "Request was updated by another action; try refreshing.",
+        );
+        race.statusCode = 409;
+        throw race;
       }
       if (updatedRows.length > 1) {
         logger.error("Multiple friend request rows updated unexpectedly", {
@@ -200,61 +279,11 @@ class FriendRepository {
         senderId: request.sender_id,
       });
 
-      // If accepted, create bidirectional friendship and add to roster
       if (status === "accepted") {
-        const { error: friendshipError } = await supabaseAdmin
-          .from("friendships")
-          .insert([
-            { user_id: request.sender_id, friend_id: request.receiver_id },
-            { user_id: request.receiver_id, friend_id: request.sender_id },
-          ]);
-
-        if (friendshipError && friendshipError.code !== "23505")
-          throw friendshipError;
-
-        // Add each user to the other's roster if not already present
-        try {
-          // Check if sender is already in receiver's roster
-          const { data: receiverRosterEntry } = await supabaseAdmin
-            .from("roster")
-            .select("id")
-            .eq("user_id", request.receiver_id)
-            .eq("contact_user_id", request.sender_id)
-            .maybeSingle();
-
-          if (!receiverRosterEntry) {
-            await rosterRepository.addToRoster(request.receiver_id, {
-              contactUserId: request.sender_id,
-            });
-          }
-
-          // Check if receiver is already in sender's roster
-          const { data: senderRosterEntry } = await supabaseAdmin
-            .from("roster")
-            .select("id")
-            .eq("user_id", request.sender_id)
-            .eq("contact_user_id", request.receiver_id)
-            .maybeSingle();
-
-          if (!senderRosterEntry) {
-            await rosterRepository.addToRoster(request.sender_id, {
-              contactUserId: request.receiver_id,
-            });
-          }
-        } catch (rosterError) {
-          // Log but don't fail the friend request acceptance if roster add fails
-          // (e.g., duplicate key or other non-critical error)
-          const logger = require("../config/logger");
-          logger.warn("Failed to add friend to roster after accepting request", {
-            requestId,
-            senderId: request.sender_id,
-            receiverId: request.receiver_id,
-            error: rosterError?.message,
-          });
-        }
+        await this.applyAcceptedFriendSideEffects(request);
       }
 
-      return request;
+      return { request, alreadyAccepted: false };
     } catch (error) {
       handleError(error, "respondToRequest");
     }

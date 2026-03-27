@@ -32,6 +32,10 @@ const handleServiceError = (res, err, fallbackMessage) => {
   if (err.name === 'RosterServiceError') {
     return error(res, err.message, err.statusCode, err.code);
   }
+  const sc = err.statusCode;
+  if (sc >= 400 && sc < 500 && err.message) {
+    return error(res, err.message, sc, err.code || null);
+  }
   logger.error(`${fallbackMessage}:`, err);
   return error(res, fallbackMessage);
 };

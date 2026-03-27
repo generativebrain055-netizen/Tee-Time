@@ -72,6 +72,8 @@ const handleError = (error, operation) => {
   err.details = error.details;
   err.hint = error.hint;
   err.constraint = error.constraint;
+  if (error.statusCode != null) err.statusCode = error.statusCode;
+  if (error.isOperational != null) err.isOperational = error.isOperational;
   throw err;
 };
 

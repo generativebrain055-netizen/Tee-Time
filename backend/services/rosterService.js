@@ -658,6 +658,18 @@ async function moveMember(
   isOnDeck,
   newPosition,
 ) {
+  const hasGroupUpdate = targetGroupId !== undefined;
+  const hasDeckUpdate = typeof isOnDeck === "boolean";
+  const hasPosUpdate =
+    typeof newPosition === "number" && Number.isFinite(newPosition);
+  if (!hasGroupUpdate && !hasDeckUpdate && !hasPosUpdate) {
+    throw new RosterServiceError(
+      "Provide targetGroupId, isOnDeck, and/or newPosition",
+      "VALIDATION",
+      400,
+    );
+  }
+
   const before = await rosterRepository.getRosterEntry(userId, rosterId);
   if (!before) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);

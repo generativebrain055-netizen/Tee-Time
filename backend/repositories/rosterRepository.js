@@ -219,8 +219,10 @@ class RosterRepository {
         .select(
           `
           *,
-          users (first_name, last_name, username),
-          user_profiles (avatar_url)
+          users!roster_contact_user_id_fkey (
+            first_name, last_name, username,
+            user_profiles (avatar_url)
+          )
         `
         )
         .eq("id", rosterId)
@@ -231,9 +233,11 @@ class RosterRepository {
       if (!data) return null;
 
       const user = data.users || {};
-      const profile = data.user_profiles?.[0] || {};
+      const profileData = user.user_profiles;
+      const profile = Array.isArray(profileData)
+        ? profileData[0] || {}
+        : profileData || {};
       delete data.users;
-      delete data.user_profiles;
 
       return {
         ...data,
@@ -630,8 +634,10 @@ class RosterRepository {
         .select(
           `
           *,
-          users (first_name, last_name, username, phone_number),
-          user_profiles (avatar_url, handicap, social_rate)
+          users!roster_contact_user_id_fkey (
+            first_name, last_name, username, phone_number,
+            user_profiles (avatar_url, handicap, social_rate)
+          )
         `
         )
         .eq("user_id", userId)
@@ -643,9 +649,11 @@ class RosterRepository {
 
       return (data || []).map((r) => {
         const user = r.users || {};
-        const profile = r.user_profiles?.[0] || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
         delete r.users;
-        delete r.user_profiles;
 
         return {
           ...r,
@@ -951,11 +959,27 @@ class RosterRepository {
 
   async moveMember(userId, rosterId, targetGroupId, isOnDeck, newPosition) {
     try {
-      const updates = {
-        group_id: targetGroupId,
-        is_on_deck: isOnDeck,
-        position: newPosition,
-      };
+      // Only send columns that were provided (undefined must not hit PostgREST).
+      // NOTE: `newPosition !== null` is true when newPosition is undefined — that used to run
+      // .gte("position", undefined) and break the request (500 / Failed to move member).
+      const updates = {};
+      if (targetGroupId !== undefined) {
+        updates.group_id = targetGroupId;
+      }
+      if (typeof isOnDeck === "boolean") {
+        updates.is_on_deck = isOnDeck;
+      }
+      if (typeof newPosition === "number" && Number.isFinite(newPosition)) {
+        updates.position = Math.floor(newPosition);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        const err = new Error(
+          "Nothing to update: provide targetGroupId, isOnDeck, and/or newPosition",
+        );
+        err.statusCode = 400;
+        throw err;
+      }
 
       const { data, error } = await supabaseAdmin
         .from("roster")
@@ -967,26 +991,32 @@ class RosterRepository {
 
       if (error) throw error;
 
-      // Reorder other members if needed - manually since .raw() is not supported
-      if (newPosition !== null) {
-        // Fetch items that need shifting
-        const { data: itemsToShift } = await supabaseAdmin
+      const positionForShift =
+        typeof updates.position === "number" ? updates.position : null;
+      const deckForShift =
+        typeof updates.is_on_deck === "boolean"
+          ? updates.is_on_deck
+          : data.is_on_deck;
+
+      if (positionForShift !== null) {
+        const { data: itemsToShift, error: shiftErr } = await supabaseAdmin
           .from("roster")
           .select("id, position")
           .eq("user_id", userId)
           .neq("id", rosterId)
-          .gte("position", newPosition)
-          .eq("is_on_deck", isOnDeck);
+          .gte("position", positionForShift)
+          .eq("is_on_deck", deckForShift);
+
+        if (shiftErr) throw shiftErr;
 
         if (itemsToShift && itemsToShift.length > 0) {
-          // Update efficiently (in parallel)
           await Promise.all(
             itemsToShift.map((item) =>
               supabaseAdmin
                 .from("roster")
                 .update({ position: item.position + 1 })
-                .eq("id", item.id)
-            )
+                .eq("id", item.id),
+            ),
           );
         }
       }

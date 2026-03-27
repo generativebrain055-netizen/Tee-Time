@@ -154,10 +154,18 @@ class FriendController {
                 return res.status(400).json({ success: false, message: "Invalid response" });
             }
 
-            const request = await friendRepository.respondToRequest(requestId, userId, response);
-            
-            // If accepted, notify the original sender
-            if (response === 'accepted' && request.sender_id) {
+            const { request, alreadyAccepted } = await friendRepository.respondToRequest(
+                requestId,
+                userId,
+                response,
+            );
+
+            // Notify sender only on first accept (skip idempotent retries)
+            if (
+                response === "accepted" &&
+                request.sender_id &&
+                !alreadyAccepted
+            ) {
                 await notificationService.notifyFriendRequestAccepted(request.sender_id, {
                     id: userId,
                     firstName: req.user.firstName,
