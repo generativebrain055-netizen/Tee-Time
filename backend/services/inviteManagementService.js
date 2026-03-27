@@ -11,6 +11,7 @@ const rosterRepository = require("../repositories/rosterRepository");
 const notificationService = require("./notificationService");
 const logger = require("../config/logger");
 const { sendInviteSms } = require("../controllers/invite/smsService");
+const { INVITE_TYPES } = require("../controllers/invite/constants");
 
 class InviteManagementService {
   /**
@@ -34,7 +35,7 @@ class InviteManagementService {
       );
 
       // Handle based on invite type
-      if (teeTime.invite_type === 'roster') {
+      if (teeTime.invite_type === 'roster' || teeTime.invite_type === 'manual') {
         await this.handleRosterCancellation(teeTime);
       } else if (teeTime.invite_type === 'fcfs') {
         await this.handleFCFSCancellation(teeTime);
@@ -132,6 +133,57 @@ class InviteManagementService {
     }
 
     logger.info(`Notified ${waitlistUsers.length} waitlist + ${pendingUsers.length} pending users about spot opening`);
+  }
+
+  /**
+   * When one invitee declines, re-send tee time invite notifications to other still-pending invitees
+   * (FCFS / open parallel invites). Ensures the remaining person's feed still shows an active invite card.
+   */
+  async notifyOtherPendingInviteesAfterDecline(teeTimeId, decliningUserId) {
+    try {
+      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
+      if (!teeTime) return;
+
+      const parallel =
+        teeTime.invite_type === INVITE_TYPES.FCFS ||
+        teeTime.invite_type === INVITE_TYPES.OPEN;
+      if (!parallel) return;
+
+      const organizer = {
+        id: teeTime.creator_id,
+        firstName: teeTime.first_name,
+        lastName: teeTime.last_name,
+      };
+
+      const pendingRows = await inviteRepository.getPendingInviteUsers(teeTimeId);
+      for (const row of pendingRows) {
+        if (!row.invitee_user_id || row.invitee_user_id === decliningUserId) {
+          continue;
+        }
+        try {
+          await notificationService.notifyTeeTimeInvite(
+            row.invitee_user_id,
+            {
+              id: teeTime.id,
+              date: teeTime.tee_date,
+              time: teeTime.tee_time,
+              courseName: teeTime.course_name,
+              maxPlayers: teeTime.max_players,
+            },
+            organizer,
+            row.expires_at || null,
+            row.id,
+          );
+        } catch (err) {
+          logger.error(
+            `Failed to re-notify pending invitee ${row.invitee_user_id} after decline:`,
+            err?.message || err,
+          );
+        }
+      }
+    } catch (error) {
+      logger.error("notifyOtherPendingInviteesAfterDecline error:", error);
+    }
   }
 
   /**
@@ -266,8 +318,7 @@ class InviteManagementService {
         const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
         if (!teeTime) continue;
 
-        if (teeTime.invite_type === 'roster') {
-          // For roster: try to activate next invite or notify about On-Deck
+        if (teeTime.invite_type === 'roster' || teeTime.invite_type === 'manual') {
           await this.handleRosterCancellation(teeTime);
         } else if (teeTime.invite_type === 'fcfs') {
           // For FCFS: check if tee time is not filled and notify organizer

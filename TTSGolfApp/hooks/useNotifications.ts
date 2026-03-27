@@ -283,6 +283,11 @@ export function getNotificationNavigation(item: AppNotification): {
       return { screen: "Profile" };
 
     case "roster_add":
+    case "roster_removed":
+    case "group_updated":
+    case "group_deleted":
+    case "on_deck_added":
+    case "on_deck_removed":
       return item.data?.ownerId
         ? { screen: "FriendProfile", params: { userId: item.data.ownerId } }
         : { screen: null };

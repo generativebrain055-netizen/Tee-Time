@@ -152,7 +152,7 @@ class FriendRepository {
       });
 
       // Update request status
-      const { data: request, error: updateError } = await supabaseAdmin
+      const { data: updatedRows, error: updateError } = await supabaseAdmin
         .from("friend_requests")
         .update({
           status,
@@ -161,8 +161,7 @@ class FriendRepository {
         .eq("id", requestId)
         .eq("receiver_id", receiverId)
         .eq("status", "pending")
-        .select()
-        .single();
+        .select();
 
       if (updateError) {
         logger.error("Error updating friend request status", {
@@ -174,14 +173,25 @@ class FriendRepository {
         throw updateError;
       }
       
-      if (!request) {
+      if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
         logger.warn("Friend request not found or already responded", {
           requestId,
           receiverId,
           status,
         });
-        throw new Error("Request not found or already responded");
+        const notFoundError = new Error("Request not found or already responded");
+        notFoundError.statusCode = 404;
+        throw notFoundError;
       }
+      if (updatedRows.length > 1) {
+        logger.error("Multiple friend request rows updated unexpectedly", {
+          requestId,
+          receiverId,
+          status,
+          updatedCount: updatedRows.length,
+        });
+      }
+      const request = updatedRows[0];
 
       logger.info("Friend request status updated successfully", {
         requestId,

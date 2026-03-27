@@ -53,7 +53,8 @@ class InviteController {
 
             if (type === INVITE_TYPES.FCFS) {
                 return createFCFSInvites(req, res, teeTime, invitees);
-            } else if (type === INVITE_TYPES.ROSTER) {
+            } else if (type === INVITE_TYPES.ROSTER || type === INVITE_TYPES.MANUAL) {
+                // Manual uses the same initial-active + backup queue as roster
                 return createRosterInvites(req, res, teeTime, invitees, responseWindow);
             } else if (type === INVITE_TYPES.OPEN) {
                 // Open invites don't need specific invites - tee time is posted to community board

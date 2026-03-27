@@ -218,13 +218,13 @@ class InviteRepository {
 
       if (error) throw error;
 
-      // Roster backups are intentionally created as pending with expires_at = null
-      // and should remain hidden until explicitly activated (expires_at gets set).
+      // Roster / manual backups: pending with expires_at = null until activated
       const visibleInvites = (data || []).filter((invite) => {
         const teeTime = invite.tee_times || {};
-        const isRosterInvite = teeTime.invite_type === "roster";
+        const isSequentialQueue =
+          teeTime.invite_type === "roster" || teeTime.invite_type === "manual";
         const hasExpiry = !!invite.expires_at;
-        return !isRosterInvite || hasExpiry;
+        return !isSequentialQueue || hasExpiry;
       });
 
       return visibleInvites.map((invite) => {
@@ -1154,7 +1154,7 @@ class InviteRepository {
     try {
       const { data, error } = await supabaseAdmin
         .from("invites")
-        .select("id, invitee_user_id, invitee_phone, invitee_name")
+        .select("id, invitee_user_id, invitee_phone, invitee_name, expires_at")
         .eq("tee_time_id", teeTimeId)
         .eq("status", "pending")
         .order("position", { ascending: true });

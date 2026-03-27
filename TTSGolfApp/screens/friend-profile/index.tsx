@@ -58,7 +58,13 @@ function FriendProfileScreen({ navigation, route }: Props) {
     handleMessage,
   } = useFriendProfile(userId, initialUser);
 
-  const handleBack = useCallback(() => navigation.goBack(), [navigation]);
+  const handleBack = useCallback(() => {
+    if (typeof navigation?.canGoBack === "function" && navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("Home");
+  }, [navigation]);
 
   const onMessage = useCallback(() => {
     if (!profile) return;

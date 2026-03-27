@@ -68,6 +68,11 @@ export function useNotificationActions({
           navigation?.navigate("Profile");
           break;
         case "roster_add":
+        case "roster_removed":
+        case "group_updated":
+        case "group_deleted":
+        case "on_deck_added":
+        case "on_deck_removed":
           if (item.data?.ownerId)
             navigation?.navigate("FriendProfile", {
               userId: item.data.ownerId,

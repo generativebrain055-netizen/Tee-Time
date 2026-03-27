@@ -1,5 +1,6 @@
 const draftService = require("../services/draftService");
 const rosterRepository = require("../repositories/rosterRepository");
+const rosterService = require("../services/rosterService");
 const friendRepository = require("../repositories/friendRepository");
 const userRepository = require("../repositories/userRepository");
 const rosterNotificationService = require("../services/rosterNotificationService");
@@ -178,8 +179,8 @@ class DraftController {
         contactUserId: userId,
       });
 
-      // Set as on-deck
-      await rosterRepository.toggleOnDeck(scannerId, entry.id, true);
+      // Set as on-deck (service sends availability notification)
+      await rosterService.toggleOnDeck(scannerId, entry.id, true);
 
       // Fetch scanner details
       const scanner = await userRepository.findById(scannerId);
@@ -244,7 +245,7 @@ class DraftController {
           });
           // Also set reverse entry as On-Deck so both see each other
           if (reverseEntry) {
-            await rosterRepository.toggleOnDeck(userId, reverseEntry.id, true);
+            await rosterService.toggleOnDeck(userId, reverseEntry.id, true);
           }
           logger.info(
             `Automatically created mutual roster entry for user ${userId} -> ${scannerId}`

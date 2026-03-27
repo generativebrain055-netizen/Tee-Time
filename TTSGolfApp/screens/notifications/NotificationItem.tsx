@@ -55,6 +55,11 @@ const getNotificationIcon = (notifType?: string) => {
     case "friend_request":
     case "friend_accepted":
     case "roster_add":
+    case "roster_removed":
+    case "group_updated":
+    case "group_deleted":
+    case "on_deck_added":
+    case "on_deck_removed":
       return <Users size={20} color={COLORS.primary} />;
     case "tee_time_invite":
     case "tee_time_response":

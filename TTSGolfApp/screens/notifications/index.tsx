@@ -25,7 +25,7 @@ import { logger } from "../../utils/logger";
 import { formatRemainingClock } from "../../utils/formatting";
 
 type TabType = 'activity' | 'invites';
-type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled';
+type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled' | 'group_updated' | 'group_deleted' | 'roster_removed' | 'on_deck_added' | 'on_deck_removed';
 
 interface CategorySection {
     title: string;
@@ -113,7 +113,14 @@ export default function NotificationsScreen({ navigation }: any) {
                     unfilledSlotAlert: true,
                 });
             }
-        } else if (dataType === "roster_add") {
+        } else if (
+            dataType === "roster_add" ||
+            dataType === "roster_removed" ||
+            dataType === "group_updated" ||
+            dataType === "group_deleted" ||
+            dataType === "on_deck_added" ||
+            dataType === "on_deck_removed"
+        ) {
             const d = item.data as Record<string, unknown> | undefined;
             if (d?.ownerId) {
                 navigation?.navigate("FriendProfile", {
@@ -270,6 +277,11 @@ export default function NotificationsScreen({ navigation }: any) {
             { key: 'tee_time_response', label: 'Invite Responses' },
             { key: 'player_cancelled', label: 'Player Cancelled' },
             { key: 'roster_add', label: 'Roster Adds' },
+            { key: 'group_updated', label: 'Group Updated' },
+            { key: 'group_deleted', label: 'Group Deleted' },
+            { key: 'roster_removed', label: 'Removed from Roster' },
+            { key: 'on_deck_added', label: 'On-Deck (added)' },
+            { key: 'on_deck_removed', label: 'On-Deck (removed)' },
             { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
             { key: 'waiver_wire', label: 'Waiver Wire' },
         ];
@@ -304,7 +316,9 @@ export default function NotificationsScreen({ navigation }: any) {
             // Activity tab: responses, group invite accepted, waiver wire, player cancelled (organizer)
             filtered = notifs.filter(n => {
                 const t = getDataType(n);
-                return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire' || t === 'player_cancelled';
+                return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire' || t === 'player_cancelled'
+                    || t === 'group_updated' || t === 'group_deleted' || t === 'roster_removed'
+                    || t === 'on_deck_added' || t === 'on_deck_removed';
             });
         }
 
@@ -338,6 +352,11 @@ export default function NotificationsScreen({ navigation }: any) {
             else if (type === 'group_invite_accepted') title = 'Group Invitations';
             else if (type === 'waiver_wire') title = 'Waiver Wire Posts';
             else if (type === 'player_cancelled') title = 'Player Cancelled';
+            else if (type === 'group_updated') title = 'Group Updated';
+            else if (type === 'group_deleted') title = 'Group Deleted';
+            else if (type === 'roster_removed') title = 'Removed from Roster';
+            else if (type === 'on_deck_added') title = 'On-Deck availability';
+            else if (type === 'on_deck_removed') title = 'On-Deck removed';
             else title = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
             return {
@@ -916,7 +935,9 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const activityCount = notifications.filter(n => {
         const t = getDataType(n);
-        return t === "tee_time_response" || t === "waiver_wire";
+        return t === "tee_time_response" || t === "waiver_wire" || t === "group_invite_accepted" || t === "player_cancelled"
+            || t === "group_updated" || t === "group_deleted" || t === "roster_removed"
+            || t === "on_deck_added" || t === "on_deck_removed";
     }).length;
 
     const typeFilterOptions = getTypeFilterOptions(activeTab);

@@ -24,7 +24,7 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
           resizeMode="cover"
         />
       )}
-      <View style={{ position: 'absolute', top: topInset + 8, left: 16 }}>
+      <View style={{ position: 'absolute', top: topInset + 8, left: 16, zIndex: 30, elevation: 30 }}>
         <TouchableOpacity
           style={{
             width: 36,
@@ -33,8 +33,11 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
             backgroundColor: 'rgba(0,0,0,0.3)',
             justifyContent: 'center',
             alignItems: 'center',
+            zIndex: 30,
+            elevation: 30,
           }}
           onPress={onBack}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <ArrowLeft size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -48,7 +51,7 @@ const ProfileBanner = memo(({ avatar, initials, headerImageUri, topInset, onBack
       right: 0,
       alignItems: 'center',
       zIndex: 10,
-    }}>
+    }} pointerEvents="none">
       {avatar ? (
         <Image
           key={avatar}

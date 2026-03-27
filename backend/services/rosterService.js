@@ -23,6 +23,16 @@ const VALID_SORT_OPTIONS = [
   "membership",
 ];
 
+/** Group fields that members should be notified about (not sort-only changes). */
+const GROUP_UPDATE_NOTIFY_FIELDS = [
+  "name",
+  "description",
+  "color",
+  "icon",
+  "autoInvite",
+  "maxMembers",
+];
+
 /**
  * Custom error with code for business logic violations
  */
@@ -116,6 +126,91 @@ async function sendAddToRosterNotification(userId, entry) {
 }
 
 /**
+ * Notify a rostered user they were removed (fire-and-forget from removeFromRoster).
+ * @private
+ */
+async function sendRemovedFromRosterNotification(ownerUserId, removedEntry) {
+  const contactUserId = removedEntry.contact_user_id;
+  if (!contactUserId) return;
+  const owner = await userRepository.findById(ownerUserId);
+  if (!owner) return;
+  await notificationService.notifyRemovedFromRoster(contactUserId, owner);
+}
+
+/**
+ * @private
+ */
+async function sendOnDeckAvailabilityNotification(ownerUserId, entry, isOnDeck) {
+  const contactUserId = entry.contact_user_id;
+  if (!contactUserId) return;
+  const owner = await userRepository.findById(ownerUserId);
+  if (!owner) return;
+  await notificationService.notifyOnDeckAvailability(
+    contactUserId,
+    owner,
+    isOnDeck,
+    entry.id,
+  );
+}
+
+/**
+ * Notify all members of a roster group after the owner updates visible fields.
+ * @private
+ */
+async function sendGroupUpdatedNotifications(ownerUserId, groupId, updatedGroup) {
+  const memberIds = await rosterRepository.getContactUserIdsForGroup(
+    ownerUserId,
+    groupId,
+  );
+  if (!memberIds.length) return;
+  const owner = await userRepository.findById(ownerUserId);
+  if (!owner) return;
+  const groupName = updatedGroup.name || "Group";
+  for (const memberUserId of memberIds) {
+    if (memberUserId === ownerUserId) continue;
+    try {
+      await notificationService.notifyGroupUpdated(
+        memberUserId,
+        owner,
+        groupId,
+        groupName,
+      );
+    } catch (err) {
+      logger.error("Failed to notify group member of update", {
+        memberUserId,
+        groupId,
+        error: err.message,
+      });
+    }
+  }
+}
+
+/**
+ * Notify members after the owner deletes a roster group.
+ * @private
+ */
+async function sendGroupDeletedNotifications(ownerUserId, groupName, memberUserIds) {
+  if (!memberUserIds.length) return;
+  const owner = await userRepository.findById(ownerUserId);
+  if (!owner) return;
+  for (const memberUserId of memberUserIds) {
+    if (memberUserId === ownerUserId) continue;
+    try {
+      await notificationService.notifyGroupDeleted(
+        memberUserId,
+        owner,
+        groupName,
+      );
+    } catch (err) {
+      logger.error("Failed to notify group member of delete", {
+        memberUserId,
+        error: err.message,
+      });
+    }
+  }
+}
+
+/**
  * Remove a contact from the user's roster
  * @throws {RosterServiceError} If entry not found
  */
@@ -123,6 +218,11 @@ async function removeFromRoster(userId, rosterId) {
   const removed = await rosterRepository.removeFromRoster(userId, rosterId);
   if (!removed) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+  }
+  if (removed.contact_user_id) {
+    sendRemovedFromRosterNotification(userId, removed).catch((err) => {
+      logger.error("Failed to send roster removed notification:", err);
+    });
   }
   return removed;
 }
@@ -146,6 +246,13 @@ async function reorderRoster(userId, orderedIds) {
  * @throws {RosterServiceError} If entry not found
  */
 async function toggleOnDeck(userId, rosterId, isOnDeck) {
+  const before = await rosterRepository.getRosterEntry(userId, rosterId);
+  if (!before) {
+    throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+  }
+  if (Boolean(before.is_on_deck) === Boolean(isOnDeck)) {
+    return before;
+  }
   const updated = await rosterRepository.toggleOnDeck(
     userId,
     rosterId,
@@ -153,6 +260,13 @@ async function toggleOnDeck(userId, rosterId, isOnDeck) {
   );
   if (!updated) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+  }
+  if (updated.contact_user_id) {
+    sendOnDeckAvailabilityNotification(userId, updated, isOnDeck).catch(
+      (err) => {
+        logger.error("Failed to send on-deck availability notification:", err);
+      },
+    );
   }
   return updated;
 }
@@ -241,6 +355,14 @@ async function updateGroup(userId, groupId, data) {
     if (!group) {
       throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
     }
+    const shouldNotifyMembers = GROUP_UPDATE_NOTIFY_FIELDS.some(
+      (k) => data[k] !== undefined,
+    );
+    if (shouldNotifyMembers) {
+      sendGroupUpdatedNotifications(userId, groupId, group).catch((err) => {
+        logger.error("Failed to send group updated notifications:", err);
+      });
+    }
     return group;
   } catch (error) {
     if (error.code === "DUPLICATE_NAME") {
@@ -283,9 +405,25 @@ async function getAutoInviteMembers(userId, groupId) {
  * @throws {RosterServiceError} If group not found
  */
 async function deleteGroup(userId, groupId) {
+  const group = await rosterRepository.getGroupWithAccess(userId, groupId);
+  if (!group) {
+    throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+  const groupName = group.name || "Group";
+  const memberIds = await rosterRepository.getContactUserIdsForGroup(
+    userId,
+    groupId,
+  );
   const deleted = await rosterRepository.deleteGroup(userId, groupId);
   if (!deleted) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
+  }
+  if (memberIds.length) {
+    sendGroupDeletedNotifications(userId, groupName, memberIds).catch(
+      (err) => {
+        logger.error("Failed to send group deleted notifications:", err);
+      },
+    );
   }
   return deleted;
 }
@@ -500,6 +638,10 @@ async function moveMember(
   isOnDeck,
   newPosition,
 ) {
+  const before = await rosterRepository.getRosterEntry(userId, rosterId);
+  if (!before) {
+    throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+  }
   const updated = await rosterRepository.moveMember(
     userId,
     rosterId,
@@ -510,6 +652,18 @@ async function moveMember(
 
   if (!updated) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+  }
+
+  const onDeckChanged =
+    updated.contact_user_id &&
+    typeof isOnDeck === "boolean" &&
+    Boolean(before.is_on_deck) !== Boolean(isOnDeck);
+  if (onDeckChanged) {
+    sendOnDeckAvailabilityNotification(userId, updated, isOnDeck).catch(
+      (err) => {
+        logger.error("Failed to send on-deck availability notification:", err);
+      },
+    );
   }
 
   return updated;

@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
+const notificationService = require("./notificationService");
 
 /**
  * Service for handling roster-related notifications
@@ -68,36 +69,26 @@ class RosterNotificationService {
         throw trackError;
       }
 
-      // Build notification message
+      // Build notification message (uses notificationService for prefs + optional push)
       const ownerName = `${ownerUser.first_name || ''} ${ownerUser.last_name || ''}`.trim() || 'Someone';
       const title = 'Added to Roster';
-      const body = groupName 
+      const body = groupName
         ? `${ownerName} added you to their roster "${groupName}"`
         : `${ownerName} added you to their roster`;
-      
-      // Create in-app notification
-      const { error: notifError } = await supabaseAdmin
-        .from("notifications")
-        .insert({
-          user_id: contact_user_id,
-          type: "in_app",
-          channel: "roster",
-          title: title,
-          body: body,
-          data: { 
-            type: 'roster_add', 
-            ownerId: ownerUser.id, 
-            ownerName,
-            groupName,
-            rosterId
-          },
-          status: "delivered"
-        });
 
-      if (notifError) {
-        logger.error("Error creating in-app notification:", notifError.message);
-        throw notifError;
-      }
+      await notificationService.createNotification({
+        userId: contact_user_id,
+        title,
+        body,
+        data: {
+          type: 'roster_add',
+          ownerId: ownerUser.id,
+          ownerName,
+          groupName: groupName || null,
+          rosterId,
+        },
+        sendPush: true,
+      });
       
       logger.info(`Roster add notification sent to user ${contact_user_id} from ${ownerUser.id}`);
       

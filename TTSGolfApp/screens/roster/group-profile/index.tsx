@@ -61,7 +61,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     } = useGroupProfile(groupId, navigation);
 
     const handleBack = useCallback(() => {
-        navigation.goBack();
+        if (typeof navigation?.canGoBack === "function" && navigation.canGoBack()) {
+            navigation.goBack();
+            return;
+        }
+        navigation?.navigate("Home");
     }, [navigation]);
 
     const handleOpenOptions = useCallback(() => {
@@ -216,7 +220,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                             const res = await rosterApi.leaveGroup(groupId);
                             if (res.success) {
                                 toast.show({ message: "You've left the group", type: "success" });
-                                navigation.goBack();
+                                handleBack();
                             } else {
                                 Alert.alert("Error", "Failed to leave group");
                             }
@@ -227,7 +231,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 },
             ]
         );
-    }, [groupId, navigation, toast]);
+    }, [groupId, handleBack, toast]);
 
     const handleLeaveGroupFromSheet = useCallback(() => {
         setShowOptionsSheet(false);

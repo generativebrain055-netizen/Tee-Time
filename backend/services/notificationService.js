@@ -464,6 +464,99 @@ class NotificationService {
   }
 
   /**
+   * Notify a group member that the roster group was updated (name, details, etc.).
+   */
+  async notifyGroupUpdated(memberUserId, owner, groupId, groupName) {
+    const ownerName =
+      `${owner.firstName || owner.first_name || ""} ${
+        owner.lastName || owner.last_name || ""
+      }`.trim() || "Someone";
+    return this.createNotification({
+      userId: memberUserId,
+      title: "Group updated",
+      body: `${ownerName} updated the roster group "${groupName || "Group"}"`,
+      data: {
+        type: "group_updated",
+        groupId,
+        groupName: groupName || null,
+        ownerId: owner.id,
+        ownerName,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
+   * Notify a group member that the roster group was deleted.
+   */
+  async notifyGroupDeleted(memberUserId, owner, groupName) {
+    const ownerName =
+      `${owner.firstName || owner.first_name || ""} ${
+        owner.lastName || owner.last_name || ""
+      }`.trim() || "Someone";
+    return this.createNotification({
+      userId: memberUserId,
+      title: "Group deleted",
+      body: `${ownerName} deleted the roster group "${groupName || "Group"}"`,
+      data: {
+        type: "group_deleted",
+        groupName: groupName || null,
+        ownerId: owner.id,
+        ownerName,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
+   * Notify a user they were removed from someone else's roster.
+   */
+  async notifyRemovedFromRoster(memberUserId, owner) {
+    const ownerName =
+      `${owner.firstName || owner.first_name || ""} ${
+        owner.lastName || owner.last_name || ""
+      }`.trim() || "Someone";
+    return this.createNotification({
+      userId: memberUserId,
+      title: "Removed from roster",
+      body: `${ownerName} removed you from their roster`,
+      data: {
+        type: "roster_removed",
+        ownerId: owner.id,
+        ownerName,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
+   * Notify a roster contact that their On-Deck (availability) status was changed by the roster owner.
+   */
+  async notifyOnDeckAvailability(memberUserId, owner, isOnDeck, rosterId) {
+    const ownerName =
+      `${owner.firstName || owner.first_name || ""} ${
+        owner.lastName || owner.last_name || ""
+      }`.trim() || "Someone";
+    const title = isOnDeck ? "On-Deck availability" : "On-Deck updated";
+    const body = isOnDeck
+      ? `${ownerName} marked you as On-Deck — you may receive fill-in invites from their tee times.`
+      : `${ownerName} removed you from On-Deck.`;
+    return this.createNotification({
+      userId: memberUserId,
+      title,
+      body,
+      data: {
+        type: isOnDeck ? "on_deck_added" : "on_deck_removed",
+        ownerId: owner.id,
+        ownerName,
+        rosterId: rosterId || null,
+        isOnDeck: !!isOnDeck,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
    * Create roster add notification
    */
   async notifyAddedToRoster(userId, adder) {

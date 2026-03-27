@@ -333,22 +333,13 @@ const createRosterInvites = async (
       })),
     });
 
-    // Separate created invites into initial and backup based on position
-    // Note: position comes from order (1-indexed), so if initialInviteCount is 1, we want position <= 1
-    // initialInviteCount represents how many invites to send initially (e.g., if max_players=2, initialInviteCount=1)
-    const initialInvites = createdInvites
-      .filter((inv) => {
-        const pos = inv.position || 0;
-        // Position is 1-indexed, so we want positions 1 through initialInviteCount
-        return pos > 0 && pos <= initialInviteCount;
-      })
-      .sort((a, b) => (a.position || 0) - (b.position || 0));
-    const backupInvites = createdInvites
-      .filter((inv) => {
-        const pos = inv.position || 0;
-        return pos > initialInviteCount;
-      })
-      .sort((a, b) => (a.position || 0) - (b.position || 0));
+    // Initial vs backup for *notifications* must match DB rows: first N invites by roster order,
+    // same as initialInviteesData / backupInviteesData. Do not use pos>0 (that drops 0-based positions).
+    const sortedCreated = [...createdInvites].sort(
+      (a, b) => (a.position ?? 0) - (b.position ?? 0),
+    );
+    const initialInvites = sortedCreated.slice(0, initialInviteCount);
+    const backupInvites = sortedCreated.slice(initialInviteCount);
     
     invitesLogger.info("[INVITE] Separated invites into initial and backup", {
       event: "invites_separated",

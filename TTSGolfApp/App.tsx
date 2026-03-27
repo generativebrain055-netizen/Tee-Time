@@ -141,6 +141,7 @@ interface Navigation {
   navigate: (screen: ScreenName, params?: NavigationParams) => void;
   replace: (screen: ScreenName, params?: NavigationParams) => void;
   goBack: () => void;
+  canGoBack: () => boolean;
   reset: (options: {
     index: number;
     routes: Array<{ name: ScreenName; params?: NavigationParams }>;
@@ -237,6 +238,7 @@ export default function App(): React.ReactElement {
         setCurrentScreen(previousEntry.screen);
       }
     },
+    canGoBack: () => screenHistory.length > 1,
     reset: (options: {
       index: number;
       routes: Array<{ name: ScreenName; params?: NavigationParams }>;

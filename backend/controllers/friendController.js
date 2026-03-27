@@ -173,7 +173,8 @@ class FriendController {
             });
         } catch (error) {
             logger.error("Respond to request error:", error);
-            res.status(500).json({ success: false, message: error.message || "Failed to respond" });
+            const statusCode = error.statusCode || 500;
+            res.status(statusCode).json({ success: false, message: error.message || "Failed to respond" });
         }
     }
 

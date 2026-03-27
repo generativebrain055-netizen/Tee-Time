@@ -1294,6 +1294,35 @@ class RosterRepository {
       handleError(error, "getMemberProfile");
     }
   }
+
+  /**
+   * Distinct contact_user_id values in a roster group (for notifying members).
+   * @param {string} ownerUserId - Roster owner
+   * @param {string} groupId - roster_groups.id
+   * @returns {Promise<string[]>}
+   */
+  async getContactUserIdsForGroup(ownerUserId, groupId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("roster")
+        .select("contact_user_id")
+        .eq("user_id", ownerUserId)
+        .eq("group_id", groupId)
+        .not("contact_user_id", "is", null);
+
+      if (error) throw error;
+      const ids = [
+        ...new Set(
+          (data || [])
+            .map((r) => r.contact_user_id)
+            .filter(Boolean),
+        ),
+      ];
+      return ids;
+    } catch (error) {
+      handleError(error, "getContactUserIdsForGroup");
+    }
+  }
 }
 
 module.exports = new RosterRepository();

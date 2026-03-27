@@ -2,6 +2,7 @@ const inviteRepository = require("../repositories/inviteRepository");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const notificationService = require("./notificationService");
 const logger = require("../config/logger");
+const { processNextRosterInvite } = require("../controllers/invite/handlers/responseHandlers");
 
 /**
  * Invite Deadline Service
@@ -183,6 +184,11 @@ class FCFSDeadlineService {
             }
           }
 
+          if (teeTime.invite_type === "roster" || teeTime.invite_type === "manual") {
+            const responseWindow = teeTime.response_window || 2;
+            await processNextRosterInvite(teeTimeId, responseWindow);
+          }
+
           // For both FCFS and Roster: check if tee time is not filled and notify organizer
           // This gives organizer the option to select from On-Deck
           await this.checkAndNotifyOrganizerIfNotFilled(
@@ -248,8 +254,7 @@ class FCFSDeadlineService {
 
         // For roster invites, only count invites that have an active expires_at (currently being waited on)
         const activeInvites = pendingInvites.filter((inv) => {
-          if (inviteType === "roster") {
-            // For roster, only the invite with expires_at set is "active"
+          if (inviteType === "roster" || inviteType === "manual") {
             return inv.expires_at && new Date(inv.expires_at) > new Date();
           }
           // For FCFS, all pending invites are active

@@ -44,6 +44,12 @@ const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: stri
     { type: 'friend_accepted', label: 'Friend Request Accepted', description: 'When someone accepts your friend request' },
     { type: 'group_invite', label: 'Group Invites', description: 'When someone invites you to a roster group' },
     { type: 'group_invite_accepted', label: 'Group Invite Accepted', description: 'When someone accepts your group invitation' },
+    { type: 'group_updated', label: 'Group Updated', description: 'When someone updates a roster group you are in' },
+    { type: 'group_deleted', label: 'Group Deleted', description: 'When someone deletes a roster group you were in' },
+    { type: 'roster_removed', label: 'Removed from Roster', description: 'When someone removes you from their roster' },
+    { type: 'roster_add', label: 'Added to Roster', description: 'When someone adds you to their roster' },
+    { type: 'on_deck_added', label: 'On-Deck — marked available', description: 'When someone marks you as On-Deck on their roster' },
+    { type: 'on_deck_removed', label: 'On-Deck — removed', description: 'When someone removes you from On-Deck on their roster' },
     { type: 'waiver_wire', label: 'Availability (Matching Availability)', description: 'When roster members with matching availability post their availability' },
     { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
 ];

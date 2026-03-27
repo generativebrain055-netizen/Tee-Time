@@ -83,7 +83,11 @@ export default function UserProfileScreen({ navigation, route }: UserProfileScre
   const [requesting, setRequesting] = useState(false);
 
   const handleBack = useCallback(() => {
-    navigation?.goBack();
+    if (typeof navigation?.canGoBack === 'function' && navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation?.navigate('Home');
   }, [navigation]);
 
   useEffect(() => {
