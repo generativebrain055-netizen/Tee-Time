@@ -203,11 +203,7 @@ class RosterController {
       const members = await rosterService.getGroupMembers(req.user.id, req.params.id, req.query.sortBy);
       success(res, { members: formatter.formatRosterEntries(members || []) });
     } catch (err) {
-      if (err.code === 'ACCESS_DENIED') {
-        return error(res, err.message, 403);
-      }
-      logger.error('Get group members error:', err);
-      success(res, { members: [] });
+      handleServiceError(res, err, 'Failed to get group members');
     }
   }
 
@@ -280,7 +276,12 @@ class RosterController {
   // PUT /api/roster/:id/group
   async updateMemberGroup(req, res) {
     try {
-      const entry = await rosterService.updateMemberGroup(req.user.id, req.params.id, req.body.groupId);
+      const entry = await rosterService.updateMemberGroup(
+        req.user.id,
+        req.params.id,
+        req.body.groupId,
+        { removeFromGroupId: req.body.removeFromGroupId },
+      );
       success(res, { entry });
     } catch (err) {
       handleServiceError(res, err, 'Failed to update member group');

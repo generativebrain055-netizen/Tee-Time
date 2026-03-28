@@ -17,6 +17,10 @@ export interface RosterContact {
     username?: string;
   };
   notes?: string;
+  /** Group profile: set for the roster_groups owner row */
+  groupMemberRole?: "organizer";
+  /** Group profile: present when invite not yet accepted */
+  inviteStatus?: "pending";
 }
 
 export interface RosterGroup {

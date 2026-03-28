@@ -92,14 +92,23 @@ export const rosterApi = {
     ),
 
   /**
-   * Update member's group
+   * Update member's group. Pass removeFromGroupId when clearing membership for one group only (multi-group).
    */
-  updateMemberGroup: (rosterId: string, groupId: string | null) =>
+  updateMemberGroup: (
+    rosterId: string,
+    groupId: string | null,
+    removeFromGroupId?: string | null,
+  ) =>
     apiCall<{ success: boolean; entry: RosterContact }>(
       `${API_ENDPOINTS.ROSTER}/${rosterId}/group`,
       {
         method: "PUT",
-        body: JSON.stringify({ groupId }),
+        body: JSON.stringify({
+          groupId,
+          ...(removeFromGroupId != null && removeFromGroupId !== ""
+            ? { removeFromGroupId }
+            : {}),
+        }),
       },
     ),
 

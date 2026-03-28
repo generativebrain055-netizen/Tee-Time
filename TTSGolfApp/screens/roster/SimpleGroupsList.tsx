@@ -130,6 +130,16 @@ export default function SimpleGroupsList({ onGroupClick, navigation, refreshTrig
         if (refreshTrigger != null && refreshTrigger > 0) loadGroups();
     }, [refreshTrigger, loadGroups]);
 
+    // Refetch when returning from GroupProfile (or any push) so left/deleted groups disappear.
+    useEffect(() => {
+        const unsub = navigation?.addListener?.("focus", () => {
+            loadGroups();
+        });
+        return () => {
+            if (typeof unsub === "function") unsub();
+        };
+    }, [navigation, loadGroups]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await loadGroups();

@@ -116,14 +116,18 @@ export const useGroupsList = () => {
       });
 
       if (response.success) {
-        const newGroup = { ...response.group, memberCount: state.selectedMembers.length };
+        const totalMembers = state.selectedMembers.length + 1;
+        const newGroup = { ...response.group, memberCount: totalMembers };
         setState(prev => ({
           ...prev,
           groups: [...prev.groups, newGroup],
           showCreateModal: false,
           creating: false,
         }));
-        Alert.alert("Success", `Group "${state.newGroupName}" created with ${state.selectedMembers.length} members!`);
+        Alert.alert(
+          "Success",
+          `Group "${state.newGroupName}" created with ${totalMembers} members (including you).`,
+        );
       }
     } catch (error: any) {
       logger.error("[useGroupsList] Create group error", error);

@@ -6,6 +6,17 @@ const deviceRepository = require("../repositories/deviceRepository");
 /** Expo push tokens start with this prefix. Others are treated as FCM tokens. */
 const EXPO_PUSH_TOKEN_PREFIX = "ExponentPushToken[";
 
+/** Expo / FCM expect string key–value data payloads. */
+function stringifyPushData(data) {
+  const out = {};
+  if (!data || typeof data !== "object") return out;
+  for (const [k, v] of Object.entries(data)) {
+    if (v === undefined || v === null) continue;
+    out[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
+  }
+  return out;
+}
+
 /**
  * Notification Service
  * Handles creating in-app notifications and sending push via Expo and/or Firebase FCM.
@@ -24,6 +35,8 @@ class NotificationService {
       return { sent: 0, failed: 0 };
     }
 
+    const payload = stringifyPushData(data);
+
     const expoTokens = pushTokens.filter((t) => t && t.startsWith(EXPO_PUSH_TOKEN_PREFIX));
     const fcmTokens = pushTokens.filter((t) => t && typeof t === "string" && !t.startsWith(EXPO_PUSH_TOKEN_PREFIX));
 
@@ -31,13 +44,13 @@ class NotificationService {
     let failed = 0;
 
     if (expoTokens.length > 0) {
-      const expoResult = await this._sendExpoPush(expoTokens, title, body, data);
+      const expoResult = await this._sendExpoPush(expoTokens, title, body, payload);
       sent += expoResult.sent;
       failed += expoResult.failed;
     }
 
     if (fcmTokens.length > 0) {
-      const fcmResult = await this._sendFcmPush(fcmTokens, title, body, data);
+      const fcmResult = await this._sendFcmPush(fcmTokens, title, body, payload);
       sent += fcmResult.sent;
       failed += fcmResult.failed;
     }
@@ -193,6 +206,7 @@ class NotificationService {
    * @param {string} params.body - Notification body
    * @param {Object} params.data - Additional data (type, senderId, etc.)
    * @param {boolean} params.sendPush - Whether to also send push notification (default: false)
+   * @param {boolean} params.forceInApp - If true, always persist in-app row (ignores type in-app preference). Use for actionable invites.
    */
   async createNotification({
     userId,
@@ -201,6 +215,7 @@ class NotificationService {
     body,
     data = {},
     sendPush = false,
+    forceInApp = false,
   }) {
     try {
       if (!userId) {
@@ -213,9 +228,11 @@ class NotificationService {
       }
 
       const notificationType = data.type || "general";
-      
-      // Check if user has enabled in-app notifications for this type
-      const inAppEnabled = await this.checkNotificationPreference(userId, notificationType, 'inApp');
+
+      // Group invites must always create an in-app row so invitees can Accept/Decline even if they muted the type.
+      const inAppEnabled =
+        forceInApp ||
+        (await this.checkNotificationPreference(userId, notificationType, "inApp"));
       
       invitesLogger.info("[NOTIFICATION] Creating notification", {
         event: "notification_create_start",
@@ -430,8 +447,13 @@ class NotificationService {
    * Invitee sees "Group request" card with Accept/Decline.
    */
   async notifyGroupInvite(inviteeUserId, inviter, groupId, groupName) {
+    if (!inviter?.id) {
+      logger.error("notifyGroupInvite: inviter missing id", { inviteeUserId, groupId });
+      return null;
+    }
     const inviterName =
-      `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() || "Someone";
+      `${inviter.firstName || inviter.first_name || ""} ${inviter.lastName || inviter.last_name || ""}`.trim() ||
+      "Someone";
     return this.createNotification({
       userId: inviteeUserId,
       title: "Group invitation",
@@ -442,8 +464,14 @@ class NotificationService {
         groupName: groupName || null,
         inviterId: inviter.id,
         inviterName,
-        inviterAvatar: inviter.avatarUrl || inviter.avatar_url || null,
+        inviterAvatar:
+          inviter.avatarUrl ||
+          inviter.avatar_url ||
+          inviter.avatar ||
+          null,
       },
+      sendPush: true,
+      forceInApp: true,
     });
   }
 
@@ -460,6 +488,7 @@ class NotificationService {
         type: "group_invite_accepted",
         inviteeName: inviteeName || null,
       },
+      sendPush: true,
     });
   }
 

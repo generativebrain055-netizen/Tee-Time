@@ -243,6 +243,9 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     }, [navigation, groupId]);
 
     const handleMemberPress = useCallback((member: RosterContact) => {
+        if (currentUserId && String(member.contact?.userId) === String(currentUserId)) {
+            return;
+        }
         if (member.contact?.userId) {
             const c = member.contact;
             const name = c.name || "";
@@ -258,7 +261,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 },
             });
         }
-    }, [navigation]);
+    }, [navigation, currentUserId]);
 
     const handleRemoveMember = useCallback((member: RosterContact) => {
         const name = member.contact?.name || "this member";
@@ -273,7 +276,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     onPress: async () => {
                         try {
                             // Remove from group by setting group to null
-                            await rosterApi.updateMemberGroup(member.id, null);
+                            await rosterApi.updateMemberGroup(
+                                member.id,
+                                null,
+                                groupId,
+                            );
                             Alert.alert("Removed", `${name} has been removed from the group.`);
                             onRefresh();
                         } catch (error) {
@@ -345,6 +352,10 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
     const groupInitials = getGroupInitials(group.name);
     const avgHandicap = calculateAvgHandicap(members);
+    const displayMemberCount =
+        typeof group.memberCount === "number" && !Number.isNaN(group.memberCount)
+            ? group.memberCount
+            : members.length + 1;
 
     return (
         <View className="flex-1 bg-gray-50">
@@ -376,11 +387,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 <GroupInfo
                     name={group.name}
                     description={group.description}
-                    memberCount={members.length}
+                    memberCount={displayMemberCount}
                 />
 
                 <GroupStats
-                    memberCount={members.length}
+                    memberCount={displayMemberCount}
                     avgHandicap={avgHandicap}
                     upcomingCount={upcomingTeeTimes.length}
                 />

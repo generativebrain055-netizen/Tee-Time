@@ -322,16 +322,27 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                     inviteCount: memberUserIds.length,
                 });
 
-                // Invite selected members to join the new group.
-                // Fallback to direct add if invite endpoint fails for any reason.
+                // Invite selected members (in-app + push). Do not fall back to addMembersToGroup:
+                // direct add skips notifications and invitees never see Accept/Decline.
+                let successDetail = "";
                 try {
-                    await rosterApi.inviteToGroup(groupId, memberUserIds);
-                } catch (inviteErr) {
-                    logger.warn("[CreateGroupScreen] inviteToGroup failed, falling back to addMembersToGroup", inviteErr);
-                    await rosterApi.addMembersToGroup(groupId, memberUserIds);
+                    const inviteRes = await rosterApi.inviteToGroup(groupId, memberUserIds);
+                    const sent = inviteRes?.sent ?? 0;
+                    if (sent < memberUserIds.length) {
+                        logger.warn("[CreateGroupScreen] Some group invites were not delivered", {
+                            groupId,
+                            expected: memberUserIds.length,
+                            sent,
+                        });
+                        successDetail =
+                            "\n\nSome invitations may not have been delivered. Invite again from the group or check notification settings.";
+                    }
+                } catch (inviteErr: any) {
+                    logger.error("[CreateGroupScreen] inviteToGroup failed", inviteErr);
+                    successDetail = `\n\nInvitations could not be sent: ${inviteErr?.message || "Unknown error"}. Open the group and invite members again.`;
                 }
 
-                Alert.alert("Success", "Group created successfully", [
+                Alert.alert("Success", `Group created successfully.${successDetail}`, [
                     {
                         text: "OK",
                         onPress: () => {
@@ -574,7 +585,7 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                     <>
                 {/* Step 2: Group details - Figma 362x84 card: 58px avatar (tappable for camera/library), camera overlay, group name input */}
                 <View style={{ marginHorizontal: 20, marginTop: 16, marginBottom: 24 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", height: FIGMA.groupNameCardHeight, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: FIGMA.inputRadius, paddingLeft: 17, paddingRight: 18 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", minHeight: FIGMA.groupNameCardHeight, paddingVertical: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: FIGMA.inputRadius, paddingLeft: 17, paddingRight: 18 }}>
                         <TouchableOpacity onPress={handlePickGroupAvatar} style={{ position: "relative" }} activeOpacity={0.8}>
                             {groupAvatarUri ? (
                                 <>
@@ -586,7 +597,7 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                             ) : groupName.trim() ? (
                                 <>
                                     <View style={{ width: FIGMA.groupAvatarSize, height: FIGMA.groupAvatarSize, borderRadius: FIGMA.groupAvatarSize / 2, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center" }}>
-                                        <Text style={{ fontFamily: theme.fontFamily.medium, fontSize: 18, lineHeight: 28, color: "#FFFFFF" }}>{getGroupInitials(groupName)}</Text>
+                                        <Text style={{ fontFamily: theme.fontFamily.medium, fontSize: 18, lineHeight: 24, color: "#FFFFFF" }}>{getGroupInitials(groupName)}</Text>
                                     </View>
                                     <View style={{ position: "absolute", right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFFFFF", borderWidth: 1.2, borderColor: "#E4E4E4", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4.8 }, shadowOpacity: 0.14, shadowRadius: 9.12, elevation: 4 }}>
                                         <Camera size={12} color="#6D6D6D" strokeWidth={1.4} />
@@ -603,7 +614,17 @@ export default function CreateGroupScreen({ navigation, route }: any) {
                             onChangeText={setGroupName}
                             placeholder="Group name"
                             placeholderTextColor={FIGMA.groupNameLabel}
-                            style={{ flex: 1, marginLeft: 12, fontFamily: theme.fontFamily.medium, fontSize: 18, lineHeight: 28, color: FIGMA.groupNameValue, paddingVertical: 0 }}
+                            includeFontPadding={Platform.OS === "android" ? false : undefined}
+                            textAlignVertical={Platform.OS === "android" ? "center" : undefined}
+                            style={{
+                                flex: 1,
+                                marginLeft: 12,
+                                fontFamily: theme.fontFamily.medium,
+                                fontSize: 18,
+                                lineHeight: 24,
+                                color: FIGMA.groupNameValue,
+                                paddingVertical: Platform.OS === "ios" ? 10 : 8,
+                            }}
                             maxLength={50}
                         />
                     </View>

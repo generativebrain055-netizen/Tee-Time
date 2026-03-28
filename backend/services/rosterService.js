@@ -416,7 +416,8 @@ async function deleteGroup(userId, groupId) {
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
   }
-  if (!group.is_owner) {
+  // roster_groups.user_id is authoritative (avoids mismatch if is_owner were wrong).
+  if (String(group.user_id) !== String(userId)) {
     throw new RosterServiceError(
       "Only the group owner can delete this group",
       "ACCESS_DENIED",
@@ -443,11 +444,55 @@ async function deleteGroup(userId, groupId) {
 }
 
 /**
- * Get members of a group
+ * Build a roster-shaped row for group member list (organizer not on roster, or pending invitee).
+ */
+function rosterRowFromUserProfile(user, opts) {
+  const {
+    id,
+    position,
+    groupId,
+    groupCheck,
+    contactUserId,
+    extra = {},
+  } = opts;
+  const first = user?.first_name ?? null;
+  const last = user?.last_name ?? null;
+  return {
+    id,
+    position,
+    is_on_deck: false,
+    group_id: groupId,
+    group_name: groupCheck.name,
+    group_color: groupCheck.color,
+    contact_user_id: contactUserId,
+    contact_phone: null,
+    contact_email: null,
+    contact_name: null,
+    first_name: first,
+    last_name: last,
+    username: user?.username ?? null,
+    avatar_url: user?.avatar_url ?? null,
+    contact_handicap: null,
+    user_handicap: user?.handicap ?? null,
+    profile_social_rate: user?.social_rate ?? null,
+    location: user?.location ?? null,
+    home_course: user?.home_course ?? null,
+    times_played_together: null,
+    last_played_together: null,
+    invite_acceptance_rate: null,
+    club_membership: null,
+    distance_to_course: null,
+    notes: null,
+    created_at: null,
+    ...extra,
+  };
+}
+
+/**
+ * Full group directory: organizer, accepted roster contacts, pending outbound invites.
  * @throws {RosterServiceError} If access denied
  */
 async function getGroupMembers(userId, groupId, sortBy) {
-  // Check access first
   const groupCheck = await rosterRepository.getGroupWithAccess(userId, groupId);
   if (!groupCheck) {
     throw new RosterServiceError(
@@ -457,7 +502,72 @@ async function getGroupMembers(userId, groupId, sortBy) {
     );
   }
 
-  return rosterRepository.getGroupMembersForGroup(groupId, sortBy);
+  const ownerId = groupCheck.user_id;
+  let rosterRows =
+    (await rosterRepository.getGroupMembersForGroup(groupId, sortBy)) || [];
+
+  const orgIdx = rosterRows.findIndex(
+    (r) =>
+      r.contact_user_id != null &&
+      String(r.contact_user_id) === String(ownerId),
+  );
+
+  let organizerRow;
+  let rest;
+  if (orgIdx >= 0) {
+    organizerRow = { ...rosterRows[orgIdx], _group_role: "organizer" };
+    rest = rosterRows.filter((_, i) => i !== orgIdx);
+  } else {
+    const orgUser = await userRepository.findById(ownerId);
+    organizerRow = rosterRowFromUserProfile(orgUser || {}, {
+      id: `synthetic:organizer:${groupId}:${ownerId}`,
+      position: -1,
+      groupId,
+      groupCheck,
+      contactUserId: ownerId,
+      extra: { _group_role: "organizer" },
+    });
+    rest = rosterRows;
+  }
+
+  const acceptedContactIds = new Set(
+    [organizerRow.contact_user_id, ...rest.map((r) => r.contact_user_id)]
+      .filter(Boolean)
+      .map(String),
+  );
+
+  const pendingRaw =
+    (await rosterRepository.getPendingGroupInvitees(ownerId, groupId)) || [];
+
+  const pendingRows = [];
+  let pendingPos = 900000;
+  for (const { notificationId, userId: inviteeId } of pendingRaw) {
+    if (acceptedContactIds.has(String(inviteeId))) continue;
+    const invitee = await userRepository.findById(inviteeId);
+    if (!invitee) continue;
+    pendingRows.push(
+      rosterRowFromUserProfile(invitee, {
+        id: `synthetic:pending:${notificationId}`,
+        position: pendingPos++,
+        groupId,
+        groupCheck,
+        contactUserId: inviteeId,
+        extra: { _invite_status: "pending" },
+      }),
+    );
+  }
+
+  pendingRows.sort((a, b) => {
+    const na = `${a.first_name || ""} ${a.last_name || ""}`
+      .trim()
+      .toLowerCase();
+    const nb = `${b.first_name || ""} ${b.last_name || ""}`
+      .trim()
+      .toLowerCase();
+    return na.localeCompare(nb);
+  });
+
+  return [organizerRow, ...rest, ...pendingRows];
 }
 
 /**
@@ -502,16 +612,37 @@ async function inviteToGroup(userId, groupId, memberUserIds) {
   if (!inviter) {
     throw new RosterServiceError("Inviter not found", "NOT_FOUND", 404);
   }
+  const targets = memberUserIds.filter((id) => id && id !== userId);
   let sent = 0;
-  for (const inviteeUserId of memberUserIds) {
-    if (inviteeUserId === userId) continue;
+  for (const inviteeUserId of targets) {
     try {
-      await notificationService.notifyGroupInvite(inviteeUserId, inviter, groupId, groupName);
-      sent++;
+      const created = await notificationService.notifyGroupInvite(
+        inviteeUserId,
+        inviter,
+        groupId,
+        groupName,
+      );
+      if (created) {
+        sent++;
+      } else {
+        logger.warn("Group invite notification not created (skipped or failed)", {
+          inviteeUserId,
+          groupId,
+        });
+      }
     } catch (err) {
-      logger.error("Failed to send group invite notification", { inviteeUserId, groupId, error: err.message });
+      logger.error("Failed to send group invite notification", {
+        inviteeUserId,
+        groupId,
+        error: err.message,
+      });
     }
   }
+  logger.info("Group invitations processed", {
+    groupId,
+    targetCount: targets.length,
+    sent,
+  });
   return { sent, groupId, groupName };
 }
 
@@ -608,31 +739,49 @@ async function declineGroupInvite(acceptingUserId, notificationId) {
 }
 
 /**
- * Leave a group (remove current user's roster entries from group) (Figma 1075-927: removing yourself)
- * @throws {RosterServiceError} If group not found
+ * Leave a group (Figma 1075-927).
+ * - Owner: deletes the group so it no longer appears in their list and members are notified (same as delete).
+ * - Member: clears the owner's roster row linking them to this group (they are no longer in the group).
+ * @throws {RosterServiceError} If group not found or leave not applicable
  */
 async function leaveGroup(userId, groupId) {
-  // Verify group exists
   const group = await rosterRepository.getGroupWithAccess(userId, groupId);
   if (!group) {
     throw new RosterServiceError("Group not found", "NOT_FOUND", 404);
   }
 
-  // Get all roster entries for this user in this group
-  const { supabaseAdmin } = require("../config/supabase");
-  const { data: entries, error: fetchError } = await supabaseAdmin
+  // Owner leaving removes the group for everyone (same as DELETE /groups/:id).
+  const isRosterGroupOwner = String(group.user_id) === String(userId);
+  if (isRosterGroupOwner) {
+    const memberCount = group.member_count || 0;
+    await deleteGroup(userId, groupId);
+    return { removedCount: memberCount, groupId };
+  }
+
+  const ownerId = group.user_id;
+  const { data: rows, error: fetchError } = await supabaseAdmin
     .from("roster")
     .select("id")
-    .eq("user_id", userId)
-    .eq("group_id", groupId);
+    .eq("user_id", ownerId)
+    .eq("contact_user_id", userId);
 
   if (fetchError) throw fetchError;
 
-  // Remove each entry from the group
   let removedCount = 0;
-  for (const entry of entries || []) {
-    const removed = await rosterRepository.removeFromGroup(userId, entry.id);
-    if (removed) removedCount++;
+  for (const row of rows || []) {
+    const ok = await rosterRepository.removeRosterFromGroupMembership(
+      groupId,
+      row.id,
+    );
+    if (ok) removedCount += 1;
+  }
+
+  if (removedCount === 0) {
+    throw new RosterServiceError(
+      "You are not a member of this group in roster",
+      "NOT_FOUND",
+      404,
+    );
   }
 
   return { removedCount, groupId };
@@ -642,10 +791,13 @@ async function leaveGroup(userId, groupId) {
  * Update which group a member belongs to
  * @throws {RosterServiceError} If roster entry not found
  */
-async function updateMemberGroup(userId, rosterId, groupId) {
+async function updateMemberGroup(userId, rosterId, groupId, options = {}) {
+  const { removeFromGroupId } = options;
   const updated = groupId
     ? await rosterRepository.addToGroup(userId, rosterId, groupId)
-    : await rosterRepository.removeFromGroup(userId, rosterId);
+    : await rosterRepository.removeFromGroup(userId, rosterId, {
+        removeFromGroupId: removeFromGroupId || undefined,
+      });
 
   if (!updated) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);

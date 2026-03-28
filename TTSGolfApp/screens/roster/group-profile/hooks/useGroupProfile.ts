@@ -138,24 +138,27 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
 
     const handleGroupChat = useCallback(async () => {
         if (!group) return;
+        const totalMembers =
+            typeof group.memberCount === "number" && !Number.isNaN(group.memberCount)
+                ? group.memberCount
+                : members.length + 1;
         try {
-            // Navigate to group chat
             navigation?.navigate("ChatDetail", {
                 chatInfo: {
                     groupId: group.id,
                     id: group.id,
                     name: group.name,
-                    subtitle: `${members.length} members`,
+                    subtitle: `${totalMembers} members`,
                     img: undefined,
                     isGroup: true,
-                    participantCount: members.length,
+                    participantCount: totalMembers,
                 },
             });
         } catch (error) {
             logger.error("[useGroupProfile] Failed to open group chat", error);
             Alert.alert("Error", "Failed to open group chat");
         }
-    }, [group, members.length, navigation]);
+    }, [group, members, navigation]);
 
     const handleSettings = useCallback(() => {
         Alert.alert("Group Settings", "Group settings coming soon!");

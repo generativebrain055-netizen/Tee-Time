@@ -1,5 +1,6 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
 const logger = require("../config/logger");
+const rosterRepository = require("./rosterRepository");
 
 /**
  * Get or create a direct conversation between two users.
@@ -116,12 +117,26 @@ async function getOrCreateGroupConversation(userId, rosterGroupId) {
     .single();
   const ownerId = group?.user_id || userId;
 
-  const { data: rosterRows } = await supabaseAdmin
-    .from("roster")
-    .select("contact_user_id")
-    .eq("group_id", rosterGroupId)
-    .eq("user_id", ownerId);
-  const memberIds = (rosterRows || []).map((r) => r.contact_user_id).filter(Boolean);
+  const rosterIds =
+    await rosterRepository.collectRosterIdsForGroupMembership(rosterGroupId);
+  let memberIds = [];
+  if (rosterIds.length > 0) {
+    const chunkSize = 100;
+    const seen = new Set();
+    for (let i = 0; i < rosterIds.length; i += chunkSize) {
+      const chunk = rosterIds.slice(i, i + chunkSize);
+      const { data: rosterRows, error: rrErr } = await supabaseAdmin
+        .from("roster")
+        .select("contact_user_id")
+        .eq("user_id", ownerId)
+        .in("id", chunk);
+      if (rrErr) handleError(rrErr, "getOrCreateGroupConversation roster");
+      (rosterRows || []).forEach((r) => {
+        if (r.contact_user_id) seen.add(r.contact_user_id);
+      });
+    }
+    memberIds = [...seen];
+  }
   const allParticipantIds = [ownerId, ...memberIds];
   const participantRows = allParticipantIds.map((uid) => ({
     conversation_id: newConv.id,
@@ -285,7 +300,7 @@ async function getConversationMeta(conv, userId, lastMessage) {
   if (conv.type === "group" && conv.roster_group_id) {
     const { data: rg } = await supabaseAdmin
       .from("roster_groups")
-      .select("name, color")
+      .select("name, color, user_id")
       .eq("id", conv.roster_group_id)
       .single();
     if (rg) {
@@ -294,12 +309,25 @@ async function getConversationMeta(conv, userId, lastMessage) {
       participantInitials = (rg.name || "G").slice(0, 2).toUpperCase();
     }
     // Group participant avatars for list/header (Figma 1379-5818, 1269-2492)
-    const { data: rosterInGroup } = await supabaseAdmin
-      .from("roster")
-      .select("contact_user_id")
-      .eq("group_id", conv.roster_group_id)
-      .limit(5);
-    const memberUserIds = (rosterInGroup || []).map((r) => r.contact_user_id).filter(Boolean);
+    const gRosterIds = await rosterRepository.collectRosterIdsForGroupMembership(
+      conv.roster_group_id,
+    );
+    let memberUserIds = [];
+    const ownerIdForGroup = rg?.user_id;
+    if (gRosterIds.length > 0 && ownerIdForGroup) {
+      const slice = gRosterIds.slice(0, 8);
+      if (slice.length > 0) {
+        const { data: rosterInGroup } = await supabaseAdmin
+          .from("roster")
+          .select("contact_user_id")
+          .eq("user_id", ownerIdForGroup)
+          .in("id", slice);
+        memberUserIds = (rosterInGroup || [])
+          .map((r) => r.contact_user_id)
+          .filter(Boolean)
+          .slice(0, 5);
+      }
+    }
     participantCount = memberUserIds.length;
     for (const uid of memberUserIds.slice(0, 3)) {
       const { data: up } = await supabaseAdmin

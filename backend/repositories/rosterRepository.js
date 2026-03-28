@@ -1,11 +1,142 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
 const logger = require("../config/logger");
 
+/**
+ * Roster rows with group_id are contacts in the group; the creator is roster_groups.user_id
+ * and is not a roster row. Total people = contacts + owner.
+ * Multiple groups per contact use roster_group_members (junction); roster.group_id is a display hint.
+ */
+function totalGroupMemberCount(rosterRowCount) {
+  return (Number(rosterRowCount) || 0) + 1;
+}
+
 class RosterRepository {
+  /**
+   * Roster row ids in this group: roster_group_members plus legacy roster.group_id rows.
+   */
+  async collectRosterIdsForGroupMembership(groupId) {
+    const idSet = new Set();
+    const { data: fromRgm, error: e1 } = await supabaseAdmin
+      .from("roster_group_members")
+      .select("roster_id")
+      .eq("group_id", groupId);
+    if (e1) throw e1;
+    (fromRgm || []).forEach((r) => {
+      if (r.roster_id) idSet.add(r.roster_id);
+    });
+    const { data: fromLegacy, error: e2 } = await supabaseAdmin
+      .from("roster")
+      .select("id")
+      .eq("group_id", groupId);
+    if (e2) throw e2;
+    (fromLegacy || []).forEach((r) => {
+      if (r.id) idSet.add(r.id);
+    });
+    return [...idSet];
+  }
+
+  async ensureRosterGroupMember(groupId, rosterId) {
+    const { error } = await supabaseAdmin.from("roster_group_members").insert({
+      group_id: groupId,
+      roster_id: rosterId,
+    });
+    if (error && error.code !== "23505") throw error;
+  }
+
+  /**
+   * Drop membership in one group; set roster.group_id from any remaining membership or null.
+   * @returns {Promise<boolean>} true if this roster row was in that group (RGM or legacy group_id).
+   */
+  async removeRosterFromGroupMembership(groupId, rosterId) {
+    const { data: row } = await supabaseAdmin
+      .from("roster")
+      .select("group_id")
+      .eq("id", rosterId)
+      .maybeSingle();
+    const matchedLegacy =
+      row?.group_id != null && String(row.group_id) === String(groupId);
+
+    const { data: deleted, error: delErr } = await supabaseAdmin
+      .from("roster_group_members")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("roster_id", rosterId)
+      .select("id");
+    if (delErr) throw delErr;
+    const hadRgmRemoval = (deleted || []).length > 0;
+
+    const { data: rest } = await supabaseAdmin
+      .from("roster_group_members")
+      .select("group_id")
+      .eq("roster_id", rosterId);
+    const nextGid = rest?.[0]?.group_id ?? null;
+    await supabaseAdmin
+      .from("roster")
+      .update({ group_id: nextGid })
+      .eq("id", rosterId);
+
+    return hadRgmRemoval || matchedLegacy;
+  }
+
+  /** Contact on owner's roster is in group via legacy column or junction. */
+  async rosterContactHasGroupMembership(rosterOwnerUserId, groupId, contactUserId) {
+    const { data: rows, error } = await supabaseAdmin
+      .from("roster")
+      .select("id, group_id")
+      .eq("user_id", rosterOwnerUserId)
+      .eq("contact_user_id", contactUserId);
+    if (error) throw error;
+    if (!rows?.length) return false;
+    for (const r of rows) {
+      if (r.group_id != null && String(r.group_id) === String(groupId)) {
+        return true;
+      }
+    }
+    const rids = rows.map((r) => r.id);
+    const { data: rgm } = await supabaseAdmin
+      .from("roster_group_members")
+      .select("id")
+      .eq("group_id", groupId)
+      .in("roster_id", rids)
+      .limit(1);
+    return (rgm || []).length > 0;
+  }
+
   async getRoster(userId, options = {}) {
     const { groupId, sortBy = "position", isOnDeck } = options;
 
     try {
+      let groupRosterIdFilter = null;
+      let groupMetaForFilter = null;
+      if (groupId) {
+        const membershipIds = await this.collectRosterIdsForGroupMembership(groupId);
+        if (membershipIds.length === 0) {
+          return [];
+        }
+        const chunkSize = 150;
+        const mineIds = new Set();
+        for (let i = 0; i < membershipIds.length; i += chunkSize) {
+          const chunk = membershipIds.slice(i, i + chunkSize);
+          const { data: mine, error: mineErr } = await supabaseAdmin
+            .from("roster")
+            .select("id")
+            .eq("user_id", userId)
+            .in("id", chunk);
+          if (mineErr) throw mineErr;
+          (mine || []).forEach((r) => mineIds.add(r.id));
+        }
+        groupRosterIdFilter = [...mineIds];
+        if (groupRosterIdFilter.length === 0) {
+          return [];
+        }
+        const { data: gMeta } = await supabaseAdmin
+          .from("roster_groups")
+          .select("name, color")
+          .eq("id", groupId)
+          .maybeSingle();
+        groupMetaForFilter = gMeta || null;
+      }
+
       let query = supabaseAdmin
         .from("roster")
         .select(
@@ -24,8 +155,8 @@ class RosterRepository {
         )
         .eq("user_id", userId);
 
-      if (groupId) {
-        query = query.eq("group_id", groupId);
+      if (groupRosterIdFilter) {
+        query = query.in("id", groupRosterIdFilter);
       }
 
       if (isOnDeck !== undefined) {
@@ -67,8 +198,8 @@ class RosterRepository {
           walk_or_ride: profile.walk_or_ride,
           rounds_played: profile.rounds_played,
           average_score: profile.average_score,
-          group_name: group.name,
-          group_color: group.color,
+          group_name: groupMetaForFilter?.name ?? group.name,
+          group_color: groupMetaForFilter?.color ?? group.color,
         };
       });
       // Perform in-memory sorting if needed for cross-table fields
@@ -331,11 +462,22 @@ class RosterRepository {
 
       const withCounts = await Promise.all(
         (data || []).map(async (g) => {
-          const { count } = await supabaseAdmin
-            .from("roster")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", g.id);
-          return { ...g, member_count: count || 0 };
+          const rids = await this.collectRosterIdsForGroupMembership(g.id);
+          let count = 0;
+          if (rids.length > 0 && g.user_id) {
+            const ownChunk = 150;
+            for (let i = 0; i < rids.length; i += ownChunk) {
+              const chunk = rids.slice(i, i + ownChunk);
+              const { count: c, error: cErr } = await supabaseAdmin
+                .from("roster")
+                .select("*", { count: "exact", head: true })
+                .eq("user_id", g.user_id)
+                .in("id", chunk);
+              if (cErr) throw cErr;
+              count += c ?? 0;
+            }
+          }
+          return { ...g, member_count: totalGroupMemberCount(count) };
         }),
       );
       return withCounts;
@@ -371,7 +513,7 @@ class RosterRepository {
 
   async getGroups(userId) {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data: owned, error } = await supabaseAdmin
         .from("roster_groups")
         .select("*")
         .eq("user_id", userId)
@@ -380,9 +522,101 @@ class RosterRepository {
 
       if (error) throw error;
 
+      const ownedList = owned || [];
+      const ownedIds = new Set(ownedList.map((g) => g.id));
+
+      // Groups you joined by accepting an invite: you appear on the owner's roster with group_id set.
+      // Inner join roster_groups so stale/orphan group_id values (e.g. after a delete) never produce a list entry.
+      const { data: memberJoinRows, error: memberErr } = await supabaseAdmin
+        .from("roster")
+        .select(
+          `
+          group_id,
+          roster_groups!inner (*)
+        `,
+        )
+        .eq("contact_user_id", userId)
+        .not("group_id", "is", null);
+
+      if (memberErr) throw memberErr;
+
+      const joinedById = new Map();
+      for (const row of memberJoinRows || []) {
+        const embedded = row.roster_groups;
+        const g = Array.isArray(embedded) ? embedded[0] : embedded;
+        if (!g?.id || ownedIds.has(g.id)) continue;
+        joinedById.set(g.id, g);
+      }
+
+      const { data: contactRosterRows } = await supabaseAdmin
+        .from("roster")
+        .select("id")
+        .eq("contact_user_id", userId);
+      const contactRosterIds = (contactRosterRows || []).map((r) => r.id);
+      if (contactRosterIds.length > 0) {
+        const rgmChunk = 100;
+        const extraGroupIds = new Set();
+        for (let i = 0; i < contactRosterIds.length; i += rgmChunk) {
+          const chunk = contactRosterIds.slice(i, i + rgmChunk);
+          const { data: rgms, error: rgmErr } = await supabaseAdmin
+            .from("roster_group_members")
+            .select("group_id")
+            .in("roster_id", chunk);
+          if (rgmErr) throw rgmErr;
+          (rgms || []).forEach((x) => {
+            if (x.group_id) extraGroupIds.add(String(x.group_id));
+          });
+        }
+        const toFetch = [...extraGroupIds].filter((id) => !ownedIds.has(id));
+        if (toFetch.length > 0) {
+          const { data: extraGrps, error: egErr } = await supabaseAdmin
+            .from("roster_groups")
+            .select("*")
+            .in("id", toFetch);
+          if (egErr) throw egErr;
+          for (const g of extraGrps || []) {
+            if (!g?.id || ownedIds.has(g.id)) continue;
+            joinedById.set(g.id, g);
+          }
+        }
+      }
+
+      let joinedGroups = [...joinedById.values()];
+      joinedGroups.sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", undefined, {
+          sensitivity: "base",
+        }),
+      );
+
+      // Owned first (manual order), then groups you are a member of but do not own.
+      let dataFiltered = [...ownedList, ...joinedGroups];
+
+      // Only return groups that still exist (owner may have deleted / left after our queries).
+      const mergedIds = [
+        ...new Set(
+          dataFiltered.map((g) => g.id).filter(Boolean).map(String),
+        ),
+      ];
+      if (mergedIds.length > 0) {
+        const existingIds = new Set();
+        const chunkSize = 100;
+        for (let i = 0; i < mergedIds.length; i += chunkSize) {
+          const chunk = mergedIds.slice(i, i + chunkSize);
+          const { data: existingRows, error: exErr } = await supabaseAdmin
+            .from("roster_groups")
+            .select("id")
+            .in("id", chunk);
+          if (exErr) throw exErr;
+          (existingRows || []).forEach((r) => existingIds.add(String(r.id)));
+        }
+        dataFiltered = dataFiltered.filter(
+          (g) => g.id && existingIds.has(String(g.id)),
+        );
+      }
+
       const today = new Date().toISOString().split("T")[0];
 
-      // Upcoming tee time count per group: fetch upcoming tee time IDs (user as creator), participants, and roster group membership
+      // Upcoming tee time count: viewer as creator; participants overlap group roster (owner + contacts).
       let upcomingTeeTimeIds = [];
       try {
         const { data: upcomingRows } = await supabaseAdmin
@@ -403,23 +637,31 @@ class RosterRepository {
         participantsByTeeTime = participants || [];
       }
 
-      const { data: rosterGroupMembers } = await supabaseAdmin
-        .from("roster")
-        .select("group_id, contact_user_id")
-        .eq("user_id", userId)
-        .not("group_id", "is", null);
+      const allGroupIds = dataFiltered.map((g) => g.id).filter(Boolean);
       const groupMemberUserIds = {};
-      (rosterGroupMembers || []).forEach((r) => {
-        if (!groupMemberUserIds[r.group_id]) groupMemberUserIds[r.group_id] = new Set();
-        if (r.contact_user_id) groupMemberUserIds[r.group_id].add(r.contact_user_id);
-      });
-
-      // Show all owned groups (including newly-created empty groups).
-      // Filtering by roster membership here can hide valid groups right after create.
-      const dataFiltered = data || [];
+      if (allGroupIds.length > 0) {
+        const rowChunk = 100;
+        for (const gid of allGroupIds) {
+          const rids = await this.collectRosterIdsForGroupMembership(gid);
+          if (!rids.length) continue;
+          if (!groupMemberUserIds[gid]) groupMemberUserIds[gid] = new Set();
+          for (let i = 0; i < rids.length; i += rowChunk) {
+            const chunk = rids.slice(i, i + rowChunk);
+            const { data: rrows, error: rgErr } = await supabaseAdmin
+              .from("roster")
+              .select("contact_user_id, user_id")
+              .in("id", chunk);
+            if (rgErr) throw rgErr;
+            (rrows || []).forEach((r) => {
+              if (r.contact_user_id) groupMemberUserIds[gid].add(r.contact_user_id);
+              if (r.user_id) groupMemberUserIds[gid].add(r.user_id);
+            });
+          }
+        }
+      }
 
       const upcomingCountByGroup = {};
-      Object.keys(groupMemberUserIds || {}).forEach((gid) => {
+      Object.keys(groupMemberUserIds).forEach((gid) => {
         const userIds = groupMemberUserIds[gid];
         const teeTimeIds = new Set();
         participantsByTeeTime.forEach((p) => {
@@ -428,7 +670,7 @@ class RosterRepository {
         upcomingCountByGroup[gid] = teeTimeIds.size;
       });
 
-      // Group IDs that have at least one pending group invite (we are the inviter)
+      // Pending outbound invites (only relevant when you own the group)
       let groupIdsWithPendingInvites = new Set();
       try {
         const { data: inviteNotifs } = await supabaseAdmin
@@ -444,29 +686,43 @@ class RosterRepository {
         });
       } catch (_) {}
 
-      // Get member counts for each group and attach upcoming_tee_time_count + has_pending_invites
       const groupsWithCounts = await Promise.all(
         dataFiltered.map(async (group) => {
-          const { count: memberCount } = await supabaseAdmin
-            .from("roster")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", group.id);
+          const rosterInGroupIds = await this.collectRosterIdsForGroupMembership(
+            group.id,
+          );
+          let memberCount = 0;
+          let onDeckCount = 0;
+          const groupOwnerUserId = group.user_id;
+          if (rosterInGroupIds.length > 0 && groupOwnerUserId) {
+            const ownChunk = 150;
+            for (let i = 0; i < rosterInGroupIds.length; i += ownChunk) {
+              const chunk = rosterInGroupIds.slice(i, i + ownChunk);
+              const { data: orows, error: ocErr } = await supabaseAdmin
+                .from("roster")
+                .select("is_on_deck")
+                .eq("user_id", groupOwnerUserId)
+                .in("id", chunk);
+              if (ocErr) throw ocErr;
+              (orows || []).forEach((r) => {
+                memberCount += 1;
+                if (r.is_on_deck) onDeckCount += 1;
+              });
+            }
+          }
 
-          const { count: onDeckCount } = await supabaseAdmin
-            .from("roster")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", group.id)
-            .eq("is_on_deck", true);
+          const isOwner = ownedIds.has(group.id);
 
           return {
             ...group,
-            member_count: memberCount || 0,
+            member_count: totalGroupMemberCount(memberCount),
             on_deck_count: onDeckCount || 0,
             upcoming_tee_time_count: upcomingCountByGroup[group.id] ?? 0,
-            is_owner: true,
-            has_pending_invites: groupIdsWithPendingInvites.has(group.id),
+            is_owner: isOwner,
+            has_pending_invites:
+              isOwner && groupIdsWithPendingInvites.has(group.id),
           };
-        })
+        }),
       );
 
       return groupsWithCounts;
@@ -657,25 +913,10 @@ class RosterRepository {
 
   async getAutoInviteMembers(userId, groupId) {
     try {
-      const { data, error } = await supabaseAdmin
-        .from("roster")
-        .select(
-          `
-          *,
-          users!roster_contact_user_id_fkey (
-            first_name, last_name, username, phone_number,
-            user_profiles (avatar_url, handicap, social_rate)
-          )
-        `
-        )
-        .eq("user_id", userId)
-        .eq("group_id", groupId)
-        .eq("is_on_deck", false)
-        .order("position", { ascending: true });
+      const rids = await this.collectRosterIdsForGroupMembership(groupId);
+      if (rids.length === 0) return [];
 
-      if (error) throw error;
-
-      return (data || []).map((r) => {
+      const mapRow = (r) => {
         const user = r.users || {};
         const profileData = user.user_profiles;
         const profile = Array.isArray(profileData)
@@ -693,20 +934,87 @@ class RosterRepository {
           user_handicap: profile.handicap,
           social_rate: profile.social_rate,
         };
-      });
+      };
+
+      const chunkSize = 80;
+      const out = [];
+      for (let i = 0; i < rids.length; i += chunkSize) {
+        const chunk = rids.slice(i, i + chunkSize);
+        const { data, error } = await supabaseAdmin
+          .from("roster")
+          .select(
+            `
+          *,
+          users!roster_contact_user_id_fkey (
+            first_name, last_name, username, phone_number,
+            user_profiles (avatar_url, handicap, social_rate)
+          )
+        `,
+          )
+          .eq("user_id", userId)
+          .in("id", chunk)
+          .eq("is_on_deck", false)
+          .order("position", { ascending: true });
+
+        if (error) throw error;
+        (data || []).forEach((r) => out.push(mapRow(r)));
+      }
+
+      out.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      return out;
     } catch (error) {
       handleError(error, "getAutoInviteMembers");
     }
   }
 
+  /**
+   * Close out pending group_invite notifications for this group (all recipients).
+   * Best-effort so invite UIs do not reference a deleted group.
+   */
+  async dismissGroupInviteNotificationsForGroup(groupId) {
+    try {
+      const gid = String(groupId);
+      const { data: rows, error } = await supabaseAdmin
+        .from("notifications")
+        .select("id, data")
+        .filter("data->>type", "eq", "group_invite")
+        .filter("data->>groupId", "eq", gid);
+
+      if (error) {
+        logger.warn("dismissGroupInviteNotificationsForGroup select failed", error);
+        return;
+      }
+
+      for (const row of rows || []) {
+        const d = row.data || {};
+        if (d.responded === true) continue;
+        const { error: upErr } = await supabaseAdmin
+          .from("notifications")
+          .update({
+            data: { ...d, responded: true, group_deleted: true },
+          })
+          .eq("id", row.id);
+        if (upErr) {
+          logger.warn("dismissGroupInviteNotificationsForGroup update failed", {
+            id: row.id,
+            error: upErr,
+          });
+        }
+      }
+    } catch (err) {
+      logger.warn("dismissGroupInviteNotificationsForGroup", err);
+    }
+  }
+
   async deleteGroup(userId, groupId) {
     try {
-      // Remove group_id from roster entries
+      // Clear group_id on every roster row pointing at this group (not only the owner's rows).
       await supabaseAdmin
         .from("roster")
         .update({ group_id: null })
-        .eq("group_id", groupId)
-        .eq("user_id", userId);
+        .eq("group_id", groupId);
+
+      await this.dismissGroupInviteNotificationsForGroup(groupId);
 
       const { data, error } = await supabaseAdmin
         .from("roster_groups")
@@ -737,14 +1045,20 @@ class RosterRepository {
           .maybeSingle();
 
         if (rosterEntry) {
-          // Update the roster entry to belong to this group
-          await supabaseAdmin
+          await this.ensureRosterGroupMember(groupId, rosterEntry.id);
+          const { data: rRow } = await supabaseAdmin
             .from("roster")
-            .update({ group_id: groupId })
-            .eq("id", rosterEntry.id);
+            .select("group_id")
+            .eq("id", rosterEntry.id)
+            .maybeSingle();
+          if (rRow && rRow.group_id == null) {
+            await supabaseAdmin
+              .from("roster")
+              .update({ group_id: groupId })
+              .eq("id", rosterEntry.id);
+          }
           addedCount++;
         } else {
-          // Friend not in roster yet, add them
           const { data: maxData } = await supabaseAdmin
             .from("roster")
             .select("position")
@@ -755,12 +1069,20 @@ class RosterRepository {
 
           const position = (maxData?.position ?? -1) + 1;
 
-          await supabaseAdmin.from("roster").insert({
-            user_id: userId,
-            contact_user_id: memberUserId,
-            group_id: groupId,
-            position,
-          });
+          const { data: inserted, error: insErr } = await supabaseAdmin
+            .from("roster")
+            .insert({
+              user_id: userId,
+              contact_user_id: memberUserId,
+              group_id: groupId,
+              position,
+            })
+            .select("id")
+            .single();
+          if (insErr) throw insErr;
+          if (inserted?.id) {
+            await this.ensureRosterGroupMember(groupId, inserted.id);
+          }
           addedCount++;
         }
       }
@@ -802,29 +1124,30 @@ class RosterRepository {
         if (!groupById) return null;
 
         let hasAccess = false;
+        const groupOwnerUserId = groupById.user_id;
 
-        // Roster rows are owned by the group creator (user_id); members appear as contact_user_id
-        const { data: rosterOwnerRow, error: rosterOwnerErr } = await supabaseAdmin
-          .from("roster")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("group_id", groupId)
-          .limit(1)
-          .maybeSingle();
-
-        if (rosterOwnerErr && rosterOwnerErr.code !== "PGRST116") throw rosterOwnerErr;
-        if (rosterOwnerRow) hasAccess = true;
-
-        if (!hasAccess) {
-          const { data: asContact, error: contactErr } = await supabaseAdmin
+        const inGroupIds = await this.collectRosterIdsForGroupMembership(groupId);
+        if (inGroupIds.length > 0) {
+          const { data: rosterOwnerRow, error: rosterOwnerErr } = await supabaseAdmin
             .from("roster")
             .select("id")
-            .eq("group_id", groupId)
-            .eq("contact_user_id", userId)
+            .eq("user_id", userId)
+            .in("id", inGroupIds)
             .limit(1)
             .maybeSingle();
 
-          if (contactErr && contactErr.code !== "PGRST116") throw contactErr;
+          if (rosterOwnerErr && rosterOwnerErr.code !== "PGRST116") {
+            throw rosterOwnerErr;
+          }
+          if (rosterOwnerRow) hasAccess = true;
+        }
+
+        if (!hasAccess) {
+          const asContact = await this.rosterContactHasGroupMembership(
+            groupOwnerUserId,
+            groupId,
+            userId,
+          );
           if (asContact) hasAccess = true;
         }
 
@@ -858,20 +1181,30 @@ class RosterRepository {
         isOwner = false;
       }
 
-      const { count: memberCount } = await supabaseAdmin
-        .from("roster")
-        .select("*", { count: "exact", head: true })
-        .eq("group_id", groupId);
-
-      const { count: onDeckCount } = await supabaseAdmin
-        .from("roster")
-        .select("*", { count: "exact", head: true })
-        .eq("group_id", groupId)
-        .eq("is_on_deck", true);
+      const groupOwnerUserId = data.user_id;
+      const rosterInGroupIds = await this.collectRosterIdsForGroupMembership(groupId);
+      let memberCount = 0;
+      let onDeckCount = 0;
+      if (rosterInGroupIds.length > 0) {
+        const chunkSize = 150;
+        for (let i = 0; i < rosterInGroupIds.length; i += chunkSize) {
+          const chunk = rosterInGroupIds.slice(i, i + chunkSize);
+          const { data: orows, error: ocErr } = await supabaseAdmin
+            .from("roster")
+            .select("id, is_on_deck")
+            .eq("user_id", groupOwnerUserId)
+            .in("id", chunk);
+          if (ocErr) throw ocErr;
+          (orows || []).forEach((r) => {
+            memberCount += 1;
+            if (r.is_on_deck) onDeckCount += 1;
+          });
+        }
+      }
 
       return {
         ...data,
-        member_count: memberCount || 0,
+        member_count: totalGroupMemberCount(memberCount),
         on_deck_count: onDeckCount || 0,
         is_owner: isOwner,
       };
@@ -880,41 +1213,47 @@ class RosterRepository {
     }
   }
 
-  async getGroupMembersForGroup(groupId, sortBy = "position") {
+  /**
+   * Outbound group invites not yet accepted (inviter's pending requests).
+   * Each row: { notificationId, userId } (invitee).
+   */
+  async getPendingGroupInvitees(inviterId, groupId) {
     try {
-      let query = supabaseAdmin
-        .from("roster")
-        .select(
-          `
-          *,
-          users!roster_contact_user_id_fkey (first_name, last_name, username, user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, rounds_played, average_score)),
-          roster_groups (name, color)
-        `
-        )
-        .eq("group_id", groupId);
-
-      switch (sortBy) {
-        case "socialRate":
-          // Order by nested user_profiles not supported; sort in memory below
-          break;
-        case "handicap":
-          query = query.order("contact_handicap", {
-            ascending: true,
-            nullsFirst: false,
-          });
-          break;
-        case "name":
-          query = query.order("contact_name", { ascending: true });
-          break;
-        default:
-          query = query.order("position", { ascending: true });
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await supabaseAdmin
+        .from("notifications")
+        .select("id, user_id, data")
+        .filter("data->>type", "eq", "group_invite")
+        .filter("data->>groupId", "eq", String(groupId))
+        .filter("data->>inviterId", "eq", String(inviterId));
 
       if (error) throw error;
 
-      let rows = (data || []).map((r) => {
+      const out = [];
+      for (const row of data || []) {
+        const d = row.data || {};
+        if (d.responded === true) continue;
+        const uid = row.user_id;
+        if (!uid) continue;
+        out.push({ notificationId: row.id, userId: uid });
+      }
+      return out;
+    } catch (error) {
+      handleError(error, "getPendingGroupInvitees");
+    }
+  }
+
+  async getGroupMembersForGroup(groupId, sortBy = "position") {
+    try {
+      const rosterIds = await this.collectRosterIdsForGroupMembership(groupId);
+      if (rosterIds.length === 0) return [];
+
+      const { data: gMeta } = await supabaseAdmin
+        .from("roster_groups")
+        .select("name, color")
+        .eq("id", groupId)
+        .maybeSingle();
+
+      const mapRow = (r) => {
         const user = r.users || {};
         const profileRow = user.user_profiles;
         const profile = Array.isArray(profileRow) ? profileRow[0] : profileRow || {};
@@ -936,13 +1275,59 @@ class RosterRepository {
           walk_or_ride: profile.walk_or_ride,
           rounds_played: profile.rounds_played,
           average_score: profile.average_score,
-          group_name: group.name,
-          group_color: group.color,
+          group_name: gMeta?.name ?? group.name,
+          group_color: gMeta?.color ?? group.color,
         };
-      });
+      };
 
-      if (sortBy === "socialRate") {
-        rows = rows.sort((a, b) => (b.profile_social_rate ?? 0) - (a.profile_social_rate ?? 0));
+      const chunkSize = 100;
+      const byId = new Map();
+      for (let i = 0; i < rosterIds.length; i += chunkSize) {
+        const chunk = rosterIds.slice(i, i + chunkSize);
+        const { data, error } = await supabaseAdmin
+          .from("roster")
+          .select(
+            `
+          *,
+          users!roster_contact_user_id_fkey (first_name, last_name, username, user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, rounds_played, average_score)),
+          roster_groups (name, color)
+        `,
+          )
+          .in("id", chunk);
+        if (error) throw error;
+        (data || []).forEach((r) => byId.set(r.id, mapRow(r)));
+      }
+
+      let rows = [...byId.values()];
+
+      switch (sortBy) {
+        case "socialRate":
+          rows.sort(
+            (a, b) => (b.profile_social_rate ?? 0) - (a.profile_social_rate ?? 0),
+          );
+          break;
+        case "handicap":
+          rows.sort((a, b) => {
+            const ah = a.contact_handicap;
+            const bh = b.contact_handicap;
+            const an = ah == null ? Infinity : Number(ah);
+            const bn = bh == null ? Infinity : Number(bh);
+            return an - bn;
+          });
+          break;
+        case "name":
+          rows.sort((a, b) =>
+            (a.contact_name || `${a.first_name || ""} ${a.last_name || ""}`)
+              .trim()
+              .localeCompare(
+                (b.contact_name || `${b.first_name || ""} ${b.last_name || ""}`).trim(),
+                undefined,
+                { sensitivity: "base" },
+              ),
+          );
+          break;
+        default:
+          rows.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
       }
 
       return rows;
@@ -962,14 +1347,45 @@ class RosterRepository {
         .single();
 
       if (error) throw error;
+      await this.ensureRosterGroupMember(groupId, rosterId);
       return data;
     } catch (error) {
       handleError(error, "addToGroup");
     }
   }
 
-  async removeFromGroup(userId, rosterId) {
+  async removeFromGroup(userId, rosterId, options = {}) {
+    const { removeFromGroupId } = options;
     try {
+      const { data: owns } = await supabaseAdmin
+        .from("roster")
+        .select("id")
+        .eq("id", rosterId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!owns) return null;
+
+      if (removeFromGroupId) {
+        const changed = await this.removeRosterFromGroupMembership(
+          removeFromGroupId,
+          rosterId,
+        );
+        if (!changed) return null;
+        const { data, error } = await supabaseAdmin
+          .from("roster")
+          .select()
+          .eq("id", rosterId)
+          .eq("user_id", userId)
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
+      await supabaseAdmin
+        .from("roster_group_members")
+        .delete()
+        .eq("roster_id", rosterId);
+
       const { data, error } = await supabaseAdmin
         .from("roster")
         .update({ group_id: null })
@@ -1018,6 +1434,17 @@ class RosterRepository {
         .single();
 
       if (error) throw error;
+
+      if (targetGroupId !== undefined) {
+        if (targetGroupId === null) {
+          await supabaseAdmin
+            .from("roster_group_members")
+            .delete()
+            .eq("roster_id", rosterId);
+        } else {
+          await this.ensureRosterGroupMember(targetGroupId, rosterId);
+        }
+      }
 
       const positionForShift =
         typeof updates.position === "number" ? updates.position : null;
@@ -1435,22 +1862,25 @@ class RosterRepository {
    */
   async getContactUserIdsForGroup(ownerUserId, groupId) {
     try {
-      const { data, error } = await supabaseAdmin
-        .from("roster")
-        .select("contact_user_id")
-        .eq("user_id", ownerUserId)
-        .eq("group_id", groupId)
-        .not("contact_user_id", "is", null);
+      const rids = await this.collectRosterIdsForGroupMembership(groupId);
+      if (rids.length === 0) return [];
 
-      if (error) throw error;
-      const ids = [
-        ...new Set(
-          (data || [])
-            .map((r) => r.contact_user_id)
-            .filter(Boolean),
-        ),
-      ];
-      return ids;
+      const chunkSize = 150;
+      const idSet = new Set();
+      for (let i = 0; i < rids.length; i += chunkSize) {
+        const chunk = rids.slice(i, i + chunkSize);
+        const { data, error } = await supabaseAdmin
+          .from("roster")
+          .select("contact_user_id")
+          .eq("user_id", ownerUserId)
+          .in("id", chunk)
+          .not("contact_user_id", "is", null);
+        if (error) throw error;
+        (data || []).forEach((r) => {
+          if (r.contact_user_id) idSet.add(r.contact_user_id);
+        });
+      }
+      return [...idSet];
     } catch (error) {
       handleError(error, "getContactUserIdsForGroup");
     }

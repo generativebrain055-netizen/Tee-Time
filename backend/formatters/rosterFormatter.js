@@ -7,38 +7,43 @@
 /**
  * Format a single roster entry for API response
  */
-const formatRosterEntry = (r) => ({
-  id: r.id,
-  position: r.position,
-  isOnDeck: r.is_on_deck,
-  groupId: r.group_id,
-  groupName: r.group_name,
-  groupColor: r.group_color,
-  contact: {
-    userId: r.contact_user_id,
-    phone: r.contact_phone,
-    name:
-      r.contact_name ||
-      `${r.first_name || ""} ${r.last_name || ""}`.trim() ||
-      "Unknown",
-    email: r.contact_email,
-    avatar: r.avatar_url,
-    handicap: r.contact_handicap || r.user_handicap,
-    username: r.username,
-    socialRate: r.social_rate || r.profile_social_rate,
-    location: r.location,
-    homeCourse: r.home_course,
-  },
-  stats: {
-    timesPlayedTogether: r.times_played_together,
-    lastPlayedTogether: r.last_played_together,
-    acceptanceRate: r.invite_acceptance_rate,
-  },
-  membership: r.club_membership,
-  distanceToCourse: r.distance_to_course,
-  notes: r.notes,
-  createdAt: r.created_at,
-});
+const formatRosterEntry = (r) => {
+  const base = {
+    id: r.id,
+    position: r.position,
+    isOnDeck: r.is_on_deck,
+    groupId: r.group_id,
+    groupName: r.group_name,
+    groupColor: r.group_color,
+    contact: {
+      userId: r.contact_user_id,
+      phone: r.contact_phone,
+      name:
+        r.contact_name ||
+        `${r.first_name || ""} ${r.last_name || ""}`.trim() ||
+        "Unknown",
+      email: r.contact_email,
+      avatar: r.avatar_url,
+      handicap: r.contact_handicap || r.user_handicap,
+      username: r.username,
+      socialRate: r.social_rate || r.profile_social_rate,
+      location: r.location,
+      homeCourse: r.home_course,
+    },
+    stats: {
+      timesPlayedTogether: r.times_played_together,
+      lastPlayedTogether: r.last_played_together,
+      acceptanceRate: r.invite_acceptance_rate,
+    },
+    membership: r.club_membership,
+    distanceToCourse: r.distance_to_course,
+    notes: r.notes,
+    createdAt: r.created_at,
+  };
+  if (r._group_role) base.groupMemberRole = r._group_role;
+  if (r._invite_status) base.inviteStatus = r._invite_status;
+  return base;
+};
 
 /**
  * Format multiple roster entries
