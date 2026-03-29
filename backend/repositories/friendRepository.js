@@ -398,10 +398,9 @@ class FriendRepository {
     }
   }
 
-  // Remove friend - COMPLEX: needs transaction
+  // Remove friendship only (both directions). Roster / on-deck entries stay — those are separate.
   async removeFriend(userId, friendId) {
     try {
-      // Delete friendship (both directions)
       const { error: friendshipError } = await supabaseAdmin
         .from("friendships")
         .delete()
@@ -410,19 +409,6 @@ class FriendRepository {
         );
 
       if (friendshipError) throw friendshipError;
-
-      // Remove from both users' rosters
-      await supabaseAdmin
-        .from("roster")
-        .delete()
-        .eq("user_id", userId)
-        .eq("contact_user_id", friendId);
-
-      await supabaseAdmin
-        .from("roster")
-        .delete()
-        .eq("user_id", friendId)
-        .eq("contact_user_id", userId);
 
       return true;
     } catch (error) {

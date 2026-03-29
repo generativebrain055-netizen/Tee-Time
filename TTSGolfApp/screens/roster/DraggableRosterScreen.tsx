@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Star, ChevronDown, ChevronUp, ArrowUp, ArrowDown, SlidersHorizontal, Check, X } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
-import { friendApi, rosterApi } from "../../services/api";
+import { rosterApi, type RosterContact } from "../../services/api";
 import { logger } from "../../utils/logger";
 
 type SortOption = "position" | "socialRate" | "handicap" | "name" | "distance" | "membership";
@@ -37,6 +37,36 @@ interface RosterMember {
 /** Roster row UUID for API calls (row id vs contact user id). */
 function rosterRowIdForApi(m: RosterMember): string | undefined {
     return m.rosterId ?? (m.id !== m.friendId ? m.id : undefined);
+}
+
+/** API row shape for roster + on-deck formatters (extra sort fields). */
+type RosterListRow = RosterContact & {
+    distanceToCourse?: number;
+    membership?: string;
+    contact: RosterContact["contact"] & { socialRate?: number };
+};
+
+/** Map API roster/on-deck row to UI model (roster data only — not friends). */
+function mapRosterRowToMember(r: RosterListRow, idx: number, isOnDeck: boolean): RosterMember {
+    const contact = r.contact;
+    const name = (contact.name || "").trim();
+    const firstName = name.split(/\s+/)[0] || "";
+    const lastName = name.split(/\s+/).slice(1).join(" ");
+    const uid = contact.userId;
+    return {
+        id: r.id,
+        rosterId: r.id,
+        firstName,
+        lastName,
+        avatar: contact.avatar,
+        isOnDeck,
+        position: r.position ?? idx,
+        friendId: uid || r.id,
+        socialRate: contact.socialRate,
+        handicap: contact.handicap,
+        distance: r.distanceToCourse,
+        membership: r.membership,
+    };
 }
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
@@ -263,114 +293,31 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
 
     const loadData = useCallback(async (sort: SortOption = "position") => {
         try {
-            const [friendsRes, rosterRes, onDeckRes] = await Promise.all([
-                friendApi.getFriends(),
+            const [rosterRes, onDeckRes] = await Promise.all([
                 rosterApi.getRoster(sort),
-                rosterApi.getOnDeck()
+                rosterApi.getOnDeck(),
             ]);
 
-            if (!friendsRes.success) {
-                logger.error("[DraggableRosterScreen] Failed to load friends");
-                return;
+            const rosterEntries = rosterRes.success ? rosterRes.roster || [] : [];
+            const onDeckEntries = onDeckRes.success ? onDeckRes.onDeck || [] : [];
+
+            if (!rosterRes.success) {
+                logger.error("[DraggableRosterScreen] Failed to load roster");
+            }
+            if (!onDeckRes.success) {
+                logger.error("[DraggableRosterScreen] Failed to load on-deck");
             }
 
-            const friends = friendsRes.friends || [];
-            const rosterEntries = rosterRes.roster || [];
-            const onDeckEntries = onDeckRes.onDeck || [];
-
-            // Create maps for quick lookup
-            const rosterByUserId = new Map<string, any>();
-            rosterEntries.forEach((r: any) => {
-                if (r.contact?.userId) {
-                    rosterByUserId.set(r.contact.userId, r);
-                }
-            });
-
-            const onDeckByUserId = new Map<string, any>();
-            onDeckEntries.forEach((r: any) => {
-                if (r.contact?.userId) {
-                    onDeckByUserId.set(r.contact.userId, r);
-                }
-            });
-
-            // Build on-deck list from on-deck entries
-            const onDeck: RosterMember[] = onDeckEntries.map((r: any, idx: number) => ({
-                id: r.id,
-                rosterId: r.id,
-                firstName: r.contact?.name?.split(' ')[0] || '',
-                lastName: r.contact?.name?.split(' ').slice(1).join(' ') || '',
-                avatar: r.contact?.avatar,
-                isOnDeck: true,
-                position: r.position ?? idx,
-                friendId: r.contact?.userId || r.id,
-                socialRate: r.contact?.socialRate,
-                handicap: r.contact?.handicap,
-                distance: r.distanceToCourse,
-                membership: r.membership,
-            }));
-
-            // Build roster list - friends who are NOT in on-deck
-            const roster: RosterMember[] = [];
-
-            const friendIds = new Set(friends.map((f) => f.id));
-
-            friends.forEach((friend, idx) => {
-                // Skip if this friend is in on-deck
-                if (onDeckByUserId.has(friend.id)) {
-                    return;
-                }
-
-                const rosterEntry = rosterByUserId.get(friend.id);
-                // Only show under main Roster if they have an actual roster row (not on-deck).
-                // Otherwise removed / never-rostered friends would still appear here because
-                // they remain in the friends list after "Remove from On Deck" deletes the row.
-                if (!rosterEntry?.id) {
-                    return;
-                }
-
-                const rowId = rosterEntry.id;
-
-                roster.push({
-                    id: rowId,
-                    rosterId: rowId,
-                    firstName: friend.firstName || '',
-                    lastName: friend.lastName || '',
-                    avatar: rosterEntry?.contact?.avatar || friend.avatar,
-                    isOnDeck: false,
-                    position: rosterEntry?.position ?? idx,
-                    friendId: friend.id,
-                    socialRate: rosterEntry?.contact?.socialRate || friend.socialRate,
-                    handicap: rosterEntry?.contact?.handicap || friend.handicap,
-                    distance: rosterEntry?.distanceToCourse,
-                    membership: rosterEntry?.membership,
-                });
-            });
-
-            // Roster rows not tied to the current friends list (still need a real roster id for move/on-deck)
-            rosterEntries.forEach((r: any, idx: number) => {
-                const uid = r.contact?.userId as string | undefined;
-                if (!uid || onDeckByUserId.has(uid) || friendIds.has(uid)) return;
-                const name = (r.contact?.name || "").trim();
-                const [first, ...rest] = name.split(/\s+/).filter(Boolean);
-                roster.push({
-                    id: r.id,
-                    rosterId: r.id,
-                    firstName: first || "",
-                    lastName: rest.join(" "),
-                    avatar: r.contact?.avatar,
-                    isOnDeck: false,
-                    position: r.position ?? roster.length + idx,
-                    friendId: uid,
-                    socialRate: r.contact?.socialRate,
-                    handicap: r.contact?.handicap,
-                    distance: r.distanceToCourse,
-                    membership: r.membership,
-                });
-            });
+            // Roster and on-deck come only from roster APIs — friendship is separate.
+            const roster: RosterMember[] = rosterEntries.map((r, idx) =>
+                mapRosterRowToMember(r as RosterListRow, idx, false),
+            );
+            const onDeck: RosterMember[] = onDeckEntries.map((r, idx) =>
+                mapRosterRowToMember(r as RosterListRow, idx, true),
+            );
 
             setRosterMembers(sortMembers(roster, sort));
             setOnDeckMembers(sortMembers(onDeck, sort));
-
         } catch (error) {
             logger.error("[DraggableRosterScreen] Failed to load roster data", error);
         } finally {
@@ -588,7 +535,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                         {rosterMembers.length === 0 ? (
                             <View className="items-center py-8 px-5">
                                 <Text className="text-[15px] font-medium text-gray-900 mt-3">No players in roster</Text>
-                                <Text className="text-[13px] text-gray-500 mt-1">Add friends to build your roster</Text>
+                                <Text className="text-[13px] text-gray-500 mt-1">Find players to add them to your roster</Text>
                             </View>
                         ) : (
                             rosterMembers.map((item, index) => (

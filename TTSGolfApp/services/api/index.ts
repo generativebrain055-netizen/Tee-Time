@@ -19,6 +19,8 @@ export {
   refreshAccessToken,
   ApiError,
   buildQueryString,
+  isDuplicateRosterContactFailure,
+  isDuplicateRosterContactApiError,
 } from "./core";
 
 // Domain APIs

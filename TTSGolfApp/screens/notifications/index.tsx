@@ -16,7 +16,14 @@ import {
     Alert,
 } from "react-native";
 import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail } from "lucide-react-native";
-import { notificationApi, friendApi, inviteApi, rosterApi, AppNotification } from "../../services/api";
+import {
+    notificationApi,
+    friendApi,
+    inviteApi,
+    rosterApi,
+    AppNotification,
+    isDuplicateRosterContactApiError,
+} from "../../services/api";
 import { ScreenShell, AppHeader } from "../../ui";
 import { useToast } from "../../ui/feedback";
 import { useUser } from "../../contexts/UserContext";
@@ -480,15 +487,21 @@ export default function NotificationsScreen({ navigation }: any) {
                     ]
                 );
             }
-        } catch (error: any) {
-            logger.error("[NotificationsScreen] Add back error", error);
-            if (error?.message?.includes("already in roster")) {
-                Alert.alert("Already Added", "This user is already in your roster.");
-                await notificationApi.markAsResponded(item.id);
-                setNotifications(prev => prev.filter(n => n.id !== item.id));
-            } else {
-                Alert.alert("Error", error.message || "Failed to add user to roster");
+        } catch (error: unknown) {
+            if (isDuplicateRosterContactApiError(error)) {
+                logger.debug("[NotificationsScreen] Add back: already on roster, clearing notification");
+                try {
+                    await notificationApi.markAsResponded(item.id);
+                    setNotifications(prev => prev.filter(n => n.id !== item.id));
+                } catch (e) {
+                    logger.warn("[NotificationsScreen] Mark responded after duplicate roster", e);
+                }
+                return;
             }
+            logger.error("[NotificationsScreen] Add back error", error);
+            const msg =
+                error instanceof Error ? error.message : "Failed to add user to roster";
+            Alert.alert("Error", msg);
         }
     }, [navigation]);
 

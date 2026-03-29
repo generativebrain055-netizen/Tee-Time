@@ -67,6 +67,29 @@ export class ApiError extends Error {
   }
 }
 
+/** POST /roster when contact is already rostered — not a user-facing error */
+export function isDuplicateRosterContactFailure(
+  status: number,
+  message: string,
+  code?: string,
+): boolean {
+  if (status !== 400) return false;
+  if (code === "DUPLICATE_CONTACT") return true;
+  const m = String(message).toLowerCase();
+  return m.includes("already in roster");
+}
+
+export function isDuplicateRosterContactApiError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    isDuplicateRosterContactFailure(
+      error.statusCode ?? 0,
+      error.message,
+      error.code,
+    )
+  );
+}
+
 /**
  * Generic API call wrapper with automatic token refresh
  */
@@ -141,16 +164,30 @@ export const apiCall = async <T>(
         });
         const retryData = await retryResponse.json();
         if (!retryResponse.ok) {
-          logger.error("[api/core] Retry request failed", {
-            url,
-            status: retryResponse.status,
-            data: retryData,
-          });
-          throw new ApiError(
-            retryData.message || "API request failed",
-            retryResponse.status,
-            retryData.code,
-          );
+          const rmsg =
+            retryData?.error?.message ||
+            retryData?.message ||
+            "API request failed";
+          const rcode = retryData?.error?.code || retryData?.code;
+          if (
+            !isDuplicateRosterContactFailure(
+              retryResponse.status,
+              rmsg,
+              rcode,
+            )
+          ) {
+            logger.error("[api/core] Retry request failed", {
+              url,
+              status: retryResponse.status,
+              data: retryData,
+            });
+          } else {
+            logger.debug("[api/core] Retry: duplicate roster contact", {
+              url,
+              code: rcode,
+            });
+          }
+          throw new ApiError(rmsg, retryResponse.status, rcode);
         }
         logger.info("[api/core] Retry request succeeded", { url });
         return retryData;
@@ -195,11 +232,15 @@ export const apiCall = async <T>(
         throw new ApiError(msg, 401, code);
       }
 
-      logger.error("[api/core] API request failed", {
-        url,
-        status: response.status,
-        data,
-      });
+      if (isDuplicateRosterContactFailure(response.status, msg, code)) {
+        logger.debug("[api/core] Duplicate roster contact", { url, code });
+      } else {
+        logger.error("[api/core] API request failed", {
+          url,
+          status: response.status,
+          data,
+        });
+      }
       throw new ApiError(msg, response.status, code);
     }
 

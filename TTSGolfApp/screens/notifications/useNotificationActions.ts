@@ -10,6 +10,7 @@ import {
   friendApi,
   rosterApi,
   AppNotification,
+  isDuplicateRosterContactApiError,
 } from "../../services/api";
 import { logger } from "../../utils/logger";
 
@@ -286,16 +287,23 @@ export function useNotificationActions({
             ]
           );
         }
-      } catch (error: any) {
-        logger.error("[useNotificationActions] Add back error", error);
-        if (error?.message?.includes("already in roster")) {
-          Alert.alert("Already Added", "This user is already in your roster.");
-          // Still mark as responded and remove notification
-          await notificationApi.markAsResponded(item.id);
-          setNotifications((prev) => prev.filter((n) => n.id !== item.id));
-        } else {
-          Alert.alert("Error", error.message || "Failed to add user to roster");
+      } catch (error: unknown) {
+        if (isDuplicateRosterContactApiError(error)) {
+          logger.debug(
+            "[useNotificationActions] Add back: already on roster, clearing notification",
+          );
+          try {
+            await notificationApi.markAsResponded(item.id);
+            setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+          } catch (e) {
+            logger.warn("[useNotificationActions] Mark responded after duplicate roster", e);
+          }
+          return;
         }
+        logger.error("[useNotificationActions] Add back error", error);
+        const msg =
+          error instanceof Error ? error.message : "Failed to add user to roster";
+        Alert.alert("Error", msg);
       }
     },
     [setNotifications, navigation],

@@ -63,4 +63,5 @@ export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardPr
             </View>
         )}
     </TouchableOpacity>
-));
+    );
+});
