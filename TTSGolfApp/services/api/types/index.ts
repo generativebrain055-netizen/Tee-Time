@@ -305,6 +305,10 @@ export interface ScanResult {
   user?: ScannedUser;
   mutualClubs?: string[];
   confirmationRequired?: boolean;
+  /** When false, scan UI should not offer “Add to On-Deck” (blocked / already on roster or on-deck). */
+  canAddToOnDeck?: boolean;
+  /** Human-readable lines explaining relationship (blocked, friend, roster, on-deck). */
+  statusDetailLines?: string[];
   message?: string;
   code?: string;
 }

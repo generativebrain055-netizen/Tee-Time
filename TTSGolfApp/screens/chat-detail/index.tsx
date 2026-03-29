@@ -12,7 +12,22 @@ import { StatusBar } from "expo-status-bar";
 import { useChat } from "./hooks/useChat";
 import { ChatHeader, ChatActionsMenu, MessageBubble, MessageInput } from "./components";
 import { COLORS } from "./styles";
-import { ChatInfo } from "./types";
+import { ChatInfo, DirectBlockRelation } from "./types";
+
+function getDirectBlockBannerText(
+  name: string,
+  rel: DirectBlockRelation | null
+): string {
+  if (!rel || (!rel.iBlockedThem && !rel.theyBlockedYou)) return "";
+  const n = name?.trim() || "This person";
+  if (rel.iBlockedThem && rel.theyBlockedYou) {
+    return `You blocked ${n}, and they blocked you. Messaging isn’t available.`;
+  }
+  if (rel.iBlockedThem) {
+    return `You blocked ${n}. Unblock them to send messages again.`;
+  }
+  return `${n} blocked you. You can’t send messages until they unblock you.`;
+}
 import { teeTimeApi, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 
@@ -45,7 +60,17 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         isMuted,
         handleMuteToggle,
         handleLeaveConversation,
+        blockRelation,
     } = useChat(chatInfo);
+
+    const isDirectChat = !chatInfo.teeTimeId && !chatInfo.groupId;
+    const directMessagingBlocked =
+        isDirectChat &&
+        blockRelation != null &&
+        (blockRelation.iBlockedThem || blockRelation.theyBlockedYou);
+    const blockBannerText = directMessagingBlocked
+        ? getDirectBlockBannerText(chatInfo.name, blockRelation)
+        : "";
 
     const [participants, setParticipants] = useState<string[]>([]);
 
@@ -196,7 +221,9 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                     {messages.length === 0 ? (
                         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 100 }}>
                             <Text style={{ fontSize: 16, fontWeight: "600", color: COLORS.textMain }}>No messages yet</Text>
-                            <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8 }}>Send a message to start the conversation</Text>
+                            <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8, textAlign: "center", paddingHorizontal: 24 }}>
+                                {blockBannerText || "Send a message to start the conversation"}
+                            </Text>
                         </View>
                     ) : (
                         messages.map((message) => (
@@ -210,7 +237,27 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                         ))
                     )}
                 </ScrollView>
-                <MessageInput value={messageText} onChangeText={setMessageText} onSend={handleSend} onPickImage={handlePickImage} onEmojiSelected={handleEmojiSelected} />
+                {blockBannerText ? (
+                    <View
+                        style={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            backgroundColor: COLORS.primaryLight,
+                            borderTopWidth: 1,
+                            borderTopColor: COLORS.divider,
+                        }}
+                    >
+                        <Text style={{ fontSize: 14, lineHeight: 20, color: COLORS.textMain }}>{blockBannerText}</Text>
+                    </View>
+                ) : null}
+                <MessageInput
+                    value={messageText}
+                    onChangeText={setMessageText}
+                    onSend={handleSend}
+                    onPickImage={handlePickImage}
+                    onEmojiSelected={handleEmojiSelected}
+                    disabled={directMessagingBlocked}
+                />
             </KeyboardAvoidingView>
             <ChatActionsMenu
                 visible={showMenu}

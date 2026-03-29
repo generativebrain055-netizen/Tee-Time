@@ -37,6 +37,14 @@ router.get(
   validateRequest,
   friendController.getFriends,
 );
+router.get(
+  "/messaging-exclusions",
+  friendController.getMessagingExcludedUserIds,
+);
+router.get(
+  "/block-relation/:otherUserId",
+  friendController.getBlockRelation,
+);
 router.delete("/:id", friendController.removeFriend);
 
 // Discovery

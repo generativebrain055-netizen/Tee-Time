@@ -19,6 +19,8 @@ class FriendController {
         this.blockUser = this.blockUser.bind(this);
         this.unblockUser = this.unblockUser.bind(this);
         this.getBlockedUsers = this.getBlockedUsers.bind(this);
+        this.getMessagingExcludedUserIds = this.getMessagingExcludedUserIds.bind(this);
+        this.getBlockRelation = this.getBlockRelation.bind(this);
     }
 
     // POST /api/friends/request
@@ -315,6 +317,7 @@ class FriendController {
                 socialRate: profile.social_rate,
                 averageScore: profile.average_score,
                 friendshipStatus: profile.friendship_status,
+                blockedYou: Boolean(profile.blocked_you),
                 // Include additional fields from enhanced getUserProfile
                 roundsCount: profile.roundsCount || profile.rounds_played || 0,
                 coursesCount: profile.coursesCount || 0,
@@ -368,6 +371,51 @@ class FriendController {
         } catch (error) {
             logger.error("Unblock user error:", error);
             res.status(500).json({ success: false, message: "Failed to unblock user" });
+        }
+    }
+
+    // GET /api/friends/block-relation/:otherUserId
+    async getBlockRelation(req, res) {
+        try {
+            const viewerId = req.user.id;
+            const otherUserId = req.params.otherUserId;
+            if (!otherUserId || viewerId === otherUserId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid user",
+                });
+            }
+            const rel = await friendRepository.getDirectBlockRelation(
+                viewerId,
+                otherUserId,
+            );
+            res.json({
+                success: true,
+                iBlockedThem: !!rel?.i_blocked,
+                theyBlockedYou: !!rel?.they_blocked_me,
+            });
+        } catch (error) {
+            logger.error("Get block relation error:", error);
+            res.status(500).json({
+                success: false,
+                message: "Failed to load block status",
+            });
+        }
+    }
+
+    // GET /api/friends/messaging-exclusions
+    async getMessagingExcludedUserIds(req, res) {
+        try {
+            const excludeUserIds = await friendRepository.getMessagingExcludedUserIds(
+                req.user.id,
+            );
+            res.json({ success: true, excludeUserIds });
+        } catch (error) {
+            logger.error("Get messaging exclusions error:", error);
+            res.status(500).json({
+                success: false,
+                message: "Failed to load messaging exclusions",
+            });
         }
     }
 

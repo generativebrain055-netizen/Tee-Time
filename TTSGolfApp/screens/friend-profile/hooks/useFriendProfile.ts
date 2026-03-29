@@ -17,10 +17,25 @@ export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) =
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
 
     const fetchProfile = useCallback(async () => {
         try {
-            const response = await friendApi.getUserProfile(userId);
+            const [response, blockedRes] = await Promise.all([
+                friendApi.getUserProfile(userId),
+                friendApi.getBlockedUsers(),
+            ]);
+
+            const uidKey = String(userId).toLowerCase();
+            if (blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
+                const blocked = (blockedRes.blockedUsers as { id?: string }[]).some(
+                    (u) => u?.id && String(u.id).toLowerCase() === uidKey,
+                );
+                setIsBlocked(blocked);
+            } else {
+                setIsBlocked(false);
+            }
+
             if (response.success && response.profile) {
                 const p = response.profile as Record<string, unknown>;
                 const apiAvatar = (typeof p.avatar === "string" ? p.avatar : (p.avatarUrl as string) || "").trim();
@@ -104,15 +119,35 @@ export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) =
         Alert.alert("Message", "Messaging feature coming soon!");
     }, []);
 
+    const handleUnblock = useCallback(async () => {
+        if (!userId) return;
+        setActionLoading(true);
+        try {
+            const res = await friendApi.unblockUser(userId);
+            if (res.success) {
+                setIsBlocked(false);
+                await fetchProfile();
+                Alert.alert("Unblocked", "This person has been unblocked.");
+            }
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Failed to unblock";
+            Alert.alert("Error", msg);
+        } finally {
+            setActionLoading(false);
+        }
+    }, [userId, fetchProfile]);
+
     return {
         profile,
         loading,
         refreshing,
         actionLoading,
+        isBlocked,
         onRefresh,
         handleAddFriend,
         handleAcceptRequest,
         handleRemoveFriend,
         handleMessage,
+        handleUnblock,
     };
 };

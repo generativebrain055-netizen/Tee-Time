@@ -88,37 +88,60 @@ export default function ComposeMessageScreen({ navigation }: any) {
 
   const loadRecipients = async () => {
     try {
-      const [friendsRes, rosterRes, onDeckRes, blockedRes] = await Promise.all([
-        friendApi.getFriends(),
-        rosterApi.getRoster(),
-        rosterApi.getOnDeck(),
-        friendApi.getBlockedUsers(),
-      ]);
-      const blockedIds = new Set<string>();
-      if (blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
-        (blockedRes.blockedUsers as { id?: string }[]).forEach((u) => {
-          if (u.id) blockedIds.add(u.id);
-        });
+      const [friendsRes, rosterRes, onDeckRes, exclusionsRes, convRes] =
+        await Promise.all([
+          friendApi.getFriends(),
+          rosterApi.getRoster(),
+          rosterApi.getOnDeck(),
+          friendApi.getMessagingExcludedUserIds(),
+          messagesApi.listConversations("direct"),
+        ]);
+
+      const excludedIds = new Set<string>();
+      const addExcluded = (id: string | null | undefined) => {
+        if (id) excludedIds.add(String(id).toLowerCase());
+      };
+      if (
+        exclusionsRes.success &&
+        Array.isArray(exclusionsRes.excludeUserIds)
+      ) {
+        exclusionsRes.excludeUserIds.forEach((id) => addExcluded(id));
       }
+      if (convRes.success && Array.isArray(convRes.conversations)) {
+        for (const c of convRes.conversations) {
+          if (
+            c.type === "direct" &&
+            c.otherUserId &&
+            c.lastMessage != null
+          ) {
+            addExcluded(c.otherUserId);
+          }
+        }
+      }
+
+      const isExcluded = (userId: string) =>
+        excludedIds.has(String(userId).toLowerCase());
+
       const byId = new Map<string, Recipient>();
       if (friendsRes.success && friendsRes.friends) {
         friendsRes.friends.forEach((f) => {
-          if (!blockedIds.has(f.id)) byId.set(f.id, toRecipientFromFriend(f));
+          if (!isExcluded(f.id)) byId.set(f.id, toRecipientFromFriend(f));
         });
       }
       if (rosterRes.success && rosterRes.roster) {
         rosterRes.roster.forEach((entry) => {
           const r = toRecipientFromRosterContact(entry);
-          if (r && !blockedIds.has(r.id) && !byId.has(r.id)) byId.set(r.id, r);
+          if (r && !isExcluded(r.id) && !byId.has(r.id)) byId.set(r.id, r);
         });
       }
       if (onDeckRes.success && onDeckRes.onDeck) {
         onDeckRes.onDeck.forEach((entry) => {
           const r = toRecipientFromRosterContact(entry);
-          if (r && !blockedIds.has(r.id)) {
+          if (r && !isExcluded(r.id)) {
             const existing = byId.get(r.id);
             if (!existing) byId.set(r.id, { ...r, source: "onDeck" });
-            else if (existing.source === "roster") byId.set(r.id, { ...existing, source: "onDeck" });
+            else if (existing.source === "roster")
+              byId.set(r.id, { ...existing, source: "onDeck" });
           }
         });
       }

@@ -385,14 +385,14 @@ class FriendRepository {
   // Check if users are friends
   async areFriends(userId1, userId2) {
     try {
-      const { data, error } = await supabaseAdmin
+      const { count, error } = await supabaseAdmin
         .from("friendships")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId1)
         .eq("friend_id", userId2);
 
       if (error) throw error;
-      return data !== null;
+      return (count ?? 0) > 0;
     } catch (error) {
       handleError(error, "areFriends");
     }
@@ -557,6 +557,16 @@ class FriendRepository {
       else if (sentRequest) friendship_status = "requested";
       else if (receivedRequest) friendship_status = "pending";
 
+      // Profile owner (userId) has blocked the viewer (viewerId)
+      const { data: theyBlockedViewer } = await supabaseAdmin
+        .from("blocked_users")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("blocked_user_id", viewerId)
+        .maybeSingle();
+
+      const blocked_you = !!theyBlockedViewer;
+
       // Get completed tee-time aggregates for unified stats logic:
       // - roundsCount: total completed rounds
       // - coursesCount: unique completed courses
@@ -625,6 +635,7 @@ class FriendRepository {
         ...data,
         ...profile,
         friendship_status,
+        blocked_you,
         roundsCount: profile.rounds_played ?? completedRoundsCount,
         coursesCount: uniqueCourses.size,
         recentRounds: recentRounds,
@@ -650,18 +661,16 @@ class FriendRepository {
         }
       );
 
-      // Remove from both rosters
-      await supabaseAdmin
-        .from("roster")
-        .delete()
-        .eq("user_id", userId)
-        .eq("contact_user_id", blockedUserId);
-
-      await supabaseAdmin
-        .from("roster")
-        .delete()
-        .eq("user_id", blockedUserId)
-        .eq("contact_user_id", userId);
+      // Remove mutual personal roster links only — do not delete rows that belong to roster groups
+      // (deleting those rows cascades off roster_group_members and breaks groups).
+      await rosterRepository.deleteContactRowIfNoGroupMembership(
+        userId,
+        blockedUserId
+      );
+      await rosterRepository.deleteContactRowIfNoGroupMembership(
+        blockedUserId,
+        userId
+      );
 
       return { user_id: userId, blocked_user_id: blockedUserId };
     } catch (error) {
@@ -684,6 +693,66 @@ class FriendRepository {
       return data || null;
     } catch (error) {
       handleError(error, "unblockUser");
+    }
+  }
+
+  /**
+   * Who blocked whom between two users (for 1:1 chat UI).
+   * @returns {{ i_blocked: boolean, they_blocked_me: boolean }}
+   */
+  async getDirectBlockRelation(viewerId, otherUserId) {
+    try {
+      if (!viewerId || !otherUserId || String(viewerId) === String(otherUserId)) {
+        return { i_blocked: false, they_blocked_me: false };
+      }
+      const { data: iBlocked, error: e1 } = await supabaseAdmin
+        .from("blocked_users")
+        .select("id")
+        .eq("user_id", viewerId)
+        .eq("blocked_user_id", otherUserId)
+        .maybeSingle();
+      if (e1 && e1.code !== "PGRST116") throw e1;
+
+      const { data: blockedMe, error: e2 } = await supabaseAdmin
+        .from("blocked_users")
+        .select("id")
+        .eq("user_id", otherUserId)
+        .eq("blocked_user_id", viewerId)
+        .maybeSingle();
+      if (e2 && e2.code !== "PGRST116") throw e2;
+
+      return {
+        i_blocked: !!iBlocked,
+        they_blocked_me: !!blockedMe,
+      };
+    } catch (error) {
+      handleError(error, "getDirectBlockRelation");
+    }
+  }
+
+  /**
+   * User IDs to hide from "new message" recipient picker: anyone you blocked or who blocked you.
+   */
+  async getMessagingExcludedUserIds(viewerId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("blocked_users")
+        .select("user_id, blocked_user_id")
+        .or(`user_id.eq.${viewerId},blocked_user_id.eq.${viewerId}`);
+
+      if (error) throw error;
+
+      const ids = new Set();
+      const v = String(viewerId);
+      for (const row of data || []) {
+        const uid = String(row.user_id);
+        const bid = String(row.blocked_user_id);
+        if (uid === v) ids.add(bid);
+        if (bid === v) ids.add(uid);
+      }
+      return [...ids];
+    } catch (error) {
+      handleError(error, "getMessagingExcludedUserIds");
     }
   }
 

@@ -166,6 +166,13 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
 
     const handleMessage = useCallback(async () => {
         const userId = profile?.contact?.userId;
+        if (profile?.blockedYou) {
+            Alert.alert(
+                "Can't message",
+                `${profile.contact.name || person.name} blocked you. You can't start a conversation with them.`,
+            );
+            return;
+        }
         if (!userId) {
             Alert.alert("Message", "This contact is not a registered user and cannot be messaged.");
             return;
@@ -189,7 +196,7 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
             logger.error("[PersonDetail] Failed to open conversation", err);
             Alert.alert("Error", "Could not open conversation.");
         }
-    }, [profile?.contact?.userId, profile?.contact?.avatar, person.name, navigation]);
+    }, [profile?.blockedYou, profile?.contact, person.name, navigation]);
 
 
     const StatCard = ({ icon: Icon, label, value, color = COLORS.primary }: any) => (
@@ -443,6 +450,14 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                 </View>
             ) : (
                 <ScrollView showsVerticalScrollIndicator={false}>
+                    {profile?.blockedYou ? (
+                        <View className="mx-4 mt-4 flex-row gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                            <Ban size={20} color="#B45309" style={{ marginTop: 2 }} />
+                            <Text className="flex-1 text-sm leading-5 text-amber-900">
+                                {profile.contact.name || person.name} blocked you. You can’t message them or send invites until they unblock you.
+                            </Text>
+                        </View>
+                    ) : null}
                     <View className="items-center py-6 border-b border-gray-100">
                         {profile?.contact.avatar || person.img ? (
                             <Image

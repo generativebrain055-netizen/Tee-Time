@@ -12,6 +12,12 @@ export interface ChatMessage {
   isSystem?: boolean;
 }
 
+/** 1:1 chat only: current user vs the other participant */
+export interface DirectBlockRelation {
+  iBlockedThem: boolean;
+  theyBlockedYou: boolean;
+}
+
 export interface ChatInfo {
   id: string;
   conversationId?: string;

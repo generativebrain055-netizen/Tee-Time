@@ -95,19 +95,6 @@ class DraftController {
 
       const targetUserId = validation.userId;
 
-      // Check if already in roster
-      const existing = await rosterRepository.isInRoster(
-        scannerId,
-        targetUserId
-      );
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "This user is already in your roster",
-          code: "ALREADY_IN_ROSTER",
-        });
-      }
-
       // Get user profile for confirmation
       const userProfile = await userRepository.getPublicProfile(targetUserId);
       if (!userProfile) {
@@ -117,6 +104,45 @@ class DraftController {
           code: "USER_NOT_FOUND",
         });
       }
+
+      const displayName =
+        `${userProfile.first_name || ""} ${userProfile.last_name || ""}`.trim() ||
+        "This player";
+
+      const [rosterRows, isFriend, blockRel] = await Promise.all([
+        rosterRepository.getContactRosterRows(scannerId, targetUserId),
+        friendRepository.areFriends(scannerId, targetUserId),
+        friendRepository.getDirectBlockRelation(scannerId, targetUserId),
+      ]);
+
+      const anyMain = (rosterRows || []).some((r) => !r.is_on_deck);
+      const anyOnDeck = (rosterRows || []).some((r) => r.is_on_deck);
+      const hasRosterRow = (rosterRows || []).length > 0;
+
+      const iBlocked = !!blockRel?.i_blocked;
+      const theyBlocked = !!blockRel?.they_blocked_me;
+
+      const statusDetailLines = [];
+      if (iBlocked) {
+        statusDetailLines.push(
+          `You have blocked ${displayName}. Unblock them to add them via Scan to Draft.`
+        );
+      }
+      if (theyBlocked) {
+        statusDetailLines.push(`${displayName} has blocked you.`);
+      }
+      if (isFriend) {
+        statusDetailLines.push(`${displayName} is your friend.`);
+      }
+      if (anyMain) {
+        statusDetailLines.push(`${displayName} is on your roster.`);
+      }
+      if (anyOnDeck) {
+        statusDetailLines.push(`${displayName} is on your On-Deck list.`);
+      }
+
+      const canAddToOnDeck =
+        !hasRosterRow && !iBlocked && !theyBlocked;
 
       // Get mutual clubs
       const mutualClubs = await draftService.getMutualClubs(
@@ -128,10 +154,7 @@ class DraftController {
         success: true,
         user: {
           id: targetUserId,
-          name:
-            `${userProfile.first_name || ""} ${
-              userProfile.last_name || ""
-            }`.trim() || "Unknown",
+          name: displayName,
           avatar: userProfile.avatar_url,
           socialRate: userProfile.social_rate,
           handicap: userProfile.handicap,
@@ -140,6 +163,8 @@ class DraftController {
         },
         mutualClubs,
         confirmationRequired: true,
+        canAddToOnDeck,
+        statusDetailLines,
       });
     } catch (error) {
       logger.error("Scan QR code error:", error.message);
@@ -162,6 +187,18 @@ class DraftController {
         return res
           .status(400)
           .json({ success: false, message: "User ID is required" });
+      }
+
+      const blockRel = await friendRepository.getDirectBlockRelation(
+        scannerId,
+        userId
+      );
+      if (blockRel?.i_blocked || blockRel?.they_blocked_me) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot add this player while one of you has blocked the other.",
+          code: "BLOCKED",
+        });
       }
 
       // Double-check not already in roster

@@ -138,6 +138,7 @@ const formatMemberProfile = (profile) => ({
   groupId: profile.group_id,
   groupName: profile.group_name,
   groupColor: profile.group_color,
+  blockedYou: Boolean(profile.blocked_you),
   contact: {
     userId: profile.contact_user_id,
     phone: profile.contact_phone,

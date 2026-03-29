@@ -71,6 +71,8 @@ export interface MemberProfile {
   groupId?: string;
   groupName?: string;
   groupColor?: string;
+  /** True when this roster contact (registered user) has blocked the viewer */
+  blockedYou?: boolean;
   contact: {
     userId?: string;
     phone?: string;

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,11 +52,13 @@ function FriendProfileScreen({ navigation, route }: Props) {
     loading,
     refreshing,
     actionLoading,
+    isBlocked,
     onRefresh,
     handleAddFriend,
     handleAcceptRequest,
     handleRemoveFriend,
     handleMessage,
+    handleUnblock,
   } = useFriendProfile(userId, initialUser);
 
   const handleBack = useCallback(() => {
@@ -90,6 +93,19 @@ function FriendProfileScreen({ navigation, route }: Props) {
     handleRemoveFriend();
   }, [handleRemoveFriend]);
 
+  const handleUnblockPress = useCallback(() => {
+    if (!profile) return;
+    const name = getFullName(profile.firstName, profile.lastName);
+    Alert.alert(
+      "Unblock member",
+      `Unblock ${name}? They will be able to contact you again; they are not added back to your roster automatically.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Unblock", onPress: () => void handleUnblock() },
+      ],
+    );
+  }, [profile, handleUnblock]);
+
   if (loading) {
     return (
       <View className="flex-1 bg-bg justify-center items-center">
@@ -115,6 +131,8 @@ function FriendProfileScreen({ navigation, route }: Props) {
   const initials = getInitials(profile.firstName, profile.lastName);
   const avatarUri = (profile.avatar || (profile as { avatarUrl?: string }).avatarUrl || "").trim() || undefined;
   const isFriend = profile.friendshipStatus === "friend";
+  const blockedYou = profile.blockedYou === true;
+  const showFriendDetails = isFriend && !isBlocked && !blockedYou;
 
   const rounds = profile.roundsCount ?? profile.roundsPlayed ?? 0;
   const courses = profile.coursesCount ?? 0;
@@ -165,6 +183,8 @@ function FriendProfileScreen({ navigation, route }: Props) {
           />
           <ActionButtons
             status={profile.friendshipStatus}
+            isBlocked={isBlocked}
+            blockedYou={blockedYou}
             loading={actionLoading}
             fullName={fullName}
             onAddFriend={handleAddFriend}
@@ -172,14 +192,17 @@ function FriendProfileScreen({ navigation, route }: Props) {
             onRemoveFriend={handleRemoveFriend}
             onMessage={onMessage}
             onShowMoreModal={handleShowMoreModal}
+            onUnblock={handleUnblockPress}
           />
         </View>
 
-        {!isFriend ? (
+        {!showFriendDetails && !isBlocked && !blockedYou ? (
           <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
             <FriendsOnlyLock fullName={fullName} />
           </View>
-        ) : (
+        ) : null}
+
+        {showFriendDetails ? (
           <>
             {/* Playing Preferences and Active Memberships in one white container */}
             <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
@@ -211,7 +234,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
             <GolfStats rounds={rounds} courses={courses} socialScore={socialScore} />
             <RecentRounds rounds={recentRounds} />
           </>
-        )}
+        ) : null}
       </ScrollView>
 
       {/* More Modal */}

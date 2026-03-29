@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ScrollView, Alert } from "react-native";
-import { messagesApi } from "../../../services/api";
+import { messagesApi, friendApi } from "../../../services/api";
 import { ApiError } from "../../../services/api/core";
-import type { ChatMessage, ChatDetailState } from "../types";
-import type { ChatInfo } from "../types";
+import type { ChatMessage, ChatDetailState, ChatInfo, DirectBlockRelation } from "../types";
 import { logger } from "../../../utils/logger";
 
 export const useChat = (chatInfo: ChatInfo | undefined) => {
@@ -16,6 +15,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
   });
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [blockRelation, setBlockRelation] = useState<DirectBlockRelation | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Resolve conversation and load messages
@@ -30,6 +30,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     const run = async () => {
       try {
         setState((prev) => ({ ...prev, loading: true }));
+        setBlockRelation(null);
 
         const params: {
           conversationId?: string;
@@ -51,6 +52,24 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
         const cid = convRes.conversation.id;
         setConversationId(cid);
         setIsMuted(!!convRes.conversation.isMuted);
+
+        const isDirectDm =
+          !chatInfo.teeTimeId && !chatInfo.groupId;
+        const otherUserId =
+          chatInfo.recipientId ?? convRes.conversation.otherUserId ?? undefined;
+        if (isDirectDm && otherUserId) {
+          try {
+            const br = await friendApi.getBlockRelation(otherUserId);
+            if (!cancelled && br.success) {
+              setBlockRelation({
+                iBlockedThem: !!br.iBlockedThem,
+                theyBlockedYou: !!br.theyBlockedYou,
+              });
+            }
+          } catch {
+            if (!cancelled) setBlockRelation(null);
+          }
+        }
 
         const msgRes = await messagesApi.getMessages(cid, { markRead: true });
         if (cancelled) return;
@@ -123,6 +142,19 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     const trimmed = state.messageText.trim();
     if (!trimmed || !conversationId) return;
 
+    const isDirectDm = !chatInfo?.teeTimeId && !chatInfo?.groupId;
+    if (
+      isDirectDm &&
+      blockRelation &&
+      (blockRelation.iBlockedThem || blockRelation.theyBlockedYou)
+    ) {
+      Alert.alert(
+        "Messaging unavailable",
+        "You can’t send messages while this chat is blocked."
+      );
+      return;
+    }
+
     setState((prev) => ({ ...prev, messageText: "" }));
 
     try {
@@ -136,11 +168,31 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     } catch (err) {
       setState((prev) => ({ ...prev, messageText: trimmed }));
     }
-  }, [state.messageText, conversationId]);
+  }, [
+    state.messageText,
+    conversationId,
+    chatInfo?.teeTimeId,
+    chatInfo?.groupId,
+    blockRelation,
+  ]);
 
   const handleSendImage = useCallback(
     async (imageBase64: string, caption?: string) => {
       if (!conversationId) return;
+
+      const isDirectDm = !chatInfo?.teeTimeId && !chatInfo?.groupId;
+      if (
+        isDirectDm &&
+        blockRelation &&
+        (blockRelation.iBlockedThem || blockRelation.theyBlockedYou)
+      ) {
+        Alert.alert(
+          "Messaging unavailable",
+          "You can’t send images while this chat is blocked."
+        );
+        return;
+      }
+
       try {
         const res = await messagesApi.sendMessage(
           conversationId,
@@ -155,7 +207,12 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
         logger.warn("[useChat] Send image error", err);
       }
     },
-    [conversationId]
+    [
+      conversationId,
+      chatInfo?.teeTimeId,
+      chatInfo?.groupId,
+      blockRelation,
+    ]
   );
 
   const handleConvertToGroupMessage = useCallback(
@@ -236,6 +293,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     ...state,
     conversationId,
     isMuted,
+    blockRelation,
     scrollViewRef,
     setMessageText,
     appendToMessageText,

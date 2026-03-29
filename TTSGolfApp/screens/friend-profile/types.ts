@@ -7,6 +7,8 @@ export type FriendshipStatus = "none" | "friend" | "requested" | "pending";
 
 export interface FriendProfileData extends Omit<DiscoveredUser, 'friendshipStatus'> {
   friendshipStatus?: FriendshipStatus;
+  /** Profile user has blocked the viewer */
+  blockedYou?: boolean;
   headerImage?: string;
   /** Optional extended fields if API supports */
   golfVibe?: string;

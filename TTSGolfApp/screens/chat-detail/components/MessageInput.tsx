@@ -14,14 +14,25 @@ interface MessageInputProps {
   onPickImage?: (uri: string, base64?: string) => void;
   /** Called when user selects an emoji from the picker (emoji icon tap). */
   onEmojiSelected?: (emoji: string) => void;
+  /** When true, input and all actions are non-interactive (e.g. blocked 1:1 chat). */
+  disabled?: boolean;
 }
 
-export const MessageInput = memo(({ value, onChangeText, onSend, onPickImage, onEmojiSelected }: MessageInputProps) => {
+export const MessageInput = memo(
+  ({
+    value,
+    onChangeText,
+    onSend,
+    onPickImage,
+    onEmojiSelected,
+    disabled = false,
+  }: MessageInputProps) => {
   const insets = useSafeAreaInsets();
-  const canSend = value.trim().length > 0;
+  const canSend = !disabled && value.trim().length > 0;
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const handleImagePress = useCallback(async () => {
+    if (disabled) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
@@ -40,7 +51,7 @@ export const MessageInput = memo(({ value, onChangeText, onSend, onPickImage, on
       const asset = result.assets[0];
       onPickImage?.(asset.uri, asset.base64 ?? undefined);
     }
-  }, [onPickImage]);
+  }, [onPickImage, disabled]);
 
   const handleEmojiSelected = useCallback(
     (ev: { emoji: string }) => {
@@ -51,9 +62,14 @@ export const MessageInput = memo(({ value, onChangeText, onSend, onPickImage, on
   );
 
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 16) }, disabled && styles.containerDisabled]}>
       <View style={styles.row}>
-        <TouchableOpacity style={styles.iconBtn} hitSlop={8} onPress={handleImagePress}>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          hitSlop={8}
+          onPress={handleImagePress}
+          disabled={disabled}
+        >
           <ImageIcon size={20} color={COLORS.textSub} />
         </TouchableOpacity>
         <View style={styles.inputWrap}>
@@ -65,8 +81,14 @@ export const MessageInput = memo(({ value, onChangeText, onSend, onPickImage, on
             onChangeText={onChangeText}
             multiline
             maxLength={10000}
+            editable={!disabled}
           />
-          <TouchableOpacity style={styles.emojiBtn} hitSlop={8} onPress={() => setEmojiPickerOpen(true)}>
+          <TouchableOpacity
+            style={styles.emojiBtn}
+            hitSlop={8}
+            onPress={() => !disabled && setEmojiPickerOpen(true)}
+            disabled={disabled}
+          >
             <Smile size={20} color={COLORS.textSub} />
           </TouchableOpacity>
         </View>
@@ -90,7 +112,8 @@ export const MessageInput = memo(({ value, onChangeText, onSend, onPickImage, on
       />
     </View>
   );
-});
+  }
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -100,6 +123,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
+  },
+  containerDisabled: {
+    opacity: 0.55,
   },
   row: {
     flexDirection: "row",

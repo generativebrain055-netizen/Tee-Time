@@ -48,6 +48,8 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [scanned, setScanned] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [scannedUser, setScannedUser] = useState<ScannedUser | null>(null);
+    const [canAddToOnDeck, setCanAddToOnDeck] = useState(true);
+    const [statusDetailLines, setStatusDetailLines] = useState<string[]>([]);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
@@ -127,6 +129,10 @@ export default function ScanQRScreen({ navigation }: Props) {
                 if (result.success && result.user) {
                     logger.info("[ScanQRScreen] User found", { userId: result.user.id });
                     setScannedUser(result.user);
+                    setCanAddToOnDeck(result.canAddToOnDeck !== false);
+                    setStatusDetailLines(
+                        Array.isArray(result.statusDetailLines) ? result.statusDetailLines : []
+                    );
                     setShowConfirmModal(true);
                 } else {
                     logger.warn("[ScanQRScreen] Scan failed", { message: result.message });
@@ -159,7 +165,7 @@ export default function ScanQRScreen({ navigation }: Props) {
     }, []);
 
     const handleConfirmDraft = useCallback(async () => {
-        if (!scannedUser) return;
+        if (!scannedUser || !canAddToOnDeck) return;
 
         setConfirming(true);
         try {
@@ -179,7 +185,7 @@ export default function ScanQRScreen({ navigation }: Props) {
         } finally {
             setConfirming(false);
         }
-    }, [scannedUser, navigation, resetScanner]);
+    }, [scannedUser, canAddToOnDeck, navigation, resetScanner]);
 
     const handleClose = useCallback(() => {
         navigation.goBack();
@@ -188,6 +194,8 @@ export default function ScanQRScreen({ navigation }: Props) {
     const handleCancelConfirm = useCallback(() => {
         setShowConfirmModal(false);
         setScannedUser(null);
+        setCanAddToOnDeck(true);
+        setStatusDetailLines([]);
         resetScanner();
     }, [resetScanner]);
 
@@ -432,32 +440,59 @@ export default function ScanQRScreen({ navigation }: Props) {
                             )}
                         </View>
 
+                        {statusDetailLines.length > 0 ? (
+                            <View className="w-full mb-4 px-1">
+                                {statusDetailLines.map((line, idx) => (
+                                    <Text
+                                        key={idx}
+                                        className="text-[15px] text-gray-600 text-center leading-[22px] mb-2"
+                                    >
+                                        {line}
+                                    </Text>
+                                ))}
+                            </View>
+                        ) : null}
+
                         <Text className="text-base text-gray-500 text-center mb-6">
-                            Add this player to your On-Deck list?
+                            {canAddToOnDeck
+                                ? "Add this player to your On-Deck list?"
+                                : "You can’t add them from this scan right now."}
                         </Text>
 
                         <View className="flex-row gap-3 w-full">
-                            <TouchableOpacity
-                                className="flex-1 py-4 rounded-[14px] bg-gray-50 items-center"
-                                onPress={handleCancelConfirm}
-                                disabled={confirming}
-                            >
-                                <Text className="text-base font-semibold text-gray-500">Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                className="flex-[1.2] flex-row py-4 rounded-[14px] bg-blue-600 items-center justify-center gap-2"
-                                onPress={handleConfirmDraft}
-                                disabled={confirming}
-                            >
-                                {confirming ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <>
-                                        <UserPlus size={20} color="#fff" />
-                                        <Text className="text-base font-semibold text-white">Add Player</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                            {canAddToOnDeck ? (
+                                <>
+                                    <TouchableOpacity
+                                        className="flex-1 py-4 rounded-[14px] bg-gray-50 items-center"
+                                        onPress={handleCancelConfirm}
+                                        disabled={confirming}
+                                    >
+                                        <Text className="text-base font-semibold text-gray-500">Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        className="flex-[1.2] flex-row py-4 rounded-[14px] bg-blue-600 items-center justify-center gap-2"
+                                        onPress={handleConfirmDraft}
+                                        disabled={confirming}
+                                    >
+                                        {confirming ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <>
+                                                <UserPlus size={20} color="#fff" />
+                                                <Text className="text-base font-semibold text-white">Add Player</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
+                                <TouchableOpacity
+                                    className="flex-1 py-4 rounded-[14px] bg-gray-100 items-center"
+                                    onPress={handleCancelConfirm}
+                                    disabled={confirming}
+                                >
+                                    <Text className="text-base font-semibold text-gray-700">Close</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     </View>
                 </View>

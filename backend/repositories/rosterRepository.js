@@ -509,6 +509,69 @@ class RosterRepository {
     }
   }
 
+  /**
+   * All roster rows for a contact on the owner's roster (personal + group-linked).
+   * Used for QR scan context (on roster vs on-deck).
+   */
+  async getContactRosterRows(ownerUserId, contactUserId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("roster")
+        .select("id, is_on_deck, group_id")
+        .eq("user_id", ownerUserId)
+        .eq("contact_user_id", contactUserId);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      handleError(error, "getContactRosterRows");
+    }
+  }
+
+  /**
+   * Delete the owner's roster row for this contact only when it is not tied to any roster group.
+   * Used when blocking: removing mutual personal roster links must not drop anyone from shared groups.
+   * @returns {Promise<boolean>} true if a row was deleted
+   */
+  async deleteContactRowIfNoGroupMembership(ownerUserId, contactUserId) {
+    try {
+      const { data: row, error: selErr } = await supabaseAdmin
+        .from("roster")
+        .select("id, group_id")
+        .eq("user_id", ownerUserId)
+        .eq("contact_user_id", contactUserId)
+        .maybeSingle();
+
+      if (selErr && selErr.code !== "PGRST116") throw selErr;
+      if (!row) return false;
+
+      if (row.group_id != null) {
+        return false;
+      }
+
+      const { count, error: cntErr } = await supabaseAdmin
+        .from("roster_group_members")
+        .select("id", { count: "exact", head: true })
+        .eq("roster_id", row.id);
+
+      if (cntErr) throw cntErr;
+      if ((count ?? 0) > 0) {
+        return false;
+      }
+
+      const { error: delErr } = await supabaseAdmin
+        .from("roster")
+        .delete()
+        .eq("id", row.id)
+        .eq("user_id", ownerUserId);
+
+      if (delErr) throw delErr;
+      return true;
+    } catch (error) {
+      handleError(error, "deleteContactRowIfNoGroupMembership");
+    }
+  }
+
   // ============ ROSTER GROUPS ============
 
   async getGroups(userId) {
@@ -1841,10 +1904,22 @@ class RosterRepository {
         .select("*", { count: "exact", head: true })
         .eq("roster_id", rosterId);
 
+      let blocked_you = false;
+      if (data.contact_user_id) {
+        const { data: blk } = await supabaseAdmin
+          .from("blocked_users")
+          .select("id")
+          .eq("user_id", data.contact_user_id)
+          .eq("blocked_user_id", userId)
+          .maybeSingle();
+        blocked_you = !!blk;
+      }
+
       return {
         ...merged,
         group_name,
         group_color,
+        blocked_you,
         times_played_together: timesPlayed || 0,
         invites_accepted: invitesAccepted || 0,
         total_invites: totalInvites || 0,

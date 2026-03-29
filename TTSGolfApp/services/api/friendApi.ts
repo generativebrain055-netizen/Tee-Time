@@ -103,7 +103,11 @@ export const friendApi = {
   getUserProfile: (userId: string) =>
     apiCall<{
       success: boolean;
-      profile: DiscoveredUser & { bio?: string; averageScore?: number };
+      profile: DiscoveredUser & {
+        bio?: string;
+        averageScore?: number;
+        blockedYou?: boolean;
+      };
     }>(`${API_ENDPOINTS.FRIENDS}/profile/${userId}`),
 
   /**
@@ -131,4 +135,20 @@ export const friendApi = {
     apiCall<{ success: boolean; blockedUsers: unknown[] }>(
       `${API_ENDPOINTS.FRIENDS}/blocked`,
     ),
+
+  /**
+   * User IDs excluded from new-message picker (you blocked or they blocked you)
+   */
+  getMessagingExcludedUserIds: () =>
+    apiCall<{ success: boolean; excludeUserIds: string[] }>(
+      `${API_ENDPOINTS.FRIENDS}/messaging-exclusions`,
+    ),
+
+  /** 1:1 chat: who blocked whom (viewer vs other user) */
+  getBlockRelation: (otherUserId: string) =>
+    apiCall<{
+      success: boolean;
+      iBlockedThem: boolean;
+      theyBlockedYou: boolean;
+    }>(`${API_ENDPOINTS.FRIENDS}/block-relation/${otherUserId}`),
 };
