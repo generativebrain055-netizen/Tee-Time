@@ -123,7 +123,7 @@ export const messagesApi = {
       { method: "POST" }
     ),
 
-  /** Delete a message (allowed for sender or tee time organizer). */
+  /** Delete a message (sender; tee time organizer may delete any in tee time chat). */
   deleteMessage: (conversationId: string, messageId: string) =>
     apiCall<{ success: boolean }>(
       API_ENDPOINTS.MESSAGES_DELETE_MESSAGE(conversationId, messageId),

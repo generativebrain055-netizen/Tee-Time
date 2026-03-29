@@ -328,7 +328,9 @@ async function getConversationMeta(conv, userId, lastMessage) {
           .slice(0, 5);
       }
     }
-    participantCount = memberUserIds.length;
+    // Include group owner + roster rows in group (memberUserIds excluded owner and was capped for avatars only)
+    participantCount =
+      rg?.user_id != null ? (gRosterIds?.length ?? 0) + 1 : null;
     for (const uid of memberUserIds.slice(0, 3)) {
       const { data: up } = await supabaseAdmin
         .from("user_profiles")

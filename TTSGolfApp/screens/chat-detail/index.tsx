@@ -134,9 +134,17 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
     }, [navigation, chatInfo.isGroup, chatInfo.groupId]);
 
     const handleDeleteChatFromMenu = useCallback(() => {
+        const hasTeeTime = chatInfo.teeTimeId != null && chatInfo.teeTimeId !== "";
+        const hasGroup = chatInfo.groupId != null && chatInfo.groupId !== "";
+        const reopenHint = hasTeeTime
+            ? "You can open it again from the tee time."
+            : hasGroup
+              ? "You can open it again from the group."
+              : "You can open it again from the profile.";
+        const deleteChatMessage = `This chat will be removed from your Messages list. Other members still have the conversation. ${reopenHint}`;
         Alert.alert(
             "Delete chat?",
-            "This chat will be removed from your Messages list. Other members still have the conversation. You can open it again from the group or tee time.",
+            deleteChatMessage,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -156,20 +164,24 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                 },
             ]
         );
-    }, [handleLeaveConversation, navigation]);
+    }, [chatInfo.groupId, chatInfo.teeTimeId, handleLeaveConversation, navigation]);
+
+    const deleteDeniedFallback =
+        chatInfo.teeTimeId != null && chatInfo.teeTimeId !== ""
+            ? "You can only delete your own messages, or any message as the tee time organizer."
+            : chatInfo.groupId != null && chatInfo.groupId !== ""
+              ? "You can only delete your own messages in this group chat."
+              : "You can only delete your own messages in this conversation.";
 
     const handleDeleteMessageWithAlert = useCallback(
         async (messageId: string) => {
             try {
                 await handleDeleteMessage(messageId);
             } catch (err: any) {
-                Alert.alert(
-                    "Cannot delete",
-                    err?.message || "You can only delete your own messages, or any message as the tee time organizer."
-                );
+                Alert.alert("Cannot delete", err?.message || deleteDeniedFallback);
             }
         },
-        [handleDeleteMessage]
+        [handleDeleteMessage, deleteDeniedFallback]
     );
 
     const handlePickImage = useCallback(

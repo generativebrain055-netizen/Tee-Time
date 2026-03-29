@@ -184,9 +184,10 @@ async function convertToGroupMessage(conversationId, messageId, userId) {
 }
 
 /**
- * Delete a message for organization. Allowed if:
+ * Delete a message. Allowed if:
  * - User is the message sender, or
- * - Conversation is a tee_time chat and user is the tee time organizer (creator).
+ * - Conversation is tee_time and user is the tee time organizer (creator).
+ * Direct and group chats: sender only. Error text matches conversation type.
  */
 async function leaveConversation(conversationId, userId) {
   await conversationRepository.leaveConversation(conversationId, userId);
@@ -211,7 +212,13 @@ async function deleteMessage(conversationId, messageId, userId) {
   }
 
   if (!isSender && !isOrganizer) {
-    throw new Error("You can only delete your own messages, or any message as the tee time organizer");
+    const msg =
+      conv.type === "tee_time"
+        ? "You can only delete your own messages, or any message as the tee time organizer."
+        : conv.type === "group"
+          ? "You can only delete your own messages in this group chat."
+          : "You can only delete your own messages in this conversation.";
+    throw new Error(msg);
   }
 
   return await messageRepository.deleteOne(messageId, conversationId);

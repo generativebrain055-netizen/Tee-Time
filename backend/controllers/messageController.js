@@ -221,7 +221,7 @@ async function leaveConversation(req, res) {
 
 /**
  * DELETE /api/messages/conversations/:id/messages/:messageId
- * Delete a message. Allowed for sender or tee time organizer (for organization).
+ * Delete a message. Sender always; tee time chats also allow the tee time organizer.
  */
 async function deleteMessage(req, res) {
   try {
