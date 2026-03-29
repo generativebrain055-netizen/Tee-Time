@@ -30,6 +30,17 @@ interface Props {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SCAN_AREA_SIZE = Math.min(SCREEN_WIDTH * 0.7, 280);
 
+/** Pre-filled in simulator/emulator so you can tap “Simulate scan” without pasting. */
+const DEFAULT_SIMULATOR_QR_PAYLOAD =
+    "eyJ2IjoxLCJ1IjoiY2M3MDljYjItNDAwNS00OWNkLTkxYzUtYjZmNDZlNTM4ODM5IiwiYyI6ImVlYTFiM2E4MzU2ZWJhYzM4YzQ0MDAzNjYwYmMzZGI3IiwicyI6Ijg2ZDAwMGQ0YTNkOGJjZjUifQ==";
+
+/** Match backend normalizeDraftQrRawInput — scanners often add whitespace/newlines. */
+function normalizeScannedQrData(data: string): string {
+    let s = String(data).trim();
+    if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+    return s.replace(/\s+/g, "");
+}
+
 export default function ScanQRScreen({ navigation }: Props) {
     const colors = useColors();
     const insets = useSafeAreaInsets();
@@ -41,7 +52,9 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [lastDetection, setLastDetection] = useState<string>("");
-    const [simulatorPayload, setSimulatorPayload] = useState("");
+    const [simulatorPayload, setSimulatorPayload] = useState(
+        Device.isDevice ? "" : DEFAULT_SIMULATOR_QR_PAYLOAD,
+    );
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
 
@@ -76,10 +89,15 @@ export default function ScanQRScreen({ navigation }: Props) {
     }, []);
 
     const handleBarCodeScanned = useCallback(({ type, data }: { type: string; data: string }) => {
-        // Update last detection for debugging
-        setLastDetection(`${type}: ${data.substring(0, 30)}...`);
+        const payload = normalizeScannedQrData(data);
+        if (!payload) {
+            return;
+        }
 
-        logger.debug("[ScanQRScreen] Barcode scanned", { type, dataLength: data.length, scanned, processing, cooldown: scanCooldown.current });
+        // Update last detection for debugging
+        setLastDetection(`${type}: ${payload.substring(0, 30)}...`);
+
+        logger.debug("[ScanQRScreen] Barcode scanned", { type, dataLength: payload.length, scanned, processing, cooldown: scanCooldown.current });
 
         // Prevent rapid duplicate scans
         if (scanned || processing || scanCooldown.current) {
@@ -87,7 +105,7 @@ export default function ScanQRScreen({ navigation }: Props) {
             return;
         }
 
-        if (lastScannedData.current === data) {
+        if (lastScannedData.current === payload) {
             logger.debug("[ScanQRScreen] Scan blocked - duplicate data");
             return;
         }
@@ -95,15 +113,15 @@ export default function ScanQRScreen({ navigation }: Props) {
         logger.debug("[ScanQRScreen] Processing QR code");
 
         scanCooldown.current = true;
-        lastScannedData.current = data;
+        lastScannedData.current = payload;
         setScanned(true);
         setProcessing(true);
 
         // Process the scan
         (async () => {
             try {
-                logger.debug("[ScanQRScreen] Calling draftApi.scanQRCode", { dataPreview: data.substring(0, 50) });
-                const result = await draftApi.scanQRCode(data);
+                logger.debug("[ScanQRScreen] Calling draftApi.scanQRCode", { dataPreview: payload.substring(0, 50) });
+                const result = await draftApi.scanQRCode(payload);
                 logger.debug("[ScanQRScreen] Scan result", result);
 
                 if (result.success && result.user) {
@@ -334,7 +352,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                             className="bg-blue-600 rounded-xl py-4 items-center mt-5"
                             disabled={processing}
                             onPress={() => {
-                                const data = simulatorPayload.trim();
+                                const data = normalizeScannedQrData(simulatorPayload);
                                 if (!data) {
                                     Alert.alert("Empty", "Paste the QR payload first.");
                                     return;
