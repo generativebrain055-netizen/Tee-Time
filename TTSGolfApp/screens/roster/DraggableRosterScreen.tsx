@@ -321,10 +321,17 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 }
 
                 const rosterEntry = rosterByUserId.get(friend.id);
-                const rowId = rosterEntry?.id;
+                // Only show under main Roster if they have an actual roster row (not on-deck).
+                // Otherwise removed / never-rostered friends would still appear here because
+                // they remain in the friends list after "Remove from On Deck" deletes the row.
+                if (!rosterEntry?.id) {
+                    return;
+                }
+
+                const rowId = rosterEntry.id;
 
                 roster.push({
-                    id: rowId || friend.id,
+                    id: rowId,
                     rosterId: rowId,
                     firstName: friend.firstName || '',
                     lastName: friend.lastName || '',

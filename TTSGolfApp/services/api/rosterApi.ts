@@ -51,12 +51,26 @@ export const rosterApi = {
     }),
 
   /**
-   * Remove from roster
+   * Remove from roster: main list → moves to On-Deck; On-Deck → deletes row.
+   * Use permanent: true to always delete the row (block user, or remove from On Deck tab).
    */
-  removeFromRoster: (rosterId: string) =>
-    apiCall<{ success: boolean }>(`${API_ENDPOINTS.ROSTER}/${rosterId}`, {
+  removeFromRoster: (
+    rosterId: string,
+    options?: { permanent?: boolean },
+  ) => {
+    const q =
+      options?.permanent === true
+        ? `${buildQueryString({ permanent: "true" })}`
+        : "";
+    return apiCall<{
+      success: boolean;
+      message?: string;
+      action?: "deleted" | "moved_to_on_deck";
+      entry?: RosterContact;
+    }>(`${API_ENDPOINTS.ROSTER}/${rosterId}${q}`, {
       method: "DELETE",
-    }),
+    });
+  },
 
   /**
    * Reorder roster (drag & drop)

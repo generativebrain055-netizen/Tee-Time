@@ -40,7 +40,7 @@ const formatLastPlayed = (dateStr: string): string => {
     return date.toLocaleDateString();
 };
 
-const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRemoveFromOnDeck, onListChanged, adding }: { 
+const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRemoveFromOnDeck, onListChanged, adding, blockedUserIds }: { 
     item: any; 
     navigation: any; 
     colors: any; 
@@ -51,6 +51,7 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRem
     /** Refresh list after block, etc. */
     onListChanged?: () => void;
     adding?: boolean;
+    blockedUserIds: Set<string>;
 }) => {
     const handlePress = () => {
         const userId = item.contact?.userId || item.id;
@@ -107,14 +108,18 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRem
         onAddToRoster?.(item);
     };
 
+    const userId = item.contact?.userId;
+    const uidKey = userId ? String(userId).toLowerCase() : "";
+    const isBlocked = uidKey ? blockedUserIds.has(uidKey) : false;
+
     const handleLongPress = useCallback(() => {
         const c = item.contact || item;
         const name = c.name || `${c.firstName || ""} ${c.lastName || ""}`.trim() || "This person";
-        const userId = item.contact?.userId;
+        const uid = item.contact?.userId;
 
         Alert.alert(
             name,
-            "Remove from On Deck removes them from your roster (they won't appear on your main Roster). Use + to move them to your main Roster instead. You can also block messages.",
+            "Remove from On Deck removes them from your roster (they won't appear on your main Roster). Use + to move them to your main Roster instead. Block member is separate.",
             [
                 {
                     text: "Remove from On Deck",
@@ -123,15 +128,15 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRem
                         onRemoveFromOnDeck?.(item);
                     },
                 },
-                ...(userId
+                ...(uid && !isBlocked
                     ? [
                             {
-                                text: "Block messages",
+                                text: "Block member",
                                 style: "destructive" as const,
-                                onPress: async () => {
+                                onPress: () => {
                                     Alert.alert(
-                                        "Block messages",
-                                        `Block ${name}? They will no longer be able to message you and will be removed from your On Deck and Roster.`,
+                                        "Block member",
+                                        `Block ${name}? They will be removed from your roster and cannot message you, send invites, or see your availability.`,
                                         [
                                             { text: "Cancel", style: "cancel" },
                                             {
@@ -139,11 +144,42 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRem
                                                 style: "destructive",
                                                 onPress: async () => {
                                                     try {
-                                                        await friendApi.blockUser(userId);
+                                                        await friendApi.blockUser(uid);
+                                                        Alert.alert("Blocked", `${name} has been blocked.`);
                                                         onListChanged?.();
                                                     } catch (err) {
                                                         logger.error("[OnDeckList] Block failed", err);
-                                                        Alert.alert("Error", "Could not block user. Please try again.");
+                                                        Alert.alert("Error", "Could not block member. Please try again.");
+                                                    }
+                                                },
+                                            },
+                                        ],
+                                    );
+                                },
+                            },
+                        ]
+                    : []),
+                ...(uid && isBlocked
+                    ? [
+                            {
+                                text: "Unblock member",
+                                style: "default" as const,
+                                onPress: () => {
+                                    Alert.alert(
+                                        "Unblock member",
+                                        `Unblock ${name}? They will be able to contact you again; they are not added back to your roster automatically.`,
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Unblock",
+                                                onPress: async () => {
+                                                    try {
+                                                        await friendApi.unblockUser(uid);
+                                                        Alert.alert("Unblocked", `${name} has been unblocked.`);
+                                                        onListChanged?.();
+                                                    } catch (err) {
+                                                        logger.error("[OnDeckList] Unblock failed", err);
+                                                        Alert.alert("Error", "Could not unblock. Please try again.");
                                                     }
                                                 },
                                             },
@@ -156,7 +192,7 @@ const OnDeckItem = memo(({ item, navigation, colors, theme, onAddToRoster, onRem
                 { text: "Cancel", style: "cancel" },
             ],
         );
-    }, [item, onListChanged, onRemoveFromOnDeck]);
+    }, [item, isBlocked, onListChanged, onRemoveFromOnDeck, blockedUserIds]);
 
     // Extract contact data (handle both roster API format and flat format)
     const contact = item.contact || item;
@@ -258,17 +294,27 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
     const colors = useColors();
     const theme = useTheme();
     const [onDeck, setOnDeck] = useState<any[]>([]);
+    const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(() => new Set());
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [addingId, setAddingId] = useState<string | null>(null);
 
     const loadOnDeck = useCallback(async () => {
         try {
-            const response = await rosterApi.getOnDeck();
-            if (response.success) {
-                const data = response.onDeck || [];
-                setOnDeck(data);
+            const [onDeckRes, blockedRes] = await Promise.all([
+                rosterApi.getOnDeck(),
+                friendApi.getBlockedUsers(),
+            ]);
+            if (onDeckRes.success) {
+                setOnDeck(onDeckRes.onDeck || []);
             }
+            const ids = new Set<string>();
+            if (blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
+                for (const u of blockedRes.blockedUsers as { id?: string }[]) {
+                    if (u?.id) ids.add(String(u.id).toLowerCase());
+                }
+            }
+            setBlockedUserIds(ids);
         } catch (error) {
             logger.error("[OnDeckList] Failed to load on-deck", error);
             setOnDeck([]);
@@ -311,12 +357,12 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
         [moveOffDeck],
     );
 
-    /** Drop from On Deck without promoting: delete roster entry (same as remove from roster). */
+    /** Drop from On Deck: always delete the roster row (never promote to main roster). */
     const removeFromOnDeckOnly = useCallback(
         async (item: any) => {
             setAddingId(item.id);
             try {
-                await rosterApi.removeFromRoster(item.id);
+                await rosterApi.removeFromRoster(item.id, { permanent: true });
                 logger.info("[OnDeckList] Removed on-deck entry (roster delete)", {
                     rosterId: item.id,
                 });
@@ -373,7 +419,7 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                                 {onDeck.length} {onDeck.length === 1 ? "player" : "players"} on deck
                             </Text>
                             <Text style={{ fontFamily: theme.fontFamily.regular, fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
-                                Tap + to move to main Roster. Long-press to remove from On Deck (off roster) or block.
+                                Tap + to move to main Roster. Long-press to remove from On Deck, block, or unblock.
                             </Text>
                         </View>
                         {onDeck.map((item, index) => (
@@ -387,6 +433,7 @@ export default function OnDeckList({ navigation }: OnDeckListProps) {
                                     onRemoveFromOnDeck={removeFromOnDeckOnly}
                                     onListChanged={loadOnDeck}
                                     adding={addingId === item.id}
+                                    blockedUserIds={blockedUserIds}
                                 />
                                 {index < onDeck.length - 1 && (
                                     <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 76 }} />

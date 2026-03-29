@@ -109,7 +109,7 @@ const MemberCard = memo(({ member, displayName: displayNameProp, isOwner, isYou,
                                             }}
                                         >
                                             <Ban size={20} color="#EF4444" />
-                                            <Text className="text-[15px] font-medium text-[#EF4444]">Block User</Text>
+                                            <Text className="text-[15px] font-medium text-[#EF4444]">Block member</Text>
                                         </TouchableOpacity>
                                     </>
                                 ) : null}

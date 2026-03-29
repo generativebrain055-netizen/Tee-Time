@@ -218,20 +218,40 @@ async function sendGroupDeletedNotifications(ownerUserId, groupName, memberUserI
 }
 
 /**
- * Remove a contact from the user's roster
+ * Remove a contact from the user's roster.
+ * - From main roster (is_on_deck false): moves them to On-Deck (same row, is_on_deck true).
+ * - From On-Deck (is_on_deck true): deletes the row (gone from roster and on-deck).
+ * - permanent=true (e.g. block user): always deletes the row.
+ *
+ * @param {{ permanent?: boolean }} [options]
+ * @returns {{ action: 'deleted' | 'moved_to_on_deck', entry: object }}
  * @throws {RosterServiceError} If entry not found
  */
-async function removeFromRoster(userId, rosterId) {
-  const removed = await rosterRepository.removeFromRoster(userId, rosterId);
-  if (!removed) {
+async function removeFromRoster(userId, rosterId, options = {}) {
+  const permanent = Boolean(options.permanent);
+  // Use slim row for deck flag (same DB column as getOnDeck); avoids any mismatch
+  // with the enriched getRosterEntry shape.
+  const row = await rosterRepository.getRosterOwnerRow(userId, rosterId);
+  if (!row) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
   }
-  if (removed.contact_user_id) {
-    sendRemovedFromRosterNotification(userId, removed).catch((err) => {
-      logger.error("Failed to send roster removed notification:", err);
-    });
+
+  const onDeck = Boolean(row.is_on_deck);
+  if (permanent || onDeck) {
+    const removed = await rosterRepository.removeFromRoster(userId, rosterId);
+    if (!removed) {
+      throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
+    }
+    if (removed.contact_user_id) {
+      sendRemovedFromRosterNotification(userId, removed).catch((err) => {
+        logger.error("Failed to send roster removed notification:", err);
+      });
+    }
+    return { action: "deleted", entry: removed };
   }
-  return removed;
+
+  const updated = await toggleOnDeck(userId, rosterId, true);
+  return { action: "moved_to_on_deck", entry: updated };
 }
 
 /**

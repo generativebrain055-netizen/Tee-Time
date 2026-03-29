@@ -298,14 +298,14 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
         if (!userId) {
             Alert.alert(
-                "Cannot Block",
+                "Cannot block",
                 "This contact is not a registered user and cannot be blocked. You can remove them from the group instead."
             );
             return;
         }
 
         Alert.alert(
-            "Block User",
+            "Block member",
             `Block ${name}? They will be removed from your roster and won't be able to:\n\n• Send you friend requests\n• Invite you to tee times\n• See your availability`,
             [
                 { text: "Cancel", style: "cancel" },
@@ -314,14 +314,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            // Remove from roster first
-                            await rosterApi.removeFromRoster(member.id);
-                            // Then block the user
                             await friendApi.blockUser(userId);
                             Alert.alert("Blocked", `${name} has been blocked.`);
                             onRefresh();
                         } catch (error) {
-                            Alert.alert("Error", "Failed to block user");
+                            Alert.alert("Error", "Failed to block member");
                         }
                     },
                 },

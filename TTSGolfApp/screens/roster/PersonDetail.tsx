@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight } from "lucide-react-native";
+import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight, UserCheck } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { rosterApi, MemberProfile, friendApi, messagesApi } from "../../services/api";
 import { logger } from "../../utils/logger";
@@ -37,6 +37,7 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'stats' | 'history' | 'equipment'>('stats');
     const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
 
     useEffect(() => {
         loadProfile();
@@ -44,12 +45,23 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
 
     const loadProfile = async () => {
         try {
-            const [profileRes, historyRes] = await Promise.all([
+            const [profileRes, historyRes, blockedRes] = await Promise.all([
                 rosterApi.getMemberProfile(person.id),
-                rosterApi.getMemberHistory(person.id)
+                rosterApi.getMemberHistory(person.id),
+                friendApi.getBlockedUsers(),
             ]);
             if (profileRes.success) setProfile(profileRes.profile);
             if (historyRes.success) setHistory((historyRes.history || []) as any);
+
+            const targetUserId = profileRes.success ? profileRes.profile?.contact?.userId : undefined;
+            let blocked = false;
+            if (targetUserId && blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
+                const t = String(targetUserId).toLowerCase();
+                blocked = (blockedRes.blockedUsers as { id?: string }[]).some(
+                    (u) => String(u?.id || "").toLowerCase() === t,
+                );
+            }
+            setIsBlocked(blocked);
         } catch (error) {
             logger.error("[PersonDetail] Failed to load profile", error);
         } finally {
@@ -60,7 +72,7 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
     const handleRemove = useCallback(() => {
         Alert.alert(
             "Remove from Roster",
-            `Remove ${person.name} from your roster? They will no longer be auto-invited to your tee times.`,
+            `Remove ${person.name} from your main roster? They will move to your On-Deck list. If they are already on On-Deck, they will be removed entirely.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -69,7 +81,12 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     onPress: async () => {
                         try {
                             const id = profile?.id ?? person.id;
-                            await rosterApi.removeFromRoster(id);
+                            const res = await rosterApi.removeFromRoster(id);
+                            const msg =
+                                res.action === "moved_to_on_deck"
+                                    ? `${person.name} was moved to On-Deck.`
+                                    : `${person.name} was removed from your roster.`;
+                            Alert.alert("Done", msg);
                             onRemoved?.();
                             onBack();
                         } catch (error: any) {
@@ -86,14 +103,14 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
 
         if (!targetUserId) {
             Alert.alert(
-                "Cannot Block",
+                "Cannot block",
                 "This contact is not a registered user and cannot be blocked. You can remove them from your roster instead."
             );
             return;
         }
 
         Alert.alert(
-            "Block User",
+            "Block member",
             `Block ${person.name}? They will be removed from your roster and won't be able to:\n\n• Send you friend requests\n• Invite you to tee times\n• See your availability`,
             [
                 { text: "Cancel", style: "cancel" },
@@ -102,21 +119,45 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            const id = profile?.id ?? person.id;
-                            await rosterApi.removeFromRoster(id);
-                            // Then block the user
                             await friendApi.blockUser(targetUserId);
+                            setIsBlocked(true);
                             Alert.alert("Blocked", `${person.name} has been blocked.`);
                             onRemoved?.();
                             onBack();
                         } catch (error) {
-                            Alert.alert("Error", "Failed to block user");
+                            Alert.alert("Error", "Failed to block member");
                         }
                     },
                 },
             ]
         );
-    }, [person.id, person.name, profile?.id, profile?.contact?.userId, onBack, onRemoved]);
+    }, [person.name, profile?.contact?.userId, onBack, onRemoved]);
+
+    const handleUnblock = useCallback(() => {
+        const targetUserId = profile?.contact?.userId;
+        if (!targetUserId) return;
+
+        Alert.alert(
+            "Unblock member",
+            `Unblock ${person.name}? They will be able to contact you again; they are not added back to your roster automatically.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Unblock",
+                    onPress: async () => {
+                        try {
+                            await friendApi.unblockUser(targetUserId);
+                            setIsBlocked(false);
+                            Alert.alert("Unblocked", `${person.name} has been unblocked.`);
+                            onRemoved?.();
+                        } catch (error) {
+                            Alert.alert("Error", "Failed to unblock member");
+                        }
+                    },
+                },
+            ]
+        );
+    }, [person.name, profile?.contact?.userId, onRemoved]);
 
     const handleInvite = useCallback(() => {
         // Navigate to create tee time with this person pre-selected
@@ -375,14 +416,24 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                           shadowRadius: 12,
                           elevation: 8
                       }}>
-                    <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleRemove(); }}>
-                        <Trash2 size={18} color="#EF4444" />
-                        <Text className="text-[15px] text-red-500 font-medium">Remove from Roster</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleBlock(); }}>
-                        <Ban size={18} color="#EF4444" />
-                        <Text className="text-[15px] text-red-500 font-medium">Block User</Text>
-                    </TouchableOpacity>
+                    {!isBlocked && (
+                        <>
+                            <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleRemove(); }}>
+                                <Trash2 size={18} color="#EF4444" />
+                                <Text className="text-[15px] text-red-500 font-medium">Remove from Roster</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5 border-b border-gray-100" onPress={() => { setShowMoreMenu(false); handleBlock(); }}>
+                                <Ban size={18} color="#EF4444" />
+                                <Text className="text-[15px] text-red-500 font-medium">Block member</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
+                    {isBlocked && (
+                        <TouchableOpacity className="flex-row items-center gap-3 px-4 py-3.5" onPress={() => { setShowMoreMenu(false); handleUnblock(); }}>
+                            <UserCheck size={18} color="#2563EB" />
+                            <Text className="text-[15px] font-medium" style={{ color: "#2563EB" }}>Unblock member</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
 

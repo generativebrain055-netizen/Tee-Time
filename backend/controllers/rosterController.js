@@ -74,11 +74,23 @@ class RosterController {
     }
   }
 
-  // DELETE /api/roster/:id
+  // DELETE /api/roster/:id — optional ?permanent=true (e.g. block user) always deletes the row
   async removeFromRoster(req, res) {
     try {
-      await rosterService.removeFromRoster(req.user.id, req.params.id);
-      success(res, { message: 'Removed from roster' });
+      const permanent =
+        req.query.permanent === "true" || req.query.permanent === "1";
+      const result = await rosterService.removeFromRoster(req.user.id, req.params.id, {
+        permanent,
+      });
+      const message =
+        result.action === "deleted"
+          ? "Removed from roster"
+          : "Moved to On-Deck";
+      success(res, {
+        message,
+        action: result.action,
+        entry: result.entry,
+      });
     } catch (err) {
       handleServiceError(res, err, 'Failed to remove from roster');
     }

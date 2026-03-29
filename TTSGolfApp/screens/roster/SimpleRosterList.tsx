@@ -43,13 +43,14 @@ const formatLastPlayed = (dateStr: string): string => {
     return `${month}/${day}/${year}`;
 };
 
-const RosterItem = memo(({ item, index, navigation, colors, theme, onBlocked }: { 
+const RosterItem = memo(({ item, index, navigation, colors, theme, onListChanged, blockedUserIds }: { 
     item: any; 
     index: number; 
     navigation: any;
     colors: any;
     theme: any;
-    onBlocked?: () => void;
+    onListChanged?: () => void;
+    blockedUserIds: Set<string>;
 }) => {
     const contact = item.contact || item;
     const userId = contact.userId ?? contact.user_id;
@@ -68,40 +69,92 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onBlocked }: 
         });
     };
 
+    const uidKey = userId ? String(userId).toLowerCase() : "";
+    const isBlocked = uidKey ? blockedUserIds.has(uidKey) : false;
+
     const handleLongPress = useCallback(() => {
         const name = contact.name || "This person";
         const rosterRowId = item.id;
 
         Alert.alert(
             name,
-            "Remove this player from your roster, or block messages.",
+            "Remove from roster moves them to On-Deck (or removes them if they are only on On-Deck). Block member is separate and also removes them from your roster.",
             [
                 {
                     text: "Remove from roster",
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await rosterApi.removeFromRoster(rosterRowId);
-                            onBlocked?.();
+                            const res = await rosterApi.removeFromRoster(rosterRowId);
+                            const msg =
+                                res.action === "moved_to_on_deck"
+                                    ? `${name} was moved to On-Deck.`
+                                    : `${name} was removed from your roster.`;
+                            Alert.alert("Done", msg);
+                            onListChanged?.();
                         } catch (err: any) {
                             logger.error("[SimpleRosterList] Remove from roster failed", err);
                             Alert.alert("Error", err?.message || "Could not remove from roster.");
                         }
                     },
                 },
-                ...(userId
+                ...(userId && !isBlocked
                     ? [
                             {
-                                text: "Block messages",
+                                text: "Block member",
                                 style: "destructive" as const,
-                                onPress: async () => {
-                                    try {
-                                        await friendApi.blockUser(userId);
-                                        onBlocked?.();
-                                    } catch (err) {
-                                        logger.error("[SimpleRosterList] Block failed", err);
-                                        Alert.alert("Error", "Could not block user. Please try again.");
-                                    }
+                                onPress: () => {
+                                    Alert.alert(
+                                        "Block member",
+                                        `Block ${name}? They will be removed from your roster and cannot message you, send invites, or see your availability.`,
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Block",
+                                                style: "destructive",
+                                                onPress: async () => {
+                                                    try {
+                                                        await friendApi.blockUser(userId);
+                                                        Alert.alert("Blocked", `${name} has been blocked.`);
+                                                        onListChanged?.();
+                                                    } catch (err) {
+                                                        logger.error("[SimpleRosterList] Block failed", err);
+                                                        Alert.alert("Error", "Could not block member. Please try again.");
+                                                    }
+                                                },
+                                            },
+                                        ],
+                                    );
+                                },
+                            },
+                        ]
+                    : []),
+                ...(userId && isBlocked
+                    ? [
+                            {
+                                text: "Unblock member",
+                                style: "default" as const,
+                                onPress: () => {
+                                    Alert.alert(
+                                        "Unblock member",
+                                        `Unblock ${name}? They will be able to contact you again; they are not added back to your roster automatically.`,
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Unblock",
+                                                onPress: async () => {
+                                                    try {
+                                                        await friendApi.unblockUser(userId);
+                                                        Alert.alert("Unblocked", `${name} has been unblocked.`);
+                                                        onListChanged?.();
+                                                    } catch (err) {
+                                                        logger.error("[SimpleRosterList] Unblock failed", err);
+                                                        Alert.alert("Error", "Could not unblock. Please try again.");
+                                                    }
+                                                },
+                                            },
+                                        ],
+                                    );
                                 },
                             },
                         ]
@@ -109,7 +162,7 @@ const RosterItem = memo(({ item, index, navigation, colors, theme, onBlocked }: 
                 { text: "Cancel", style: "cancel" },
             ]
         );
-    }, [userId, contact.name, item.id, onBlocked]);
+    }, [userId, uidKey, isBlocked, contact.name, item.id, onListChanged, blockedUserIds]);
     
     const handleMessage = useCallback(async (e: any) => {
         e?.stopPropagation();
@@ -231,15 +284,26 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
     const theme = useTheme();
     const scrollRef = React.useRef<ScrollView | null>(null);
     const [roster, setRoster] = useState<any[]>([]);
+    const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(() => new Set());
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const loadRoster = useCallback(async () => {
         try {
-            const response = await rosterApi.getRoster();
-            if (response.success) {
-                setRoster(response.roster || []);
+            const [rosterRes, blockedRes] = await Promise.all([
+                rosterApi.getRoster(),
+                friendApi.getBlockedUsers(),
+            ]);
+            if (rosterRes.success) {
+                setRoster(rosterRes.roster || []);
             }
+            const ids = new Set<string>();
+            if (blockedRes.success && Array.isArray(blockedRes.blockedUsers)) {
+                for (const u of blockedRes.blockedUsers as { id?: string }[]) {
+                    if (u?.id) ids.add(String(u.id).toLowerCase());
+                }
+            }
+            setBlockedUserIds(ids);
         } catch (error) {
             logger.error("[SimpleRosterList] Failed to load roster", error);
             setRoster([]);
@@ -343,7 +407,8 @@ export default function SimpleRosterList({ navigation }: RosterListProps) {
                             navigation={navigation} 
                             colors={colors} 
                             theme={theme}
-                            onBlocked={loadRoster}
+                            onListChanged={loadRoster}
+                            blockedUserIds={blockedUserIds}
                         />
                         {index < roster.length - 1 && (
                             <View style={{ height: 1, backgroundColor: "#F3F4F6", marginLeft: 88 }} />
