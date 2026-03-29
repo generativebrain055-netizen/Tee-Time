@@ -168,8 +168,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       // If user doesn't exist (401/404) or session expired, clear everything (expected on logout)
-      if (err.statusCode === 401 || err.statusCode === 404 || err.code === 'SESSION_EXPIRED') {
-        logger.info('[UserContext] User not found or session expired, clearing session');
+      if (
+        err.statusCode === 401 ||
+        err.statusCode === 404 ||
+        err.code === 'SESSION_EXPIRED' ||
+        err.code === 'NOT_AUTHENTICATED'
+      ) {
+        logger.debug('[UserContext] No session or user, clearing local state');
         await clearProfile();
         await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'user']);
         const { sessionManager } = await import('../utils/sessionManager');

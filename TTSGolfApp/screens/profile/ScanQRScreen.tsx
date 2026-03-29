@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
     View,
     Text,
+    TextInput,
     TouchableOpacity,
     Alert,
     ActivityIndicator,
@@ -9,6 +10,9 @@ import {
     Image,
     Dimensions,
     Animated,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from "react-native";
 import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
@@ -37,6 +41,7 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [lastDetection, setLastDetection] = useState<string>("");
+    const [simulatorPayload, setSimulatorPayload] = useState("");
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
 
@@ -278,21 +283,76 @@ export default function ScanQRScreen({ navigation }: Props) {
                 </View>
             </View>
 
-            {/* Simulator: camera not available – shown as dark overlay so no grey flash */}
+            {/* Simulator / emulator: no camera — paste the same string encoded in the player's QR (Profile → share shows "Code: …"). */}
             {!Device.isDevice && (
-                <View style={{ position: "absolute", inset: 0, backgroundColor: "#111827", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
-                    <TouchableOpacity style={{ position: "absolute", top: insets.top + 16, left: 20, padding: 8 }} onPress={handleClose}>
-                        <X size={28} color="#fff" />
-                    </TouchableOpacity>
-                    <Camera size={64} color={colors.textSecondary} style={{ marginBottom: 24 }} />
-                    <Text className="text-xl font-bold text-white mb-2">Camera not available</Text>
-                    <Text className="text-[15px] text-white/80 text-center mb-8 leading-[22px]">
-                        QR scanning requires a physical device. The camera isn't available in the simulator.
-                    </Text>
-                    <TouchableOpacity className="py-3" onPress={handleClose}>
-                        <Text className="text-base text-gray-400">Go back</Text>
-                    </TouchableOpacity>
-                </View>
+                <KeyboardAvoidingView
+                    style={{ position: "absolute", inset: 0, backgroundColor: "#111827" }}
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    keyboardVerticalOffset={insets.top}
+                >
+                    <ScrollView
+                        contentContainerStyle={{
+                            flexGrow: 1,
+                            paddingHorizontal: 24,
+                            paddingTop: insets.top + 56,
+                            paddingBottom: insets.bottom + 24,
+                        }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <TouchableOpacity style={{ position: "absolute", top: insets.top + 8, left: 4, padding: 8, zIndex: 1 }} onPress={handleClose}>
+                            <X size={28} color="#fff" />
+                        </TouchableOpacity>
+                        <Camera size={48} color={colors.textSecondary} style={{ alignSelf: "center", marginBottom: 16 }} />
+                        <Text className="text-xl font-bold text-white mb-2 text-center">Test scan (simulator)</Text>
+                        <Text className="text-[15px] text-white/75 text-center mb-6 leading-[22px]">
+                            Paste the QR payload from another account (e.g. Profile → QR → share message, or copy what the QR encodes), then simulate a scan.
+                        </Text>
+                        <TextInput
+                            value={simulatorPayload}
+                            onChangeText={setSimulatorPayload}
+                            placeholder="Paste QR code data"
+                            placeholderTextColor="rgba(255,255,255,0.35)"
+                            editable={!processing}
+                            multiline
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            style={{
+                                backgroundColor: "rgba(255,255,255,0.08)",
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: "rgba(255,255,255,0.2)",
+                                color: "#fff",
+                                fontSize: 15,
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                minHeight: 100,
+                                textAlignVertical: "top",
+                                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                            }}
+                        />
+                        <TouchableOpacity
+                            className="bg-blue-600 rounded-xl py-4 items-center mt-5"
+                            disabled={processing}
+                            onPress={() => {
+                                const data = simulatorPayload.trim();
+                                if (!data) {
+                                    Alert.alert("Empty", "Paste the QR payload first.");
+                                    return;
+                                }
+                                handleBarCodeScanned({ type: "qr", data });
+                            }}
+                        >
+                            {processing ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text className="text-base font-semibold text-white">Simulate scan</Text>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity className="py-4 items-center mt-2" onPress={handleClose} disabled={processing}>
+                            <Text className="text-base text-gray-400">Cancel</Text>
+                        </TouchableOpacity>
+                    </ScrollView>
+                </KeyboardAvoidingView>
             )}
 
             {/* Permission denied – shown as dark overlay, no separate grey page */}

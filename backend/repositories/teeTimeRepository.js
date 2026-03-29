@@ -203,7 +203,11 @@ class TeeTimeRepository {
     try {
       const logger = require("../config/logger");
       const { invitesLogger } = require("../config/logger");
-      
+
+      // Include in_progress: confirmed tee times move here when a player cancels participation
+      // but the event is still upcoming (same as calendar / schedule view).
+      const upcomingStatuses = ["pending", "confirmed", "in_progress"];
+
       // Get tee times where user is creator
       const { data: creatorTeeTimes, error: creatorError } = await supabaseAdmin
         .from("tee_times")
@@ -215,7 +219,7 @@ class TeeTimeRepository {
         )
         .eq("creator_id", userId)
         .gte("tee_date", new Date().toISOString().split("T")[0])
-        .in("status", ["pending", "confirmed"])
+        .in("status", upcomingStatuses)
         .order("tee_date", { ascending: true })
         .order("tee_time", { ascending: true });
 
@@ -281,7 +285,7 @@ class TeeTimeRepository {
           p.tee_times &&
           !teeTimeMap.has(p.tee_times.id) &&
           p.tee_times.tee_date >= today &&
-          ["pending", "confirmed"].includes(p.tee_times.status)
+          upcomingStatuses.includes(p.tee_times.status)
         ) {
           teeTimeMap.set(p.tee_times.id, p.tee_times);
         }
@@ -458,6 +462,51 @@ class TeeTimeRepository {
       });
     } catch (error) {
       handleError(error, "getParticipants");
+    }
+  }
+
+  /** Users who left after joining (detail API only; excluded from active participant queries). */
+  async getCancelledParticipants(teeTimeId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select(
+          `
+          *,
+          users!tee_time_participants_user_id_fkey (
+            first_name,
+            last_name,
+            username,
+            user_profiles (avatar_url, handicap)
+          )
+        `,
+        )
+        .eq("tee_time_id", teeTimeId)
+        .eq("status", "cancelled")
+        .order("cancelled_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((p) => {
+        const user = p.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete p.users;
+
+        return {
+          ...p,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          avatar_url: profile.avatar_url,
+          user_handicap: profile.handicap,
+        };
+      });
+    } catch (error) {
+      handleError(error, "getCancelledParticipants");
     }
   }
 
@@ -668,6 +717,10 @@ class TeeTimeRepository {
         .single();
 
       if (error) throw error;
+
+      const inviteRepository = require("./inviteRepository");
+      await inviteRepository.markInvitesCancelledForLeavingUser(teeTimeId, userId);
+
       const conversationRepository = require("./conversationRepository");
       await conversationRepository.syncTeeTimeConversationParticipants(teeTimeId);
       return data;

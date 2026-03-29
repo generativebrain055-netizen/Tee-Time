@@ -74,8 +74,9 @@ export default function SettingsScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await clearProfile();
+                            // Clear tokens first so any in-flight / re-run profile fetch skips the network
                             await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                            await clearProfile();
                             navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
                         } catch (error) {
                             logger.error("[SettingsScreen] Error logging out", error);

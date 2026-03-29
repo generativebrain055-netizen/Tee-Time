@@ -104,12 +104,13 @@ async function getTeeTimeById(teeTimeId) {
     throw new TeeTimeServiceError("Tee time not found", "NOT_FOUND", 404);
   }
 
-  const [participants, invites] = await Promise.all([
+  const [participants, invites, cancelledParticipants] = await Promise.all([
     teeTimeRepository.getParticipants(teeTimeId),
     inviteRepository.getInvitesByTeeTime(teeTimeId),
+    teeTimeRepository.getCancelledParticipants(teeTimeId),
   ]);
 
-  return { teeTime, participants, invites };
+  return { teeTime, participants, invites, cancelledParticipants };
 }
 
 /**

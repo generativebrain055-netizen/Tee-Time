@@ -688,6 +688,31 @@ class InviteRepository {
     }
   }
 
+  /**
+   * When a user leaves a tee time, their invite row can still be "accepted" while
+   * tee_time_participants is "cancelled". Mark invite cancelled so clients show the right state.
+   */
+  async markInvitesCancelledForLeavingUser(teeTimeId, userId) {
+    try {
+      if (!teeTimeId || !userId) return;
+      const { error } = await supabaseAdmin
+        .from("invites")
+        .update({
+          status: "cancelled",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("tee_time_id", teeTimeId)
+        .eq("invitee_user_id", userId)
+        .eq("status", "accepted");
+
+      if (error) {
+        logger.error("markInvitesCancelledForLeavingUser:", error.message);
+      }
+    } catch (error) {
+      logger.error("markInvitesCancelledForLeavingUser:", error.message);
+    }
+  }
+
   async getSentInvites(userId) {
     try {
       const { data, error } = await supabaseAdmin

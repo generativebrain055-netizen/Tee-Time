@@ -75,7 +75,12 @@ const formatInvite = (i) => ({
 /**
  * Format full tee time detail response
  */
-const formatTeeTimeDetail = (teeTime, participants, invites) => ({
+const formatTeeTimeDetail = (
+  teeTime,
+  participants,
+  invites,
+  cancelledParticipants = [],
+) => ({
   id: teeTime.id,
   courseName: teeTime.course_name,
   courseLocation: teeTime.course_location,
@@ -93,6 +98,7 @@ const formatTeeTimeDetail = (teeTime, participants, invites) => ({
   },
   participants: (participants || []).map(formatParticipant),
   invites: (invites || []).map(formatInvite),
+  cancelledParticipants: (cancelledParticipants || []).map(formatParticipant),
 });
 
 /**

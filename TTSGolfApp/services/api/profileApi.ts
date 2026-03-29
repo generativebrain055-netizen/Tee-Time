@@ -4,8 +4,9 @@
  * @module services/api/profileApi
  */
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS, API_URL } from "../../config/api";
-import { apiCall, getAuthHeaders } from "./core";
+import { apiCall, getAuthHeaders, ApiError } from "./core";
 import type {
   UserProfile,
   NotificationPreferences,
@@ -24,13 +25,19 @@ export const profileApi = {
   /**
    * Get current user with profile.
    * Skips token refresh on 401 so logout/session-expired doesn't trigger refresh attempts and noisy logs.
+   * Does not call the network when there is no access token (avoids 401 noise after logout).
    */
-  getCurrentUser: () =>
-    apiCall<{ success: boolean; user: UserProfile }>(
+  getCurrentUser: async () => {
+    const token = await AsyncStorage.getItem("accessToken");
+    if (!token?.trim()) {
+      throw new ApiError("Not authenticated", 401, "NOT_AUTHENTICATED");
+    }
+    return apiCall<{ success: boolean; user: UserProfile }>(
       API_ENDPOINTS.GET_CURRENT_USER,
       {},
       false, // retryOnUnauthorized
-    ),
+    );
+  },
 
   /**
    * Update profile (handles both user and profile data)

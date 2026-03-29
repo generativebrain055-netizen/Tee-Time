@@ -24,8 +24,15 @@ class DraftService {
     }
 
     if (existing && existing.length > 0) {
-      // Return existing code info (regenerate payload since we don't store the code)
-      return this.generateQRPayload(userId, existing[0].version);
+      const row = existing[0];
+      if (row.code_secret) {
+        return this.createPayload(userId, row.code_secret, row.version);
+      }
+      // Legacy rows: no stored secret — rotate once so the client gets a stable QR going forward
+      logger.warn(
+        `draft_qr_codes active row for user ${userId} missing code_secret; rotating`
+      );
+      return this.regenerateQRCode(userId);
     }
 
     // Generate new code
@@ -60,6 +67,7 @@ class DraftService {
       .insert({
         user_id: userId,
         code_hash: codeHash,
+        code_secret: code,
         version: version,
         is_active: true
       });
@@ -114,15 +122,6 @@ class DraftService {
       ...payload,
       s: sig,
     };
-  }
-
-  /**
-   * Generate payload for existing code (when we need to show QR again)
-   * Note: This regenerates the code since we don't store it
-   */
-  async generateQRPayload(userId, version) {
-    // Since we only store the hash, we need to regenerate
-    return this.regenerateQRCode(userId);
   }
 
   /**

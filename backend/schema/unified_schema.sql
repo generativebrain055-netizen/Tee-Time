@@ -1116,6 +1116,7 @@ CREATE TABLE draft_qr_codes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code_hash VARCHAR(255) NOT NULL,
+    code_secret VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     is_active BOOLEAN DEFAULT true,
     expires_at TIMESTAMPTZ,

@@ -161,7 +161,14 @@ const isSecurityScanPath = (path) => {
 const errorHandler = (err, req, res, next) => {
   const isSecurityScan = isSecurityScanPath(req.path);
   const isNotFound = err.statusCode === 404;
-  
+  const pathOnly = (req.originalUrl || req.path || "").split("?")[0];
+  const isUnauthedMeGet =
+    err.statusCode === 401 &&
+    req.method === "GET" &&
+    pathOnly.endsWith("/auth/me") &&
+    err.code === "INVALID_TOKEN" &&
+    err.message === "No token provided";
+
   // For 404s on security scan paths, log at info level instead of error
   // These are common bot/scanner requests and not actual errors
   if (isNotFound && isSecurityScan) {
@@ -170,6 +177,11 @@ const errorHandler = (err, req, res, next) => {
       method: req.method,
       ip: req.ip,
       userAgent: req.get('user-agent'),
+    });
+  } else if (isUnauthedMeGet) {
+    logger.debug("GET /auth/me without token (expected after logout or cold start)", {
+      path: pathOnly,
+      ip: req.ip,
     });
   } else {
     // Log actual errors

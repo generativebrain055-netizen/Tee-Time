@@ -117,6 +117,7 @@ class TeeTimeController {
           result.teeTime,
           result.participants,
           result.invites,
+          result.cancelledParticipants,
         ),
       });
     } catch (error) {

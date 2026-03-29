@@ -182,16 +182,25 @@ export const apiCall = async <T>(
     }
 
     if (!response.ok) {
+      const msg =
+        data?.error?.message || data?.message || "API request failed";
+      const code = data?.error?.code || data?.code;
+
+      // Logout / session cleared: 401 with no refresh retry is expected, not an error
+      if (response.status === 401 && !retryOnUnauthorized) {
+        logger.debug("[api/core] Unauthenticated response (skipped token refresh)", {
+          url,
+          code,
+        });
+        throw new ApiError(msg, 401, code);
+      }
+
       logger.error("[api/core] API request failed", {
         url,
         status: response.status,
         data,
       });
-      throw new ApiError(
-        data.message || "API request failed",
-        response.status,
-        data.code,
-      );
+      throw new ApiError(msg, response.status, code);
     }
 
     logger.info("[api/core] API request succeeded", { url, success: data.success });

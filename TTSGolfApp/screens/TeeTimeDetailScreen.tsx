@@ -31,7 +31,7 @@ interface Participant {
     userId?: string;
     name: string;
     avatar?: string;
-    status: 'accepted' | 'declined' | 'pending' | 'queued' | 'invited' | 'expired';
+    status: 'accepted' | 'declined' | 'pending' | 'queued' | 'invited' | 'expired' | 'cancelled';
     isCreator: boolean;
     expiresAt?: string;
     inviteId?: string; // For skip functionality
@@ -39,7 +39,7 @@ interface Participant {
 
 interface Invite {
     id: string;
-    status: 'pending' | 'accepted' | 'declined' | 'expired';
+    status: 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
     invitee: {
         userId?: string;
         phone?: string;
@@ -153,6 +153,8 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
                 return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
             case 'expired':
                 return { color: 'text-gray-400', text: 'Expired', showBadge: true, badgeIcon: 'timeout', showArrow: false };
+            case 'cancelled':
+                return { color: 'text-gray-500', text: 'Cancelled', showBadge: true, badgeIcon: 'decline', showArrow: false };
             default:
                 return { color: 'text-gray-600', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
         }
@@ -253,6 +255,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [teeTime, setTeeTime] = useState<TeeTimeDetail | null>(null);
     const [showBackupDeclined, setShowBackupDeclined] = useState(false);
+    const [showCancelledMembers, setShowCancelledMembers] = useState(false);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
@@ -292,9 +295,10 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 // Add confirmed participants (those who accepted)
                 if (data.participants) {
                     data.participants.forEach((p: any) => {
-                        const userId = p.userId || p.id;
-                        if (!seenUserIds.has(userId)) {
-                            seenUserIds.add(userId);
+                        const uid = p.userId as string | undefined;
+                        const dedupeKey = uid || p.id;
+                        if (!seenUserIds.has(dedupeKey)) {
+                            seenUserIds.add(dedupeKey);
                             allParticipants.push({
                                 id: p.id,
                                 userId: p.userId,
@@ -306,18 +310,37 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         }
                     });
                 }
+
+                // Left after accepting (open join, etc.) — same row not in active participants
+                if (data.cancelledParticipants?.length) {
+                    data.cancelledParticipants.forEach((p: any) => {
+                        const dedupeKey = (p.userId as string | undefined) || p.id;
+                        if (!seenUserIds.has(dedupeKey)) {
+                            seenUserIds.add(dedupeKey);
+                            allParticipants.push({
+                                id: p.id,
+                                userId: p.userId,
+                                name: p.name,
+                                avatar: p.avatar,
+                                status: 'cancelled',
+                                isCreator: p.isCreator || false,
+                            });
+                        }
+                    });
+                }
                 
                 // Add invites (pending, declined, etc.) - skip if user already in participants
                 if (data.invites) {
                     data.invites.forEach((invite: any) => {
-                        const userId = invite.invitee?.userId || invite.id;
+                        const userId = invite.invitee?.userId as string | undefined;
+                        const dedupeKey = userId || invite.id;
                         
-                        // Skip if this user is already in the participants list
-                        if (seenUserIds.has(userId)) {
+                        // Skip if this user is already in the merged list (active or cancelled)
+                        if (seenUserIds.has(dedupeKey)) {
                             return;
                         }
                         
-                        seenUserIds.add(userId);
+                        seenUserIds.add(dedupeKey);
                         
                         // Check if invite is expired (either by status or by time)
                         const isExpiredByTime = invite.expiresAt && new Date(invite.expiresAt) < new Date();
@@ -328,9 +351,16 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             userId: invite.invitee?.userId,
                             name: invite.invitee?.name || 'Unknown',
                             avatar: invite.invitee?.avatar,
-                            status: invite.status === 'accepted' ? 'accepted' : 
-                                   invite.status === 'declined' ? 'declined' :
-                                   isExpired ? 'expired' : 'pending',
+                            status:
+                                invite.status === 'cancelled'
+                                    ? 'cancelled'
+                                    : invite.status === 'accepted'
+                                      ? 'accepted'
+                                      : invite.status === 'declined'
+                                        ? 'declined'
+                                        : isExpired
+                                          ? 'expired'
+                                          : 'pending',
                             isCreator: false,
                             expiresAt: invite.expiresAt,
                             inviteId: invite.id, // Store invite ID for skip functionality
@@ -512,6 +542,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     }
 
     const acceptedParticipants = teeTime.participants.filter(p => p.status === 'accepted');
+    const cancelledMembers = teeTime.participants.filter(p => p.status === 'cancelled');
     const pendingParticipants = teeTime.participants.filter(p => p.status === 'pending');
     const declinedParticipants = teeTime.participants.filter(p => p.status === 'declined');
     const expiredParticipants = teeTime.participants.filter(p => p.status === 'expired');
@@ -640,6 +671,31 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     {acceptedParticipants.map(p => (
                         <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
                     ))}
+
+                    {/* Left / cancelled after accepting */}
+                    {cancelledMembers.length > 0 && (
+                        <>
+                            <TouchableOpacity
+                                className="flex-row items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200"
+                                onPress={() => setShowCancelledMembers(!showCancelledMembers)}
+                                activeOpacity={0.7}
+                            >
+                                <Text className="font-jakarta-bold text-base text-gray-800">
+                                    Cancelled ({cancelledMembers.length})
+                                </Text>
+                                <ChevronDown
+                                    size={22}
+                                    color="#9CA3AF"
+                                    strokeWidth={2.5}
+                                    style={{ transform: [{ rotate: showCancelledMembers ? '180deg' : '0deg' }] }}
+                                />
+                            </TouchableOpacity>
+                            {showCancelledMembers &&
+                                cancelledMembers.map(p => (
+                                    <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
+                                ))}
+                        </>
+                    )}
                     
                     {/* Awaiting response section - grouped with green background */}
                     {pendingParticipants.length > 0 && pendingParticipants.map(p => (
