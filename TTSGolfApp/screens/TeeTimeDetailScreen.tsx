@@ -191,7 +191,8 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
             case 'pending':
                 return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'queued':
-                return { color: 'text-gray-600', text: 'Queued', showBadge: false, badgeIcon: null, showArrow: true };
+                // FCFS / parallel pending — match design: arrow + “Invited” (lighter grey)
+                return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
             case 'invited':
                 return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
             case 'waitlist':
@@ -370,7 +371,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [teeTime, setTeeTime] = useState<TeeTimeDetail | null>(null);
-    const [showQueued, setShowQueued] = useState(true);
     const [showBackupDeclined, setShowBackupDeclined] = useState(true);
     const [showConfirmSheet, setShowConfirmSheet] = useState(false);
     const [showCancelledMembers, setShowCancelledMembers] = useState(false);
@@ -408,12 +408,14 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 
                 // Combine participants and invites into a single list
                 const allParticipants: Participant[] = [];
-                const seenUserIds = new Set<string>(); // Track seen users to avoid duplicates
-                
+                const seenUserIds = new Set<string>(); // Roster/participant rows only (not invite rows)
+                const acceptedPlayingUserIds = new Set<string>(); // Confirmed in the group — hide redundant invite row
+
                 // Add confirmed participants (those who accepted)
                 if (data.participants) {
                     data.participants.forEach((p: any) => {
                         const uid = p.userId as string | undefined;
+                        if (uid) acceptedPlayingUserIds.add(uid);
                         const dedupeKey = uid || p.id;
                         if (!seenUserIds.has(dedupeKey)) {
                             seenUserIds.add(dedupeKey);
@@ -447,23 +449,22 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     });
                 }
                 
-                // Add invites (pending, declined, etc.) - skip if user already in participants
+                // Add invites — one row per invite id; skip only if invitee already listed as accepted player
                 if (data.invites) {
                     const parallelInvite =
                         data.inviteType === 'fcfs' ||
                         data.inviteType === 'manual' ||
                         data.inviteType === 'open';
 
+                    const seenInviteIds = new Set<string>();
                     data.invites.forEach((invite: any) => {
+                        if (seenInviteIds.has(invite.id)) return;
+                        seenInviteIds.add(invite.id);
+
                         const userId = invite.invitee?.userId as string | undefined;
-                        const dedupeKey = userId || invite.id;
-                        
-                        // Skip if this user is already in the merged list (active or cancelled)
-                        if (seenUserIds.has(dedupeKey)) {
+                        if (userId && acceptedPlayingUserIds.has(userId)) {
                             return;
                         }
-                        
-                        seenUserIds.add(dedupeKey);
                         
                         // Check if invite is expired (either by status or by time)
                         const isExpiredByTime = invite.expiresAt && new Date(invite.expiresAt) < new Date();
@@ -723,7 +724,14 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const queuedParticipants = teeTime.participants.filter(
         p => p.status === 'queued' || p.status === 'invited' || p.status === 'waitlist'
     );
-    const backupDeclinedList = [...declinedParticipants, ...expiredParticipants, ...pendingParticipants];
+    const parallelInviteDetail =
+        teeTime.inviteType === 'fcfs' ||
+        teeTime.inviteType === 'manual' ||
+        teeTime.inviteType === 'open';
+    // Roster: declined lives under “Backup & declined”. FCFS/manual/open: declined + invited in main list (see mock).
+    const backupDeclinedList = parallelInviteDetail
+        ? [...expiredParticipants, ...pendingParticipants]
+        : [...declinedParticipants, ...expiredParticipants, ...pendingParticipants];
 
     const formatDate = (dateStr: string) => {
         // Parse YYYY-MM-DD as local date (not UTC) to avoid day-shift bugs.
@@ -855,6 +863,25 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
                     ))}
 
+                    {/* FCFS / parallel: declined in main flow (same row style as reference) */}
+                    {parallelInviteDetail &&
+                        declinedParticipants.map((p) => (
+                            <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
+                        ))}
+
+                    {/* FCFS / parallel: still-invited members — continuous list, label “Invited” */}
+                    {parallelInviteDetail &&
+                        queuedParticipants.map((p) => (
+                            <ParticipantRow
+                                key={p.id}
+                                participant={p}
+                                calculateTimeLeft={calculateTimeLeft}
+                                showTimeLeft={!!p.expiresAt}
+                            />
+                        ))}
+
+                    {/* Roster-style: declined remains under Backup & declined only */}
+
                     {/* Left / cancelled after accepting */}
                     {cancelledMembers.length > 0 && (
                         <>
@@ -880,39 +907,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         </>
                     )}
                 </View>
-
-                {/* FCFS / parallel: invited members awaiting a spot */}
-                {queuedParticipants.length > 0 && (
-                    <>
-                        <View className="h-2.5 bg-gray-50" />
-                        <View className="bg-white">
-                            <TouchableOpacity
-                                className="flex-row items-center justify-between px-6 py-5"
-                                onPress={() => setShowQueued(!showQueued)}
-                                activeOpacity={0.7}
-                            >
-                                <Text className="font-jakarta-bold text-lg text-gray-900">
-                                    Queued ({queuedParticipants.length})
-                                </Text>
-                                <ChevronDown
-                                    size={22}
-                                    color="#9CA3AF"
-                                    strokeWidth={2.5}
-                                    style={{ transform: [{ rotate: showQueued ? '180deg' : '0deg' }] }}
-                                />
-                            </TouchableOpacity>
-                            {showQueued &&
-                                queuedParticipants.map((p) => (
-                                    <ParticipantRow
-                                        key={p.id}
-                                        participant={p}
-                                        calculateTimeLeft={calculateTimeLeft}
-                                        showTimeLeft={!!p.expiresAt}
-                                    />
-                                ))}
-                        </View>
-                    </>
-                )}
 
                 {/* Backup & declined — roster backups, expired, and declined */}
                 {backupDeclinedList.length > 0 && (

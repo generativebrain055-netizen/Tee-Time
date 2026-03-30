@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sessionManager } from '../utils/sessionManager';
 
 interface UserData {
   id?: string;
@@ -50,7 +51,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await AsyncStorage.multiRemove(['user', 'accessToken', 'refreshToken']);
+    await sessionManager.clearSession();
     set({ user: null, isAuthenticated: false });
   },
 }));

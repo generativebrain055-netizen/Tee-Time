@@ -13,6 +13,7 @@ import { Check, Search } from "lucide-react-native";
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend, RosterGroup, RosterContact, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
+import { otherPeopleInGroupCount } from "../../utils/groupMemberCount";
 
 type SourceTab = "roster" | "ondeck" | "groups";
 
@@ -116,7 +117,7 @@ const GroupItem = memo(({
             <View className="flex-1">
                 <Text className="text-[15px] font-semibold text-[#1F2937]">{group.name}</Text>
                 <Text className="text-[13px] text-[#9CA3AF] mt-0.5">
-                    {selectedCount > 0 ? `${selectedCount}/` : ""}{group.memberCount} members
+                    {selectedCount > 0 ? `${selectedCount}/` : ""}{otherPeopleInGroupCount(group.memberCount)} members
                 </Text>
             </View>
             <TouchableOpacity
@@ -275,6 +276,9 @@ export default function ManualInviteStep({
         const isExpanded = expandedGroupId === item.id;
         const members = groupMembersMap[item.id] || [];
         const selectedCount = getGroupSelectedCount(item.id);
+        const othersInGroup = otherPeopleInGroupCount(item.memberCount);
+        const allGroupMembersSelected =
+            members.length > 0 && selectedCount === members.length;
 
         return (
             <View key={item.id} style={{
@@ -328,7 +332,7 @@ export default function ManualInviteStep({
                             color: '#9CA3AF',
                             marginTop: 2,
                         }}>
-                            {selectedCount > 0 ? `${selectedCount}/` : ""}{item.memberCount} members
+                            {selectedCount > 0 ? `${selectedCount}/` : ""}{othersInGroup} members
                         </Text>
                     </View>
 
@@ -338,7 +342,7 @@ export default function ManualInviteStep({
                             paddingHorizontal: 12,
                             paddingVertical: 6,
                             borderRadius: 6,
-                            backgroundColor: selectedCount === item.memberCount && item.memberCount > 0 ? '#E5E7EB' : '#22C55E',
+                            backgroundColor: allGroupMembersSelected ? '#E5E7EB' : '#22C55E',
                         }}
                         onPress={(e) => {
                             e.stopPropagation();
@@ -348,9 +352,9 @@ export default function ManualInviteStep({
                         <Text style={{
                             fontFamily: 'Inter_600SemiBold',
                             fontSize: 12,
-                            color: selectedCount === item.memberCount && item.memberCount > 0 ? '#111827' : '#FFFFFF',
+                            color: allGroupMembersSelected ? '#111827' : '#FFFFFF',
                         }}>
-                            {selectedCount === item.memberCount && item.memberCount > 0 ? "Deselect" : "Select All"}
+                            {allGroupMembersSelected ? "Deselect" : "Select All"}
                         </Text>
                     </TouchableOpacity>
                 </TouchableOpacity>

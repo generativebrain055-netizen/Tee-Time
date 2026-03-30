@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Users, Edit2, Trash2, Calendar } from "lucide-react-native";
 import { COLORS } from "../../../../constants/colors";
 import { RosterGroup } from "../../../../services/api";
+import { otherPeopleInGroupCount } from "../../../../utils/groupMemberCount";
 
 interface GroupCardProps {
     group: RosterGroup;
@@ -40,7 +41,7 @@ export const GroupCard = memo(({ group, onPress, onEdit, onDelete }: GroupCardPr
             <View className="mt-1">
                 <View className="flex-row items-center gap-1">
                     <Users size={12} color={COLORS.textSub} />
-                    <Text className="text-xs text-gray-500">{group.memberCount} members{group.hasPendingInvites ? " (pending)" : ""}</Text>
+                    <Text className="text-xs text-gray-500">{otherPeopleInGroupCount(group.memberCount)} members{group.hasPendingInvites ? " (pending)" : ""}</Text>
                 </View>
                 {upcomingCount > 0 && (
                     <View className="flex-row items-center gap-1 mt-1">

@@ -24,15 +24,16 @@ import {
     LogOut,
     ChevronRight,
 } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "../contexts";
+import { useAuthStore } from "../stores";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { logger } from "../utils/logger";
 
 export default function SettingsScreen({ navigation }: any) {
-    const { profile, fetchProfile, clearProfile } = useUser();
+    const { profile, fetchProfile } = useUser();
+    const logout = useAuthStore((s) => s.logout);
     const colors = useColors();
     const theme = useTheme();
 
@@ -74,9 +75,7 @@ export default function SettingsScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            // Clear tokens first so any in-flight / re-run profile fetch skips the network
-                            await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-                            await clearProfile();
+                            await logout();
                             navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
                         } catch (error) {
                             logger.error("[SettingsScreen] Error logging out", error);
@@ -85,7 +84,7 @@ export default function SettingsScreen({ navigation }: any) {
                 },
             ]
         );
-    }, [navigation, clearProfile]);
+    }, [navigation, logout]);
 
     return (
         <ScreenShell>

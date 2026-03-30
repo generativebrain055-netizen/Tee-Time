@@ -13,6 +13,7 @@ import {
     TeeTime,
 } from "../../../../services/api";
 import { logger } from "../../../../utils/logger";
+import { otherPeopleInGroupCount } from "../../../../utils/groupMemberCount";
 
 export const useGroupProfile = (groupId: string, navigation?: any) => {
     const [loading, setLoading] = useState(true);
@@ -138,20 +139,21 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
 
     const handleGroupChat = useCallback(async () => {
         if (!group) return;
-        const totalMembers =
+        const totalIncludingSelf =
             typeof group.memberCount === "number" && !Number.isNaN(group.memberCount)
                 ? group.memberCount
                 : members.length + 1;
+        const otherMembers = otherPeopleInGroupCount(totalIncludingSelf);
         try {
             navigation?.navigate("ChatDetail", {
                 chatInfo: {
                     groupId: group.id,
                     id: group.id,
                     name: group.name,
-                    subtitle: `${totalMembers} members`,
+                    subtitle: `${otherMembers} members`,
                     img: undefined,
                     isGroup: true,
-                    participantCount: totalMembers,
+                    participantCount: totalIncludingSelf,
                 },
             });
         } catch (error) {

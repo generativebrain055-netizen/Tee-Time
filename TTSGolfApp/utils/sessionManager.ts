@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logger } from "./logger";
+import { notifySessionCleared, notifySessionSaved } from "./profileSessionBridge";
 
 type SessionExpiredCallback = () => void;
 
@@ -23,10 +24,7 @@ class SessionManager {
 
   // Call this when session expires
   async handleSessionExpired() {
-    // Clear all auth data
-    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-
-    // Trigger the callback to navigate to login
+    await this.clearSession();
     if (this.onSessionExpiredCallback) {
       this.onSessionExpiredCallback();
     }
@@ -81,6 +79,7 @@ class SessionManager {
   // Clear session
   async clearSession() {
     await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+    notifySessionCleared();
   }
 
   // Save session data
@@ -122,6 +121,8 @@ class SessionManager {
       logger.debug("[SessionManager] Session saved, verification", {
         savedUserStr: savedUser ? savedUser.substring(0, 100) + "..." : null,
       });
+
+      notifySessionSaved();
     } catch (error) {
       logger.error("[SessionManager] Error saving session", error);
       throw error;

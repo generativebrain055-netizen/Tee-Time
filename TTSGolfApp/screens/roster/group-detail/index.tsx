@@ -15,6 +15,7 @@ import { useGroupDetail } from "./hooks/useGroupDetail";
 import { ActionButton, AddPeopleModal, MemberRow, TeeTimeCard } from "./components";
 import { getInitials } from "./utils";
 import { GroupDetailProps } from "./types";
+import { otherPeopleInGroupCount } from "../../../utils/groupMemberCount";
 
 function GroupDetail({
     groupId,
@@ -53,6 +54,11 @@ function GroupDetail({
             Alert.alert("Coming Soon", "Navigate to create tee time with group pre-selected");
         }
     }, [groupId, onNavigateToCreateTeeTime]);
+
+    const peopleHeadingCount =
+        group?.memberCount != null && !Number.isNaN(group.memberCount)
+            ? otherPeopleInGroupCount(group.memberCount)
+            : members.length;
 
     if (loading) {
         return (
@@ -120,7 +126,7 @@ function GroupDetail({
                 {/* People Section */}
                 <View className="px-5 pt-6">
                     <View className="flex-row justify-between items-baseline mb-3">
-                        <Text className="text-base font-bold" style={{ color: COLORS.textMain }}>People ({members.length})</Text>
+                        <Text className="text-base font-bold" style={{ color: COLORS.textMain }}>People ({peopleHeadingCount})</Text>
                         <TouchableOpacity>
                             <Text className="text-xs font-medium" style={{ color: COLORS.primary }}>See all</Text>
                         </TouchableOpacity>

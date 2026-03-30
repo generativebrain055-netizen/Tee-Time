@@ -21,6 +21,8 @@ import { Users, UserCheck, Check, Clock, Calendar, Search } from "lucide-react-n
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend, RosterGroup, rosterApi, RosterContact } from "../../services/api";
 import logger from "../../utils/logger";
+import { otherPeopleInGroupCount } from "../../utils/groupMemberCount";
+import { useAuthStore } from "../../stores";
 
 type TargetType = "roster" | "group";
 type PickerMode = "date" | "time" | null;
@@ -56,6 +58,7 @@ export default function FCFSInviteStep({
     onDeselectAllPlayers,
     groupMembers = [],
 }: FCFSInviteStepProps) {
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const [hasDeadline, setHasDeadline] = useState(deadline !== null);
     const [pickerMode, setPickerMode] = useState<PickerMode>(null);
     const [tempDate, setTempDate] = useState<Date>(deadline || getDefaultDeadline());
@@ -101,19 +104,28 @@ export default function FCFSInviteStep({
         try {
             const response = await rosterApi.getGroupMembers(groupId);
             if (response.success) {
-                const members: Friend[] = response.members.map((m: RosterContact) => {
-                    const nameParts = (m.contact?.name ?? "").split(" ");
-                    return {
-                        id: m.contact?.userId || m.id,
-                        firstName: nameParts[0] || "",
-                        lastName: nameParts.slice(1).join(" ") || "",
-                        username: m.contact?.username,
-                        handicap: m.contact?.handicap,
-                        avatar: m.contact?.avatar,
-                        friendshipStatus: "friend" as const,
-                        friendsSince: "",
-                    };
-                });
+                const myId = currentUserId;
+                const members: Friend[] = response.members
+                    .filter(
+                        (m: RosterContact) =>
+                            !myId ||
+                            !m.contact?.userId ||
+                            String(m.contact.userId) !== String(myId)
+                    )
+                    .map((m: RosterContact) => {
+                        const nameParts = (m.contact?.name ?? "").split(" ");
+                        return {
+                            id: m.id,
+                            firstName: nameParts[0] || "",
+                            lastName: nameParts.slice(1).join(" ") || "",
+                            username: m.contact?.username,
+                            handicap: m.contact?.handicap,
+                            avatar: m.contact?.avatar,
+                            friendshipStatus: "friend" as const,
+                            friendsSince: "",
+                            contactUserId: m.contact?.userId,
+                        } as Friend & { contactUserId?: string };
+                    });
                 setGroupMembersMap(prev => ({ ...prev, [groupId]: members }));
             }
         } catch (e) {
@@ -121,7 +133,7 @@ export default function FCFSInviteStep({
         } finally {
             setLoadingGroup(null);
         }
-    }, [groupMembersMap, targetType, selectedGroupId, groupMembers]);
+    }, [groupMembersMap, targetType, selectedGroupId, groupMembers, currentUserId]);
 
     // Load group members when group is selected
     useEffect(() => {
@@ -388,7 +400,7 @@ export default function FCFSInviteStep({
                                                     {group.name}
                                                 </Text>
                                                 <Text style={styles.groupMemberCount}>
-                                                    {group.memberCount} members
+                                                    {otherPeopleInGroupCount(group.memberCount)} members
                                                 </Text>
                                             </View>
                                         </TouchableOpacity>

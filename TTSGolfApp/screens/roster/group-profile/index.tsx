@@ -24,6 +24,7 @@ import {
     GroupOptionsSheet,
 } from "./components";
 import { getGroupInitials, calculateAvgHandicap } from "./utils";
+import { otherPeopleInGroupCount } from "../../../utils/groupMemberCount";
 
 interface Props {
     navigation: any;
@@ -349,10 +350,11 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
 
     const groupInitials = getGroupInitials(group.name);
     const avgHandicap = calculateAvgHandicap(members);
-    const displayMemberCount =
+    const totalIncludingSelf =
         typeof group.memberCount === "number" && !Number.isNaN(group.memberCount)
             ? group.memberCount
             : members.length + 1;
+    const displayMemberCount = otherPeopleInGroupCount(totalIncludingSelf);
 
     return (
         <View className="flex-1 bg-gray-50">

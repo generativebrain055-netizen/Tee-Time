@@ -44,6 +44,8 @@ type FCFSTargetType = "roster" | "group";
 interface ExtendedFriend extends Friend {
   phone?: string;
   rosterId?: string; // Original roster entry ID
+  /** Linked app user (when id is the roster row id for group members) */
+  contactUserId?: string;
 }
 
 /** Normalize phone to E.164 for API (backend expects /^\+?[1-9]\d{6,14}$/). */
@@ -273,22 +275,33 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     try {
       const response = await rosterApi.getGroupMembers(groupId);
       if (response.success) {
-        // Convert roster contacts to Friend format for display
-        const members: ExtendedFriend[] = response.members.map((m) => {
-          const nameParts = (m.contact?.name ?? "").split(" ");
-          return {
-            id: m.contact?.userId || m.id,
-            rosterId: m.id,
-            firstName: nameParts[0] || "",
-            lastName: nameParts.slice(1).join(" ") || "",
-          username: m.contact?.username,
-          handicap: m.contact?.handicap,
-          avatar: m.contact?.avatar,
-          phone: m.contact?.phone,
-          friendshipStatus: "friend" as const,
-          friendsSince: "",
-        };
-        });
+        const myId = user?.id;
+        // Convert roster contacts to Friend format; never invite yourself
+        const members: ExtendedFriend[] = response.members
+          .filter(
+            (m) =>
+              !myId ||
+              !m.contact?.userId ||
+              String(m.contact.userId) !== String(myId)
+          )
+          .map((m) => {
+            const nameParts = (m.contact?.name ?? "").split(" ");
+            const contactUserId = m.contact?.userId;
+            return {
+              // Roster row id is unique per group slot (avoids duplicate keys / one invite for whole group)
+              id: m.id,
+              rosterId: m.id,
+              contactUserId: contactUserId || undefined,
+              firstName: nameParts[0] || "",
+              lastName: nameParts.slice(1).join(" ") || "",
+              username: m.contact?.username,
+              handicap: m.contact?.handicap,
+              avatar: m.contact?.avatar,
+              phone: m.contact?.phone,
+              friendshipStatus: "friend" as const,
+              friendsSince: "",
+            };
+          });
         setGroupMembers(members);
         // Initialize FCFS selected players with all group members
         setFcfsSelectedPlayers(members.map((m) => m.id));
@@ -305,7 +318,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
       logger.error("Failed to load group members", e);
       setGroupMembers([]);
     }
-  }, []);
+  }, [user?.id]);
 
   // Handle group selection for FCFS
   const handleGroupSelect = useCallback(
@@ -539,29 +552,48 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           logger.debug("Roster invite response", { success: inviteResponse.success });
         }
       } else if (inviteType === "fcfs") {
-        // FCFS - send to all at once. Resolve every selected id from the same pool as manual
-        // (friends, on-deck, loaded group members) so we never drop valid invitees.
-        const currentLoadedPlayers = allLoadedPlayersRef.current;
+        // FCFS - send to all at once. Merge current group members so ref/state never misses rows.
+        const loadedPool = allLoadedPlayersRef.current;
+        const poolIds = new Set(loadedPool.map((p) => p.id));
+        const mergedPool: ExtendedFriend[] =
+          fcfsTargetType === "group" && groupMembers.length > 0
+            ? [
+                ...loadedPool,
+                ...groupMembers.filter((m) => !poolIds.has(m.id)),
+              ]
+            : [...loadedPool];
+
         const invitees = fcfsSelectedPlayers
-          .map((id) => {
-            const player = currentLoadedPlayers.find((p) => p.id === id);
+          .map((selId) => {
+            const player = mergedPool.find((p) => p.id === selId);
             if (!player) {
-              logger.warn("FCFS: selected player not in loaded pool", { id });
+              logger.warn("FCFS: selected player not in loaded pool", { selId });
             }
             const name = player
               ? `${player.firstName} ${player.lastName}`.trim()
               : undefined;
-            const isValidUuid =
+            const isValidUuid = (v: string | undefined) =>
+              !!v &&
               /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                id
+                v
               );
             const invitee: {
               userId?: string;
               phone?: string;
               name?: string;
             } = {};
-            if (isValidUuid && player?.rosterId !== id) {
-              invitee.userId = id;
+            const linkedUser = player?.contactUserId;
+            if (isValidUuid(linkedUser)) {
+              invitee.userId = linkedUser;
+            } else if (
+              isValidUuid(selId) &&
+              player?.rosterId != null &&
+              player.rosterId === selId
+            ) {
+              // Group slot keyed by roster row: backend resolves contact_user_id from this id
+              invitee.userId = selId;
+            } else if (isValidUuid(selId) && player?.rosterId !== selId) {
+              invitee.userId = selId;
             }
             if (player?.phone) {
               const e164 = toE164Phone(player.phone);

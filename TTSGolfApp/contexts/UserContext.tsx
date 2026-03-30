@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { profileApi } from '../services/api';
 import { logger } from '../utils/logger';
+import { subscribeProfileSession } from '../utils/profileSessionBridge';
 
 interface UserPreferences {
   preferredTeeTime?: string;
@@ -67,13 +68,36 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isProfileCached, setIsProfileCached] = useState(false);
+  const fetchProfileRef = useRef<(forceRefresh?: boolean) => Promise<void>>(async () => {});
+  /** Bumps when session changes so a slow initial cache read cannot overwrite another user's profile */
+  const profileLoadEpochRef = useRef(0);
 
   // Load cached profile on mount
   useEffect(() => {
     loadCachedProfile();
   }, []);
 
+  // When tokens are saved or cleared, drop cached profile so the next user never sees the previous account
+  useEffect(() => {
+    return subscribeProfileSession((event) => {
+      profileLoadEpochRef.current += 1;
+      setProfile(null);
+      setIsProfileCached(false);
+      setError(null);
+      void AsyncStorage.removeItem(CACHE_KEY);
+      if (event.hasSession) {
+        void (async () => {
+          const token = await AsyncStorage.getItem('accessToken');
+          if (token) {
+            await fetchProfileRef.current(true);
+          }
+        })();
+      }
+    });
+  }, []);
+
   const loadCachedProfile = async () => {
+    const epochAtStart = profileLoadEpochRef.current;
     try {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
       if (cached) {
@@ -82,6 +106,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Check if cache is still valid
         if (now - timestamp < CACHE_DURATION) {
+          if (epochAtStart !== profileLoadEpochRef.current) {
+            logger.debug('[UserContext] Skipping stale cache apply after session change');
+            return;
+          }
           logger.debug('[UserContext] Loading profile from cache');
           setProfile(cachedProfile);
           setIsProfileCached(true);
@@ -187,6 +215,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   }, [profile, isProfileCached]);
+
+  fetchProfileRef.current = fetchProfile;
 
   const updateProfile = useCallback((updates: Partial<UserProfile>) => {
     setProfile((prev) => {
