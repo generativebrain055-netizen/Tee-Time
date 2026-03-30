@@ -9,7 +9,7 @@ import {
   ActionSheetIOS,
   Platform,
 } from "react-native";
-import { Clock, MapPin, MoreHorizontal, Check, Users } from "lucide-react-native";
+import { Clock, MapPin, MoreHorizontal, Check, Users, ChevronRight } from "lucide-react-native";
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
@@ -28,6 +28,8 @@ interface TeeTimeCardProps {
   teeTime: CalendarTeeTime;
   onPress?: (teeTimeId: string) => void;
   onCancelSuccess?: () => void;
+  /** Organizer-only: navigate to pre–tee time check-in. */
+  onPreTeeTimeCheck?: (teeTimeId: string, courseLine: string) => void;
 }
 
 const CANCEL_PENALTY_CONFIRMED = 10;
@@ -69,7 +71,7 @@ function getStatusDisplay(status: CalendarTeeTime["status"]) {
   }
 }
 
-const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProps) => {
+const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck }: TeeTimeCardProps) => {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const { fetchProfile } = useUser();
   const toast = useToast();
@@ -78,29 +80,52 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  const canCancelParticipation =
+    teeTime.status === "confirmed" || teeTime.status === "pending";
+  /** "Is everyone here?" / check-in — confirmed tee times only */
+  const showPreTeeTimeCheck =
+    !!onPreTeeTimeCheck &&
+    !!teeTime.isOrganizer &&
+    teeTime.status === "confirmed";
+
   const handlePress = useCallback(() => {
     onPress?.(teeTime.id);
   }, [onPress, teeTime.id]);
 
   const handleMorePress = useCallback(() => {
-    const canCancel = teeTime.status === "confirmed" || teeTime.status === "pending";
     if (Platform.OS === "ios") {
-      const options = ["View details", ...(canCancel ? ["Cancel participation"] : []), "Cancel"];
+      const options = [
+        "View details",
+        ...(canCancelParticipation ? ["Cancel participation"] : []),
+        "Dismiss",
+      ];
       ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: options.length - 1, destructiveButtonIndex: canCancel ? 1 : undefined },
+        {
+          options,
+          cancelButtonIndex: options.length - 1,
+          destructiveButtonIndex: canCancelParticipation ? 1 : undefined,
+        },
         (i) => {
           if (i === 0) handlePress();
-          else if (canCancel && i === 1) setShowCancelModal(true);
+          else if (canCancelParticipation && i === 1) setShowCancelModal(true);
         }
       );
     } else {
       Alert.alert("Options", "", [
         { text: "View details", onPress: handlePress },
-        ...(canCancel ? [{ text: "Cancel participation", onPress: () => setShowCancelModal(true) }] : []),
-        { text: "Cancel", style: "cancel" },
+        ...(canCancelParticipation
+          ? [{ text: "Cancel participation", onPress: () => setShowCancelModal(true) }]
+          : []),
+        { text: "Dismiss", style: "cancel" },
       ]);
     }
-  }, [teeTime.status, handlePress]);
+  }, [teeTime.status, canCancelParticipation, handlePress]);
+
+  const checkInCourseLine = `${formatTeeTimeDate(teeTime.date)}, ${formatTeeTimeTime(teeTime.time)} – ${teeTime.course}`;
+
+  const handlePreTeeTimeCheckPress = useCallback(() => {
+    onPreTeeTimeCheck?.(teeTime.id, checkInCourseLine);
+  }, [onPreTeeTimeCheck, teeTime.id, checkInCourseLine]);
 
   const handleConfirmCancel = useCallback(async () => {
     setIsCancelling(true);
@@ -124,7 +149,6 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
     }
   }, [teeTime.id, onCancelSuccess, fetchProfile, toast]);
 
-  const canCancel = teeTime.status === "confirmed" || teeTime.status === "pending";
   const participants = teeTime.participants ?? [];
 
   return (
@@ -318,6 +342,50 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
           </Text>
         )}
         </TouchableOpacity>
+
+        {showPreTeeTimeCheck ? (
+          <TouchableOpacity
+            onPress={handlePreTeeTimeCheckPress}
+            activeOpacity={0.85}
+            style={{
+              marginTop: 16,
+              marginHorizontal: -4,
+              paddingVertical: 14,
+              paddingHorizontal: 14,
+              borderRadius: 12,
+              backgroundColor: "#F0FDF4",
+              borderWidth: 1,
+              borderColor: "rgba(94, 188, 104, 0.35)",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontFamily: "Inter_700Bold",
+                  color: "#166534",
+                }}
+              >
+                Is everyone here?
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontFamily: "Inter_500Medium",
+                  color: "#15803D",
+                  marginTop: 4,
+                }}
+                numberOfLines={2}
+              >
+                {checkInCourseLine}
+              </Text>
+            </View>
+            <ChevronRight size={22} color="#166534" />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <Modal
@@ -331,7 +399,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess }: TeeTimeCardProp
             className="bg-white rounded-xl p-7 w-full max-w-[340px] items-center"
             style={{ elevation: 10, shadowColor: "#000", shadowRadius: 10, shadowOpacity: 0.2 }}
           >
-            <Text className="text-xl font-bold text-gray-900 mb-3">Cancel Tee Time?</Text>
+            <Text className="text-xl font-bold text-gray-900 mb-3">Cancel participation?</Text>
             <Text className="text-base text-gray-500 text-center leading-6 mb-7">
               {teeTime.status === "confirmed"
                 ? `You will lose ${CANCEL_PENALTY_CONFIRMED} points if you cancel. Confirm?`

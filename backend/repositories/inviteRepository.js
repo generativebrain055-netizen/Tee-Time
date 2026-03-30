@@ -218,13 +218,14 @@ class InviteRepository {
 
       if (error) throw error;
 
-      // Roster / manual backups: pending with expires_at = null until activated
+      // Roster backups: pending with expires_at = null until activated — hide from Invites list
+      // Manual invites are parallel (all have deadlines); legacy manual rows without expiry still show
       const visibleInvites = (data || []).filter((invite) => {
         const teeTime = invite.tee_times || {};
-        const isSequentialQueue =
-          teeTime.invite_type === "roster" || teeTime.invite_type === "manual";
-        const hasExpiry = !!invite.expires_at;
-        return !isSequentialQueue || hasExpiry;
+        if (teeTime.invite_type === "roster" && !invite.expires_at) {
+          return false;
+        }
+        return true;
       });
 
       return visibleInvites.map((invite) => {

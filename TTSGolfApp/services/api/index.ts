@@ -21,6 +21,10 @@ export {
   buildQueryString,
   isDuplicateRosterContactFailure,
   isDuplicateRosterContactApiError,
+  isCheckInAlreadyFinalizedFailure,
+  isCheckInAlreadyFinalizedApiError,
+  isAttendanceRecordNotFoundFailure,
+  isAttendanceRecordNotFoundApiError,
 } from "./core";
 
 // Domain APIs

@@ -187,6 +187,13 @@ export default function FullCalendarScreen({ navigation }: Props) {
     [navigation]
   );
 
+  const handlePreTeeTimeCheck = useCallback(
+    (teeTimeId: string, courseLine: string) => {
+      navigation?.navigate("CheckIn", { teeTimeId, courseName: courseLine });
+    },
+    [navigation]
+  );
+
   return (
     <ScreenShell>
       <AppHeader title="Schedule" onBack={handleBack} />
@@ -291,6 +298,7 @@ export default function FullCalendarScreen({ navigation }: Props) {
                 embedded
                 onTeeTimePress={handleTeeTimePress}
                 onCancelSuccess={onRefresh}
+                onPreTeeTimeCheck={handlePreTeeTimeCheck}
               />
             </View>
           </View>

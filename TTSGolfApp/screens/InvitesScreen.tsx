@@ -33,6 +33,15 @@ const COLORS = {
     textSub: "#6B7280",
 };
 
+type InviteRespondApiResult = {
+    success: boolean;
+    message?: string;
+    code?: string;
+    status?: string;
+    socialRateDelta?: number;
+    newSocialRate?: number;
+};
+
 // Helper for status badge colors
 const getStatusBadgeClass = (status: string): string => {
     switch (status) {
@@ -90,7 +99,10 @@ export default function InvitesScreen({ navigation }: any) {
                 response,
             });
             
-            const result = await inviteApi.respondToInvite(inviteId, response);
+            const result = (await inviteApi.respondToInvite(
+                inviteId,
+                response
+            )) as InviteRespondApiResult;
             
             console.log("🟢 [InvitesScreen] inviteApi.respondToInvite SUCCESS", { inviteId, response, result });
             logger.info("[InvitesScreen] Invite response received", {
@@ -115,13 +127,21 @@ export default function InvitesScreen({ navigation }: any) {
                     const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
                     toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
                 }
-                
-                Alert.alert(
-                    response === "accepted" ? "Accepted!" : "Declined",
+
+                const acceptTitle =
                     response === "accepted"
-                        ? "You've been added to the tee time!"
-                        : "You've declined the invite."
-                );
+                        ? result.status === "waitlist"
+                            ? "Waitlist"
+                            : "Accepted!"
+                        : "Declined";
+                const acceptBody =
+                    result.message ||
+                    (response === "accepted"
+                        ? result.status === "waitlist"
+                            ? "You're on the waitlist for this tee time."
+                            : "You've been added to the tee time!"
+                        : "You've declined the invite.");
+                Alert.alert(acceptTitle, acceptBody);
             } else {
                 console.warn("🟡 [InvitesScreen] Response not successful", { inviteId, response, result });
                 logger.warn("[InvitesScreen] Invite response was not successful", {
@@ -129,7 +149,11 @@ export default function InvitesScreen({ navigation }: any) {
                     response,
                     result,
                 });
-                Alert.alert("Error", "Failed to respond to invite. Please try again.");
+                const full = result.code === "TEE_TIME_FULL";
+                Alert.alert(
+                    full ? "Tee time full" : "Error",
+                    result.message || "Failed to respond to invite. Please try again."
+                );
             }
         } catch (error: any) {
             console.error("🔴 [InvitesScreen] ERROR in handleRespond", {

@@ -35,7 +35,11 @@ export const attendanceApi = {
    */
   batchUpdateAttendance: (
     teeTimeId: string,
-    updates: Array<{ attendanceId: string; status: "present" | "no_show" }>,
+    updates: Array<{
+      attendanceId: string;
+      participantId?: string;
+      status: "present" | "no_show";
+    }>,
   ) =>
     apiCall<{
       success: boolean;

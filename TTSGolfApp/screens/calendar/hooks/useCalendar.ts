@@ -26,16 +26,21 @@ function mapApiToCalendar(
     isCreator: p.isCreator,
     status: "confirmed" as const,
   }));
-  const creatorId = participants.find((p) => p.isCreator)?.userId;
-  const isOrganizer = !!currentUserId && (creatorId === currentUserId || !!(api.creator?.firstName));
+  const creatorId =
+    participants.find((p) => p.isCreator)?.userId ?? api.creatorId;
+  const isOrganizer =
+    !!currentUserId &&
+    !!creatorId &&
+    String(creatorId).toLowerCase() === String(currentUserId).toLowerCase();
+  const raw = String(api.status ?? "").toLowerCase();
   const status =
-    api.status === "in_progress"
+    raw === "in_progress"
       ? "in_progress"
-      : api.status === "confirmed"
+      : raw === "confirmed"
         ? "confirmed"
-        : api.status === "completed"
+        : raw === "completed"
           ? "completed"
-          : api.status === "cancelled"
+          : raw === "cancelled" || raw === "canceled"
             ? "cancelled"
             : "pending";
   const dateStr = api.teeDate ?? api.date ?? dateKey ?? "";

@@ -77,6 +77,8 @@ function AppHeaderInner({
     <View
       style={[
         {
+          zIndex: 20,
+          elevation: 20,
           paddingTop: includeSafeArea ? insets.top + spacing.sm : spacing.sm,
           paddingHorizontal: componentTokens.header.paddingHorizontal,
           paddingBottom: spacing.md,

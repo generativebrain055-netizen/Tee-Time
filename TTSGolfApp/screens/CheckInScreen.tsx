@@ -1,541 +1,475 @@
 /**
- * Pre Tee Time Check-In Screen (Figma 437-321)
- * Allows organizer to check in all participants or mark no-shows
+ * Pre tee time check-in — per-player Yes/No presence + Save (Figma-style).
  */
 import React, { useState, useEffect, useCallback, memo } from "react";
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    Image,
-    StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Image,
+  StyleSheet,
+  BackHandler,
 } from "react-native";
-import { Check, X, Users, AlertTriangle } from "lucide-react-native";
+import { X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenShell, AppHeader } from "../ui";
-import { useColors, useTheme } from "../ui/theme";
-import { attendanceApi, AttendanceRecord } from "../services/api";
-import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
+import { useColors } from "../ui/theme";
+import {
+  attendanceApi,
+  AttendanceRecord,
+  isAttendanceRecordNotFoundApiError,
+  isCheckInAlreadyFinalizedApiError,
+} from "../services/api";
+import { spacing, fontSize, fontFamily, radii, palette } from "../ui/theme/tokens";
 import { logger } from "../utils/logger";
 
 interface CheckInScreenProps {
-    route: { params: { teeTimeId: string; courseName?: string } };
-    navigation: any;
+  route: {
+    params: {
+      teeTimeId: string;
+      courseName?: string;
+      teeDate?: string;
+      teeTime?: string;
+    };
+  };
+  navigation: any;
 }
 
-type ScreenMode = "initial" | "who_bailed";
+function formatCheckInSummaryLine(teeDate?: string, teeTime?: string, courseName?: string): string {
+  if (!teeDate?.trim() || !teeTime?.trim() || !courseName?.trim()) return "";
+  const parts = teeDate.split(/[-/]/).map(Number);
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return "";
+  const d = new Date(parts[0], (parts[1] ?? 1) - 1, parts[2] ?? 1);
+  if (Number.isNaN(d.getTime())) return "";
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+  const md = `${d.getMonth() + 1}/${d.getDate()}`;
+  const [h = 0, m = 0] = teeTime.split(":").map((x) => parseInt(x, 10));
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  const timeLabel = `${h12}:${(Number.isNaN(m) ? 0 : m).toString().padStart(2, "0")} ${ampm}`;
+  return `${weekday}, ${md}, ${timeLabel} – ${courseName}`;
+}
 
-const ParticipantCheckbox = memo(({
-    participant,
-    isSelected,
-    onToggle,
+const YesNoToggle = memo(
+  ({
+    value,
+    onChange,
+    disabled,
     colors,
-}: {
-    participant: AttendanceRecord;
-    isSelected: boolean;
-    onToggle: () => void;
+  }: {
+    value: "present" | "no_show";
+    onChange: (v: "present" | "no_show") => void;
+    disabled?: boolean;
     colors: ReturnType<typeof useColors>;
-}) => {
-    const initials = participant.name
-        ?.split(' ')
-        .map(n => n[0])
-        .join('')
+  }) => {
+    const isYes = value === "present";
+    return (
+      <View style={[toggleStyles.track, { backgroundColor: palette.gray200 }, disabled && { opacity: 0.55 }]}>
+        <TouchableOpacity
+          style={[toggleStyles.segment, !isYes && toggleStyles.segmentOn]}
+          onPress={() => onChange("no_show")}
+          disabled={disabled}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Mark as not here"
+          accessibilityState={{ selected: !isYes }}
+        >
+          <Text style={[toggleStyles.segmentText, !isYes ? toggleStyles.segmentTextOn : toggleStyles.segmentTextOff]}>
+            No
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[toggleStyles.segment, isYes && toggleStyles.segmentOn]}
+          onPress={() => onChange("present")}
+          disabled={disabled}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Mark as here"
+          accessibilityState={{ selected: isYes }}
+        >
+          <Text style={[toggleStyles.segmentText, isYes ? toggleStyles.segmentTextOn : toggleStyles.segmentTextOff]}>
+            Yes
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  },
+);
+
+const toggleStyles = StyleSheet.create({
+  track: {
+    flexDirection: "row",
+    borderRadius: radii.full,
+    padding: 3,
+    minWidth: 118,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentOn: {
+    backgroundColor: palette.white,
+  },
+  segmentText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.sm,
+  },
+  segmentTextOn: {
+    color: palette.gray900,
+  },
+  segmentTextOff: {
+    color: palette.gray400,
+  },
+});
+
+const AttendanceRow = memo(
+  ({
+    participant,
+    presence,
+    onPresenceChange,
+    colors,
+  }: {
+    participant: AttendanceRecord;
+    presence: "present" | "no_show";
+    onPresenceChange: (id: string, v: "present" | "no_show") => void;
+    colors: ReturnType<typeof useColors>;
+  }) => {
+    const initials =
+      participant.name
+        ?.split(" ")
+        .map((n) => n[0])
+        .join("")
         .toUpperCase()
-        .slice(0, 2) || '?';
+        .slice(0, 2) || "?";
 
     return (
-        <TouchableOpacity
-            style={[
-                styles.participantRow,
-                isSelected && { backgroundColor: colors.errorContainer, borderColor: colors.error, borderWidth: 2 },
-                !isSelected && { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
-            ]}
-            onPress={onToggle}
-            activeOpacity={0.7}
-        >
-            <View style={styles.participantInfo}>
-                {participant.avatar ? (
-                    <Image source={{ uri: participant.avatar }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-                        <Text style={[styles.avatarText, { color: colors.onPrimary }]}>{initials}</Text>
-                    </View>
-                )}
-                <View style={styles.participantDetails}>
-                    <Text style={[styles.participantName, { color: colors.textPrimary }]} numberOfLines={1}>
-                        {participant.name}
-                    </Text>
-                    {participant.isCreator && (
-                        <Text style={[styles.organizerLabel, { color: colors.primary }]}>Organizer</Text>
-                    )}
-                </View>
+      <View style={[rowStyles.row, { borderBottomColor: colors.border }]}>
+        <View style={rowStyles.left}>
+          {participant.avatar ? (
+            <Image source={{ uri: participant.avatar }} style={rowStyles.avatar} />
+          ) : (
+            <View style={[rowStyles.avatarPh, { backgroundColor: colors.primary }]}>
+              <Text style={[rowStyles.avatarPhText, { color: colors.onPrimary }]}>{initials}</Text>
             </View>
-            <View style={[
-                styles.checkbox,
-                isSelected && { backgroundColor: colors.error, borderColor: colors.error },
-                !isSelected && { borderColor: colors.border },
-            ]}>
-                {isSelected && <Check size={16} color={colors.onError} strokeWidth={3} />}
-            </View>
-        </TouchableOpacity>
+          )}
+          <Text style={[rowStyles.name, { color: colors.textPrimary }]} numberOfLines={1}>
+            {participant.name}
+          </Text>
+        </View>
+        <YesNoToggle
+          value={participant.isCreator ? "present" : presence}
+          onChange={(v) => onPresenceChange(participant.id, v)}
+          disabled={participant.isCreator}
+          colors={colors}
+        />
+      </View>
     );
+  },
+);
+
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+    marginRight: spacing.md,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    marginRight: spacing.md,
+  },
+  avatarPh: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    marginRight: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarPhText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.base,
+  },
+  name: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.base,
+    flex: 1,
+  },
 });
 
 export default function CheckInScreen({ route, navigation }: CheckInScreenProps) {
-    const { teeTimeId, courseName } = route.params;
-    const colors = useColors();
-    const theme = useTheme();
+  const teeTimeId = route?.params?.teeTimeId;
+  const courseName = route?.params?.courseName;
+  const teeDate = route?.params?.teeDate;
+  const teeTime = route?.params?.teeTime;
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
 
-    const [mode, setMode] = useState<ScreenMode>("initial");
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const [participants, setParticipants] = useState<AttendanceRecord[]>([]);
-    const [selectedNoShows, setSelectedNoShows] = useState<Set<string>>(new Set());
-    const [checkInAvailable, setCheckInAvailable] = useState(true);
-    const [checkInMessage, setCheckInMessage] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [participants, setParticipants] = useState<AttendanceRecord[]>([]);
+  const [presenceById, setPresenceById] = useState<Record<string, "present" | "no_show">>({});
+  const [checkInAvailable, setCheckInAvailable] = useState(true);
+  const [checkInMessage, setCheckInMessage] = useState<string | undefined>();
 
-    const loadAttendance = useCallback(async () => {
-        try {
-            setLoading(true);
-            const response = await attendanceApi.getAttendance(teeTimeId);
-            if (response.success) {
-                // Filter out cancelled participants and the organizer for no-show selection
-                const activeParticipants = response.attendance.filter(
-                    p => p.status !== 'cancelled'
-                );
-                setParticipants(activeParticipants);
-                setCheckInAvailable(response.checkInAvailable);
-                setCheckInMessage(response.checkInMessage);
-            }
-        } catch (error) {
-            logger.error("[CheckInScreen] Failed to load attendance", error);
-            Alert.alert("Error", "Failed to load attendance data");
-        } finally {
-            setLoading(false);
-        }
-    }, [teeTimeId]);
+  const summaryLine =
+    formatCheckInSummaryLine(teeDate, teeTime, courseName) || (courseName?.trim() ? courseName.trim() : "");
 
-    useEffect(() => {
-        loadAttendance();
-    }, [loadAttendance]);
-
-    const handleYesEveryone = useCallback(async () => {
-        setSubmitting(true);
-        try {
-            const response = await attendanceApi.checkInAll(teeTimeId);
-            if (response.success) {
-                Alert.alert(
-                    "Check-In Complete ✓",
-                    `All ${response.checkedIn} players have been checked in. Have a great round!`,
-                    [{ text: "OK", onPress: () => navigation.goBack() }]
-                );
-            }
-        } catch (error: any) {
-            Alert.alert("Error", error?.message || "Failed to check in players");
-        } finally {
-            setSubmitting(false);
-        }
-    }, [teeTimeId, navigation]);
-
-    const handleNoSomeonesBailed = useCallback(() => {
-        setMode("who_bailed");
-    }, []);
-
-    const toggleNoShow = useCallback((participantId: string) => {
-        setSelectedNoShows(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(participantId)) {
-                newSet.delete(participantId);
-            } else {
-                newSet.add(participantId);
-            }
-            return newSet;
-        });
-    }, []);
-
-    const handleConfirmNoShows = useCallback(async () => {
-        if (selectedNoShows.size === 0) {
-            Alert.alert("No Selection", "Please select the players who didn't show up, or go back and select 'Yes' if everyone is here.");
-            return;
-        }
-
-        const noShowNames = participants
-            .filter(p => selectedNoShows.has(p.id))
-            .map(p => p.name)
-            .join(", ");
-
-        Alert.alert(
-            "Confirm No-Shows",
-            `The following players will be marked as no-shows and receive a -10 point penalty:\n\n${noShowNames}\n\nAre you sure?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Confirm",
-                    style: "destructive",
-                    onPress: async () => {
-                        setSubmitting(true);
-                        try {
-                            // Prepare batch updates: selected as no-shows, others as present
-                            const updates = participants
-                                .filter(p => !p.isCreator) // Skip organizer
-                                .map(p => ({
-                                    attendanceId: p.id,
-                                    status: (selectedNoShows.has(p.id) ? 'no_show' : 'present') as 'present' | 'no_show',
-                                }));
-
-                            // Use batch update endpoint which also completes check-in
-                            const response = await attendanceApi.batchUpdateAttendance(teeTimeId, updates);
-                            
-                            if (response.success) {
-                                const message = response.noShow > 0
-                                    ? `${response.noShow} player(s) marked as no-show. Penalties have been applied.`
-                                    : 'All players checked in successfully.';
-                                
-                                Alert.alert(
-                                    "Check-In Complete",
-                                    message,
-                                    [{ text: "OK", onPress: () => navigation.goBack() }]
-                                );
-                            } else {
-                                throw new Error(response.message || "Failed to update attendance");
-                            }
-                        } catch (error: any) {
-                            Alert.alert("Error", error?.message || "Failed to update attendance");
-                        } finally {
-                            setSubmitting(false);
-                        }
-                    },
-                },
-            ]
-        );
-    }, [selectedNoShows, participants, teeTimeId, navigation]);
-
-    if (loading) {
-        return (
-            <ScreenShell>
-                <AppHeader title="Check-In" onBack={() => navigation.goBack()} />
-                <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-            </ScreenShell>
-        );
+  const loadAttendance = useCallback(async () => {
+    if (!teeTimeId) {
+      setLoading(false);
+      return;
     }
+    try {
+      setLoading(true);
+      const response = await attendanceApi.getAttendance(teeTimeId);
+      if (response.success) {
+        const active = response.attendance.filter((p) => p.status !== "cancelled");
+        setParticipants(active);
+        const next: Record<string, "present" | "no_show"> = {};
+        active.forEach((p) => {
+          next[p.id] = "present";
+        });
+        setPresenceById(next);
+        setCheckInAvailable(response.checkInAvailable);
+        setCheckInMessage(response.checkInMessage);
+      } else {
+        setCheckInAvailable(false);
+        setCheckInMessage("Could not load this tee time.");
+      }
+    } catch (error) {
+      logger.error("[CheckInScreen] Failed to load attendance", error);
+      Alert.alert("Error", "Failed to load attendance data");
+    } finally {
+      setLoading(false);
+    }
+  }, [teeTimeId]);
 
-    // Filter out organizer for no-show selection (organizer can't be marked as no-show)
-    const selectableParticipants = participants.filter(p => !p.isCreator);
+  useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance]);
 
+  const handlePresenceChange = useCallback((id: string, v: "present" | "no_show") => {
+    setPresenceById((prev) => ({ ...prev, [id]: v }));
+  }, []);
+
+  const handleHeaderBack = useCallback(() => {
+    navigation?.goBack?.();
+  }, [navigation]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      navigation?.goBack?.();
+      return true;
+    });
+    return () => sub.remove();
+  }, [navigation]);
+
+  const handleSave = useCallback(async () => {
+    if (!teeTimeId) return;
+
+    const nonOrganizers = participants.filter((p) => !p.isCreator);
+    const updates = nonOrganizers.map((p) => ({
+      attendanceId: p.id,
+      ...(p.participantId ? { participantId: p.participantId } : {}),
+      status: (presenceById[p.id] === "no_show" ? "no_show" : "present") as "present" | "no_show",
+    }));
+
+    const anyNoShow = updates.some((u) => u.status === "no_show");
+
+    setSubmitting(true);
+    try {
+      if (!anyNoShow) {
+        const response = await attendanceApi.checkInAll(teeTimeId);
+        if (response.success) {
+          Alert.alert("Saved", `All ${response.checkedIn} players checked in. Have a great round!`, [
+            { text: "OK", onPress: () => navigation.goBack() },
+          ]);
+        } else {
+          throw new Error(response.message || "Check-in failed");
+        }
+      } else {
+        const response = await attendanceApi.batchUpdateAttendance(teeTimeId, updates);
+        if (response.success) {
+          const msg =
+            response.noShow > 0
+              ? `${response.noShow} marked no-show. Penalties applied where applicable.`
+              : response.message || "Check-in saved.";
+          Alert.alert("Saved", msg, [{ text: "OK", onPress: () => navigation.goBack() }]);
+        } else {
+          throw new Error(response.message || "Failed to update attendance");
+        }
+      }
+    } catch (error: unknown) {
+      if (isCheckInAlreadyFinalizedApiError(error)) {
+        navigation.goBack();
+        return;
+      }
+      if (isAttendanceRecordNotFoundApiError(error)) {
+        await loadAttendance();
+        return;
+      }
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "Failed to save check-in";
+      Alert.alert("Error", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [teeTimeId, participants, presenceById, navigation, loadAttendance]);
+
+  const closeButton = (
+    <TouchableOpacity
+      onPress={handleHeaderBack}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      style={{
+        minWidth: 44,
+        minHeight: 44,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Close"
+    >
+      <X size={24} color={colors.textPrimary} strokeWidth={2.2} />
+    </TouchableOpacity>
+  );
+
+  if (!teeTimeId) {
     return (
-        <ScreenShell>
-            <AppHeader
-                title={mode === "initial" ? "Check-In" : "Who Bailed?"}
-                onBack={() => mode === "who_bailed" ? setMode("initial") : navigation.goBack()}
-            />
-
-            {mode === "initial" ? (
-                <View style={styles.container}>
-                    {/* Question Section */}
-                    <View style={styles.questionSection}>
-                        <Users size={48} color={colors.primary} strokeWidth={2} />
-                        <Text style={[styles.questionTitle, { color: colors.textPrimary }]}>
-                            Is Everyone Here?
-                        </Text>
-                        {courseName && (
-                            <Text style={[styles.courseName, { color: colors.textSecondary }]}>
-                                {courseName}
-                            </Text>
-                        )}
-                        <Text style={[styles.participantCount, { color: colors.textSecondary }]}>
-                            {participants.length} player{participants.length !== 1 ? 's' : ''} confirmed
-                        </Text>
-                    </View>
-
-                    {/* Warning Message */}
-                    {!checkInAvailable && checkInMessage && (
-                        <View style={[styles.warningBanner, { backgroundColor: colors.warningContainer }]}>
-                            <AlertTriangle size={20} color={colors.warning} />
-                            <Text style={[styles.warningText, { color: colors.onWarningContainer }]}>
-                                {checkInMessage}
-                            </Text>
-                        </View>
-                    )}
-
-                    {/* Action Buttons */}
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                            style={[
-                                styles.primaryButton,
-                                { backgroundColor: colors.primary },
-                                (submitting || !checkInAvailable) && styles.buttonDisabled,
-                            ]}
-                            onPress={handleYesEveryone}
-                            disabled={submitting || !checkInAvailable}
-                            activeOpacity={0.8}
-                        >
-                            <Check size={24} color={colors.onPrimary} strokeWidth={2.5} />
-                            <Text style={[styles.buttonText, { color: colors.onPrimary }]}>
-                                {submitting ? "Checking In..." : "Yes, Everyone's Here"}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.secondaryButton,
-                                { backgroundColor: colors.surface, borderColor: colors.error },
-                                (submitting || !checkInAvailable) && styles.buttonDisabled,
-                            ]}
-                            onPress={handleNoSomeonesBailed}
-                            disabled={submitting || !checkInAvailable}
-                            activeOpacity={0.8}
-                        >
-                            <X size={24} color={colors.error} strokeWidth={2.5} />
-                            <Text style={[styles.buttonTextSecondary, { color: colors.error }]}>
-                                No, Someone Bailed
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Info Text */}
-                    <Text style={[styles.infoText, { color: colors.textMuted }]}>
-                        Players marked as no-show will receive a -10 Social Rate penalty
-                    </Text>
-                </View>
-            ) : (
-                <View style={styles.container}>
-                    {/* Who Bailed Header */}
-                    <View style={[styles.headerSection, { borderBottomColor: colors.border }]}>
-                        <AlertTriangle size={32} color={colors.error} strokeWidth={2} />
-                        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-                            Select No-Shows
-                        </Text>
-                        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                            Tap to select players who didn't show up.{"\n"}
-                            They will receive a -10 point penalty.
-                        </Text>
-                    </View>
-
-                    {/* Participant List */}
-                    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                        {selectableParticipants.map(participant => (
-                            <ParticipantCheckbox
-                                key={participant.id}
-                                participant={participant}
-                                isSelected={selectedNoShows.has(participant.id)}
-                                onToggle={() => toggleNoShow(participant.id)}
-                                colors={colors}
-                            />
-                        ))}
-                    </ScrollView>
-
-                    {/* Selection Summary */}
-                    {selectedNoShows.size > 0 && (
-                        <View style={[styles.summaryBanner, { backgroundColor: colors.errorContainer }]}>
-                            <Text style={[styles.summaryText, { color: colors.onErrorContainer }]}>
-                                {selectedNoShows.size} player{selectedNoShows.size !== 1 ? 's' : ''} selected as no-show
-                            </Text>
-                        </View>
-                    )}
-
-                    {/* Confirm Button */}
-                    <View style={styles.confirmButtonContainer}>
-                        <TouchableOpacity
-                            style={[
-                                styles.confirmButton,
-                                { backgroundColor: colors.error },
-                                selectedNoShows.size === 0 && styles.buttonDisabled,
-                            ]}
-                            onPress={handleConfirmNoShows}
-                            disabled={submitting || selectedNoShows.size === 0}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={[styles.confirmButtonText, { color: colors.onError }]}>
-                                {submitting ? "Processing..." : "Confirm & Apply Penalties"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            )}
-        </ScreenShell>
+      <ScreenShell>
+        <AppHeader title="Is everyone here?" leftComponent={closeButton} />
+        <View style={styles.centerContainer}>
+          <Text style={[styles.infoText, { color: colors.textPrimary, textAlign: "center", paddingHorizontal: 24 }]}>
+            Missing tee time. Go back and open check-in from your schedule or tee time details.
+          </Text>
+        </View>
+      </ScreenShell>
     );
+  }
+
+  if (loading) {
+    return (
+      <ScreenShell>
+        <AppHeader title="Is everyone here?" leftComponent={closeButton} />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </ScreenShell>
+    );
+  }
+
+  return (
+    <ScreenShell>
+      <AppHeader title="Is everyone here?" leftComponent={closeButton} />
+
+      <View style={styles.flex}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {!!summaryLine && (
+            <Text style={[styles.summary, { color: colors.textPrimary }]} numberOfLines={2}>
+              {summaryLine}
+            </Text>
+          )}
+
+          {!checkInAvailable && checkInMessage && (
+            <View style={[styles.warningBanner, { backgroundColor: colors.warningContainer }]}>
+              <Text style={[styles.warningText, { color: colors.onWarningContainer }]}>
+                {checkInMessage}
+                {"\n\n"}
+                You can still tap Save until check-in has been completed for this tee time.
+              </Text>
+            </View>
+          )}
+
+          {participants.map((p) => (
+            <AttendanceRow
+              key={p.id}
+              participant={p}
+              presence={presenceById[p.id] ?? "present"}
+              onPresenceChange={handlePresenceChange}
+              colors={colors}
+            />
+          ))}
+        </ScrollView>
+
+        <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.primary }, submitting && styles.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={submitting}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.saveBtnText, { color: colors.onPrimary }]}>{submitting ? "Saving…" : "Save"}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </ScreenShell>
+  );
 }
 
 const styles = StyleSheet.create({
-    centerContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    container: {
-        flex: 1,
-        padding: spacing.lg,
-    },
-    questionSection: {
-        alignItems: 'center',
-        paddingVertical: spacing['4xl'],
-    },
-    questionTitle: {
-        fontFamily: fontFamily.bold,
-        fontSize: fontSize['3xl'],
-        marginTop: spacing.xl,
-        marginBottom: spacing.sm,
-    },
-    courseName: {
-        fontFamily: fontFamily.medium,
-        fontSize: fontSize.base,
-        marginBottom: spacing.xs,
-    },
-    participantCount: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.base,
-    },
-    warningBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: spacing.md,
-        borderRadius: radii.md,
-        marginBottom: spacing.xl,
-        gap: spacing.sm,
-    },
-    warningText: {
-        flex: 1,
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.sm,
-    },
-    buttonContainer: {
-        gap: spacing.lg,
-        marginTop: spacing.xl,
-    },
-    primaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: spacing.lg,
-        paddingHorizontal: spacing.lg,
-        borderRadius: radii.md,
-        gap: spacing.md,
-    },
-    secondaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: spacing.lg,
-        paddingHorizontal: spacing.lg,
-        borderRadius: radii.md,
-        borderWidth: 2,
-        gap: spacing.md,
-    },
-    buttonDisabled: {
-        opacity: 0.5,
-    },
-    buttonText: {
-        fontFamily: fontFamily.semiBold,
-        fontSize: fontSize.lg,
-    },
-    buttonTextSecondary: {
-        fontFamily: fontFamily.semiBold,
-        fontSize: fontSize.lg,
-    },
-    infoText: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.sm,
-        textAlign: 'center',
-        marginTop: spacing['2xl'],
-    },
-    headerSection: {
-        alignItems: 'center',
-        paddingVertical: spacing['2xl'],
-        borderBottomWidth: 1,
-        marginBottom: spacing.lg,
-    },
-    headerTitle: {
-        fontFamily: fontFamily.bold,
-        fontSize: fontSize['2xl'],
-        marginTop: spacing.md,
-    },
-    headerSubtitle: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.sm,
-        textAlign: 'center',
-        marginTop: spacing.sm,
-        lineHeight: fontSize.base * 1.25,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    participantRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: spacing.lg,
-        borderRadius: radii.md,
-        marginBottom: spacing.sm,
-    },
-    participantInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: radii.full,
-        marginRight: spacing.md,
-    },
-    avatarPlaceholder: {
-        width: 44,
-        height: 44,
-        borderRadius: radii.full,
-        marginRight: spacing.md,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        fontFamily: fontFamily.semiBold,
-        fontSize: fontSize.base,
-    },
-    participantDetails: {
-        flex: 1,
-        minWidth: 0,
-    },
-    participantName: {
-        fontFamily: fontFamily.semiBold,
-        fontSize: fontSize.base,
-    },
-    organizerLabel: {
-        fontFamily: fontFamily.regular,
-        fontSize: fontSize.xs,
-        marginTop: spacing['2xs'],
-    },
-    checkbox: {
-        width: 28,
-        height: 28,
-        borderRadius: radii.full,
-        borderWidth: 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    summaryBanner: {
-        padding: spacing.md,
-        borderRadius: radii.md,
-        marginTop: spacing.md,
-    },
-    summaryText: {
-        fontFamily: fontFamily.medium,
-        fontSize: fontSize.sm,
-        textAlign: 'center',
-    },
-    confirmButtonContainer: {
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.xl,
-    },
-    confirmButton: {
-        paddingVertical: spacing.lg,
-        borderRadius: radii.md,
-        alignItems: 'center',
-    },
-    confirmButtonText: {
-        fontFamily: fontFamily.semiBold,
-        fontSize: fontSize.base,
-    },
+  flex: { flex: 1, backgroundColor: palette.white },
+  scroll: { flex: 1 },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  summary: {
+    fontFamily: fontFamily.bold,
+    fontSize: fontSize.base,
+    textAlign: "center",
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  warningBanner: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+  },
+  warningText: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+  },
+  infoText: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+  },
+  footer: {
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    backgroundColor: palette.white,
+  },
+  saveBtn: {
+    borderRadius: radii.md,
+    paddingVertical: spacing.lg,
+    alignItems: "center",
+  },
+  saveBtnDisabled: { opacity: 0.5 },
+  saveBtnText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.lg,
+  },
 });

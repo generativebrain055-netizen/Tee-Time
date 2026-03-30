@@ -17,7 +17,7 @@ const { INVITE_TYPES, INVITE_RESPONSES } = require("../constants");
  * When someone declines, activate the next backup invite immediately
  */
 const isSequentialInviteTeeTime = (inviteType) =>
-    inviteType === INVITE_TYPES.ROSTER || inviteType === INVITE_TYPES.MANUAL;
+    inviteType === INVITE_TYPES.ROSTER;
 
 async function resolveInviteeUserIdByPhone(phone) {
     if (!phone || typeof phone !== "string") return null;
@@ -36,7 +36,7 @@ async function resolveInviteeUserIdByPhone(phone) {
 }
 
 /**
- * Activate next backup invite (roster or manual) when a spot opens.
+ * Activate next backup invite (roster) when a spot opens.
  * Used by fcfsDeadlineService for expired invite cycling.
  */
 const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
@@ -114,7 +114,7 @@ const processNextRosterInvite = async (teeTimeId, responseWindowHours = 2) => {
 };
 
 /**
- * Direct, reliable activation + notification for sequential (roster/manual) declines.
+ * Direct, reliable activation + notification for sequential roster declines.
  *
  * Unlike processNextRosterInvite, this function:
  *   - Receives the already-fetched teeTime so there is no risk of a re-fetch failure
@@ -345,14 +345,35 @@ const handleAcceptance = async (invite, teeTime, userId, participantCount) => {
                 message: "You've already responded to this invite.",
                 status: 'error'
             };
-        } else {
-            logger.error(`Acceptance failed with reason: ${result.reason}`);
+        }
+
+        const rpcMsg = String(result.message || '').toLowerCase();
+        const rpcSaysFull =
+            rpcMsg.includes('tee time is full') ||
+            rpcMsg === 'tee time is full' ||
+            rpcMsg.includes('tee time full');
+
+        if (rpcSaysFull) {
+            invitesLogger.info("[INVITE] Accept blocked — tee time already at capacity (RPC)", {
+                event: "handle_acceptance_tee_full",
+                inviteId: invite.id,
+                userId,
+            });
             return {
                 success: false,
-                message: "Unable to process your response. Please try again.",
-                status: 'error'
+                message:
+                    'This tee time is already full. All spots have been taken.',
+                code: 'TEE_TIME_FULL',
+                status: 'tee_time_full',
             };
         }
+
+        logger.error(`Acceptance failed with reason: ${result.reason}, message: ${result.message}`);
+        return {
+            success: false,
+            message: result.message || 'Unable to process your response. Please try again.',
+            status: 'error'
+        };
     }
 
     // Apply social rate bonus (+2)
@@ -381,7 +402,7 @@ const handleDecline = async (invite, teeTime, userId) => {
     );
     const penaltyApplied = newSocialRate != null;
 
-    // Roster / manual: activate the next invitee in the queue and send them a notification.
+    // Roster: activate the next invitee in the queue and send them a notification.
     // Uses sendDeclineActivationNotifications (direct, reliable) instead of the
     // re-fetching processNextRosterInvite to avoid silent failures.
     if (isSequentialInviteTeeTime(teeTime.invite_type)) {
@@ -389,8 +410,12 @@ const handleDecline = async (invite, teeTime, userId) => {
         await sendDeclineActivationNotifications(invite.tee_time_id, userId, teeTime, responseWindow);
     }
 
-    // FCFS / open: other pending invitees still need a visible invite notification after someone declines
-    if (teeTime.invite_type === INVITE_TYPES.FCFS || teeTime.invite_type === INVITE_TYPES.OPEN) {
+    // FCFS / open / manual (parallel): re-notify other pending invitees after a decline
+    if (
+        teeTime.invite_type === INVITE_TYPES.FCFS ||
+        teeTime.invite_type === INVITE_TYPES.OPEN ||
+        teeTime.invite_type === INVITE_TYPES.MANUAL
+    ) {
         await inviteManagementService.notifyOtherPendingInviteesAfterDecline(
             invite.tee_time_id,
             userId,

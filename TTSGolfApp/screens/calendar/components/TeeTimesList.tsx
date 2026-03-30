@@ -16,6 +16,8 @@ interface TeeTimesListProps {
   onRefresh?: () => void;
   onTeeTimePress?: (teeTimeId: string) => void;
   onCancelSuccess?: () => void;
+  /** Organizer: open pre–tee time check-in (CheckIn screen). */
+  onPreTeeTimeCheck?: (teeTimeId: string, courseLine: string) => void;
   /**
    * When true, render as embedded content (no inner ScrollView) so parent can own page scrolling.
    */
@@ -46,6 +48,7 @@ const TeeTimesList = memo(({
   onRefresh,
   onTeeTimePress,
   onCancelSuccess,
+  onPreTeeTimeCheck,
   embedded = false,
 }: TeeTimesListProps) => {
   const insets = useSafeAreaInsets();
@@ -63,6 +66,7 @@ const TeeTimesList = memo(({
             teeTime={teeTime}
             onPress={onTeeTimePress}
             onCancelSuccess={onCancelSuccess}
+            onPreTeeTimeCheck={onPreTeeTimeCheck}
           />
         ))
       ) : (

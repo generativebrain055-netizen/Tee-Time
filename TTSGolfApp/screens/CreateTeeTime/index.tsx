@@ -539,47 +539,38 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           logger.debug("Roster invite response", { success: inviteResponse.success });
         }
       } else if (inviteType === "fcfs") {
-        // FCFS - send to all at once
-        let invitees: Array<{
-          userId?: string;
-          phone?: string;
-          name?: string;
-        }> = [];
-
-        if (fcfsTargetType === "roster") {
-          // Use fcfsSelectedPlayers instead of all friends
-          invitees = friends
-            .filter(f => fcfsSelectedPlayers.includes(f.id))
-            .map((f) => ({
-              userId: f.id,
-              name: `${f.firstName} ${f.lastName}`,
-            }));
-        } else if (selectedGroupId && groupMembers.length > 0) {
-          // Use fcfsSelectedPlayers to filter group members
-          invitees = groupMembers
-            .filter(m => fcfsSelectedPlayers.includes(m.id))
-            .map((m) => {
-              const isValidUuid =
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                  m.id
-                );
-              const invitee: {
-                userId?: string;
-                phone?: string;
-                name?: string;
-              } = {
-                name: `${m.firstName} ${m.lastName}`,
-              };
-              if (isValidUuid && m.rosterId !== m.id) {
-                invitee.userId = m.id;
-              }
-              if (m.phone) {
-                invitee.phone = m.phone;
-              }
-              return invitee;
-            })
-            .filter((inv) => inv.userId || inv.phone);
-        }
+        // FCFS - send to all at once. Resolve every selected id from the same pool as manual
+        // (friends, on-deck, loaded group members) so we never drop valid invitees.
+        const currentLoadedPlayers = allLoadedPlayersRef.current;
+        const invitees = fcfsSelectedPlayers
+          .map((id) => {
+            const player = currentLoadedPlayers.find((p) => p.id === id);
+            if (!player) {
+              logger.warn("FCFS: selected player not in loaded pool", { id });
+            }
+            const name = player
+              ? `${player.firstName} ${player.lastName}`.trim()
+              : undefined;
+            const isValidUuid =
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                id
+              );
+            const invitee: {
+              userId?: string;
+              phone?: string;
+              name?: string;
+            } = {};
+            if (isValidUuid && player?.rosterId !== id) {
+              invitee.userId = id;
+            }
+            if (player?.phone) {
+              const e164 = toE164Phone(player.phone);
+              if (e164) invitee.phone = e164;
+            }
+            if (name) invitee.name = name;
+            return invitee;
+          })
+          .filter((inv) => inv.userId || inv.phone);
 
         if (invitees.length > 0) {
           logger.debug("FCFS invitees prepared", { count: invitees.length, deadline: fcfsDeadline });
@@ -668,7 +659,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         // No invites to send - tee time is open to community
       }
 
-      navigation?.replace("TeeTimeDetail", { teeTimeId });
+      navigation?.replace("TeeTimeDetail", { teeTimeId, showAllSet: true });
     } catch (error: any) {
       logger.error("Create tee time error", error);
       // Try to get more detailed error info
@@ -938,7 +929,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
       {step === 4 && inviteType === "fcfs" && (
         <ReviewFCFSInviteStep
-          friends={fcfsTargetType === "roster" ? friends : groupMembers}
+          friends={allLoadedPlayers}
           selectedPlayers={fcfsSelectedPlayers}
           onRemovePlayer={(playerId) => {
             setFcfsSelectedPlayers(prev => prev.filter(id => id !== playerId));

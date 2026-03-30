@@ -90,6 +90,42 @@ export function isDuplicateRosterContactApiError(error: unknown): boolean {
   );
 }
 
+/** Organizer check-in when tee is already finalized — not worth ERROR logs or alarming UI */
+export function isCheckInAlreadyFinalizedFailure(
+  status: number,
+  message: string,
+): boolean {
+  if (status !== 400) return false;
+  const m = String(message).toLowerCase();
+  return (
+    m.includes("tee time already completed") ||
+    m.includes("check-in already completed")
+  );
+}
+
+export function isCheckInAlreadyFinalizedApiError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    isCheckInAlreadyFinalizedFailure(error.statusCode ?? 0, error.message)
+  );
+}
+
+/** Transient / resolved server-side for batch check-in — avoid noisy ERROR logs */
+export function isAttendanceRecordNotFoundFailure(
+  status: number,
+  message: string,
+): boolean {
+  if (status !== 400 && status !== 404) return false;
+  return String(message).toLowerCase().includes("attendance record not found");
+}
+
+export function isAttendanceRecordNotFoundApiError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    isAttendanceRecordNotFoundFailure(error.statusCode ?? 0, error.message)
+  );
+}
+
 /**
  * Generic API call wrapper with automatic token refresh
  */
@@ -169,22 +205,26 @@ export const apiCall = async <T>(
             retryData?.message ||
             "API request failed";
           const rcode = retryData?.error?.code || retryData?.code;
-          if (
-            !isDuplicateRosterContactFailure(
-              retryResponse.status,
-              rmsg,
-              rcode,
-            )
-          ) {
+          if (isDuplicateRosterContactFailure(retryResponse.status, rmsg, rcode)) {
+            logger.debug("[api/core] Retry: duplicate roster contact", {
+              url,
+              code: rcode,
+            });
+          } else if (isCheckInAlreadyFinalizedFailure(retryResponse.status, rmsg)) {
+            logger.debug("[api/core] Retry: check-in already finalized", {
+              url,
+              message: rmsg,
+            });
+          } else if (isAttendanceRecordNotFoundFailure(retryResponse.status, rmsg)) {
+            logger.debug("[api/core] Retry: attendance record not found", {
+              url,
+              message: rmsg,
+            });
+          } else {
             logger.error("[api/core] Retry request failed", {
               url,
               status: retryResponse.status,
               data: retryData,
-            });
-          } else {
-            logger.debug("[api/core] Retry: duplicate roster contact", {
-              url,
-              code: rcode,
             });
           }
           throw new ApiError(rmsg, retryResponse.status, rcode);
@@ -234,6 +274,13 @@ export const apiCall = async <T>(
 
       if (isDuplicateRosterContactFailure(response.status, msg, code)) {
         logger.debug("[api/core] Duplicate roster contact", { url, code });
+      } else if (isCheckInAlreadyFinalizedFailure(response.status, msg)) {
+        logger.debug("[api/core] Check-in already finalized for tee time", { url, message: msg });
+      } else if (isAttendanceRecordNotFoundFailure(response.status, msg)) {
+        logger.debug("[api/core] Attendance record lookup failed (batch/single)", {
+          url,
+          message: msg,
+        });
       } else {
         logger.error("[api/core] API request failed", {
           url,

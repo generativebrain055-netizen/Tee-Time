@@ -35,9 +35,9 @@ class InviteManagementService {
       );
 
       // Handle based on invite type
-      if (teeTime.invite_type === 'roster' || teeTime.invite_type === 'manual') {
+      if (teeTime.invite_type === 'roster') {
         await this.handleRosterCancellation(teeTime);
-      } else if (teeTime.invite_type === 'fcfs') {
+      } else if (teeTime.invite_type === 'fcfs' || teeTime.invite_type === 'manual') {
         await this.handleFCFSCancellation(teeTime);
       }
 
@@ -146,7 +146,8 @@ class InviteManagementService {
 
       const parallel =
         teeTime.invite_type === INVITE_TYPES.FCFS ||
-        teeTime.invite_type === INVITE_TYPES.OPEN;
+        teeTime.invite_type === INVITE_TYPES.OPEN ||
+        teeTime.invite_type === INVITE_TYPES.MANUAL;
       if (!parallel) return;
 
       const organizer = {
@@ -318,13 +319,12 @@ class InviteManagementService {
         const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
         if (!teeTime) continue;
 
-        if (teeTime.invite_type === 'roster' || teeTime.invite_type === 'manual') {
+        if (teeTime.invite_type === 'roster') {
           await this.handleRosterCancellation(teeTime);
-        } else if (teeTime.invite_type === 'fcfs') {
-          // For FCFS: check if tee time is not filled and notify organizer
+        } else if (teeTime.invite_type === 'fcfs' || teeTime.invite_type === 'manual') {
           const participantCount = await teeTimeRepository.getParticipantCount(teeTimeId);
           const spotsRemaining = teeTime.max_players - participantCount;
-          
+
           if (spotsRemaining > 0) {
             await notificationService.notifyTeeTimeNotFilled(
               teeTime.creator_id,

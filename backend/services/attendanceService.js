@@ -1,7 +1,7 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 const socialRateService = require("./socialRateService");
-const { formatDateLocal } = require("../utils/dateUtils");
+const { formatDateLocal, createTeeDateTime } = require("../utils/dateUtils");
 
 class AttendanceService {
   /**
@@ -72,7 +72,7 @@ class AttendanceService {
           )
         `)
         .eq("tee_time_id", teeTimeId)
-        .order("tee_time_participants(position)", { ascending: true });
+        .order("created_at", { ascending: true });
 
       if (error) {
         logger.error(`Error fetching attendance for tee time ${teeTimeId}:`, error.message);
@@ -115,6 +115,71 @@ class AttendanceService {
   /**
    * Get single attendance record
    */
+  /**
+   * Minimal attendance rows (no joins) — reliable for batch ID resolution when embedded selects fail.
+   */
+  async listAttendanceRowsForTeeTime(teeTimeId) {
+    const { data, error } = await supabaseAdmin
+      .from("tee_time_attendance")
+      .select("id, participant_id, user_id, status, tee_time_id")
+      .eq("tee_time_id", teeTimeId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      logger.error(`listAttendanceRowsForTeeTime ${teeTimeId}:`, error.message);
+      return [];
+    }
+    return data || [];
+  }
+
+  /**
+   * Ensure a tee_time_attendance row exists for this participant (batch / temp-id safety).
+   */
+  async ensureAttendanceRowForParticipant(teeTimeId, participantId) {
+    const { data: p, error: pe } = await supabaseAdmin
+      .from("tee_time_participants")
+      .select("id, user_id, tee_time_id, status")
+      .eq("tee_time_id", teeTimeId)
+      .eq("id", participantId)
+      .maybeSingle();
+
+    if (pe || !p) {
+      logger.warn(`ensureAttendanceRowForParticipant: participant not found ${participantId} for tee ${teeTimeId}`);
+      return null;
+    }
+    if (p.status === "cancelled") {
+      return null;
+    }
+
+    const { error: upErr } = await supabaseAdmin.from("tee_time_attendance").upsert(
+      {
+        tee_time_id: teeTimeId,
+        participant_id: p.id,
+        user_id: p.user_id,
+        status: "pending",
+      },
+      { onConflict: "tee_time_id,participant_id", ignoreDuplicates: true },
+    );
+
+    if (upErr) {
+      logger.error(`ensureAttendanceRowForParticipant upsert:`, upErr.message);
+      return null;
+    }
+
+    const { data: row, error: re } = await supabaseAdmin
+      .from("tee_time_attendance")
+      .select("id, participant_id")
+      .eq("tee_time_id", teeTimeId)
+      .eq("participant_id", p.id)
+      .maybeSingle();
+
+    if (re) {
+      logger.error(`ensureAttendanceRowForParticipant fetch row:`, re.message);
+      return null;
+    }
+    return row;
+  }
+
   async getAttendanceById(attendanceId) {
     const { data, error } = await supabaseAdmin
       .from("tee_time_attendance")
@@ -182,9 +247,20 @@ class AttendanceService {
         }
       }
       
-      // Complete the check-in process
-      await this.completeCheckIn(teeTimeId, organizerId);
-      
+      const { data: ttRow } = await supabaseAdmin
+        .from("tee_times")
+        .select("tee_date, tee_time")
+        .eq("id", teeTimeId)
+        .single();
+
+      if (!this.isBeforeScheduledTeeTime(ttRow)) {
+        await this.completeCheckIn(teeTimeId, organizerId);
+      } else {
+        logger.info(
+          `checkInAll: attendance saved; deferring completeCheckIn until scheduled tee time (${teeTimeId})`,
+        );
+      }
+
       logger.info(`All participants checked in for tee time ${teeTimeId} by ${organizerId}. Checked in: ${checkedInCount}/${attendance.length}`);
       
       return { success: true, checkedIn: checkedInCount, total: attendance.length };
@@ -456,9 +532,20 @@ class AttendanceService {
         }
       }
 
-      // Complete check-in if at least some updates succeeded
       if (results.present > 0 || results.noShow > 0) {
-        await this.completeCheckIn(teeTimeId, completedBy);
+        const { data: ttRow } = await supabaseAdmin
+          .from("tee_times")
+          .select("tee_date, tee_time")
+          .eq("id", teeTimeId)
+          .single();
+
+        if (!this.isBeforeScheduledTeeTime(ttRow)) {
+          await this.completeCheckIn(teeTimeId, completedBy);
+        } else {
+          logger.info(
+            `batchUpdateAttendance: deferring completeCheckIn until scheduled tee time (${teeTimeId})`,
+          );
+        }
       }
 
       return results;
@@ -531,8 +618,9 @@ class AttendanceService {
 
   /**
    * Check if check-in is available for a tee time (Figma 437-321: Pre tee time check-in)
-   * Check-in window: 30 minutes before tee time to 60 minutes after tee time
-   * Only available on the day of the tee time
+   * On the calendar day of the tee: available from start of that day until 4 hours after tee time
+   * (organizers can open check-in the morning of, not only 30 min before).
+   * Other days: not yet, or closed if past.
    */
   async isCheckInAvailable(teeTimeId) {
     const { data: teeTime, error } = await supabaseAdmin
@@ -574,21 +662,66 @@ class AttendanceService {
     const minutesUntilTeeTime = teeMinutes - currentMinutes;
     
     logger.debug(`Check-in availability: current=${currentTimeStr}, teeTime=${teeTimeStr}, minutesUntil=${minutesUntilTeeTime.toFixed(1)}`);
-    
-    // Check-in available from 30 minutes before to 60 minutes after
-    if (minutesUntilTeeTime > 30) {
-      return { available: false, reason: 'Check-in not available yet' };
-    }
-    
-    if (minutesUntilTeeTime < -60) {
-      return { available: false, reason: 'Check-in window closed' };
-    }
-    
+
     if (teeTime.check_in_completed_at) {
-      return { available: false, reason: 'Check-in already completed' };
+      return { available: false, reason: "Check-in already completed" };
     }
-    
+
+    // Same calendar day: allow any time until 4 hours after scheduled tee time
+    if (minutesUntilTeeTime < -240) {
+      return { available: false, reason: "Check-in window closed" };
+    }
+
     return { available: true, teeTime };
+  }
+
+  /**
+   * Whether the organizer may submit check-in (Save / batch / check-in all).
+   * Before scheduled tee_date + tee_time: always allowed (update participant status),
+   * except for cancelled tee times. After that moment: blocked if tee is completed
+   * or check-in was already finalized.
+   */
+  async canOrganizerSubmitCheckIn(teeTimeId) {
+    const { data: teeTime, error } = await supabaseAdmin
+      .from("tee_times")
+      .select("id, status, check_in_completed_at, tee_date, tee_time")
+      .eq("id", teeTimeId)
+      .single();
+
+    if (error || !teeTime) {
+      return { ok: false, reason: "Tee time not found" };
+    }
+    if (teeTime.status === "cancelled") {
+      return { ok: false, reason: "Tee time cancelled" };
+    }
+    if (this.isBeforeScheduledTeeTime(teeTime)) {
+      return { ok: true, teeTime };
+    }
+    if (teeTime.status === "completed") {
+      return { ok: false, reason: "Tee time already completed" };
+    }
+    if (teeTime.check_in_completed_at) {
+      return { ok: false, reason: "Check-in already completed" };
+    }
+    return { ok: true, teeTime };
+  }
+
+  /**
+   * True while "now" is strictly before scheduled tee_date + tee_time.
+   * When true, organizer saves update attendance only — completeCheckIn is deferred
+   * so Save stays available until the scheduled moment.
+   */
+  isBeforeScheduledTeeTime(teeTime) {
+    if (!teeTime?.tee_date || teeTime.tee_time == null || teeTime.tee_time === "") {
+      return false;
+    }
+    try {
+      const scheduled = createTeeDateTime(teeTime.tee_date, String(teeTime.tee_time).trim());
+      return Date.now() < scheduled.getTime();
+    } catch (e) {
+      logger.warn("isBeforeScheduledTeeTime failed:", e.message);
+      return false;
+    }
   }
 
   /**

@@ -157,6 +157,10 @@ export default function App(): React.ReactElement {
   const [screenHistory, setScreenHistory] = useState<
     { screen: ScreenName; params: NavigationParams }[]
   >([{ screen: "Splash", params: {} }]);
+  const screenHistoryRef = useRef(screenHistory);
+  screenHistoryRef.current = screenHistory;
+  const currentScreenRef = useRef(currentScreen);
+  currentScreenRef.current = currentScreen;
   // Key to force remount screens when navigating
   const [screenKey, setScreenKey] = useState<number>(0);
 
@@ -229,17 +233,23 @@ export default function App(): React.ReactElement {
       setCurrentScreen(screen);
     },
     goBack: () => {
-      if (screenHistory.length > 1) {
-        const newHistory = [...screenHistory];
-        newHistory.pop(); // Remove current screen
+      const hist = screenHistoryRef.current;
+      if (hist.length > 1) {
+        const newHistory = [...hist];
+        newHistory.pop();
         const previousEntry = newHistory[newHistory.length - 1];
         setScreenHistory(newHistory);
-        setScreenParams(previousEntry.params); // Restore previous screen's params
+        setScreenParams(previousEntry.params);
         setScreenKey((prev) => prev + 1);
         setCurrentScreen(previousEntry.screen);
+      } else if (currentScreenRef.current === "CheckIn") {
+        setScreenHistory([{ screen: "HomePage", params: {} }]);
+        setScreenParams({});
+        setScreenKey((prev) => prev + 1);
+        setCurrentScreen("HomePage");
       }
     },
-    canGoBack: () => screenHistory.length > 1,
+    canGoBack: () => screenHistoryRef.current.length > 1,
     setParams: (params: NavigationParams) => {
       // Update params for the current screen entry so goBack restores
       // the exact tab/state the user was on.

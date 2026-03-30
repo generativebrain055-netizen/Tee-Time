@@ -184,7 +184,7 @@ class FCFSDeadlineService {
             }
           }
 
-          if (teeTime.invite_type === "roster" || teeTime.invite_type === "manual") {
+          if (teeTime.invite_type === "roster") {
             const responseWindow = teeTime.response_window || 2;
             await processNextRosterInvite(teeTimeId, responseWindow);
           }
@@ -254,10 +254,9 @@ class FCFSDeadlineService {
 
         // For roster invites, only count invites that have an active expires_at (currently being waited on)
         const activeInvites = pendingInvites.filter((inv) => {
-          if (inviteType === "roster" || inviteType === "manual") {
+          if (inviteType === "roster") {
             return inv.expires_at && new Date(inv.expires_at) > new Date();
           }
-          // For FCFS, all pending invites are active
           return true;
         });
 

@@ -37,6 +37,16 @@ interface InviteDetailScreenProps {
     route?: any;
 }
 
+/** Body returned from PUT /invites/:id/respond */
+type InviteRespondApiResult = {
+    success: boolean;
+    message?: string;
+    code?: string;
+    status?: string;
+    socialRateDelta?: number;
+    newSocialRate?: number;
+};
+
 export default function InviteDetailScreen({ navigation, route }: InviteDetailScreenProps) {
     const { inviteId } = route?.params || {};
     const colors = useColors();
@@ -130,7 +140,10 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
                 response,
             });
             
-            const result = await inviteApi.respondToInvite(invite.id, response);
+            const result = (await inviteApi.respondToInvite(
+                invite.id,
+                response
+            )) as InviteRespondApiResult;
             
             console.log("🟢 [InviteDetailScreen] inviteApi.respondToInvite SUCCESS", { inviteId: invite.id, response, result });
             logger.info("[InviteDetailScreen] Invite response received", {
@@ -148,15 +161,22 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
                     const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
                     toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
                 }
-                // Navigate back immediately to remove from view
                 navigation?.goBack();
-                
-                Alert.alert(
-                    response === "accepted" ? "Accepted!" : "Declined",
+
+                const acceptTitle =
                     response === "accepted"
-                        ? "You've been added to the tee time!"
-                        : "You've declined the invite."
-                );
+                        ? result.status === "waitlist"
+                            ? "Waitlist"
+                            : "Accepted!"
+                        : "Declined";
+                const acceptBody =
+                    result.message ||
+                    (response === "accepted"
+                        ? result.status === "waitlist"
+                            ? "You're on the waitlist for this tee time."
+                            : "You've been added to the tee time!"
+                        : "You've declined the invite.");
+                Alert.alert(acceptTitle, acceptBody);
             } else {
                 console.warn("🟡 [InviteDetailScreen] Response not successful", { inviteId: invite.id, response, result });
                 logger.warn("[InviteDetailScreen] Invite response was not successful", {
@@ -164,7 +184,11 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
                     response,
                     result,
                 });
-                Alert.alert("Error", "Failed to respond to invite. Please try again.");
+                const full = result.code === "TEE_TIME_FULL";
+                Alert.alert(
+                    full ? "Tee time full" : "Error",
+                    result.message || "Failed to respond to invite. Please try again."
+                );
             }
         } catch (error: any) {
             console.error("🔴 [InviteDetailScreen] ERROR in handleRespond", {

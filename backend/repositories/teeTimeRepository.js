@@ -961,8 +961,8 @@ class TeeTimeRepository {
     const maxPlayers = teeTime.max_players || 4;
 
     try {
-      // FCFS / open: confirm when all spots are filled (participant count >= max_players)
-      if (inviteType === "fcfs" || inviteType === "open") {
+      // FCFS / open / manual (parallel): confirm when group is full
+      if (inviteType === "fcfs" || inviteType === "open" || inviteType === "manual") {
         const participantCount = await this.getParticipantCount(teeTimeId);
         if (participantCount >= maxPlayers) {
           logger.info(`FCFS/open tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`);
@@ -971,7 +971,7 @@ class TeeTimeRepository {
         return null;
       }
 
-      // Roster / manual: confirm when no pending invites and at least one accepted
+      // Roster: confirm when no pending invites and at least one accepted
       const { data: invites, error } = await supabaseAdmin
         .from("invites")
         .select("status")

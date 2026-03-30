@@ -5,6 +5,23 @@ const userRepository = require("../repositories/userRepository");
 const logger = require("../config/logger");
 const { createTeeDateTime } = require("../utils/dateUtils");
 
+function attendanceRowMatchesId(row, attendanceId) {
+  const raw = String(attendanceId || "").trim();
+  if (!raw) return false;
+  const idLc = String(row.id || "").toLowerCase();
+  const pidLc = String(row.participant_id || "").toLowerCase();
+  const rawLc = raw.toLowerCase();
+  if (idLc === rawLc) return true;
+  if (rawLc.startsWith("temp-")) {
+    return pidLc === rawLc.slice(5);
+  }
+  return pidLc === rawLc;
+}
+
+function findAttendanceRowForUpdate(attendance, attendanceId) {
+  return attendance.find((a) => attendanceRowMatchesId(a, attendanceId)) || null;
+}
+
 class AttendanceController {
   constructor() {
     this.getAttendance = this.getAttendance.bind(this);
@@ -129,12 +146,11 @@ class AttendanceController {
         return res.status(403).json({ success: false, message: "Only organizer can check in" });
       }
 
-      // Check if check-in is available
-      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      if (!checkInStatus.available) {
-        return res.status(400).json({ 
-          success: false, 
-          message: checkInStatus.reason || "Check-in is not available" 
+      const submit = await attendanceService.canOrganizerSubmitCheckIn(teeTimeId);
+      if (!submit.ok) {
+        return res.status(400).json({
+          success: false,
+          message: submit.reason || "Cannot check in",
         });
       }
 
@@ -145,11 +161,12 @@ class AttendanceController {
         attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       }
 
-      // If still no attendance, mark all participants as present directly
+      // If still no attendance rows after initialize, avoid completing before scheduled tee time
       if (attendance.length === 0) {
         const participants = await teeTimeRepository.getParticipants(teeTimeId);
-        // Complete the tee time
-        await attendanceService.completeCheckIn(teeTimeId, userId);
+        if (!attendanceService.isBeforeScheduledTeeTime(teeTime)) {
+          await attendanceService.completeCheckIn(teeTimeId, userId);
+        }
         return res.json({
           success: true,
           message: "All participants checked in successfully",
@@ -200,27 +217,31 @@ class AttendanceController {
         });
       }
 
-      // Check if check-in is available
-      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      if (!checkInStatus.available) {
-        return res.status(400).json({ 
-          success: false, 
-          message: checkInStatus.reason || "Check-in is not available" 
+      const submit = await attendanceService.canOrganizerSubmitCheckIn(teeTimeId);
+      if (!submit.ok) {
+        return res.status(400).json({
+          success: false,
+          message: submit.reason || "Cannot update attendance",
         });
       }
 
-      // Initialize attendance records if they don't exist
       let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       if (attendance.length === 0) {
         await attendanceService.initializeAttendance(teeTimeId);
         attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       }
+      if (attendance.length === 0) {
+        attendance = await attendanceService.listAttendanceRowsForTeeTime(teeTimeId);
+      }
 
-      // Find attendance record by ID or participant ID (handle temp IDs from frontend)
-      let targetRecord = attendance.find(a => a.id === attendanceId);
-      if (!targetRecord && attendanceId.startsWith('temp-')) {
-        const participantId = attendanceId.replace('temp-', '');
-        targetRecord = attendance.find(a => a.participant_id === participantId);
+      let targetRecord = findAttendanceRowForUpdate(attendance, attendanceId);
+      if (!targetRecord) {
+        const pid = String(attendanceId).startsWith("temp-")
+          ? String(attendanceId).slice(5)
+          : String(attendanceId);
+        await attendanceService.ensureAttendanceRowForParticipant(teeTimeId, pid);
+        attendance = await attendanceService.listAttendanceRowsForTeeTime(teeTimeId);
+        targetRecord = findAttendanceRowForUpdate(attendance, attendanceId);
       }
 
       if (!targetRecord) {
@@ -294,35 +315,54 @@ class AttendanceController {
         });
       }
 
-      // Check if check-in is available
-      const checkInStatus = await attendanceService.isCheckInAvailable(teeTimeId);
-      if (!checkInStatus.available) {
-        return res.status(400).json({ 
-          success: false, 
-          message: checkInStatus.reason || "Check-in is not available" 
+      const submit = await attendanceService.canOrganizerSubmitCheckIn(teeTimeId);
+      if (!submit.ok) {
+        return res.status(400).json({
+          success: false,
+          message: submit.reason || "Cannot update attendance",
         });
       }
 
-      // Initialize attendance records if they don't exist
       let attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       if (attendance.length === 0) {
         await attendanceService.initializeAttendance(teeTimeId);
         attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
       }
+      if (attendance.length === 0) {
+        attendance = await attendanceService.listAttendanceRowsForTeeTime(teeTimeId);
+      }
 
-      // Resolve temp IDs and find actual attendance IDs
-      const resolvedUpdates = updates.map(update => {
-        let targetRecord = attendance.find(a => a.id === update.attendanceId);
-        if (!targetRecord && update.attendanceId.startsWith('temp-')) {
-          const participantId = update.attendanceId.replace('temp-', '');
-          targetRecord = attendance.find(a => a.participant_id === participantId);
+      const participantIdsToEnsure = new Set();
+      for (const update of updates) {
+        if (!findAttendanceRowForUpdate(attendance, update.attendanceId)) {
+          const raw = String(update.attendanceId);
+          if (raw.toLowerCase().startsWith("temp-")) {
+            participantIdsToEnsure.add(raw.slice(5));
+          } else if (update.participantId) {
+            participantIdsToEnsure.add(String(update.participantId));
+          } else {
+            participantIdsToEnsure.add(raw);
+          }
         }
+      }
+      for (const pid of participantIdsToEnsure) {
+        await attendanceService.ensureAttendanceRowForParticipant(teeTimeId, pid);
+      }
+      if (participantIdsToEnsure.size > 0) {
+        attendance = await attendanceService.listAttendanceRowsForTeeTime(teeTimeId);
+        if (attendance.length === 0) {
+          attendance = await attendanceService.getAttendanceByTeeTime(teeTimeId);
+        }
+      }
+
+      const resolvedUpdates = updates.map((update) => {
+        const targetRecord = findAttendanceRowForUpdate(attendance, update.attendanceId);
         if (!targetRecord) {
           throw new Error(`Attendance record not found for ${update.attendanceId}`);
         }
         return {
           attendanceId: targetRecord.id,
-          status: update.status
+          status: update.status,
         };
       });
 

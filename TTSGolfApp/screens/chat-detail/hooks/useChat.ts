@@ -5,6 +5,22 @@ import { ApiError } from "../../../services/api/core";
 import type { ChatMessage, ChatDetailState, ChatInfo, DirectBlockRelation } from "../types";
 import { logger } from "../../../utils/logger";
 
+/** API/polling can occasionally return the same message id twice — React keys must be unique */
+function dedupeChatMessagesById(messages: ChatMessage[]): ChatMessage[] {
+  const seen = new Set<string>();
+  const out: ChatMessage[] = [];
+  for (const m of messages) {
+    if (!m?.id) {
+      out.push(m);
+      continue;
+    }
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    out.push(m);
+  }
+  return out;
+}
+
 export const useChat = (chatInfo: ChatInfo | undefined) => {
   const [state, setState] = useState<ChatDetailState>({
     messageText: "",
@@ -77,7 +93,7 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
 
         setState((prev) => ({
           ...prev,
-          messages: list as ChatMessage[],
+          messages: dedupeChatMessagesById(list as ChatMessage[]),
           loading: false,
         }));
       } catch (err) {
@@ -110,7 +126,10 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
             const prevIds = new Set(prev.messages.map((m) => m.id));
             const hasNew = msgRes.messages!.some((m) => !prevIds.has(m.id));
             if (!hasNew) return prev;
-            return { ...prev, messages: msgRes.messages as ChatMessage[] };
+            return {
+              ...prev,
+              messages: dedupeChatMessagesById(msgRes.messages as ChatMessage[]),
+            };
           });
         }
       } catch {
@@ -161,7 +180,10 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
       const res = await messagesApi.sendMessage(conversationId, trimmed);
       if (res.success && res.message) {
         const m = res.message as ChatMessage;
-        setState((prev) => ({ ...prev, messages: [...prev.messages, m] }));
+        setState((prev) => ({
+          ...prev,
+          messages: dedupeChatMessagesById([...prev.messages, m]),
+        }));
       } else {
         setState((prev) => ({ ...prev, messageText: trimmed }));
       }
@@ -201,7 +223,10 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
         );
         if (res.success && res.message) {
           const m = res.message as ChatMessage;
-          setState((prev) => ({ ...prev, messages: [...prev.messages, m] }));
+          setState((prev) => ({
+            ...prev,
+            messages: dedupeChatMessagesById([...prev.messages, m]),
+          }));
         }
       } catch (err) {
         logger.warn("[useChat] Send image error", err);

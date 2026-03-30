@@ -71,6 +71,7 @@ function ScreenShellInner({
       animate={{ opacity: 1 }}
       transition={{ type: 'timing', duration: animation.duration.fast }}
       style={{ flex: 1 }}
+      pointerEvents="box-none"
     >
       {children}
     </MotiView>

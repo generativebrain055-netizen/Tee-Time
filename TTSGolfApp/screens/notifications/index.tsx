@@ -178,6 +178,16 @@ export default function NotificationsScreen({ navigation }: any) {
                 }
                 const result = await inviteApi.respondToInvite(inviteId, "accepted");
                 console.log("🟢 [NotificationsScreen] inviteApi.respondToInvite completed");
+                if (!result.success) {
+                    const r = result as { message?: string; code?: string };
+                    Alert.alert(
+                        r.code === "TEE_TIME_FULL" ? "Tee time full" : "Could not accept",
+                        r.message || "Something went wrong. Try again from the Invites tab.",
+                        [{ text: "OK" }],
+                    );
+                    await fetchNotifications();
+                    return;
+                }
                 const delta = result.socialRateDelta;
                 const newScore = result.newSocialRate;
                 if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
@@ -185,6 +195,10 @@ export default function NotificationsScreen({ navigation }: any) {
                     const sign = delta > 0 ? "+" : "";
                     const msg = newScore != null ? `${sign}${delta} Social Rate (${newScore})` : `${sign}${delta} Social Rate`;
                     toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                }
+                const resOk = result as { message?: string; status?: string };
+                if (resOk.status === "waitlist" && resOk.message) {
+                    Alert.alert("Waitlist", resOk.message, [{ text: "OK" }]);
                 }
                 // Mark notification as responded in backend
                 try {

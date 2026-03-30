@@ -15,6 +15,8 @@ export interface TeeTime {
   id: string;
   courseName: string;
   courseLocation?: string;
+  /** Present on calendar API entries (organizer’s user id). */
+  creatorId?: string;
   teeDate: string;
   teeTime: string;
   maxPlayers: number;

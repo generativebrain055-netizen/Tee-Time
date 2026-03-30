@@ -32,7 +32,9 @@ export default function ReviewFCFSInviteStep({
         return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
     };
 
-    const selectedFriends = friends.filter(f => selectedPlayers.includes(f.id));
+    const selectedFriends = selectedPlayers
+        .map((id) => friends.find((f) => f.id === id))
+        .filter((f): f is Friend => f != null);
 
     return (
         <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
