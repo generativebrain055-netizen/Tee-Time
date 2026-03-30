@@ -443,7 +443,7 @@ class AttendanceService {
   /**
    * Handle user cancellation (before tee time)
    */
-  async handleCancellation(teeTimeId, userId, teeDateTime, teeTimeStatus = 'pending') {
+  async handleCancellation(teeTimeId, userId, teeDateTime) {
     // Try to update attendance record if it exists
     const attendance = await this.getAttendanceByUser(teeTimeId, userId);
     
@@ -465,8 +465,7 @@ class AttendanceService {
       logger.info(`No attendance record found for user ${userId} in tee time ${teeTimeId} - skipping attendance update`);
     }
 
-    // Apply late cancellation penalty if within 24h AND not a confirmed tee time
-    if (userId && teeTimeStatus !== 'confirmed') {
+    if (userId) {
       await socialRateService.applyLateCancellationPenalty(userId, teeTimeId, teeDateTime);
     }
     

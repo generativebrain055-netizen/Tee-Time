@@ -12,7 +12,7 @@ import {
     Alert,
     Dimensions,
 } from "react-native";
-import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin, ScanLine } from "lucide-react-native";
+import { Settings, QrCode, Edit3, ArrowLeft, X, Trash2, MapPin, ScanLine, History, ChevronRight } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ScreenShell, ContentArea, AppHeader, AppBottomNav } from "../../ui";
 import { ConfirmModal } from "../../ui/feedback";
@@ -682,6 +682,34 @@ export default function ProfileScreen({ navigation }: any) {
                                 </Text>
                             </TouchableOpacity>
                         </View>
+                        <TouchableOpacity
+                            onPress={() => navigation?.navigate("SocialRateHistory")}
+                            activeOpacity={0.7}
+                            style={{
+                                marginTop: 16,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                paddingVertical: 14,
+                                paddingHorizontal: 14,
+                                backgroundColor: "#FAF5FF",
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: "#E9D5FF",
+                            }}
+                        >
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                                <History size={20} color="#9333EA" strokeWidth={2} />
+                                <Text style={{
+                                    fontFamily: "Inter_600SemiBold",
+                                    fontSize: 15,
+                                    color: "#581C87",
+                                }}>
+                                    Social rate history
+                                </Text>
+                            </View>
+                            <ChevronRight size={20} color="#9333EA" strokeWidth={2} />
+                        </TouchableOpacity>
                     </View>
                 </View>
 

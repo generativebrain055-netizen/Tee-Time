@@ -13,7 +13,8 @@ import { Check, Search } from "lucide-react-native";
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend, RosterGroup, RosterContact, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
-import { otherPeopleInGroupCount } from "../../utils/groupMemberCount";
+import { otherPeopleInGroupCount, rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
+import { useAuthStore } from "../../stores";
 
 type SourceTab = "roster" | "ondeck" | "groups";
 
@@ -146,6 +147,7 @@ export default function ManualInviteStep({
     onSelectGroupMembers,
     onGroupMembersLoaded,
 }: ManualInviteStepProps) {
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const [activeTab, setActiveTab] = useState<SourceTab>("roster");
     const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
     const [groupMembersMap, setGroupMembersMap] = useState<Record<string, Friend[]>>({});
@@ -163,7 +165,8 @@ export default function ManualInviteStep({
         try {
             const response = await rosterApi.getGroupMembers(groupId);
             if (response.success) {
-                const members: (Friend & { phone?: string; rosterId?: string })[] = response.members.map((m: RosterContact) => ({
+                const others = rosterGroupMembersExceptSelf(response.members, currentUserId);
+                const members: (Friend & { phone?: string; rosterId?: string })[] = others.map((m: RosterContact) => ({
                     id: m.contact.userId || m.id,
                     rosterId: m.id,
                     firstName: m.contact.name?.split(' ')[0] || '',
@@ -185,7 +188,7 @@ export default function ManualInviteStep({
         } finally {
             setLoadingGroup(null);
         }
-    }, [groupMembersMap, expandedGroupId, onGroupMembersLoaded]);
+    }, [groupMembersMap, expandedGroupId, onGroupMembersLoaded, currentUserId]);
 
     // Handle select all for a group
     const handleSelectAllGroup = useCallback((groupId: string) => {

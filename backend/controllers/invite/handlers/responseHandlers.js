@@ -425,7 +425,7 @@ const handleDecline = async (invite, teeTime, userId) => {
     return {
         success: true,
         message: penaltyApplied
-            ? "Response recorded. (-1 Social Rate for late decline)"
+            ? "Response recorded. (-1 Social Rate for declining more than 24 hours after the invite)"
             : "Response recorded. Maybe next time!",
         status: INVITE_RESPONSES.DECLINED,
         penaltyApplied: !!penaltyApplied,

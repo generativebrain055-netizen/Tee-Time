@@ -30,6 +30,7 @@ function getDirectBlockBannerText(
 }
 import { teeTimeApi, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
+import { useAuthStore } from "../../stores";
 
 interface ChatDetailScreenProps {
     navigation: any;
@@ -37,6 +38,7 @@ interface ChatDetailScreenProps {
 }
 
 function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const chatInfo: ChatInfo = route?.params?.chatInfo || {
         id: "1",
         name: "Unknown",
@@ -82,18 +84,22 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                     // Tee time chat: get participants from tee time
                     const ttRes = await teeTimeApi.getTeeTime(chatInfo.teeTimeId);
                     if (ttRes.success && ttRes.teeTime?.participants) {
+                        const selfId = currentUserId?.trim() || "";
                         const userIds = ttRes.teeTime.participants
                             .map((p: any) => p.userId)
-                            .filter((id: string | undefined): id is string => !!id);
+                            .filter((id: string | undefined): id is string => !!id)
+                            .filter((id: string) => !selfId || id !== selfId);
                         setParticipants(userIds);
                     }
                 } else if (chatInfo.groupId) {
                     // Group chat: get members from group
                     const groupRes = await rosterApi.getGroupMembers(chatInfo.groupId);
                     if (groupRes.success && groupRes.members) {
+                        const selfId = currentUserId?.trim() || "";
                         const userIds = groupRes.members
                             .map((m: any) => m.contact?.userId)
-                            .filter((id: string | undefined): id is string => !!id);
+                            .filter((id: string | undefined): id is string => !!id)
+                            .filter((id: string) => !selfId || id !== selfId);
                         setParticipants(userIds);
                     }
                 } else if (chatInfo.recipientId) {
@@ -105,7 +111,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
             }
         };
         loadParticipants();
-    }, [chatInfo.teeTimeId, chatInfo.groupId, chatInfo.recipientId]);
+    }, [chatInfo.teeTimeId, chatInfo.groupId, chatInfo.recipientId, currentUserId]);
 
     const handleBack = useCallback(() => {
         navigation?.goBack();

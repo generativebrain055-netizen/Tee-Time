@@ -3,8 +3,11 @@ import { Alert } from "react-native";
 import { rosterApi, friendApi, teeTimeApi, RosterContact, Friend, TeeTime } from "../../../../services/api";
 import { GroupData, GroupDetailState } from "../types";
 import { logger } from "../../../../utils/logger";
+import { rosterGroupMembersExceptSelf } from "../../../../utils/groupMemberCount";
+import { useAuthStore } from "../../../../stores";
 
 export const useGroupDetail = (groupId: string) => {
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const [state, setState] = useState<GroupDetailState>({
     loading: true,
     refreshing: false,
@@ -30,7 +33,9 @@ export const useGroupDetail = (groupId: string) => {
         group: groupsRes.success 
           ? groupsRes.groups.find(g => g.id === groupId) || null 
           : null,
-        members: membersRes.success ? membersRes.members : [],
+        members: membersRes.success
+          ? rosterGroupMembersExceptSelf(membersRes.members, currentUserId)
+          : [],
         upcomingTeeTimes: teeTimesRes.success ? teeTimesRes.teeTimes.slice(0, 2) : [],
         loading: false,
       }));
@@ -38,7 +43,7 @@ export const useGroupDetail = (groupId: string) => {
       logger.error("[useGroupDetail] Failed to load group data", error);
       setState(prev => ({ ...prev, loading: false }));
     }
-  }, [groupId]);
+  }, [groupId, currentUserId]);
 
   useEffect(() => {
     loadGroupData();

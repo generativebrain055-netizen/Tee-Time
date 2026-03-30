@@ -13,6 +13,7 @@ import { ChevronRight, ChevronDown, CheckCircle, Check } from "lucide-react-nati
 import { availabilityApi, type DayOfWeek, type TimeSlotType } from "../services/api/availabilityApi";
 import { rosterApi } from "../services/api";
 import { ScreenShell, AppBottomNav } from "../ui";
+import { useAuthStore } from "../stores";
 
 // Types
 interface FriendInfo {
@@ -211,6 +212,7 @@ const TimeSlotRow = memo(({
 });
 
 function AvailabilityScreen({ navigation }: any) {
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [dateTabs, setDateTabs] = useState<DateTab[]>(() => buildDateTabs());
@@ -282,11 +284,17 @@ function AvailabilityScreen({ navigation }: any) {
 
             // 2. Fetch list based on filter (Roster, On Deck, or Groups)
             let friendsList: any[] = [];
+            const selfId = currentUserId?.trim() || "";
             if (filterType === 'roster') {
                 const rosterResponse = await rosterApi.getRoster();
                 if (rosterResponse.success && rosterResponse.roster) {
                     friendsList = rosterResponse.roster
-                        .filter((member: any) => !member.isOnDeck && member.contact?.userId)
+                        .filter(
+                            (member: any) =>
+                                !member.isOnDeck &&
+                                member.contact?.userId &&
+                                (!selfId || String(member.contact.userId) !== selfId),
+                        )
                         .map((member: any) => ({
                             id: member.contact.userId,
                             firstName: member.contact.name?.split(' ')[0] || '',
@@ -298,7 +306,11 @@ function AvailabilityScreen({ navigation }: any) {
                 const onDeckResponse = await rosterApi.getOnDeck();
                 if (onDeckResponse.success && onDeckResponse.onDeck) {
                     friendsList = onDeckResponse.onDeck
-                        .filter((member: any) => member.contact?.userId)
+                        .filter(
+                            (member: any) =>
+                                member.contact?.userId &&
+                                (!selfId || String(member.contact.userId) !== selfId),
+                        )
                         .map((member: any) => ({
                             id: member.contact.userId,
                             firstName: member.contact.name?.split(' ')[0] || '',
@@ -318,7 +330,11 @@ function AvailabilityScreen({ navigation }: any) {
                         }
                     }
                     friendsList = allGroupMembers
-                        .filter((member: any) => member.contact?.userId)
+                        .filter(
+                            (member: any) =>
+                                member.contact?.userId &&
+                                (!selfId || String(member.contact.userId) !== selfId),
+                        )
                         .map((member: any) => ({
                             id: member.contact.userId,
                             firstName: member.contact.name?.split(' ')[0] || '',
@@ -395,7 +411,7 @@ function AvailabilityScreen({ navigation }: any) {
                 setLoading(false);
             }
         }
-    }, [selectedTabIndex, filterType]); // Only depend on primitives, not dateTabs object
+    }, [selectedTabIndex, filterType, currentUserId]); // Only depend on primitives, not dateTabs object
 
     useEffect(() => {
         if (dateTabs[selectedTabIndex] && isMountedRef.current) {

@@ -21,7 +21,7 @@ import { Users, UserCheck, Check, Clock, Calendar, Search } from "lucide-react-n
 import { COLORS, FIGMA_YOUR_PLAYERS } from "./constants";
 import { Friend, RosterGroup, rosterApi, RosterContact } from "../../services/api";
 import logger from "../../utils/logger";
-import { otherPeopleInGroupCount } from "../../utils/groupMemberCount";
+import { otherPeopleInGroupCount, rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
 import { useAuthStore } from "../../stores";
 
 type TargetType = "roster" | "group";
@@ -104,15 +104,10 @@ export default function FCFSInviteStep({
         try {
             const response = await rosterApi.getGroupMembers(groupId);
             if (response.success) {
-                const myId = currentUserId;
-                const members: Friend[] = response.members
-                    .filter(
-                        (m: RosterContact) =>
-                            !myId ||
-                            !m.contact?.userId ||
-                            String(m.contact.userId) !== String(myId)
-                    )
-                    .map((m: RosterContact) => {
+                const members: Friend[] = rosterGroupMembersExceptSelf(
+                    response.members,
+                    currentUserId,
+                ).map((m: RosterContact) => {
                         const nameParts = (m.contact?.name ?? "").split(" ");
                         return {
                             id: m.id,

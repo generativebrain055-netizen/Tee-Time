@@ -975,40 +975,52 @@ class TeeTimeRepository {
     const maxPlayers = teeTime.max_players || 4;
 
     try {
-      // While still pending: confirm as soon as the tee time has max_players active participants.
-      // Applies to every invite type (roster backups can leave invites in `pending` even when the group is full).
-      if (teeTime.status === "pending") {
-        const participantCount = await this.getParticipantCount(teeTimeId);
-        if (participantCount >= maxPlayers) {
+      const participantCount = await this.getParticipantCount(teeTimeId);
+      const checkInStarted = !!teeTime.check_in_started_at;
+
+      // Full group → confirmed (pending, or in_progress after a spot reopened and refilled).
+      // Skip when check-in has already started: keep in_progress during the check-in session while full.
+      if (participantCount >= maxPlayers) {
+        if (teeTime.status === "pending") {
           logger.info(
             `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`,
           );
           return this.updateStatus(teeTimeId, "confirmed");
         }
-
-        const inviteType = teeTime.invite_type || "roster";
-
-        // Parallel flows: no other auto-confirm until full (handled above).
-        if (inviteType === "fcfs" || inviteType === "open" || inviteType === "manual") {
-          return null;
-        }
-
-        // Roster: confirm when no pending invites and at least one accepted (partial group, legacy behavior)
-        const { data: invites, error } = await supabaseAdmin
-          .from("invites")
-          .select("status")
-          .eq("tee_time_id", teeTimeId);
-
-        if (error) throw error;
-
-        const pendingCount = invites.filter((i) => i.status === "pending").length;
-        const acceptedCount = invites.filter(
-          (i) => i.status === "accepted",
-        ).length;
-
-        if (pendingCount === 0 && acceptedCount > 0) {
+        if (teeTime.status === "in_progress" && !checkInStarted) {
+          logger.info(
+            `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}) while in_progress (pre-check-in), setting status to confirmed`,
+          );
           return this.updateStatus(teeTimeId, "confirmed");
         }
+        return null;
+      }
+
+      if (teeTime.status !== "pending") {
+        return null;
+      }
+
+      const inviteType = teeTime.invite_type || "roster";
+
+      if (inviteType === "fcfs" || inviteType === "open" || inviteType === "manual") {
+        return null;
+      }
+
+      // Roster: confirm when no pending invites and at least one accepted (partial group, legacy behavior)
+      const { data: invites, error } = await supabaseAdmin
+        .from("invites")
+        .select("status")
+        .eq("tee_time_id", teeTimeId);
+
+      if (error) throw error;
+
+      const pendingCount = invites.filter((i) => i.status === "pending").length;
+      const acceptedCount = invites.filter(
+        (i) => i.status === "accepted",
+      ).length;
+
+      if (pendingCount === 0 && acceptedCount > 0) {
+        return this.updateStatus(teeTimeId, "confirmed");
       }
 
       return null;

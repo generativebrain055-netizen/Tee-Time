@@ -35,6 +35,7 @@ import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
+import { rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
 import { X, Users, Phone, ChevronRight } from "lucide-react-native";
 import { BannerAd } from "../../components/BannerAd";
 
@@ -275,16 +276,11 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     try {
       const response = await rosterApi.getGroupMembers(groupId);
       if (response.success) {
-        const myId = user?.id;
-        // Convert roster contacts to Friend format; never invite yourself
-        const members: ExtendedFriend[] = response.members
-          .filter(
-            (m) =>
-              !myId ||
-              !m.contact?.userId ||
-              String(m.contact.userId) !== String(myId)
-          )
-          .map((m) => {
+        // Convert roster contacts to Friend format; never list yourself as a group pick target
+        const members: ExtendedFriend[] = rosterGroupMembersExceptSelf(
+          response.members,
+          user?.id,
+        ).map((m) => {
             const nameParts = (m.contact?.name ?? "").split(" ");
             const contactUserId = m.contact?.userId;
             return {

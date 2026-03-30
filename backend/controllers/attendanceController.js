@@ -423,23 +423,16 @@ class AttendanceController {
       let newSocialRate = null;
       let socialRateDelta = 0;
 
-      if (teeTime.status === 'confirmed') {
-        newSocialRate = await socialRateService.applyConfirmedCancellationPenalty(userId, teeTimeId);
+      const hoursUntilTeeTime = (teeDateTime - new Date()) / (1000 * 60 * 60);
+      if (hoursUntilTeeTime <= 24) {
+        newSocialRate = await socialRateService.applyLateCancellationPenalty(userId, teeTimeId, teeDateTime);
         penaltyApplied = true;
-        socialRateDelta = -10;
-        penaltyMessage = "A -10 Social Rate penalty was applied for cancelling a confirmed tee time.";
-      } else {
-        const hoursUntilTeeTime = (teeDateTime - new Date()) / (1000 * 60 * 60);
-        if (hoursUntilTeeTime <= 24) {
-          newSocialRate = await socialRateService.applyLateCancellationPenalty(userId, teeTimeId, teeDateTime);
-          penaltyApplied = true;
-          socialRateDelta = -5;
-          penaltyMessage = "A -5 Social Rate penalty was applied for late cancellation.";
-        }
+        socialRateDelta = -5;
+        penaltyMessage = "A -5 Social Rate penalty was applied for cancelling within 24 hours of tee time.";
       }
 
       // Handle cancellation (updates attendance record if exists)
-      await attendanceService.handleCancellation(teeTimeId, userId, teeDateTime, teeTime.status);
+      await attendanceService.handleCancellation(teeTimeId, userId, teeDateTime);
 
       // Remove from participants
       const removedParticipant = await teeTimeRepository.removeParticipantByUser(teeTimeId, userId);

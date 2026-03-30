@@ -1,12 +1,18 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
-// Point values for different actions
+/**
+ * Social score rules (clamped 0–200 in adjustScore):
+ * - Baseline: 100
+ * - Accept invite: +2
+ * - Decline: -1 if declined more than 24h after invite was sent (spec: decline >24hr)
+ * - Cancel participation within 24h of tee: -5 (spec: cancel <24hr)
+ * - No-show: -10
+ */
 const POINT_VALUES = {
   INVITE_ACCEPTED: 2,
   INVITE_DECLINED_LATE: -1,
   CANCELLATION_LATE: -5,
-  CANCELLATION_CONFIRMED: -10,  // Cancelling a confirmed tee time
   NO_SHOW: -10,
   INITIAL_SCORE: 100
 };
@@ -16,7 +22,7 @@ const REASONS = {
   INVITE_ACCEPTED: 'invite_accepted',
   INVITE_DECLINED_LATE: 'invite_declined_late',
   CANCELLATION_LATE: 'cancellation_late',
-  CANCELLATION_CONFIRMED: 'cancellation_confirmed',
+  CANCELLATION_CONFIRMED: 'cancellation_confirmed', // legacy rows only; no longer written
   NO_SHOW: 'no_show',
   INITIAL_SCORE: 'initial_score',
   ADMIN_ADJUSTMENT: 'admin_adjustment'
@@ -86,21 +92,19 @@ class SocialRateService {
   }
 
   /**
-   * Apply penalty for late decline (-1 point if > 24h after invite sent)
+   * Decline penalty: -1 if the user declines more than 24 hours after the invite was created.
    */
   async applyLateDeclinePenalty(userId, teeTimeId, inviteId, inviteCreatedAt) {
     const hoursSinceInvite = this.hoursBetween(new Date(inviteCreatedAt), new Date());
 
-    // Only penalize if > 24 hours since invite was sent
     if (hoursSinceInvite <= 24) {
-      logger.info(`No penalty for decline - within 24h window (${hoursSinceInvite.toFixed(1)}h)`);
+      logger.info(`No decline penalty — within 24h of invite (${hoursSinceInvite.toFixed(1)}h)`);
       return null;
     }
 
-    // Check idempotency
     const existing = await this.findLogEntry(userId, inviteId, REASONS.INVITE_DECLINED_LATE);
     if (existing) {
-      logger.info(`Late decline penalty already applied for user ${userId}, invite ${inviteId}`);
+      logger.info(`Decline penalty already applied for user ${userId}, invite ${inviteId}`);
       return existing.new_score;
     }
 
@@ -135,24 +139,6 @@ class SocialRateService {
       reason: REASONS.CANCELLATION_LATE,
       teeTimeId,
       reasonDetails: `Cancelled ${Math.abs(Math.floor(hoursUntilTeeTime))}h before tee time`
-    });
-  }
-
-  /**
-   * Apply penalty for cancelling a confirmed tee time (-10 points)
-   */
-  async applyConfirmedCancellationPenalty(userId, teeTimeId) {
-    // Check idempotency using tee_time_id + reason
-    const existing = await this.findLogEntryByTeeTime(userId, teeTimeId, REASONS.CANCELLATION_CONFIRMED);
-    if (existing) {
-      logger.info(`Confirmed cancellation penalty already applied for user ${userId}, tee time ${teeTimeId}`);
-      return existing.new_score;
-    }
-
-    return this.adjustScore(userId, POINT_VALUES.CANCELLATION_CONFIRMED, {
-      reason: REASONS.CANCELLATION_CONFIRMED,
-      teeTimeId,
-      reasonDetails: 'Cancelled confirmed tee time'
     });
   }
 

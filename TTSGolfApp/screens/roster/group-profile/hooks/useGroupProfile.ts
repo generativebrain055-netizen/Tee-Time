@@ -13,9 +13,11 @@ import {
     TeeTime,
 } from "../../../../services/api";
 import { logger } from "../../../../utils/logger";
-import { otherPeopleInGroupCount } from "../../../../utils/groupMemberCount";
+import { otherPeopleInGroupCount, rosterGroupMembersExceptSelf } from "../../../../utils/groupMemberCount";
+import { useAuthStore } from "../../../../stores";
 
 export const useGroupProfile = (groupId: string, navigation?: any) => {
+    const currentUserId = useAuthStore((s) => s.user?.id);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [group, setGroup] = useState<RosterGroup | null>(null);
@@ -40,14 +42,16 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
                 setGroup(groupRes.group);
             }
 
-            if (membersRes.success) setMembers(membersRes.members);
+            if (membersRes.success) {
+                setMembers(rosterGroupMembersExceptSelf(membersRes.members, currentUserId));
+            }
             if (teeTimesRes.success) setUpcomingTeeTimes(teeTimesRes.teeTimes.slice(0, 3));
         } catch (error) {
             logger.error("[useGroupProfile] Failed to load group data", error);
         } finally {
             setLoading(false);
         }
-    }, [groupId]);
+    }, [groupId, currentUserId]);
 
     useEffect(() => {
         loadGroupData();
