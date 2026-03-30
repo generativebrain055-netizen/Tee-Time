@@ -301,9 +301,6 @@ class FriendController {
 
             // Apply privacy settings
             const privacy = profile.privacy_settings || {};
-            const showPhone =
-                privacy.showPhone === true ||
-                privacy.show_phone === true;
             const isFriend = profile.friendship_status === "friend";
             const formatted = {
                 id: profile.id,
@@ -322,10 +319,8 @@ class FriendController {
                 averageScore: profile.average_score,
                 friendshipStatus: profile.friendship_status,
                 blockedYou: Boolean(profile.blocked_you),
-                phone:
-                    isFriend && showPhone && profile.phone_number
-                        ? profile.phone_number
-                        : undefined,
+                // Accepted friends can see each other’s number for coordination (not shown to non-friends).
+                phone: isFriend && profile.phone_number ? profile.phone_number : undefined,
                 // Include additional fields from enhanced getUserProfile
                 roundsCount: profile.roundsCount || profile.rounds_played || 0,
                 coursesCount: profile.coursesCount || 0,

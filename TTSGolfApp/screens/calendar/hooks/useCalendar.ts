@@ -3,10 +3,15 @@
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { teeTimeApi } from "../../../services/api";
-import { useAuthStore } from "../../../stores";
+import { useAuthStore, useCalendarUiStore } from "../../../stores";
 import type { TeeTime as ApiTeeTime } from "../../../services/api";
 import { CalendarTeeTime, TeeTimesMap } from "../types";
-import { createTeeTimesMap, generateCalendarDays, getDateKey } from "../utils";
+import {
+  createTeeTimesMap,
+  generateCalendarDays,
+  getDateKey,
+  parseCalendarDateKey,
+} from "../utils";
 import { logger } from "../../../utils/logger";
 
 export type StatusFilter = "all" | "pending" | "confirmed" | "completed" | "in_progress";
@@ -61,9 +66,14 @@ function mapApiToCalendar(
 export const useCalendar = () => {
   const today = new Date();
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(today);
+  const saved = useCalendarUiStore.getState();
+  const [currentMonth, setCurrentMonth] = useState(() => saved.currentMonth);
+  const [currentYear, setCurrentYear] = useState(() => saved.currentYear);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
+    const parsed = parseCalendarDateKey(saved.selectedDateKey);
+    if (parsed) return parsed;
+    return today;
+  });
   const [teeTimes, setTeeTimes] = useState<CalendarTeeTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,6 +107,15 @@ export const useCalendar = () => {
   useEffect(() => {
     loadTeeTimes();
   }, [loadTeeTimes]);
+
+  useEffect(() => {
+    const d = selectedDate ?? new Date();
+    useCalendarUiStore.setState({
+      currentMonth,
+      currentYear,
+      selectedDateKey: getDateKey(d),
+    });
+  }, [currentMonth, currentYear, selectedDate]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

@@ -10,9 +10,9 @@ import {
     Image,
     Dimensions,
     Animated,
-    KeyboardAvoidingView,
     Platform,
     ScrollView,
+    KeyboardAvoidingView,
 } from "react-native";
 import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
@@ -27,12 +27,8 @@ interface Props {
     navigation: any;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SCAN_AREA_SIZE = Math.min(SCREEN_WIDTH * 0.7, 280);
-
-/** Pre-filled in simulator/emulator so you can tap “Simulate scan” without pasting. */
-const DEFAULT_SIMULATOR_QR_PAYLOAD =
-    "eyJ2IjoxLCJ1IjoiY2M3MDljYjItNDAwNS00OWNkLTkxYzUtYjZmNDZlNTM4ODM5IiwiYyI6ImVlYTFiM2E4MzU2ZWJhYzM4YzQ0MDAzNjYwYmMzZGI3IiwicyI6Ijg2ZDAwMGQ0YTNkOGJjZjUifQ==";
 
 /** Match backend normalizeDraftQrRawInput — scanners often add whitespace/newlines. */
 function normalizeScannedQrData(data: string): string {
@@ -54,9 +50,10 @@ export default function ScanQRScreen({ navigation }: Props) {
     const [confirming, setConfirming] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
     const [lastDetection, setLastDetection] = useState<string>("");
-    const [simulatorPayload, setSimulatorPayload] = useState(
-        Device.isDevice ? "" : DEFAULT_SIMULATOR_QR_PAYLOAD,
-    );
+    /** iOS/Android simulators often have no camera preview — allow manual entry after a short wait. */
+    const [cameraPreviewLikelyUnavailable, setCameraPreviewLikelyUnavailable] = useState(false);
+    const [manualEntryOpen, setManualEntryOpen] = useState(false);
+    const [manualPayload, setManualPayload] = useState("");
     const lastScannedData = useRef<string>("");
     const scanCooldown = useRef(false);
 
@@ -69,6 +66,25 @@ export default function ScanQRScreen({ navigation }: Props) {
             requestPermission();
         }
     }, [permission?.granted, permission?.canAskAgain, requestPermission]);
+
+    useEffect(() => {
+        if (!permission?.granted) {
+            setCameraPreviewLikelyUnavailable(false);
+            return;
+        }
+        const isSim = !Device.isDevice;
+        if (!isSim) return;
+        const t = setTimeout(() => {
+            setCameraPreviewLikelyUnavailable((prev) => prev || !cameraReady);
+        }, 4000);
+        return () => clearTimeout(t);
+    }, [permission?.granted, cameraReady]);
+
+    useEffect(() => {
+        if (cameraPreviewLikelyUnavailable && !Device.isDevice) {
+            setManualEntryOpen(true);
+        }
+    }, [cameraPreviewLikelyUnavailable]);
 
     useEffect(() => {
         // Animate scan line
@@ -158,6 +174,7 @@ export default function ScanQRScreen({ navigation }: Props) {
     const resetScanner = useCallback(() => {
         setScanned(false);
         lastScannedData.current = "";
+        setManualPayload("");
         // Add cooldown to prevent immediate re-scan
         setTimeout(() => {
             scanCooldown.current = false;
@@ -204,10 +221,9 @@ export default function ScanQRScreen({ navigation }: Props) {
         outputRange: [0, SCAN_AREA_SIZE - 4],
     });
 
-    // Determine if camera should render (permission granted and on a real device)
-    const cameraActive = Device.isDevice && permission?.granted === true;
-    // Show inline loading/blocked state in the scan area
-    const scanAreaBlocked = !cameraReady || !cameraActive;
+    const cameraActive = permission?.granted === true;
+    const scanAreaBlocked =
+        cameraActive && !processing && !cameraReady && !cameraPreviewLikelyUnavailable;
 
     return (
         <View style={{ flex: 1, backgroundColor: '#000000' }}>
@@ -216,7 +232,7 @@ export default function ScanQRScreen({ navigation }: Props) {
             {/* Camera - only mounted when permission is granted on a real device */}
             {cameraActive && (
                 <CameraView
-                    className="flex-1"
+                    style={{ flex: 1 }}
                     facing="back"
                     onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                     barcodeScannerSettings={{
@@ -225,6 +241,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                     onCameraReady={() => {
                         logger.debug("[ScanQRScreen] Camera is ready");
                         setCameraReady(true);
+                        setCameraPreviewLikelyUnavailable(false);
                     }}
                     enableTorch={false}
                 />
@@ -257,7 +274,7 @@ export default function ScanQRScreen({ navigation }: Props) {
                         <View className="absolute bottom-0 right-0 w-[35px] h-[35px] border-b-4 border-r-4 border-blue-600 rounded-br-2xl" />
 
                         {/* Animated scan line – shown once camera is live */}
-                        {cameraReady && !scanned && (
+                        {(cameraReady || cameraPreviewLikelyUnavailable) && !scanned && (
                             <Animated.View
                                 className="absolute left-2.5 right-2.5 h-[3px] bg-blue-600 rounded-sm"
                                 style={{
@@ -286,6 +303,14 @@ export default function ScanQRScreen({ navigation }: Props) {
                             </View>
                         )}
 
+                        {cameraPreviewLikelyUnavailable && !cameraReady && !processing && (
+                            <View className="absolute inset-0 bg-black/70 justify-center items-center rounded-md px-3">
+                                <Text className="text-white text-sm text-center leading-5">
+                                    Camera preview isn’t available on this simulator. Use “Enter code manually” below, or test on a physical device.
+                                </Text>
+                            </View>
+                        )}
+
                         {/* Debug: Show last detection */}
                         {__DEV__ && lastDetection && (
                             <View className="absolute bottom-2.5 left-2.5 right-2.5 bg-black/70 p-2 rounded-md">
@@ -296,93 +321,90 @@ export default function ScanQRScreen({ navigation }: Props) {
                     <View className="flex-1 bg-black/70" />
                 </View>
 
-                {/* Bottom dark area */}
-                <View className="flex-1 bg-black/70 items-center justify-center" style={{ paddingBottom: insets.bottom + 20 }}>
-                    <Text className="text-sm text-white/70 text-center leading-5">
-                        Ask the player to show their QR code from their profile
-                    </Text>
-                    {scanned && !processing && !showConfirmModal && (
-                        <TouchableOpacity className="mt-6 px-8 py-3.5 bg-blue-600 rounded-[25px]" onPress={resetScanner}>
-                            <Text className="text-base font-semibold text-white">Tap to Scan Again</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-
-            {/* Simulator / emulator: no camera — paste the same string encoded in the player's QR (Profile → share shows "Code: …"). */}
-            {!Device.isDevice && (
+                {/* Bottom: hints + optional manual entry (primary flow is camera scanning) */}
                 <KeyboardAvoidingView
-                    style={{ position: "absolute", inset: 0, backgroundColor: "#111827" }}
+                    className="flex-1 bg-black/70"
                     behavior={Platform.OS === "ios" ? "padding" : undefined}
-                    keyboardVerticalOffset={insets.top}
+                    keyboardVerticalOffset={insets.top + 40}
+                    style={{ paddingBottom: insets.bottom + 12 }}
                 >
                     <ScrollView
-                        contentContainerStyle={{
-                            flexGrow: 1,
-                            paddingHorizontal: 24,
-                            paddingTop: insets.top + 56,
-                            paddingBottom: insets.bottom + 24,
-                        }}
                         keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={{
+                            paddingHorizontal: 20,
+                            paddingTop: 12,
+                            paddingBottom: 8,
+                            alignItems: "center",
+                        }}
                     >
-                        <TouchableOpacity style={{ position: "absolute", top: insets.top + 8, left: 4, padding: 8, zIndex: 1 }} onPress={handleClose}>
-                            <X size={28} color="#fff" />
-                        </TouchableOpacity>
-                        <Camera size={48} color={colors.textSecondary} style={{ alignSelf: "center", marginBottom: 16 }} />
-                        <Text className="text-xl font-bold text-white mb-2 text-center">Test scan (simulator)</Text>
-                        <Text className="text-[15px] text-white/75 text-center mb-6 leading-[22px]">
-                            Paste the QR payload from another account (e.g. Profile → QR → share message, or copy what the QR encodes), then simulate a scan.
+                        <Text className="text-sm text-white/70 text-center leading-5 mb-3">
+                            Point your camera at the other player’s QR code (Profile → Draft via QR).
                         </Text>
-                        <TextInput
-                            value={simulatorPayload}
-                            onChangeText={setSimulatorPayload}
-                            placeholder="Paste QR code data"
-                            placeholderTextColor="rgba(255,255,255,0.35)"
-                            editable={!processing}
-                            multiline
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            style={{
-                                backgroundColor: "rgba(255,255,255,0.08)",
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: "rgba(255,255,255,0.2)",
-                                color: "#fff",
-                                fontSize: 15,
-                                paddingHorizontal: 14,
-                                paddingVertical: 12,
-                                minHeight: 100,
-                                textAlignVertical: "top",
-                                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-                            }}
-                        />
+                        {scanned && !processing && !showConfirmModal && (
+                            <TouchableOpacity className="mb-4 px-8 py-3.5 bg-blue-600 rounded-[25px]" onPress={resetScanner}>
+                                <Text className="text-base font-semibold text-white">Scan again</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
-                            className="bg-blue-600 rounded-xl py-4 items-center mt-5"
+                            onPress={() => setManualEntryOpen((o) => !o)}
                             disabled={processing}
-                            onPress={() => {
-                                const data = normalizeScannedQrData(simulatorPayload);
-                                if (!data) {
-                                    Alert.alert("Empty", "Paste the QR payload first.");
-                                    return;
-                                }
-                                handleBarCodeScanned({ type: "qr", data });
-                            }}
+                            className="py-2"
                         >
-                            {processing ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text className="text-base font-semibold text-white">Simulate scan</Text>
-                            )}
+                            <Text className="text-sm text-blue-300 text-center underline">
+                                {manualEntryOpen ? "Hide manual entry" : "Trouble scanning? Enter code manually"}
+                            </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity className="py-4 items-center mt-2" onPress={handleClose} disabled={processing}>
-                            <Text className="text-base text-gray-400">Cancel</Text>
-                        </TouchableOpacity>
+                        {manualEntryOpen && (
+                            <View className="w-full mt-2">
+                                <TextInput
+                                    value={manualPayload}
+                                    onChangeText={setManualPayload}
+                                    placeholder="Paste QR payload (same data encoded in the QR)"
+                                    placeholderTextColor="rgba(255,255,255,0.35)"
+                                    editable={!processing}
+                                    multiline
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    style={{
+                                        backgroundColor: "rgba(255,255,255,0.08)",
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: "rgba(255,255,255,0.2)",
+                                        color: "#fff",
+                                        fontSize: 14,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        minHeight: 88,
+                                        textAlignVertical: "top",
+                                        fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                                    }}
+                                />
+                                <TouchableOpacity
+                                    className="bg-blue-600 rounded-xl py-3.5 items-center mt-3"
+                                    disabled={processing}
+                                    onPress={() => {
+                                        const data = normalizeScannedQrData(manualPayload);
+                                        if (!data) {
+                                            Alert.alert("Empty", "Paste the QR payload first.");
+                                            return;
+                                        }
+                                        handleBarCodeScanned({ type: "qr", data });
+                                    }}
+                                >
+                                    {processing ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <Text className="text-base font-semibold text-white">Use this code</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </ScrollView>
                 </KeyboardAvoidingView>
-            )}
+            </View>
 
-            {/* Permission denied – shown as dark overlay, no separate grey page */}
-            {Device.isDevice && permission && !permission.granted && (
+            {/* Permission denied – full-screen prompt on all platforms */}
+            {permission && !permission.granted && (
                 <View style={{ position: "absolute", inset: 0, backgroundColor: "#111827", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
                     <TouchableOpacity style={{ position: "absolute", top: insets.top + 16, left: 20, padding: 8 }} onPress={handleClose}>
                         <X size={28} color="#fff" />

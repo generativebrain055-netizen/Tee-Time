@@ -108,20 +108,54 @@ export default function NotificationsScreen({ navigation }: any) {
                 // ignore
             }
         }
-        const dataType = (item.data as Record<string, unknown> | undefined)?.type;
-        if (dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled" || dataType === "organizer_invite_more") {
-            const d = item.data as Record<string, unknown> | undefined;
+        const d = item.data as Record<string, unknown> | undefined;
+        const dataType = d?.type as string | undefined;
+
+        if (
+            dataType === "organizer_fill_warning" ||
+            dataType === "tee_time_not_filled" ||
+            dataType === "organizer_invite_more" ||
+            dataType === "roster_exhausted"
+        ) {
             if (d?.teeTimeId) {
+                const unfilled =
+                    dataType === "tee_time_not_filled" ||
+                    dataType === "organizer_fill_warning" ||
+                    dataType === "organizer_invite_more";
                 navigation?.navigate("SelectOnDeck", {
                     teeTimeId: d.teeTimeId,
                     spotsRemaining: (d.spotsRemaining as number) ?? 1,
                     courseName: d.courseName as string | undefined,
                     teeDate: d.teeDate as string | undefined,
                     teeTime: d.teeTime as string | undefined,
-                    unfilledSlotAlert: true,
+                    unfilledSlotAlert: unfilled,
                 });
             }
-        } else if (
+            return;
+        }
+
+        if (dataType === "friend_request" && d?.senderId) {
+            navigation?.navigate("FriendProfile", { userId: String(d.senderId) });
+            return;
+        }
+        if (dataType === "friend_accepted" && d?.userId) {
+            navigation?.navigate("FriendProfile", { userId: String(d.userId) });
+            return;
+        }
+        if (dataType === "tee_time_invite" || dataType === "spot_opened") {
+            if (d?.teeTimeId) {
+                navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
+            } else {
+                navigation?.navigate("Invites");
+            }
+            return;
+        }
+        if (dataType === "no_show") {
+            navigation?.navigate("Profile");
+            return;
+        }
+
+        if (
             dataType === "roster_add" ||
             dataType === "roster_removed" ||
             dataType === "group_updated" ||
@@ -129,18 +163,31 @@ export default function NotificationsScreen({ navigation }: any) {
             dataType === "on_deck_added" ||
             dataType === "on_deck_removed"
         ) {
-            const d = item.data as Record<string, unknown> | undefined;
             if (d?.ownerId) {
                 navigation?.navigate("FriendProfile", {
-                    userId: d.ownerId as string,
+                    userId: String(d.ownerId),
                 });
             }
-        } else if (dataType === "waiver_wire") {
+            return;
+        }
+
+        if (dataType === "waiver_wire") {
             navigation?.navigate("WaiverWire");
-        } else if ((item.data as Record<string, unknown>)?.teeTimeId) {
-            navigation?.navigate("TeeTimeDetail", {
-                teeTimeId: (item.data as Record<string, unknown>).teeTimeId,
-            });
+            return;
+        }
+
+        if (
+            (dataType === "tee_time_response" ||
+                dataType === "player_cancelled" ||
+                dataType === "check_in_reminder") &&
+            d?.teeTimeId
+        ) {
+            navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
+            return;
+        }
+
+        if (d?.teeTimeId) {
+            navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
         }
     }, [navigation]);
 
@@ -155,9 +202,14 @@ export default function NotificationsScreen({ navigation }: any) {
             console.log("🔵 [NotificationsScreen] Checking notification type", { dataType, type, hasInviteId: !!data?.inviteId });
             
             if (dataType.includes('friend') || type.includes('friend')) {
-                const requestId = data?.requestId || notificationId;
-                console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
-                await friendApi.respondToRequest(requestId, "accepted");
+                const requestId = data?.requestId;
+                if (!requestId) {
+                    logger.warn("[NotificationsScreen] Accept: missing requestId in friend notification", { notificationId, data });
+                    Alert.alert("Can't respond", "This friend request is missing data. Try again from your pending requests.", [{ text: "OK" }]);
+                    await fetchNotifications();
+                    return;
+                }
+                await friendApi.respondToRequest(String(requestId), "accepted");
                 try {
                     await notificationApi.markAsResponded(notificationId);
                 } catch (markError) {
@@ -232,9 +284,14 @@ export default function NotificationsScreen({ navigation }: any) {
             console.log("🔵 [NotificationsScreen] Checking notification type", { dataType, type, hasInviteId: !!data?.inviteId });
             
             if (dataType.includes('friend') || type.includes('friend')) {
-                const requestId = data?.requestId || notificationId;
-                console.log("🔵 [NotificationsScreen] Calling friendApi.respondToRequest", { requestId });
-                await friendApi.respondToRequest(requestId, "declined");
+                const requestId = data?.requestId;
+                if (!requestId) {
+                    logger.warn("[NotificationsScreen] Decline: missing requestId in friend notification", { notificationId, data });
+                    Alert.alert("Can't respond", "This friend request is missing data. Try again from your pending requests.", [{ text: "OK" }]);
+                    await fetchNotifications();
+                    return;
+                }
+                await friendApi.respondToRequest(String(requestId), "declined");
                 try {
                     await notificationApi.markAsResponded(notificationId);
                 } catch (markError) {
@@ -975,7 +1032,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const invitesUnreadCount = notifications.filter(n => {
         const t = getDataType(n);
         return !n.isRead && (
-            t === "tee_time_invite" || t === "friend_request" || t === "spot_opened" ||
+            t === "tee_time_invite" || t === "friend_request" || t === "group_invite" || t === "spot_opened" ||
             t === "roster_add" || t === "organizer_fill_warning" || t === "tee_time_not_filled" || t === "organizer_invite_more"
         );
     }).length;
@@ -984,7 +1041,9 @@ export default function NotificationsScreen({ navigation }: any) {
         const t = getDataType(n);
         return t === "tee_time_response" || t === "waiver_wire" || t === "group_invite_accepted" || t === "player_cancelled"
             || t === "group_updated" || t === "group_deleted" || t === "roster_removed"
-            || t === "on_deck_added" || t === "on_deck_removed";
+            || t === "on_deck_added" || t === "on_deck_removed"
+            || t === "friend_accepted" || t === "check_in_reminder" || t === "no_show"
+            || t === "roster_exhausted" || t === "fcfs_deadline";
     }).length;
 
     const typeFilterOptions = getTypeFilterOptions(activeTab);

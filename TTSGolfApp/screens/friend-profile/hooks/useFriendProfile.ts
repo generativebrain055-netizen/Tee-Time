@@ -66,7 +66,7 @@ function normalizeFriendProfileApi(raw: Record<string, unknown>): FriendProfileD
         coursesCount: pickNum(raw.coursesCount, raw.courses_count) ?? 0,
         recentRounds: recentRounds as FriendProfileData["recentRounds"],
         blockedYou: Boolean(raw.blockedYou ?? raw.blocked_you),
-        phone: pickStr(raw.phone),
+        phone: pickStr(raw.phone, raw.phone_number),
         clubs,
         averageScore: pickNum(raw.averageScore, raw.average_score),
         headerImage: pickStr(raw.headerImage),

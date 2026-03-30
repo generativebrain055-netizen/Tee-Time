@@ -129,6 +129,18 @@ export const getDateKey = (date: Date): string => {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 };
 
+/** Inverse of getDateKey (year, 0-indexed month, day). */
+export const parseCalendarDateKey = (key: string): Date | null => {
+  const parts = key.split("-");
+  if (parts.length !== 3) return null;
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  const out = new Date(y, m, d);
+  return Number.isNaN(out.getTime()) ? null : out;
+};
+
 export const formatSelectedDate = (date: Date): string => {
   return date.toLocaleDateString("en-US", {
     weekday: "long",
