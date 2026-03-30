@@ -349,6 +349,23 @@ class RosterController {
     }
   }
 
+  // GET /api/roster/:id/social-rate-history
+  async getRosterMemberSocialHistory(req, res) {
+    try {
+      const limit = parseInt(req.query.limit, 10) || 50;
+      const offset = parseInt(req.query.offset, 10) || 0;
+      const data = await rosterService.getRosterMemberSocialHistory(
+        req.user.id,
+        req.params.id,
+        limit,
+        offset,
+      );
+      success(res, data);
+    } catch (err) {
+      handleServiceError(res, err, 'Failed to get social rate history');
+    }
+  }
+
   // ============ WAIVER WIRE ============
 
   // GET /api/roster/waiver-wire?date=YYYY-MM-DD&rosterConnectionsOnly=true&maxDistance=20&lat=...&lng=...
@@ -427,6 +444,7 @@ module.exports = {
   moveMember: controller.moveMember.bind(controller),
   getMemberProfile: controller.getMemberProfile.bind(controller),
   getMemberHistory: controller.getMemberHistory.bind(controller),
+  getRosterMemberSocialHistory: controller.getRosterMemberSocialHistory.bind(controller),
   getWaiverWire: controller.getWaiverWire.bind(controller),
   addToWaiverWire: controller.addToWaiverWire.bind(controller),
   updateWaiverWire: controller.updateWaiverWire.bind(controller),

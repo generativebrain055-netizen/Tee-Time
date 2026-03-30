@@ -1,6 +1,5 @@
 import React, { memo } from "react";
 import { View, Text } from "react-native";
-import { cn } from "../../../utils/cn";
 
 interface Props {
   teeTimePreference: string;
@@ -78,7 +77,7 @@ const PlayingPreferences = memo(({ teeTimePreference, walkOrRide, golfVibe, drin
           fontSize: 15,
           color: '#111827',
         }}>
-          {golfVibe ?? "—"}
+          {golfVibe?.trim() ? golfVibe : "Not set"}
         </Text>
       </View>
       <View style={{ flex: 1, minWidth: '45%' }}>
@@ -97,7 +96,7 @@ const PlayingPreferences = memo(({ teeTimePreference, walkOrRide, golfVibe, drin
           fontSize: 15,
           color: '#111827',
         }}>
-          {drinkOfChoice ?? "—"}
+          {drinkOfChoice?.trim() ? drinkOfChoice : "Not set"}
         </Text>
       </View>
     </View>

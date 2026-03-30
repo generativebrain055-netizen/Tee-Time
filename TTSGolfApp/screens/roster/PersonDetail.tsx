@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ArrowLeft, MoreHorizontal, MessageCircle, Calendar, Star, MapPin, Clock, Award, TrendingUp, Users, Ban, Trash2, ChevronRight, UserCheck } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
@@ -30,6 +30,25 @@ interface PersonDetailProps {
     onRemoved?: () => void;
     navigation?: any;
 }
+
+const formatStatNumber = (v: unknown): string => {
+    if (v == null || v === "") return "N/A";
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    const n = Number(v);
+    return Number.isFinite(n) ? String(n) : String(v);
+};
+
+const formatSocialRateDisplay = (v: unknown): string => {
+    if (v == null || v === "") return "—";
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(1) : String(v);
+};
+
+const dialPhone = (phone: string) => {
+    const digits = phone.replace(/\D/g, "");
+    if (!digits) return;
+    Linking.openURL(`tel:${digits}`).catch(() => {});
+};
 
 export default function PersonDetail({ person, onBack, onRemoved, navigation }: PersonDetailProps) {
     const [profile, setProfile] = useState<MemberProfile | null>(null);
@@ -220,24 +239,72 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
 
     const renderStatsTab = () => (
         <View className="p-4">
-            {/* Social Rate Highlight */}
-            {profile?.stats.socialRate != null && (
+            {profile?.contact?.userId ? (
                 <View className="bg-amber-50 rounded-md p-5 items-center mb-4 border border-amber-100">
                     <View className="flex-row items-center gap-2 mb-2">
                         <Star size={24} color="#F59E0B" fill="#F59E0B" />
                         <Text className="text-sm font-semibold text-amber-900">Social Rate</Text>
                     </View>
-                    <Text className="text-5xl font-bold text-amber-500">{Number(profile.stats.socialRate).toFixed(1)}</Text>
-                    <Text className="text-xs text-amber-900 text-center mt-1">Reliability score based on attendance history</Text>
+                    <Text className="text-5xl font-bold text-amber-500">{formatSocialRateDisplay(profile?.stats.socialRate)}</Text>
+                    <Text className="text-xs text-amber-900 text-center mt-1 px-2">
+                        Reliability score (0–200) from invites, cancellations, and attendance
+                    </Text>
+                    <TouchableOpacity
+                        className="mt-4 flex-row items-center justify-center gap-2 py-3 px-4 rounded-md bg-white border border-amber-200 w-full"
+                        onPress={() =>
+                            navigation?.navigate("SocialRateHistory", {
+                                rosterId: person.id,
+                                memberName: profile?.contact?.name || person.name,
+                            })
+                        }
+                        activeOpacity={0.7}
+                    >
+                        <History size={18} color="#B45309" />
+                        <Text className="text-sm font-semibold text-amber-900">Social rate history</Text>
+                        <ChevronRight size={18} color="#B45309" />
+                    </TouchableOpacity>
                 </View>
-            )}
+            ) : null}
 
             <View className="flex-row flex-wrap gap-3 mb-4">
-                <StatCard icon={Award} label="Handicap" value={profile?.stats.handicap} />
-                <StatCard icon={TrendingUp} label="Rounds" value={profile?.stats.roundsPlayed} />
-                <StatCard icon={Users} label="Played Together" value={profile?.stats.timesPlayedTogether} />
-                <StatCard icon={Calendar} label="Avg Score" value={profile?.stats.averageScore} />
+                <StatCard icon={Award} label="Handicap" value={formatStatNumber(profile?.stats.handicap)} />
+                <StatCard icon={TrendingUp} label="Rounds" value={formatStatNumber(profile?.stats.roundsPlayed)} />
+                <StatCard icon={Users} label="Played Together" value={formatStatNumber(profile?.stats.timesPlayedTogether)} />
+                <StatCard icon={Calendar} label="Avg Score" value={formatStatNumber(profile?.stats.averageScore)} />
             </View>
+
+            {profile?.contact?.phone ? (
+                <View className="mb-5">
+                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Phone</Text>
+                    <TouchableOpacity
+                        className="flex-row items-center gap-3 py-3 px-3 rounded-md bg-gray-50 border border-gray-100"
+                        onPress={() => dialPhone(profile.contact.phone!)}
+                        activeOpacity={0.7}
+                    >
+                        <Phone size={18} color={COLORS.primary} />
+                        <Text className="text-base font-medium text-gray-900 flex-1">{profile.contact.phone}</Text>
+                        <ChevronRight size={18} color={COLORS.textSub} />
+                    </TouchableOpacity>
+                    <Text className="text-xs text-gray-500 mt-2">Tap to call</Text>
+                </View>
+            ) : null}
+
+            {(profile?.memberships && profile.memberships.length > 0) ? (
+                <View className="mb-5">
+                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Club memberships</Text>
+                    {profile.memberships.map((m, index) => (
+                        <View
+                            key={m.id || `${m.name}-${index}`}
+                            className="py-3 border-b border-gray-100"
+                        >
+                            <Text className="text-[15px] font-semibold text-gray-900">{m.name}</Text>
+                            {m.location ? (
+                                <Text className="text-sm text-gray-500 mt-0.5">{m.location}</Text>
+                            ) : null}
+                        </View>
+                    ))}
+                </View>
+            ) : null}
 
             <View className="mb-5">
                 <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Invite Stats</Text>
@@ -302,15 +369,6 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     </View>
                 )}
             </View>
-
-            {profile?.membership && (
-                <View className="mb-5">
-                    <Text className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Club Memberships</Text>
-                    <View className="bg-green-50 px-3 py-2 rounded-md self-start">
-                        <Text className="text-sm font-medium" style={{ color: COLORS.primary }}>{profile.membership}</Text>
-                    </View>
-                </View>
-            )}
 
             {profile?.distanceToCourse && (
                 <View className="mb-5">
@@ -475,9 +533,13 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                         {profile?.contact.username && (
                             <Text className="text-sm text-gray-500 mt-1">@{profile.contact.username}</Text>
                         )}
-                        {profile?.contact.phone && (
-                            <Text className="text-sm text-gray-500 mt-1">{profile.contact.phone}</Text>
-                        )}
+                        {profile?.contact.phone ? (
+                            <TouchableOpacity onPress={() => dialPhone(profile.contact.phone!)} activeOpacity={0.7}>
+                                <Text className="text-sm font-medium mt-1" style={{ color: COLORS.primary }}>
+                                    {profile.contact.phone}
+                                </Text>
+                            </TouchableOpacity>
+                        ) : null}
                         {profile?.groupName && (
                             <View className="px-3 py-1 rounded-md mt-2" style={{ backgroundColor: profile.groupColor || '#E8F5E9' }}>
                                 <Text className="text-xs font-semibold text-gray-900">{profile.groupName}</Text>

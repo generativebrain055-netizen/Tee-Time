@@ -480,6 +480,7 @@ export default function App(): React.ReactElement {
           <SocialRateHistoryScreen
             key={`social-rate-history-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "CreateTeeTime":

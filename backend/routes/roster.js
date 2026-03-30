@@ -304,6 +304,13 @@ router.put("/:id/move", rosterController.moveMember);
 router.get("/:id/profile", rosterController.getMemberProfile);
 
 /**
+ * @route   GET /api/roster/:id/social-rate-history
+ * @desc    Social rate change history for roster member (roster owner only)
+ * @access  Private
+ */
+router.get("/:id/social-rate-history", rosterController.getRosterMemberSocialHistory);
+
+/**
  * @route   GET /api/roster/:id/history
  * @desc    Get member's playing history
  * @access  Private

@@ -143,6 +143,8 @@ export interface DiscoveredUser {
   playingPartnerPreference?: string;
   recentRounds?: Array<{ courseName: string; date: string }>;
   clubs?: Array<{ id?: string; name: string; location?: string; type?: string }>;
+  /** Shown only for accepted friends when privacy allows */
+  phone?: string;
 }
 
 export type FriendshipStatus = "none" | "friend" | "requested" | "pending";

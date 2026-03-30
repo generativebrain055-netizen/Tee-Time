@@ -1819,6 +1819,26 @@ class RosterRepository {
     }
   }
 
+  /**
+   * Roster row owned by user (minimal fetch for authorization).
+   * @returns {Promise<{ contact_user_id: string | null } | null>}
+   */
+  async getOwnedRosterRow(ownerUserId, rosterId) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("roster")
+        .select("contact_user_id")
+        .eq("id", rosterId)
+        .eq("user_id", ownerUserId)
+        .maybeSingle();
+
+      if (error && error.code !== "PGRST116") throw error;
+      return data ?? null;
+    } catch (error) {
+      handleError(error, "getOwnedRosterRow");
+    }
+  }
+
   async getMemberProfile(userId, rosterId) {
     try {
       const { data, error } = await supabaseAdmin
@@ -1850,7 +1870,7 @@ class RosterRepository {
           .from("users")
           .select(
             `first_name, last_name, username, phone_number,
-            user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, playing_partner_preference, rounds_played, average_score, bio, driver, irons, putter, ball)`
+            user_profiles (avatar_url, handicap, social_rate, location, home_course, preferred_tee_time, walk_or_ride, playing_partner_preference, rounds_played, average_score, bio, driver, irons, putter, ball, clubs)`
           )
           .eq("id", data.contact_user_id)
           .maybeSingle();
@@ -1869,6 +1889,7 @@ class RosterRepository {
             avatar_url: up.avatar_url,
             user_handicap: up.handicap,
             profile_social_rate: up.social_rate,
+            profile_clubs: up.clubs,
             location: up.location,
             home_course: up.home_course,
             preferred_tee_time: up.preferred_tee_time,

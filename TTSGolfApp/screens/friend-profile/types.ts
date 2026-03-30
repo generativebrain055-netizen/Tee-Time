@@ -17,6 +17,7 @@ export interface FriendProfileData extends Omit<DiscoveredUser, 'friendshipStatu
   coursesCount?: number;
   recentRounds?: { courseName: string; date: string }[];
   membership?: { name: string; location?: string };
+  phone?: string;
 }
 
 export interface FriendProfileRouteParams {

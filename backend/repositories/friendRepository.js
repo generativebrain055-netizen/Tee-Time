@@ -1,6 +1,31 @@
 const { supabaseAdmin, handleError } = require("../config/supabase");
 const rosterRepository = require("./rosterRepository");
 
+/** Supabase/PostgREST may return embedded user_profiles as an array or a single object (1:1). */
+function normalizeUserProfileEmbed(raw) {
+  if (raw == null) return {};
+  if (Array.isArray(raw)) {
+    const row = raw[0];
+    return row && typeof row === "object" ? row : {};
+  }
+  if (typeof raw === "object") return raw;
+  return {};
+}
+
+function normalizeClubsJson(clubs) {
+  if (clubs == null) return [];
+  if (Array.isArray(clubs)) return clubs;
+  if (typeof clubs === "string") {
+    try {
+      const parsed = JSON.parse(clubs);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 class FriendRepository {
   // Send friend request
   async sendFriendRequest(senderId, receiverId, message = null) {
@@ -458,7 +483,7 @@ class FriendRepository {
       // Get friendship status for each user
       const usersWithStatus = await Promise.all(
         (data || []).map(async (user) => {
-          const profile = user.user_profiles?.[0] || {};
+          const profile = normalizeUserProfileEmbed(user.user_profiles);
           delete user.user_profiles;
 
           // Check friendship
@@ -509,7 +534,7 @@ class FriendRepository {
         .from("users")
         .select(
           `
-                    id, first_name, last_name, username,
+                    id, first_name, last_name, username, phone_number,
                     user_profiles (
                         handicap, avatar_url, location, home_course,
                         preferred_tee_time, walk_or_ride, playing_partner_preference,
@@ -525,7 +550,7 @@ class FriendRepository {
       if (error && error.code !== "PGRST116") throw error;
       if (!data) return null;
 
-      const profile = data.user_profiles?.[0] || {};
+      const profile = normalizeUserProfileEmbed(data.user_profiles);
       delete data.user_profiles;
 
       // Get friendship status
@@ -634,6 +659,7 @@ class FriendRepository {
       return {
         ...data,
         ...profile,
+        clubs: normalizeClubsJson(profile.clubs),
         friendship_status,
         blocked_you,
         roundsCount: profile.rounds_played ?? completedRoundsCount,

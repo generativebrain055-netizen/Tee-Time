@@ -128,6 +128,25 @@ const formatAutoInviteMember = (m) => ({
   socialRate: m.profile_social_rate || m.social_rate,
 });
 
+/** Club memberships from user_profiles.clubs JSONB plus legacy roster.club_membership */
+const normalizeMemberships = (profile) => {
+  const raw = profile.profile_clubs;
+  let list = [];
+  if (Array.isArray(raw)) {
+    list = raw
+      .map((c) => ({
+        id: c.id != null ? String(c.id) : undefined,
+        name: c.name || c.club_name || c.title,
+        location: c.location,
+      }))
+      .filter((c) => c.name);
+  }
+  if (list.length === 0 && profile.club_membership) {
+    list = [{ name: profile.club_membership }];
+  }
+  return list;
+};
+
 /**
  * Format member profile for API response
  */
@@ -141,7 +160,7 @@ const formatMemberProfile = (profile) => ({
   blockedYou: Boolean(profile.blocked_you),
   contact: {
     userId: profile.contact_user_id,
-    phone: profile.contact_phone,
+    phone: profile.contact_phone || profile.phone_number || undefined,
     name:
       profile.contact_name ||
       `${profile.first_name || ""} ${profile.last_name || ""}`.trim(),
@@ -151,8 +170,8 @@ const formatMemberProfile = (profile) => ({
     bio: profile.bio,
   },
   stats: {
-    handicap: profile.contact_handicap || profile.user_handicap,
-    socialRate: profile.profile_social_rate || profile.social_rate,
+    handicap: profile.contact_handicap ?? profile.user_handicap,
+    socialRate: profile.profile_social_rate ?? profile.social_rate,
     roundsPlayed: profile.rounds_played,
     averageScore: profile.average_score,
     timesPlayedTogether: profile.times_played_together,
@@ -170,6 +189,7 @@ const formatMemberProfile = (profile) => ({
   },
   equipment: profile.equipment,
   membership: profile.club_membership,
+  memberships: normalizeMemberships(profile),
   distanceToCourse: profile.distance_to_course,
   notes: profile.notes,
 });

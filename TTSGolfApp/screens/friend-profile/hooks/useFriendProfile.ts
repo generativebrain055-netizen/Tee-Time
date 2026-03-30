@@ -6,6 +6,73 @@ import { Alert } from "react-native";
 import { friendApi, DiscoveredUser } from "../../../services/api";
 import { FriendProfileData } from "../types";
 
+function pickStr(a: unknown, b?: unknown): string | undefined {
+    const v = a ?? b;
+    if (v == null || v === "") return undefined;
+    return typeof v === "string" ? v : String(v);
+}
+
+function pickNum(a: unknown, b?: unknown): number | undefined {
+    const v = a ?? b;
+    if (v == null || v === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+}
+
+/** Normalize GET /friends/profile response (camelCase + occasional snake_case / JSON clubs). */
+function normalizeFriendProfileApi(raw: Record<string, unknown>): FriendProfileData {
+    let clubs: FriendProfileData["clubs"];
+    const cr = raw.clubs;
+    if (Array.isArray(cr)) {
+        clubs = cr as FriendProfileData["clubs"];
+    } else if (typeof cr === "string") {
+        try {
+            const parsed = JSON.parse(cr);
+            clubs = Array.isArray(parsed) ? parsed : [];
+        } catch {
+            clubs = [];
+        }
+    } else {
+        clubs = [];
+    }
+
+    let recentRounds = raw.recentRounds ?? raw.recent_rounds;
+    if (!Array.isArray(recentRounds)) recentRounds = [];
+
+    const playingPartnerPreference = pickStr(raw.playingPartnerPreference, raw.playing_partner_preference);
+    const fs = raw.friendshipStatus ?? raw.friendship_status;
+
+    return {
+        id: String(raw.id ?? ""),
+        firstName: pickStr(raw.firstName, raw.first_name) ?? "",
+        lastName: pickStr(raw.lastName, raw.last_name) ?? "",
+        username: pickStr(raw.username),
+        avatar: pickStr(raw.avatar, raw.avatar_url),
+        handicap: pickNum(raw.handicap) ?? null,
+        location: pickStr(raw.location),
+        homeCourse: pickStr(raw.homeCourse, raw.home_course),
+        preferredTeeTime: pickStr(raw.preferredTeeTime, raw.preferred_tee_time),
+        walkOrRide: pickStr(raw.walkOrRide, raw.walk_or_ride),
+        playingPartnerPreference,
+        socialRate: pickNum(raw.socialRate, raw.social_rate),
+        friendshipStatus:
+            fs === "friend" || fs === "requested" || fs === "pending" || fs === "none"
+                ? fs
+                : "none",
+        roundsPlayed: pickNum(raw.roundsPlayed, raw.rounds_played),
+        golfVibe: pickStr(raw.golfVibe) ?? playingPartnerPreference,
+        drinkOfChoice: pickStr(raw.drinkOfChoice, raw.drink_of_choice),
+        roundsCount: pickNum(raw.roundsCount, raw.rounds_count) ?? pickNum(raw.roundsPlayed, raw.rounds_played) ?? 0,
+        coursesCount: pickNum(raw.coursesCount, raw.courses_count) ?? 0,
+        recentRounds: recentRounds as FriendProfileData["recentRounds"],
+        blockedYou: Boolean(raw.blockedYou ?? raw.blocked_you),
+        phone: pickStr(raw.phone),
+        clubs,
+        averageScore: pickNum(raw.averageScore, raw.average_score),
+        headerImage: pickStr(raw.headerImage),
+    };
+}
+
 export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) => {
     const [profile, setProfile] = useState<FriendProfileData | null>(() => {
         if (initialUser && initialUser.id === userId) {
@@ -38,9 +105,13 @@ export const useFriendProfile = (userId: string, initialUser?: DiscoveredUser) =
 
             if (response.success && response.profile) {
                 const p = response.profile as Record<string, unknown>;
-                const apiAvatar = (typeof p.avatar === "string" ? p.avatar : (p.avatarUrl as string) || "").trim();
+                const normalized = normalizeFriendProfileApi(p);
+                const apiAvatar =
+                    (typeof p.avatar === "string" ? p.avatar : (p.avatarUrl as string) || "").trim() ||
+                    normalized.avatar?.trim() ||
+                    "";
                 setProfile((prev) => {
-                    const merged = { ...response.profile } as FriendProfileData;
+                    const merged = { ...normalized };
                     merged.avatar = apiAvatar || (prev?.avatar && String(prev.avatar).trim()) || undefined;
                     return merged;
                 });

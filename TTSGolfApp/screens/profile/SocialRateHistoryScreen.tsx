@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react-native";
 import { ScreenShell, AppHeader } from "../../ui";
-import { socialRateApi } from "../../services/api";
+import { socialRateApi, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
 import type { SocialRateLogEntry } from "../../services/api";
 
@@ -151,7 +151,10 @@ const HistoryItem = ({ entry }: HistoryItemProps) => {
     );
 };
 
-export default function SocialRateHistoryScreen({ navigation }: any) {
+export default function SocialRateHistoryScreen({ navigation, route }: any) {
+    const rosterId = route?.params?.rosterId as string | undefined;
+    const memberName = route?.params?.memberName as string | undefined;
+
     const [history, setHistory] = useState<SocialRateLogEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -159,17 +162,25 @@ export default function SocialRateHistoryScreen({ navigation }: any) {
 
     const loadHistory = useCallback(async () => {
         try {
-            const [scoreRes, historyRes] = await Promise.all([
-                socialRateApi.getCurrentScore(),
-                socialRateApi.getHistory(50, 0),
-            ]);
+            if (rosterId) {
+                const res = await rosterApi.getMemberSocialHistory(rosterId, 50, 0);
+                if (res.success) {
+                    setCurrentScore(res.currentScore ?? null);
+                    setHistory(res.history || []);
+                }
+            } else {
+                const [scoreRes, historyRes] = await Promise.all([
+                    socialRateApi.getCurrentScore(),
+                    socialRateApi.getHistory(50, 0),
+                ]);
 
-            if (scoreRes.success) {
-                setCurrentScore(scoreRes.socialRate.currentScore);
-            }
+                if (scoreRes.success) {
+                    setCurrentScore(scoreRes.socialRate.currentScore);
+                }
 
-            if (historyRes.success) {
-                setHistory(historyRes.history);
+                if (historyRes.success) {
+                    setHistory(historyRes.history);
+                }
             }
         } catch (error) {
             logger.error("[SocialRateHistoryScreen] Failed to load history", error);
@@ -177,11 +188,13 @@ export default function SocialRateHistoryScreen({ navigation }: any) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [rosterId]);
 
     useEffect(() => {
         loadHistory();
-    }, [loadHistory]);
+    }, [loadHistory, rosterId]);
+
+    const screenTitle = memberName ? `Social rate · ${memberName}` : "Social Rate History";
 
     const handleRefresh = useCallback(() => {
         setRefreshing(true);
@@ -191,7 +204,7 @@ export default function SocialRateHistoryScreen({ navigation }: any) {
     if (loading) {
         return (
             <ScreenShell>
-                <AppHeader title="Social Rate History" onBack={() => navigation?.goBack()} />
+                <AppHeader title={screenTitle} onBack={() => navigation?.goBack()} />
                 <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
                 </View>
@@ -201,7 +214,7 @@ export default function SocialRateHistoryScreen({ navigation }: any) {
 
     return (
         <ScreenShell>
-            <AppHeader title="Social Rate History" onBack={() => navigation?.goBack()} />
+            <AppHeader title={screenTitle} onBack={() => navigation?.goBack()} />
 
             <ScrollView
                 style={{ flex: 1, backgroundColor: COLORS.bg }}
@@ -300,7 +313,9 @@ export default function SocialRateHistoryScreen({ navigation }: any) {
                                     textAlign: "center",
                                 }}
                             >
-                                Your social rate changes will appear here
+                                {rosterId
+                                    ? "No social rate changes recorded for this member yet."
+                                    : "Your social rate changes will appear here"}
                             </Text>
                         </View>
                     ) : (

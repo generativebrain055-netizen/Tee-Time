@@ -22,7 +22,7 @@ const GolfStats = memo(({ rounds, courses, socialScore }: Props) => (
         color: '#111827',
         marginBottom: 16,
       }}>
-        Stats
+        Golf stats
       </Text>
       <View style={{
         flexDirection: 'row',

@@ -138,8 +138,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
   const courses = profile.coursesCount ?? 0;
   const socialScore = formatScore(profile.socialRate);
   const recentRounds = profile.recentRounds ?? [];
-  const membershipName = profile.homeCourse ?? "No clubs added";
-  const membershipLocation = profile.location;
+  const clubs = Array.isArray(profile.clubs) ? profile.clubs : [];
 
   return (
     <View className="flex-1 bg-bg">
@@ -167,7 +166,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
           backgroundColor: '#FFFFFF',
           borderRadius: 16,
           padding: 20,
-          paddingTop: 70,
+          paddingTop: 78,
           borderWidth: 1,
           borderColor: '#E5E7EB',
           shadowColor: '#000',
@@ -180,6 +179,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
             fullName={fullName}
             location={profile.location}
             handicap={profile.handicap}
+            phone={showFriendDetails ? profile.phone : undefined}
           />
           <ActionButtons
             status={profile.friendshipStatus}
@@ -214,7 +214,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
                 borderColor: '#E5E7EB',
               }}>
                 <PlayingPreferences
-                  teeTimePreference={getPreferredTeeTimeDisplay(profile.preferredTeeTime)}
+                  teeTimePreference={getPreferredTeeTimeDisplay(profile.preferredTeeTime, "compact")}
                   walkOrRide={getWalkOrRideDisplay(profile.walkOrRide)}
                   golfVibe={profile.golfVibe}
                   drinkOfChoice={profile.drinkOfChoice}
@@ -227,7 +227,7 @@ function FriendProfileScreen({ navigation, route }: Props) {
                   marginVertical: 20,
                 }} />
                 
-                <ActiveMemberships clubName={membershipName} location={membershipLocation} />
+                <ActiveMemberships clubs={clubs} />
               </View>
             </View>
             

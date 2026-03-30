@@ -106,7 +106,10 @@ export interface MemberProfile {
     putter?: string;
     ball?: string;
   };
+  /** @deprecated Prefer memberships from profile */
   membership?: string;
+  /** Active club memberships from the member's profile */
+  memberships?: { id?: string; name: string; location?: string }[];
   distanceToCourse?: number;
   notes?: string;
 }

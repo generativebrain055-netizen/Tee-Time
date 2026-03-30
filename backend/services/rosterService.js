@@ -899,6 +899,30 @@ async function getMemberHistory(userId, rosterId) {
   return rosterRepository.getMemberHistory(userId, rosterId);
 }
 
+/**
+ * Social rate history for a roster member (viewer must own the roster row).
+ * @returns {{ currentScore: number | null, history: object[] }}
+ */
+async function getRosterMemberSocialHistory(viewerId, rosterId, limit = 50, offset = 0) {
+  const row = await rosterRepository.getOwnedRosterRow(viewerId, rosterId);
+  if (!row) {
+    throw new RosterServiceError("Member not found", "NOT_FOUND", 404);
+  }
+  if (!row.contact_user_id) {
+    return { currentScore: null, history: [] };
+  }
+  const socialRateService = require("./socialRateService");
+  const { formatSocialRateHistoryEntries } = require("../utils/socialRateHistoryFormatter");
+  const [currentScore, rawHistory] = await Promise.all([
+    socialRateService.getCurrentScore(row.contact_user_id),
+    socialRateService.getScoreHistory(row.contact_user_id, limit, offset),
+  ]);
+  return {
+    currentScore: currentScore ?? null,
+    history: formatSocialRateHistoryEntries(rawHistory),
+  };
+}
+
 // ============ WAIVER WIRE ============
 
 /**
@@ -1058,6 +1082,7 @@ module.exports = {
   // Member operations
   getMemberProfile,
   getMemberHistory,
+  getRosterMemberSocialHistory,
 
   // Waiver wire
   getWaiverWire,

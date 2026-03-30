@@ -1,6 +1,6 @@
 const socialRateService = require("../services/socialRateService");
 const logger = require("../config/logger");
-const { formatDateLocal } = require("../utils/dateUtils");
+const { formatSocialRateHistoryEntries } = require("../utils/socialRateHistoryFormatter");
 
 class SocialRateController {
   constructor() {
@@ -49,22 +49,7 @@ class SocialRateController {
       const offset = parseInt(req.query.offset) || 0;
 
       const history = await socialRateService.getScoreHistory(userId, limit, offset);
-
-      const formatted = history.map(entry => ({
-        id: entry.id,
-        delta: entry.delta,
-        previousScore: entry.previous_score,
-        newScore: entry.new_score,
-        reason: entry.reason,
-        reasonDetails: entry.reason_details,
-        teeTime: entry.tee_time_id ? {
-          id: entry.tee_time_id,
-          courseName: entry.course_name,
-          date: formatDateLocal(entry.tee_date),
-          time: entry.tee_time
-        } : null,
-        createdAt: entry.created_at
-      }));
+      const formatted = formatSocialRateHistoryEntries(history);
 
       res.json({ success: true, history: formatted });
     } catch (error) {

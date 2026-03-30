@@ -18,6 +18,7 @@ import type {
   MoveMemberRequest,
   AddToWaiverWireRequest,
   UpdateWaiverWireRequest,
+  SocialRateLogEntry,
 } from "./types";
 
 export const rosterApi = {
@@ -140,6 +141,18 @@ export const rosterApi = {
   getMemberHistory: (rosterId: string) =>
     apiCall<{ success: boolean; history: unknown[] }>(
       `${API_ENDPOINTS.ROSTER}/${rosterId}/history`,
+    ),
+
+  /**
+   * Social rate history for a roster member (viewer must own roster row)
+   */
+  getMemberSocialHistory: (rosterId: string, limit = 50, offset = 0) =>
+    apiCall<{
+      success: boolean;
+      currentScore: number | null;
+      history: SocialRateLogEntry[];
+    }>(
+      `${API_ENDPOINTS.ROSTER}/${rosterId}/social-rate-history?limit=${limit}&offset=${offset}`,
     ),
 
   /**

@@ -11,7 +11,6 @@ interface Props {
 }
 
 const RecentRounds = memo(({ rounds }: Props) => {
-  if (!rounds.length) return null;
   return (
     <View style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 24 }}>
       <View style={{
@@ -29,6 +28,40 @@ const RecentRounds = memo(({ rounds }: Props) => {
         }}>
           Recent rounds
         </Text>
+        {!rounds.length ? (
+          <View
+            style={{
+              backgroundColor: "#F9FAFB",
+              borderRadius: 12,
+              padding: 24,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: "Inter_500Medium",
+                fontSize: 15,
+                color: "#6B7280",
+                textAlign: "center",
+              }}
+            >
+              No completed rounds yet
+            </Text>
+            <Text
+              style={{
+                fontFamily: "Inter_400Regular",
+                fontSize: 13,
+                color: "#9CA3AF",
+                textAlign: "center",
+                marginTop: 6,
+              }}
+            >
+              Completed tee times will show up here
+            </Text>
+          </View>
+        ) : null}
         {rounds.map((round, idx) => (
           <View
             key={`${round.courseName}-${round.date}-${idx}`}
