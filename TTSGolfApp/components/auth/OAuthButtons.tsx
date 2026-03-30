@@ -221,12 +221,26 @@ export function OAuthButtons({
 
       logger.debug("[Firebase] Google Sign-In response:", JSON.stringify(userInfo, null, 2));
 
-      // Get the ID token from the response
-      const idToken = userInfo.data?.idToken;
+      // v15+ returns { type: 'cancelled', data: null } when the user closes the sheet — not an error
+      if (userInfo && typeof userInfo === "object" && "type" in userInfo && userInfo.type === "cancelled") {
+        logger.debug("[Firebase] Google Sign-In cancelled by user");
+        return;
+      }
+
+      const data =
+        userInfo && typeof userInfo === "object" && "data" in userInfo
+          ? (userInfo as { data: { idToken?: string } | null }).data
+          : null;
+      const idToken = data?.idToken;
 
       if (!idToken) {
-        logger.error("[Firebase] No ID token in response. Full response:", userInfo);
-        throw new Error("No ID token received from Google");
+        if (userInfo && typeof userInfo === "object" && "type" in userInfo && userInfo.type === "success") {
+          logger.warn("[Firebase] Google Sign-In succeeded but idToken missing — check OAuth client config");
+          onError("Could not complete Google sign-in. Please try again.");
+        } else {
+          logger.debug("[Firebase] Google Sign-In finished without an ID token");
+        }
+        return;
       }
 
       logger.debug("[Firebase] Got Google ID token, signing in to Firebase...");
@@ -249,10 +263,8 @@ export function OAuthButtons({
       await handleFirebaseUser(userCredential.user);
 
     } catch (error: any) {
-      logger.error("[Firebase] Google Sign-In Error:", error);
-
-      // Handle specific error codes
-      if (error.code === "SIGN_IN_CANCELLED" || error.code === 'auth/cancelled-popup-request') {
+      // Handle specific error codes (user dismiss / duplicate tap — no UI error)
+      if (error.code === "SIGN_IN_CANCELLED" || error.code === "auth/cancelled-popup-request") {
         logger.debug("[Firebase] User cancelled sign-in");
         return;
       }
@@ -261,6 +273,13 @@ export function OAuthButtons({
         logger.debug("[Firebase] Sign-in already in progress");
         return;
       }
+
+      if (isUserCancellation(error)) {
+        logger.debug("[Firebase] User cancelled sign-in");
+        return;
+      }
+
+      logger.error("[Firebase] Google Sign-In Error:", error);
 
       if (error.code === "PLAY_SERVICES_NOT_AVAILABLE") {
         onError("Google Play Services not available. Please update Google Play Services.");

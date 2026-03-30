@@ -309,7 +309,25 @@ class InviteController {
 
             // Check and update tee time status after response
             await teeTimeRepository.checkAndUpdateStatus(invite.tee_time_id);
-            
+
+            if (
+                result.success &&
+                (response === INVITE_RESPONSES.ACCEPTED ||
+                    response === INVITE_RESPONSES.DECLINED)
+            ) {
+                try {
+                    const organizerPipelineNudgeService = require("../../services/organizerPipelineNudgeService");
+                    await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(
+                        invite.tee_time_id
+                    );
+                } catch (nudgeErr) {
+                    logger.error(
+                        "Organizer pipeline nudge after invite response",
+                        nudgeErr
+                    );
+                }
+            }
+
             // If invite was accepted and tee time is confirmed, ensure participant is added to conversation
             if (response === INVITE_RESPONSES.ACCEPTED && userId) {
                 try {

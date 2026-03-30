@@ -547,6 +547,7 @@ CREATE TABLE tee_times (
     check_in_completed_at TIMESTAMPTZ,
     check_in_completed_by UUID REFERENCES users(id),
     organizer_fill_warning_sent BOOLEAN DEFAULT false,
+    organizer_pipeline_nudge_at TIMESTAMPTZ,
     distance_radius DECIMAL(5,2), -- Distance radius in miles for Open invites
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),

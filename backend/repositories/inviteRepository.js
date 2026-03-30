@@ -678,12 +678,39 @@ class InviteRepository {
     try {
       const { data, error } = await supabaseAdmin
         .from("invites")
-        .select("*")
+        .select(
+          `
+          *,
+          users!invites_invitee_user_id_fkey (
+            first_name,
+            last_name,
+            username,
+            user_profiles (avatar_url)
+          )
+        `,
+        )
         .eq("tee_time_id", teeTimeId)
         .order("position", { ascending: true });
 
       if (error) throw error;
-      return data || [];
+
+      return (data || []).map((invite) => {
+        const user = invite.users || {};
+        const profileData = user.user_profiles;
+        const profile = Array.isArray(profileData)
+          ? profileData[0] || {}
+          : profileData || {};
+
+        delete invite.users;
+
+        return {
+          ...invite,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          username: user.username,
+          avatar_url: profile.avatar_url || null,
+        };
+      });
     } catch (error) {
       handleError(error, "getInvitesByTeeTime");
     }

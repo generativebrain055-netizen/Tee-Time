@@ -456,6 +456,13 @@ class AttendanceController {
       // Trigger auto-reinvite based on invite type
       await inviteManagementService.handlePlayerCancellation(teeTimeId, userId, cancelledUserInfo);
 
+      try {
+        const organizerPipelineNudgeService = require("../services/organizerPipelineNudgeService");
+        await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(teeTimeId);
+      } catch (nudgeErr) {
+        logger.error("Organizer pipeline nudge after cancel participation", nudgeErr);
+      }
+
       // When a confirmed player cancels, keep tee time in "in_progress" so it stays active (not reverted to pending)
       if (teeTime.status === "confirmed") {
         await teeTimeRepository.updateStatus(teeTimeId, "in_progress");

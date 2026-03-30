@@ -2,6 +2,7 @@ const inviteRepository = require("../repositories/inviteRepository");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const notificationService = require("./notificationService");
 const logger = require("../config/logger");
+const organizerPipelineNudgeService = require("./organizerPipelineNudgeService");
 const { processNextRosterInvite } = require("../controllers/invite/handlers/responseHandlers");
 
 /**
@@ -219,63 +220,11 @@ class FCFSDeadlineService {
   async checkAndNotifyOrganizerIfNotFilled(teeTimeId, inviteType) {
     try {
       logger.debug(
-        `Checking if tee time ${teeTimeId} (${inviteType}) is filled...`
+        `Pipeline nudge check for tee time ${teeTimeId} (${inviteType})...`
       );
-
-      const teeTime = await teeTimeRepository.getTeeTimeById(teeTimeId);
-      if (!teeTime) {
-        logger.debug(`Tee time ${teeTimeId} not found`);
-        return;
-      }
-
-      logger.debug(`Tee time ${teeTimeId} status: ${teeTime.status}`);
-
-      // Only process if tee time is still active (not cancelled/completed)
-      if (teeTime.status === "cancelled" || teeTime.status === "completed") {
-        logger.debug(
-          `Tee time ${teeTimeId} status is ${teeTime.status}, skipping notification`
-        );
-        return;
-      }
-
-      const participantCount = await teeTimeRepository.getParticipantCount(
+      await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(
         teeTimeId
       );
-      const spotsRemaining = teeTime.max_players - participantCount;
-
-      logger.debug(
-        `Tee time ${teeTimeId}: ${participantCount}/${teeTime.max_players} participants, ${spotsRemaining} spots remaining`
-      );
-
-      if (spotsRemaining > 0) {
-        // Check if there are any pending invites with active deadlines
-        const pendingInvites =
-          await inviteRepository.getPendingInvitesByTeeTime(teeTimeId);
-
-        // For roster invites, only count invites that have an active expires_at (currently being waited on)
-        const activeInvites = pendingInvites.filter((inv) => {
-          if (inviteType === "roster") {
-            return inv.expires_at && new Date(inv.expires_at) > new Date();
-          }
-          return true;
-        });
-
-        logger.debug(
-          `Tee time ${teeTimeId} has ${pendingInvites.length} pending invites, ${activeInvites.length} active`
-        );
-
-        if (activeInvites.length === 0) {
-          // No active invites and spots remaining - notify organizer to use On-Deck
-          logger.info(
-            `Notifying organizer ${teeTime.creator_id} that tee time ${teeTimeId} (${inviteType}) has ${spotsRemaining} unfilled spots - prompting On-Deck selection`
-          );
-          await notificationService.notifyTeeTimeNotFilled(
-            teeTime.creator_id,
-            teeTime,
-            spotsRemaining
-          );
-        }
-      }
     } catch (error) {
       logger.error(`Error checking tee time ${teeTimeId} fill status:`, error);
     }

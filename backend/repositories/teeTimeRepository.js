@@ -364,6 +364,21 @@ class TeeTimeRepository {
     }
   }
 
+  async setOrganizerPipelineNudgeAt(teeTimeId, isoTimestamp) {
+    try {
+      const { error } = await supabaseAdmin
+        .from("tee_times")
+        .update({
+          organizer_pipeline_nudge_at: isoTimestamp,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", teeTimeId);
+      if (error) throw error;
+    } catch (error) {
+      handleError(error, "setOrganizerPipelineNudgeAt");
+    }
+  }
+
   async addParticipant(
     teeTimeId,
     userId,
@@ -957,35 +972,43 @@ class TeeTimeRepository {
       return this.updateStatus(teeTimeId, "completed");
     }
 
-    const inviteType = teeTime.invite_type || "roster";
     const maxPlayers = teeTime.max_players || 4;
 
     try {
-      // FCFS / open / manual (parallel): confirm when group is full
-      if (inviteType === "fcfs" || inviteType === "open" || inviteType === "manual") {
+      // While still pending: confirm as soon as the tee time has max_players active participants.
+      // Applies to every invite type (roster backups can leave invites in `pending` even when the group is full).
+      if (teeTime.status === "pending") {
         const participantCount = await this.getParticipantCount(teeTimeId);
         if (participantCount >= maxPlayers) {
-          logger.info(`FCFS/open tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`);
+          logger.info(
+            `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`,
+          );
           return this.updateStatus(teeTimeId, "confirmed");
         }
-        return null;
-      }
 
-      // Roster: confirm when no pending invites and at least one accepted
-      const { data: invites, error } = await supabaseAdmin
-        .from("invites")
-        .select("status")
-        .eq("tee_time_id", teeTimeId);
+        const inviteType = teeTime.invite_type || "roster";
 
-      if (error) throw error;
+        // Parallel flows: no other auto-confirm until full (handled above).
+        if (inviteType === "fcfs" || inviteType === "open" || inviteType === "manual") {
+          return null;
+        }
 
-      const pendingCount = invites.filter((i) => i.status === "pending").length;
-      const acceptedCount = invites.filter(
-        (i) => i.status === "accepted",
-      ).length;
+        // Roster: confirm when no pending invites and at least one accepted (partial group, legacy behavior)
+        const { data: invites, error } = await supabaseAdmin
+          .from("invites")
+          .select("status")
+          .eq("tee_time_id", teeTimeId);
 
-      if (pendingCount === 0 && acceptedCount > 0) {
-        return this.updateStatus(teeTimeId, "confirmed");
+        if (error) throw error;
+
+        const pendingCount = invites.filter((i) => i.status === "pending").length;
+        const acceptedCount = invites.filter(
+          (i) => i.status === "accepted",
+        ).length;
+
+        if (pendingCount === 0 && acceptedCount > 0) {
+          return this.updateStatus(teeTimeId, "confirmed");
+        }
       }
 
       return null;

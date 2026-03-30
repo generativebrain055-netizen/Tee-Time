@@ -109,7 +109,7 @@ export default function NotificationsScreen({ navigation }: any) {
             }
         }
         const dataType = (item.data as Record<string, unknown> | undefined)?.type;
-        if (dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled") {
+        if (dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled" || dataType === "organizer_invite_more") {
             const d = item.data as Record<string, unknown> | undefined;
             if (d?.teeTimeId) {
                 navigation?.navigate("SelectOnDeck", {
@@ -343,7 +343,8 @@ export default function NotificationsScreen({ navigation }: any) {
                        t === 'spot_opened' ||
                        t === 'roster_add' ||
                        t === 'organizer_fill_warning' ||
-                       t === 'tee_time_not_filled';
+                       t === 'tee_time_not_filled' ||
+                       t === 'organizer_invite_more';
             });
         } else {
             // Activity tab: responses, social/roster activity, reminders, and other non-invite notices
@@ -382,7 +383,7 @@ export default function NotificationsScreen({ navigation }: any) {
             else if (type === 'friend_request') title = 'Friend Requests';
             else if (type === 'spot_opened') title = 'Spot Opened';
             else if (type === 'roster_add') title = 'Roster Adds';
-            else if (type === 'organizer_fill_warning' || type === 'tee_time_not_filled') title = 'Unfilled Slot Alerts';
+            else if (type === 'organizer_fill_warning' || type === 'tee_time_not_filled' || type === 'organizer_invite_more') title = 'Unfilled Slot Alerts';
             else if (type === 'tee_time_response') title = 'Invite Responses';
             else if (type === 'group_invite_accepted') title = 'Group Invitations';
             else if (type === 'waiver_wire') title = 'Waiver Wire Posts';
@@ -619,7 +620,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const renderNotificationItem = (item: AppNotification) => {
         const dataType = (item.data as Record<string, unknown> | undefined)?.type as string | undefined;
         const d = item.data as Record<string, unknown> | undefined;
-        const isUnfilledSlotAlert = dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled";
+        const isUnfilledSlotAlert = dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled" || dataType === "organizer_invite_more";
         const isFriendRequest = dataType === "friend_request" || item.type.includes("friend_request");
         const isGroupInvite = dataType === "group_invite";
         const isRosterAdd = dataType === "roster_add";
@@ -975,7 +976,7 @@ export default function NotificationsScreen({ navigation }: any) {
         const t = getDataType(n);
         return !n.isRead && (
             t === "tee_time_invite" || t === "friend_request" || t === "spot_opened" ||
-            t === "roster_add" || t === "organizer_fill_warning" || t === "tee_time_not_filled"
+            t === "roster_add" || t === "organizer_fill_warning" || t === "tee_time_not_filled" || t === "organizer_invite_more"
         );
     }).length;
 

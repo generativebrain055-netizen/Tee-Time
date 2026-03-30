@@ -9,6 +9,7 @@ const inviteRepository = require("../repositories/inviteRepository");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const rosterRepository = require("../repositories/rosterRepository");
 const notificationService = require("./notificationService");
+const organizerPipelineNudgeService = require("./organizerPipelineNudgeService");
 const logger = require("../config/logger");
 const { sendInviteSms } = require("../controllers/invite/smsService");
 const { INVITE_TYPES } = require("../controllers/invite/constants");
@@ -191,23 +192,9 @@ class InviteManagementService {
    * Check if roster is exhausted and notify organizer to use On-Deck
    */
   async checkAndNotifyRosterExhausted(teeTime) {
-    const participantCount = await teeTimeRepository.getParticipantCount(teeTime.id);
-    const spotsRemaining = teeTime.max_players - participantCount;
-
-    if (spotsRemaining > 0) {
-      // Check if there are any pending invites left
-      const inviteStatus = await inviteRepository.checkAllInvitesResponded(teeTime.id);
-      
-      if (inviteStatus.pendingCount === 0) {
-        // Roster exhausted - notify organizer
-        await notificationService.notifyRosterExhausted(
-          teeTime.creator_id,
-          teeTime,
-          spotsRemaining
-        );
-        logger.info(`Notified organizer ${teeTime.creator_id} about roster exhaustion for tee time ${teeTime.id}`);
-      }
-    }
+    await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(
+      teeTime.id
+    );
   }
 
   /**
@@ -272,6 +259,9 @@ class InviteManagementService {
       }
 
       logger.info(`Sent ${createdInvites.length} On-Deck FCFS invites for tee time ${teeTimeId}`);
+      await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(
+        teeTimeId
+      );
       return createdInvites;
     } catch (error) {
       logger.error("Send On-Deck invites error:", error);
@@ -322,16 +312,9 @@ class InviteManagementService {
         if (teeTime.invite_type === 'roster') {
           await this.handleRosterCancellation(teeTime);
         } else if (teeTime.invite_type === 'fcfs' || teeTime.invite_type === 'manual') {
-          const participantCount = await teeTimeRepository.getParticipantCount(teeTimeId);
-          const spotsRemaining = teeTime.max_players - participantCount;
-
-          if (spotsRemaining > 0) {
-            await notificationService.notifyTeeTimeNotFilled(
-              teeTime.creator_id,
-              teeTime,
-              spotsRemaining
-            );
-          }
+          await organizerPipelineNudgeService.maybeNotifyOrganizerInsufficientPipeline(
+            teeTimeId
+          );
         }
       }
 

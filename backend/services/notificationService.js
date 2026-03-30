@@ -794,6 +794,41 @@ class NotificationService {
   }
 
   /**
+   * Not enough players in the invite pipeline to fill open spots — prompt organizer to invite more.
+   */
+  async notifyOrganizerInviteMorePlayers(
+    organizerId,
+    teeTime,
+    spotsRemaining,
+    pipelineCount
+  ) {
+    const teeDateStr = teeTime.tee_date
+      ? this.formatDateForNotification(teeTime.tee_date)
+      : "";
+    const teeTimeStr =
+      teeTime.tee_time != null ? String(teeTime.tee_time).slice(0, 5) : "";
+    const spotWord = spotsRemaining === 1 ? "spot" : "spots";
+    const pipeWord = pipelineCount === 1 ? "invite" : "invites";
+    return this.createNotification({
+      userId: organizerId,
+      title: "Invite more players",
+      body: `Your tee time at ${teeTime.course_name} still has ${spotsRemaining} open ${spotWord}, but only ${pipelineCount} active ${pipeWord} can fill them. Add players from your roster or On-Deck.`,
+      data: {
+        type: "organizer_invite_more",
+        teeTimeId: teeTime.id,
+        courseName: teeTime.course_name,
+        teeDate: teeDateStr,
+        teeTime: teeTimeStr,
+        spotsRemaining,
+        pipelineCount,
+        action: "INVITE_MORE",
+        unfilledSlotAlert: true,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
    * Helper to format date for notifications
    * Uses UTC methods to avoid timezone shift with PostgreSQL DATE type
    */

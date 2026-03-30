@@ -295,6 +295,7 @@ export function getNotificationNavigation(item: AppNotification): {
     case "roster_exhausted":
     case "tee_time_not_filled":
     case "organizer_fill_warning":
+    case "organizer_invite_more":
       return item.data?.teeTimeId
         ? {
             screen: "SelectOnDeck",
@@ -302,6 +303,9 @@ export function getNotificationNavigation(item: AppNotification): {
               teeTimeId: item.data.teeTimeId,
               spotsRemaining: item.data.spotsRemaining || 1,
               courseName: item.data.courseName,
+              teeDate: item.data.teeDate,
+              teeTime: item.data.teeTime,
+              unfilledSlotAlert: true,
             },
           }
         : { screen: null };

@@ -82,6 +82,7 @@ export function useNotificationActions({
         case "roster_exhausted":
         case "tee_time_not_filled":
         case "organizer_fill_warning":
+        case "organizer_invite_more":
           if (item.data?.teeTimeId) {
             navigation?.navigate("SelectOnDeck", {
               teeTimeId: item.data.teeTimeId,
@@ -89,7 +90,11 @@ export function useNotificationActions({
               courseName: item.data.courseName,
               teeDate: item.data.teeDate,
               teeTime: item.data.teeTime,
-              unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (item.data?.type === "tee_time_not_filled" || item.data?.type === "organizer_fill_warning")),
+              unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (
+                item.data?.type === "tee_time_not_filled" ||
+                item.data?.type === "organizer_fill_warning" ||
+                item.data?.type === "organizer_invite_more"
+              )),
             });
           }
           break;
@@ -246,7 +251,11 @@ export function useNotificationActions({
           courseName: item.data?.courseName,
           teeDate: item.data?.teeDate,
           teeTime: item.data?.teeTime,
-          unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (item.data?.type === "tee_time_not_filled" || item.data?.type === "organizer_fill_warning")),
+          unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (
+            item.data?.type === "tee_time_not_filled" ||
+            item.data?.type === "organizer_fill_warning" ||
+            item.data?.type === "organizer_invite_more"
+          )),
         });
       } catch (error) {
         logger.error("[useNotificationActions] Error selecting on-deck", error);

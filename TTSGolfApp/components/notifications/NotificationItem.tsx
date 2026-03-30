@@ -51,6 +51,7 @@ function getNotificationIcon(type: string | undefined) {
     case "roster_exhausted":
     case "tee_time_not_filled":
     case "organizer_fill_warning":
+    case "organizer_invite_more":
       return <Calendar size={20} color={COLORS.error || "#EF4444"} />;
     case "no_show":
       return <Bell size={20} color={COLORS.error || "#EF4444"} />;
@@ -76,7 +77,8 @@ export const NotificationItem = memo(function NotificationItem({
   const isRosterExhausted =
     notifType === "roster_exhausted" ||
     notifType === "tee_time_not_filled" ||
-    notifType === "organizer_fill_warning";
+    notifType === "organizer_fill_warning" ||
+    notifType === "organizer_invite_more";
 
   const isFriendRequestActionable =
     isFriendRequest && item.data?.requestId && !item.data?.responded;

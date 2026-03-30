@@ -12,7 +12,7 @@ import {
     RefreshControl,
     Image,
 } from "react-native";
-import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck, Check } from "lucide-react-native";
+import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck, Check, UserPlus } from "lucide-react-native";
 import { teeTimeApi, attendanceApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { TeeTimeConfirmSheet } from "../ui/sheets/TeeTimeConfirmSheet";
@@ -44,6 +44,8 @@ interface Participant {
     isCreator: boolean;
     expiresAt?: string;
     inviteId?: string; // For skip functionality
+    /** True when this row came from tee_time_participants with status cancelled (left after joining). */
+    fromParticipationRecord?: boolean;
 }
 
 /** Match API tee time status regardless of casing / whitespace */
@@ -51,6 +53,14 @@ function normalizeTeeDetailStatus(status: string | undefined | null): string {
     return String(status ?? "")
         .toLowerCase()
         .trim();
+}
+
+/** Profile URL from API, or generated initials avatar when none (invitees without user profile, etc.). */
+function resolveMemberAvatarUri(name: string, avatar?: string | null): string {
+    const trimmed = typeof avatar === "string" ? avatar.trim() : "";
+    if (trimmed) return trimmed;
+    const label = (name || "?").trim() || "?";
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&size=128&background=F3F4F6&color=374151&bold=true`;
 }
 
 interface Invite {
@@ -166,14 +176,19 @@ function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
     return true;
 }
 
-const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, onSkip, canSkip }: { 
+const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, isActiveInvitedSlot, onSkip, canSkip, parallelInviteFlow }: { 
     participant: Participant; 
     showTimeLeft?: boolean;
     calculateTimeLeft?: (expiresAt: string) => string | null;
     isInAwaitingGroup?: boolean;
+    /** FCFS / parallel: front-of-line invite with active deadline (highlight row + avatar ring + timer). */
+    isActiveInvitedSlot?: boolean;
     onSkip?: (inviteId: string) => void;
     canSkip?: boolean;
+    /** FCFS / manual / open use “Invited”; roster uses “Queued” when a deadline applies. */
+    parallelInviteFlow?: boolean;
 }) => {
+    const parallelFlow = parallelInviteFlow !== false;
     const getStatusConfig = () => {
         // Check if expired (by status or by time)
         const isExpiredByTime = participant.expiresAt && calculateTimeLeft && !calculateTimeLeft(participant.expiresAt);
@@ -195,8 +210,14 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
                 if (!participant.expiresAt) {
                     return { color: 'text-gray-600', text: 'Queued', showBadge: false, badgeIcon: null, showArrow: false };
                 }
-                // FCFS / manual parallel pending — arrow + “Invited”
-                return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
+                // Parallel: “Invited”. Roster with a deadline: “Queued” (arrow + timer when active).
+                return {
+                    color: 'text-gray-600',
+                    text: parallelFlow ? 'Invited' : 'Queued',
+                    showBadge: false,
+                    badgeIcon: null,
+                    showArrow: true,
+                };
             case 'invited':
                 return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
             case 'waitlist':
@@ -214,31 +235,28 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
     const timeLeft = showTimeLeft && participant.expiresAt && calculateTimeLeft ? 
                      calculateTimeLeft(participant.expiresAt) : null;
 
+    const highlightRow = !!isInAwaitingGroup || !!isActiveInvitedSlot;
+    const highlightAvatarRing = !!isInAwaitingGroup || !!isActiveInvitedSlot;
+    const avatarRingStyle = highlightAvatarRing
+        ? { borderWidth: 2, borderColor: "#5EBC68" as const }
+        : {};
+    const avatarUri = resolveMemberAvatarUri(participant.name, participant.avatar);
+
     return (
-        <View className={`flex-row items-center py-4 px-5 border-b border-gray-200 ${isInAwaitingGroup ? 'bg-green-50' : 'bg-white'}`}>
+        <View className={`flex-row items-center py-4 px-5 border-b border-gray-200 ${highlightRow ? 'bg-green-50' : 'bg-white'}`}>
             {statusConfig.showArrow && (
-                <View className="mr-3.5">
-                    <Text className="font-jakarta-bold text-2xl text-gray-900 leading-7">
-                        →
-                    </Text>
+                <View className="mr-2 justify-center">
+                    <ChevronRight size={22} color="#111827" strokeWidth={2.5} />
                 </View>
             )}
             
             {/* Avatar with Status Badge */}
             <View className="relative mr-3.5">
-                {participant.avatar ? (
-                    <Image 
-                        source={{ uri: participant.avatar }} 
-                        className="w-14 h-14 rounded-full"
-                        style={{ borderRadius: 28 }}
-                    />
-                ) : (
-                    <View className="w-14 h-14 rounded-full bg-gray-300 items-center justify-center">
-                        <Text className="font-jakarta-semibold text-lg text-gray-600">
-                            {participant.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                        </Text>
-                    </View>
-                )}
+                <Image
+                    source={{ uri: avatarUri }}
+                    className="w-14 h-14 rounded-full"
+                    style={{ borderRadius: 28, ...avatarRingStyle }}
+                />
                 {statusConfig.showBadge && (
                     <View className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full ${
                         statusConfig.badgeIcon === 'check' ? 'bg-primary' : 
@@ -296,7 +314,7 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
     );
 });
 
-/** Backup & declined — declined, expired (not active roster invitees) */
+/** Backup section rows — e.g. stale parallel invites (`pending`) not shown in main list */
 const BackupDeclinedRow = memo(
     ({
         participant,
@@ -316,28 +334,16 @@ const BackupDeclinedRow = memo(
         const isDeclined = participant.status === 'declined';
         const label = isDeclined ? 'Declined' : isExpiredLike ? 'Expired' : 'Backup';
         const showDeclineBadge = isDeclined;
+        const avatarUri = resolveMemberAvatarUri(participant.name, participant.avatar);
 
         return (
             <View className="flex-row items-center py-4 px-5 border-b border-gray-200 bg-white">
                 <View className="relative mr-3.5">
-                    {participant.avatar ? (
-                        <Image
-                            source={{ uri: participant.avatar }}
-                            className="w-14 h-14 rounded-full"
-                            style={{ borderRadius: 28 }}
-                        />
-                    ) : (
-                        <View className="w-14 h-14 rounded-full bg-gray-300 items-center justify-center">
-                            <Text className="font-jakarta-semibold text-lg text-gray-600">
-                                {participant.name
-                                    .split(' ')
-                                    .map((n) => n[0])
-                                    .join('')
-                                    .toUpperCase()
-                                    .slice(0, 2)}
-                            </Text>
-                        </View>
-                    )}
+                    <Image
+                        source={{ uri: avatarUri }}
+                        className="w-14 h-14 rounded-full"
+                        style={{ borderRadius: 28 }}
+                    />
                     {showDeclineBadge && (
                         <View className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-error items-center justify-center border-2 border-white">
                             <Text className="text-white font-jakarta-bold text-xs">✕</Text>
@@ -448,6 +454,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                 avatar: p.avatar,
                                 status: 'cancelled',
                                 isCreator: p.isCreator || false,
+                                fromParticipationRecord: true,
                             });
                         }
                     });
@@ -469,7 +476,10 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         if (userId && acceptedPlayingUserIds.has(userId)) {
                             return;
                         }
-                        
+                        if (userId && seenUserIds.has(userId)) {
+                            return;
+                        }
+
                         // Check if invite is expired (either by status or by time)
                         const isExpiredByTime = invite.expiresAt && new Date(invite.expiresAt) < new Date();
                         const isExpired = invite.status === 'expired' || isExpiredByTime;
@@ -510,6 +520,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             expiresAt: invite.expiresAt,
                             inviteId: invite.id, // Store invite ID for skip functionality
                         });
+                        if (userId) seenUserIds.add(userId);
                     });
                 }
                 
@@ -730,7 +741,16 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     }
 
     const acceptedParticipants = teeTime.participants.filter(p => p.status === 'accepted');
-    const cancelledMembers = teeTime.participants.filter(p => p.status === 'cancelled');
+    const showExpandedBackupAndCancelled =
+        normalizedTeeStatus === 'confirmed' ||
+        normalizedTeeStatus === 'completed' ||
+        normalizedTeeStatus === 'cancelled' ||
+        normalizedTeeStatus === 'canceled';
+    const cancelledMembers = teeTime.participants.filter(p => {
+        if (p.status !== 'cancelled') return false;
+        if (showExpandedBackupAndCancelled) return true;
+        return p.fromParticipationRecord === true;
+    });
     const pendingParticipants = teeTime.participants.filter(p => p.status === 'pending');
     const declinedParticipants = teeTime.participants.filter(p => p.status === 'declined');
     const expiredParticipants = teeTime.participants.filter(p => p.status === 'expired');
@@ -741,11 +761,36 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         teeTime.inviteType === 'fcfs' ||
         teeTime.inviteType === 'manual' ||
         teeTime.inviteType === 'open';
-    // Roster: awaiting (pending + deadline) and queued (backup, no deadline) render in the main list.
-    // “Backup & declined” is only real backups/problems — not active roster invitees.
-    const backupDeclinedList = parallelInviteDetail
-        ? [...expiredParticipants, ...pendingParticipants]
-        : [...declinedParticipants, ...expiredParticipants];
+
+    /** Confirmed / completed / cancelled (tee) with every spot filled: main list = accepted only; accordion = everyone else (Figma). */
+    const useFilledConfirmedMemberLayout =
+        showExpandedBackupAndCancelled &&
+        teeTime.slotsOpen === 0 &&
+        normalizedTeeStatus !== 'pending' &&
+        normalizedTeeStatus !== 'in_progress';
+
+    const backupDeclinedList = useFilledConfirmedMemberLayout
+        ? [
+              ...declinedParticipants,
+              ...expiredParticipants,
+              ...queuedParticipants,
+              ...(parallelInviteDetail ? pendingParticipants : []),
+          ]
+        : parallelInviteDetail && showExpandedBackupAndCancelled
+          ? [...pendingParticipants]
+          : [];
+
+    const firstQueuedWithDeadlineIdx = queuedParticipants.findIndex(
+        (q) => q.expiresAt && calculateTimeLeft?.(q.expiresAt),
+    );
+
+    const showInviteMoreMembers =
+        isOrganizer &&
+        teeTime.slotsOpen > 0 &&
+        (normalizedTeeStatus === "in_progress" ||
+            (normalizedTeeStatus === "pending" &&
+                pendingParticipants.length === 0 &&
+                queuedParticipants.length === 0));
 
     const formatDate = (dateStr: string) => {
         // Parse YYYY-MM-DD as local date (not UTC) to avoid day-shift bugs.
@@ -872,52 +917,79 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
 
                 {/* Participants List */}
                 <View className="bg-white">
-                    {/* Accepted participants */}
-                    {acceptedParticipants.map(p => (
-                        <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
+                    {/* Accepted — always first */}
+                    {acceptedParticipants.map((p) => (
+                        <ParticipantRow
+                            key={p.id}
+                            participant={p}
+                            calculateTimeLeft={calculateTimeLeft}
+                            parallelInviteFlow={parallelInviteDetail}
+                        />
                     ))}
 
-                    {/* FCFS / parallel: declined in main flow (same row style as reference) */}
-                    {parallelInviteDetail &&
-                        declinedParticipants.map((p) => (
-                            <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
-                        ))}
+                    {/* Pending / in-progress / confirmed with open spots: single scroll (declined inline, pipeline below) */}
+                    {!useFilledConfirmedMemberLayout && (
+                        <>
+                            {declinedParticipants.map((p) => (
+                                <ParticipantRow
+                                    key={p.id}
+                                    participant={p}
+                                    calculateTimeLeft={calculateTimeLeft}
+                                    parallelInviteFlow={parallelInviteDetail}
+                                />
+                            ))}
+                            {expiredParticipants.map((p) => (
+                                <ParticipantRow
+                                    key={p.id}
+                                    participant={p}
+                                    calculateTimeLeft={calculateTimeLeft}
+                                    showTimeLeft={!!p.expiresAt}
+                                    parallelInviteFlow={parallelInviteDetail}
+                                />
+                            ))}
 
-                    {/* FCFS / parallel: still-invited members — continuous list, label “Invited” */}
-                    {parallelInviteDetail &&
-                        queuedParticipants.map((p) => (
-                            <ParticipantRow
-                                key={p.id}
-                                participant={p}
-                                calculateTimeLeft={calculateTimeLeft}
-                                showTimeLeft={!!p.expiresAt}
-                            />
-                        ))}
+                            {parallelInviteDetail &&
+                                queuedParticipants.map((p, i) => (
+                                    <ParticipantRow
+                                        key={p.id}
+                                        participant={p}
+                                        calculateTimeLeft={calculateTimeLeft}
+                                        showTimeLeft={!!p.expiresAt}
+                                        isActiveInvitedSlot={
+                                            i === firstQueuedWithDeadlineIdx && firstQueuedWithDeadlineIdx >= 0
+                                        }
+                                        parallelInviteFlow
+                                    />
+                                ))}
 
-                    {/* Roster: awaiting response (n−1 active invites) then queued backups */}
-                    {!parallelInviteDetail &&
-                        pendingParticipants.map((p) => (
-                            <ParticipantRow
-                                key={p.id}
-                                participant={p}
-                                calculateTimeLeft={calculateTimeLeft}
-                                showTimeLeft={!!p.expiresAt}
-                                isInAwaitingGroup
-                                canSkip={isOrganizer}
-                                onSkip={handleSkipInvite}
-                            />
-                        ))}
-                    {!parallelInviteDetail &&
-                        queuedParticipants.map((p) => (
-                            <ParticipantRow
-                                key={p.id}
-                                participant={p}
-                                calculateTimeLeft={calculateTimeLeft}
-                                showTimeLeft={!!p.expiresAt}
-                            />
-                        ))}
-
-                    {/* Roster-style: declined remains under Backup & declined only */}
+                            {!parallelInviteDetail &&
+                                pendingParticipants.map((p) => (
+                                    <ParticipantRow
+                                        key={p.id}
+                                        participant={p}
+                                        calculateTimeLeft={calculateTimeLeft}
+                                        showTimeLeft={!!p.expiresAt}
+                                        isInAwaitingGroup
+                                        canSkip={isOrganizer}
+                                        onSkip={handleSkipInvite}
+                                        parallelInviteFlow={false}
+                                    />
+                                ))}
+                            {!parallelInviteDetail &&
+                                queuedParticipants.map((p, i) => (
+                                    <ParticipantRow
+                                        key={p.id}
+                                        participant={p}
+                                        calculateTimeLeft={calculateTimeLeft}
+                                        showTimeLeft={!!p.expiresAt}
+                                        isActiveInvitedSlot={
+                                            i === firstQueuedWithDeadlineIdx && firstQueuedWithDeadlineIdx >= 0
+                                        }
+                                        parallelInviteFlow={false}
+                                    />
+                                ))}
+                        </>
+                    )}
 
                     {/* Left / cancelled after accepting */}
                     {cancelledMembers.length > 0 && (
@@ -938,15 +1010,20 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                 />
                             </TouchableOpacity>
                             {showCancelledMembers &&
-                                cancelledMembers.map(p => (
-                                    <ParticipantRow key={p.id} participant={p} calculateTimeLeft={calculateTimeLeft} />
+                                cancelledMembers.map((p) => (
+                                    <ParticipantRow
+                                        key={p.id}
+                                        participant={p}
+                                        calculateTimeLeft={calculateTimeLeft}
+                                        parallelInviteFlow={parallelInviteDetail}
+                                    />
                                 ))}
                         </>
                     )}
                 </View>
 
-                {/* Backup & declined — roster backups, expired, and declined */}
-                {backupDeclinedList.length > 0 && (
+                {/* Backup & declined — full group (confirmed/completed/cancelled + all slots filled); hidden in progress */}
+                {backupDeclinedList.length > 0 && normalizedTeeStatus !== 'in_progress' && (
                     <>
                         <View className="h-2.5 bg-gray-50" />
                         <View className="bg-white">
@@ -982,10 +1059,33 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 {/* Action Buttons */}
                 {(canShowCheckParticipantStatus ||
                     showOrganizerCancelTeeTimeCta ||
-                    showLeaveTeeTimeButton) && (
+                    showLeaveTeeTimeButton ||
+                    showInviteMoreMembers) && (
                     <>
                         <View className="h-2.5 bg-gray-50" />
                         <View className="bg-white px-6 py-5">
+                            {showInviteMoreMembers && (
+                                <TouchableOpacity
+                                    className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"
+                                    style={{ backgroundColor: "#5EBC68", borderWidth: 0 }}
+                                    onPress={() =>
+                                        navigation?.navigate("SelectOnDeck", {
+                                            teeTimeId,
+                                            spotsRemaining: teeTime.slotsOpen,
+                                            courseName: teeTime.courseName,
+                                            teeDate: teeTime.teeDate,
+                                            teeTime: teeTime.teeTime,
+                                            unfilledSlotAlert: true,
+                                        })
+                                    }
+                                    activeOpacity={0.7}
+                                >
+                                    <UserPlus size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                    <Text className="font-jakarta-semibold text-base text-white">
+                                        Invite more members
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
                             {canShowCheckParticipantStatus && (
                                 <TouchableOpacity
                                     className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"

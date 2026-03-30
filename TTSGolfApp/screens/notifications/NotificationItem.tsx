@@ -69,6 +69,7 @@ const getNotificationIcon = (notifType?: string) => {
     case "roster_exhausted":
     case "tee_time_not_filled":
     case "organizer_fill_warning":
+    case "organizer_invite_more":
       return <Calendar size={20} color={COLORS.error || "#EF4444"} />;
     case "no_show":
       return <Bell size={20} color={COLORS.error || "#EF4444"} />;
@@ -138,7 +139,7 @@ export const NotificationItem = memo(
     const isSpotOpened = notifType === "spot_opened";
     const isRosterAdd = notifType === "roster_add";
     const isUnfilledSlotAlert =
-      notifType === "tee_time_not_filled" || notifType === "organizer_fill_warning";
+      notifType === "tee_time_not_filled" || notifType === "organizer_fill_warning" || notifType === "organizer_invite_more";
     const isRosterExhausted =
       notifType === "roster_exhausted" || isUnfilledSlotAlert;
 

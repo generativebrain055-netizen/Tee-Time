@@ -420,6 +420,8 @@ class TeeTimeController {
         false
       );
 
+      await teeTimeRepository.checkAndUpdateStatus(teeTimeId);
+
       res.json({
         success: true,
         message: "Successfully joined the tee time!",
