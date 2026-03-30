@@ -191,7 +191,11 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
             case 'pending':
                 return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'queued':
-                // FCFS / parallel pending — match design: arrow + “Invited” (lighter grey)
+                // Roster backups: no deadline yet — match design (white row, “Queued”, no arrow)
+                if (!participant.expiresAt) {
+                    return { color: 'text-gray-600', text: 'Queued', showBadge: false, badgeIcon: null, showArrow: false };
+                }
+                // FCFS / manual parallel pending — arrow + “Invited”
                 return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
             case 'invited':
                 return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
@@ -292,7 +296,7 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
     );
 });
 
-/** Backup & declined list — declined (badge), expired, awaiting roster / backup */
+/** Backup & declined — declined, expired (not active roster invitees) */
 const BackupDeclinedRow = memo(
     ({
         participant,
@@ -481,8 +485,17 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             derivedStatus = 'expired';
                         } else if (invite.status === 'waitlist') {
                             derivedStatus = 'waitlist';
-                        } else if (parallelInvite && invite.status === 'pending') {
-                            derivedStatus = 'queued';
+                        } else if (invite.status === 'pending') {
+                            if (parallelInvite) {
+                                // FCFS / manual / open: everyone notified in parallel
+                                derivedStatus = 'queued';
+                            } else if (data.inviteType === 'roster' && !invite.expiresAt) {
+                                // Roster backup wave: row exists but not notified yet (no deadline)
+                                derivedStatus = 'queued';
+                            } else {
+                                // Roster initial wave (or activated backup): awaiting response
+                                derivedStatus = 'pending';
+                            }
                         } else {
                             derivedStatus = 'pending';
                         }
@@ -728,10 +741,11 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         teeTime.inviteType === 'fcfs' ||
         teeTime.inviteType === 'manual' ||
         teeTime.inviteType === 'open';
-    // Roster: declined lives under “Backup & declined”. FCFS/manual/open: declined + invited in main list (see mock).
+    // Roster: awaiting (pending + deadline) and queued (backup, no deadline) render in the main list.
+    // “Backup & declined” is only real backups/problems — not active roster invitees.
     const backupDeclinedList = parallelInviteDetail
         ? [...expiredParticipants, ...pendingParticipants]
-        : [...declinedParticipants, ...expiredParticipants, ...pendingParticipants];
+        : [...declinedParticipants, ...expiredParticipants];
 
     const formatDate = (dateStr: string) => {
         // Parse YYYY-MM-DD as local date (not UTC) to avoid day-shift bugs.
@@ -823,10 +837,10 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                 </Text>
                             )}
                             {teeTime.slotsOpen > 0 &&
-                                pendingParticipants.length > 0 &&
+                                (pendingParticipants.length > 0 || queuedParticipants.length > 0) &&
                                 teeTime.inviteType === 'roster' && (
                                 <Text className="font-jakarta text-xs text-gray-400 mt-1 leading-5">
-                                    (Active and backup invites below)
+                                    Awaiting response and queued invites are listed below.
                                 </Text>
                             )}
                         </View>
@@ -871,6 +885,29 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
 
                     {/* FCFS / parallel: still-invited members — continuous list, label “Invited” */}
                     {parallelInviteDetail &&
+                        queuedParticipants.map((p) => (
+                            <ParticipantRow
+                                key={p.id}
+                                participant={p}
+                                calculateTimeLeft={calculateTimeLeft}
+                                showTimeLeft={!!p.expiresAt}
+                            />
+                        ))}
+
+                    {/* Roster: awaiting response (n−1 active invites) then queued backups */}
+                    {!parallelInviteDetail &&
+                        pendingParticipants.map((p) => (
+                            <ParticipantRow
+                                key={p.id}
+                                participant={p}
+                                calculateTimeLeft={calculateTimeLeft}
+                                showTimeLeft={!!p.expiresAt}
+                                isInAwaitingGroup
+                                canSkip={isOrganizer}
+                                onSkip={handleSkipInvite}
+                            />
+                        ))}
+                    {!parallelInviteDetail &&
                         queuedParticipants.map((p) => (
                             <ParticipantRow
                                 key={p.id}
