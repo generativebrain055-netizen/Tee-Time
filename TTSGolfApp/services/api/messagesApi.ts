@@ -15,6 +15,8 @@ export interface ConversationListItem {
   title: string;
   subtitle: string;
   avatarUrl?: string | null;
+  /** Roster group color (hex) when type is group */
+  groupColor?: string | null;
   otherUserId?: string | null;
   participantInitials?: string | null;
   participantAvatars?: string[];

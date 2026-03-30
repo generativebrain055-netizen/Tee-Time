@@ -17,8 +17,14 @@ const BADGE_SIZE = FIGMA.headerGroupStackBadgeSize ?? 22;
 
 export const ChatHeader = memo(({ chatInfo, onBack, onMenuPress }: ChatHeaderProps) => {
   const insets = useSafeAreaInsets();
+  const isRosterGroupChat = !!chatInfo.groupId && !chatInfo.teeTimeId;
+  const groupPhotoUri =
+    isRosterGroupChat && chatInfo.img && String(chatInfo.img).trim()
+      ? String(chatInfo.img).trim()
+      : null;
   const isExpandedGroup =
     chatInfo.isGroup &&
+    !groupPhotoUri &&
     (chatInfo.participantCount != null || (chatInfo.participantAvatars?.length ?? 0) > 0);
   const avatars = chatInfo.participantAvatars ?? [];
   const count = chatInfo.participantCount ?? Math.max(avatars.length + 1, 2);
@@ -47,7 +53,9 @@ export const ChatHeader = memo(({ chatInfo, onBack, onMenuPress }: ChatHeaderPro
         >
           <View style={styles.avatarWrap}>
             {chatInfo.isGroup ? (
-              isExpandedGroup ? (
+              groupPhotoUri ? (
+                <Image source={{ uri: groupPhotoUri }} style={styles.avatar} />
+              ) : isExpandedGroup ? (
                 <View style={[styles.groupStack, { width: GROUP_STACK_SIZE, height: GROUP_STACK_SIZE }]}>
                   {avatars.length >= 1 ? (
                     <Image source={{ uri: avatars[0] }} style={[styles.groupStackCircle, styles.groupStackFirst]} />

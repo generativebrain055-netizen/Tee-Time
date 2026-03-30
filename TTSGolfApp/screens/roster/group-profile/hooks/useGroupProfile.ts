@@ -155,7 +155,7 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
                     id: group.id,
                     name: group.name,
                     subtitle: `${otherMembers} members`,
-                    img: undefined,
+                    img: group.avatar ?? group.icon ?? undefined,
                     isGroup: true,
                     participantCount: totalIncludingSelf,
                 },

@@ -231,6 +231,8 @@ async function getConversationMeta(conv, userId, lastMessage) {
   let participantInitials = null;
   let participantAvatars = [];
   let participantCount = null;
+  /** Roster group color (hex) for list / header when no group photo */
+  let groupColor = null;
 
   if (conv.type === "direct") {
     const { data: participants } = await supabaseAdmin
@@ -300,13 +302,16 @@ async function getConversationMeta(conv, userId, lastMessage) {
   if (conv.type === "group" && conv.roster_group_id) {
     const { data: rg } = await supabaseAdmin
       .from("roster_groups")
-      .select("name, color, user_id")
+      .select("name, color, user_id, icon")
       .eq("id", conv.roster_group_id)
       .single();
     if (rg) {
       title = rg.name;
       subtitle = "Group";
       participantInitials = (rg.name || "G").slice(0, 2).toUpperCase();
+      const rawIcon = rg.icon != null ? String(rg.icon).trim() : "";
+      avatarUrl = rawIcon || null;
+      groupColor = rg.color && String(rg.color).trim() ? String(rg.color).trim() : null;
     }
     // Group participant avatars for list/header (Figma 1379-5818, 1269-2492)
     const gRosterIds = await rosterRepository.collectRosterIdsForGroupMembership(
@@ -359,6 +364,7 @@ async function getConversationMeta(conv, userId, lastMessage) {
     participantAvatars,
     participantCount,
     lastMessagePreview,
+    groupColor,
   };
 }
 

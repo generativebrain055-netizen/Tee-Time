@@ -68,13 +68,19 @@ function mapToTeeTimeItem(c: ConversationListItem): TeeTimeConversationItem {
 function mapToGroupItem(c: ConversationListItem): GroupConversationItem {
   const avatars = c.participantAvatars ?? [];
   const count = c.participantCount ?? (avatars.length > 0 ? avatars.length + 1 : undefined);
+  const gc = c.groupColor?.trim();
+  const listColor =
+    gc && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(gc)
+      ? gc
+      : getAvatarColor(c.id);
   return {
     id: c.id,
     type: "group",
     groupId: c.roster_group_id ?? c.id,
     name: c.title,
+    avatar: c.avatarUrl?.trim() || undefined,
     initials: c.participantInitials ?? getInitials(c.title),
-    color: getAvatarColor(c.id),
+    color: listColor,
     lastMessage: c.lastMessage?.body ?? "No messages yet",
     lastMessageTime: c.lastMessage?.created_at ? formatRelativeTime(c.lastMessage.created_at) : "",
     unread: c.unreadCount ?? 0,
