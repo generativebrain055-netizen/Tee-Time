@@ -114,7 +114,7 @@ export function CreateYourAccountPage({
                 </Text>
                 <TextInput
                   className="h-14 bg-white rounded-md border border-gray-200 px-4 text-base text-gray-900"
-                  placeholder="e.g. Blake"
+                  placeholder="John"
                   placeholderTextColor="#9CA3AF"
                   value={firstName}
                   onChangeText={setFirstName}
@@ -132,7 +132,7 @@ export function CreateYourAccountPage({
                 <TextInput
                   ref={lastNameRef}
                   className="h-14 bg-white rounded-md border border-gray-200 px-4 text-base text-gray-900"
-                  placeholder="e.g. Hylen"
+                  placeholder="Smith"
                   placeholderTextColor="#9CA3AF"
                   value={lastName}
                   onChangeText={setLastName}

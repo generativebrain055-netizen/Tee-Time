@@ -247,7 +247,7 @@ export default function LoginScreen({ navigation }: Props) {
                       />
                       <TextInput
                         style={styles.textInput}
-                        placeholder="First name (optional)"
+                        placeholder="John"
                         placeholderTextColor="#9CA3AF"
                         value={firstName}
                         onChangeText={setFirstName}
@@ -255,7 +255,7 @@ export default function LoginScreen({ navigation }: Props) {
                       />
                       <TextInput
                         style={styles.textInput}
-                        placeholder="Last name (optional)"
+                        placeholder="Smith"
                         placeholderTextColor="#9CA3AF"
                         value={lastName}
                         onChangeText={setLastName}

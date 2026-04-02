@@ -463,7 +463,7 @@ export function OAuthOnboardingScreen({
                 <TextInput
                   ref={lastNameRef}
                   className="h-14 bg-gray-50 border border-gray-200 rounded-md px-4 text-base text-gray-900"
-                  placeholder="Doe"
+                  placeholder="Smith"
                   placeholderTextColor={COLORS.textPlaceholder}
                   value={lastName}
                   onChangeText={setLastName}

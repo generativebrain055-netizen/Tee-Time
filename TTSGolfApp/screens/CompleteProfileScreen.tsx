@@ -177,7 +177,7 @@ const CompleteProfileScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.label}>Last Name *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Doe"
+              placeholder="Smith"
               value={lastName}
               onChangeText={setLastName}
               autoCapitalize="words"
