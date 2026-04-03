@@ -2,8 +2,7 @@
  * Settings Screen (Figma 883-* Account + Profile Settings)
  * Main settings screen with account information and settings options
  */
-import React, { useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useEffect } from "react";
 import {
     View,
     Text,
@@ -39,12 +38,15 @@ export default function SettingsScreen({ navigation }: any) {
     const colors = useColors();
     const theme = useTheme();
 
-    // Refetch every time this screen comes into focus so displayed settings always reflect the DB
-    useFocusEffect(
-        useCallback(() => {
+    // Fetch on mount and re-fetch whenever the screen regains focus
+    useEffect(() => {
+        fetchProfile(true);
+        // navigation prop is available when inside a navigator; safe to skip otherwise
+        const unsubscribe = navigation?.addListener?.("focus", () => {
             fetchProfile(true);
-        }, [fetchProfile])
-    );
+        });
+        return unsubscribe;
+    }, [fetchProfile, navigation]);
 
 
 

@@ -741,6 +741,7 @@ const completeOAuthProfile = async (req, res, next) => {
     const updates = {};
     if (firstName) updates.firstName = firstName;
     if (lastName) updates.lastName = lastName;
+    if (email) updates.email = email;
     if (phoneNumber) updates.phoneNumber = phoneNumber;
     if (username) updates.username = username;
     if (handicap !== undefined) updates.handicap = handicap;
