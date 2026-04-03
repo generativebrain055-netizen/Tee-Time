@@ -83,12 +83,16 @@ router.put(
     body("accountSid").optional().isString(),
     body("authToken").optional().isString(),
     body("fromNumber").optional().isString(),
+    body("messagingServiceSid").optional().isString(),
     body("apiKeySid").optional().isString(),
     body("apiKeySecret").optional().isString(),
     body("verifyServiceSid").optional().isString(),
   ],
   adminController.updateTwilioSettings
 );
+
+// ---------- Twilio: clear Firestore credentials (fall back to .env) ----------
+router.delete("/settings/twilio", authenticateAdmin, adminController.clearTwilioSettings);
 
 // ---------- Twilio test (admin only; for testing/trial accounts) ----------
 router.post(

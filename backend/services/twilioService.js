@@ -6,19 +6,62 @@ const twilioConfigService = require("./twilioConfigService");
 
 /**
  * Twilio Service
- * Credentials: Firestore only (config/twilio). Manage via admin Settings page.
+ * Credentials: Firestore first (config/twilio), then .env TWILIO_* vars as fallback.
  * Handles OTP and SMS.
  */
 
 let cached = { credsKey: null, client: null, verify: null };
 
 /**
- * Get Twilio config from Firestore. No .env fallback; Twilio is managed in Firestore.
- * @returns {Promise<{ accountSid?: string, authToken?: string, fromNumber?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string }>}
+ * Build env-based credentials from process.env TWILIO_* variables.
+ */
+function getEnvCredentials() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() || undefined;
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() || undefined;
+  const fromNumber = process.env.TWILIO_FROM_NUMBER?.trim() || undefined;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() || undefined;
+  const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || undefined;
+  const apiKeySid = process.env.TWILIO_API_KEY_SID?.trim() || undefined;
+  const apiKeySecret = process.env.TWILIO_API_KEY_SECRET?.trim() || undefined;
+  return { accountSid, authToken, fromNumber, messagingServiceSid, verifyServiceSid, apiKeySid, apiKeySecret };
+}
+
+/**
+ * Returns true when a credentials object has enough to send SMS.
+ */
+function isUsableCreds(creds) {
+  if (!creds) return false;
+  if (!creds.accountSid?.startsWith("AC")) return false;
+  const hasAuth = !!(creds.authToken) || !!(creds.apiKeySid && creds.apiKeySecret);
+  const hasSender = !!(creds.fromNumber) || !!(creds.messagingServiceSid?.startsWith("MG"));
+  return hasAuth && hasSender;
+}
+
+/**
+ * Get Twilio credentials: Firestore first, .env TWILIO_* vars as fallback.
+ * @returns {Promise<{ accountSid?: string, authToken?: string, fromNumber?: string, messagingServiceSid?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string, _source?: 'firestore'|'env'|'none' }>}
  */
 async function getCredentials() {
   const fromFirestore = await twilioConfigService.getTwilioConfigFromFirestore();
-  return fromFirestore || {};
+  if (isUsableCreds(fromFirestore)) {
+    return { ...fromFirestore, _source: "firestore" };
+  }
+  // Firestore missing or incomplete — try .env
+  const envCreds = getEnvCredentials();
+  if (isUsableCreds(envCreds)) {
+    logger.debug("[TWILIO] Using credentials from .env (Firestore missing or incomplete)");
+    return { ...envCreds, _source: "env" };
+  }
+  // Return whatever Firestore had (may be partial) or empty
+  return { ...(fromFirestore || {}), _source: "none" };
+}
+
+/**
+ * Returns where the active Twilio credentials come from: 'firestore', 'env', or 'none'.
+ */
+async function getCredentialSource() {
+  const creds = await getCredentials();
+  return creds._source || "none";
 }
 
 /**
@@ -61,22 +104,32 @@ function buildClientFromCreds(creds) {
  * Cache key from creds (no secrets).
  */
 function credsKey(creds) {
-  return [creds.accountSid || "", creds.fromNumber || ""].join("|");
+  return [
+    creds.accountSid || "",
+    creds.fromNumber || "",
+    creds.messagingServiceSid || "",
+  ].join("|");
+}
+
+/** When set (MG…), SMS uses A2P Messaging Service; Twilio picks sender from the service pool. */
+function useMessagingService(creds) {
+  const sid = creds?.messagingServiceSid?.trim();
+  return !!sid && sid.startsWith("MG");
 }
 
 /**
- * Get Twilio client and verify service (async). Uses Firestore then env, caches by accountSid+fromNumber.
+ * Get Twilio client and verify service (async). Uses Firestore then .env, caches by creds key.
  */
 async function getClientAsync() {
   const creds = await getCredentials();
   const key = credsKey(creds);
-  if (cached.credsKey === key && (cached.client || cached.verify !== undefined)) {
+  if (cached.credsKey === key && cached.client !== undefined) {
     return { client: cached.client, verify: cached.verify };
   }
   const { client, verify } = buildClientFromCreds(creds);
   cached = { credsKey: key, client, verify };
-  if (client && !cached.credsKey) {
-    logger.info("[TWILIO] Client initialized (Firestore or env)");
+  if (client) {
+    logger.info("[TWILIO] Client initialized");
   }
   return { client, verify };
 }
@@ -138,15 +191,21 @@ const sendOTP = async (phoneNumber) => {
   }
 
   if (twilioClient) {
-    const fromNumber = creds.fromNumber;
-    if (!fromNumber) throw new Error("Twilio from number not configured");
+    const fromNumber = creds.fromNumber?.trim();
+    const viaMs = useMessagingService(creds);
+    if (!viaMs && !fromNumber) throw new Error("Twilio from number or Messaging Service SID not configured");
     const otp = generateOTP();
     try {
-      const message = await twilioClient.messages.create({
+      const createPayload = {
         body: `Your TeeTime Golf verification code is: ${otp}. Valid for 5 minutes.`,
-        from: fromNumber,
         to: phoneNumber,
-      });
+      };
+      if (viaMs) {
+        createPayload.messagingServiceSid = creds.messagingServiceSid.trim();
+      } else {
+        createPayload.from = fromNumber;
+      }
+      const message = await twilioClient.messages.create(createPayload);
       logger.info(`OTP sent via Messages API to ${phoneNumber}. SID: ${message.sid}`);
       twilioLogger.info("[TWILIO] OTP sent via Messages API", {
         feature: "otp",
@@ -201,8 +260,12 @@ const verifyOTP = async (phoneNumber, otp) => {
 
 /**
  * Send SMS message
+ * @param {string} phoneNumber
+ * @param {string} message
+ * @param {{ throwOnTwilioError?: boolean }} [opts] - If throwOnTwilioError, never swallow Twilio errors in development (for admin test SMS).
  */
-const sendSMS = async (phoneNumber, message) => {
+const sendSMS = async (phoneNumber, message, opts = {}) => {
+  const throwOnTwilioError = opts.throwOnTwilioError === true;
   const { client: twilioClient } = await getClientAsync();
   const creds = await getCredentials();
 
@@ -217,21 +280,24 @@ const sendSMS = async (phoneNumber, message) => {
     return { success: true, mode: "console" };
   }
 
-  const fromNumber = creds.fromNumber;
-  if (!fromNumber) {
-    twilioLogger.warn("[TWILIO] SMS skipped - from number not configured", {
+  const fromNumber = creds.fromNumber?.trim();
+  const viaMs = useMessagingService(creds);
+  if (!viaMs && !fromNumber) {
+    twilioLogger.warn("[TWILIO] SMS skipped - from number / messaging service not configured", {
       feature: "sms",
       to: phoneNumber,
     });
-    throw new Error("Twilio from number not configured");
+    throw new Error("Twilio from number or Messaging Service SID not configured");
   }
 
   try {
-    const result = await twilioClient.messages.create({
-      body: message,
-      from: fromNumber,
-      to: phoneNumber,
-    });
+    const createPayload = { body: message, to: phoneNumber };
+    if (viaMs) {
+      createPayload.messagingServiceSid = creds.messagingServiceSid.trim();
+    } else {
+      createPayload.from = fromNumber;
+    }
+    const result = await twilioClient.messages.create(createPayload);
     logger.info(`SMS sent to ${phoneNumber}. SID: ${result.sid}`);
     twilioLogger.info("[TWILIO] SMS sent", {
       feature: "sms",
@@ -246,9 +312,11 @@ const sendSMS = async (phoneNumber, message) => {
       feature: "sms",
       to: phoneNumber,
       error: error?.message,
+      code: error?.code,
       bodyPreview: message.slice(0, 80),
     });
-    if (process.env.NODE_ENV === "development") {
+    const dev = process.env.NODE_ENV === "development";
+    if (dev && !throwOnTwilioError) {
       logger.info(`[SMS FAILED - FALLBACK] to ${phoneNumber}: ${message}`);
       twilioLogger.info("[TWILIO] SMS dev fallback (send failed)", {
         feature: "sms",
@@ -278,7 +346,9 @@ const isConfiguredAsync = async () => {
   const hasAuth =
     (creds.accountSid && creds.authToken && creds.accountSid.startsWith("AC")) ||
     (creds.accountSid && creds.apiKeySid && creds.apiKeySecret && creds.accountSid.startsWith("AC"));
-  return !!(hasAuth && creds.fromNumber);
+  const hasSender =
+    !!(creds.fromNumber && creds.fromNumber.trim()) || useMessagingService(creds);
+  return !!(hasAuth && hasSender);
 };
 
 /** @deprecated Use isConfiguredAsync. Sync version returns false until first async load. */
@@ -292,6 +362,11 @@ module.exports = {
   getClient,
   getClientAsync,
   getCredentials,
+  getCredentialSource,
+  getEnvCredentials,
+  isUsableCreds,
+  buildClientFromCreds,
+  useMessagingService,
   isConfigured,
   isConfiguredAsync,
   clearCache,

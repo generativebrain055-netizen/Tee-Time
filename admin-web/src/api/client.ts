@@ -418,7 +418,12 @@ export type TwilioSettingsStatus = {
   availableForTest?: boolean;
   accountSidMasked: string | null;
   fromNumberMasked: string | null;
+  /** Twilio Messaging Service SID (MG…), masked — used for US A2P / 10DLC sends */
+  messagingServiceSidMasked?: string | null;
   storedInFirestore?: boolean;
+  /** Where the active credentials come from: 'firestore' | 'env' | 'none' */
+  credentialSource?: 'firestore' | 'env' | 'none';
+  usingEnvFallback?: boolean;
   envVars: string[];
   description: string;
 };
@@ -454,10 +459,21 @@ export type TwilioSettingsUpdate = {
   accountSid?: string;
   authToken?: string;
   fromNumber?: string;
+  /** Messaging Service SID (MG…) linked to your A2P campaign — preferred for US app-to-person SMS */
+  messagingServiceSid?: string;
   apiKeySid?: string;
   apiKeySecret?: string;
   verifyServiceSid?: string;
 };
+
+/** Clear Twilio credentials from Firestore. Backend falls back to .env TWILIO_* vars. */
+export async function clearTwilioSettings(): Promise<{ success: true; message: string } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/settings/twilio', { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to clear Twilio settings' };
+  if (data.success) return { success: true, message: data.message || 'Cleared.' };
+  return { success: false, message: data.message || 'Invalid response' };
+}
 
 /** Save Twilio credentials to Firestore. Overrides .env when set. */
 export async function updateTwilioSettings(

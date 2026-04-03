@@ -570,14 +570,14 @@ const getSystemSettings = async (req, res, next) => {
     const firebaseConfigured = !!firebaseProjectId.trim() && firebaseCredsFileExists;
 
     const twilioCreds = await twilioService.getCredentials();
-    const twilioConfigured =
-      !!twilioCreds.accountSid?.trim() &&
-      (!!twilioCreds.authToken?.trim() || (!!twilioCreds.apiKeySid?.trim() && !!twilioCreds.apiKeySecret?.trim())) &&
-      !!twilioCreds.fromNumber?.trim() &&
-      twilioCreds.accountSid.startsWith("AC");
-    const availableForTest = await twilioService.isConfiguredAsync();
+    const twilioConfigured = await twilioService.isConfiguredAsync();
+    const availableForTest = twilioConfigured;
     const firestoreTwilio = await twilioConfigService.getTwilioConfigFromFirestore();
-    const storedInFirestore = !!firestoreTwilio && (!!firestoreTwilio.accountSid || !!firestoreTwilio.fromNumber);
+    const storedInFirestore =
+      !!firestoreTwilio &&
+      (!!firestoreTwilio.accountSid ||
+        !!firestoreTwilio.fromNumber ||
+        !!firestoreTwilio.messagingServiceSid);
 
     return res.json({
       success: true,
@@ -594,9 +594,15 @@ const getSystemSettings = async (req, res, next) => {
           availableForTest,
           accountSidMasked: twilioCreds.accountSid ? maskValue(twilioCreds.accountSid) : null,
           fromNumberMasked: twilioCreds.fromNumber ? maskPhone(twilioCreds.fromNumber) : null,
+          messagingServiceSidMasked: twilioCreds.messagingServiceSid
+            ? maskValue(twilioCreds.messagingServiceSid)
+            : null,
           storedInFirestore,
-          envVars: [],
-          description: "Required for SMS magic links and text invites. Manage credentials in Firestore via this Settings page (document config/twilio). Account SID must start with AC. Trial accounts can send only to verified numbers.",
+          credentialSource: await twilioService.getCredentialSource(),
+          usingEnvFallback: !storedInFirestore && twilioConfigured,
+          envVars: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "TWILIO_MESSAGING_SERVICE_SID", "TWILIO_VERIFY_SERVICE_SID"],
+          description:
+            "Required for SMS magic links and text invites. Credentials are read from Firestore (config/twilio) first; if Firestore is empty the backend falls back to TWILIO_* env vars. Account SID must start with AC. For US A2P/10DLC, set Messaging Service SID (MG…) linked to your approved campaign; the backend sends via that service when set (no From number required). Otherwise set a message-capable From number (E.164). Trial accounts can send only to verified numbers.",
         },
       },
     });
@@ -628,7 +634,9 @@ const sendTwilioTestSms = async (req, res, next) => {
       });
     }
     const testMessage = "Tee Time Admin: Test SMS. Twilio is working.";
-    const result = await twilioService.sendSMS(to, testMessage);
+    const result = await twilioService.sendSMS(to, testMessage, {
+      throwOnTwilioError: true,
+    });
     if (result?.mode === "console_fallback") {
       return res.status(400).json({
         success: false,
@@ -644,6 +652,42 @@ const sendTwilioTestSms = async (req, res, next) => {
     logger.error("Admin sendTwilioTestSms error:", error);
     const code = error?.code;
     const msg = error?.message || "";
+    if (code === 20404 || msg.includes("20404") || msg.includes("was not found")) {
+      // Auto-retry with .env creds if Firestore creds caused this
+      const activeCreds = await twilioService.getCredentials();
+      if (activeCreds._source === "firestore") {
+        const envCreds = twilioService.getEnvCredentials();
+        if (twilioService.isUsableCreds(envCreds)) {
+          try {
+            const { client: envClient } = twilioService.buildClientFromCreds(envCreds);
+            if (envClient) {
+              const createPayload = { body: "Tee Time Admin: Test SMS. Twilio is working (via .env credentials).", to };
+              if (twilioService.useMessagingService(envCreds)) {
+                createPayload.messagingServiceSid = envCreds.messagingServiceSid.trim();
+              } else {
+                createPayload.from = envCreds.fromNumber.trim();
+              }
+              await envClient.messages.create(createPayload);
+              return res.status(400).json({
+                success: false,
+                message:
+                  "Your Firestore credentials are invalid (20404 — Account SID / Auth Token mismatch). However, your .env credentials worked and the test SMS was sent using them. Fix: go to Admin → Settings → Store credentials in Firestore and save the correct Account SID, Auth Token, and Messaging Service SID — or click 'Clear Firestore credentials' to use .env permanently.",
+              });
+            }
+          } catch (envError) {
+            logger.warn("Admin sendTwilioTestSms: .env retry also failed:", envError?.message);
+          }
+        }
+      }
+      return res.status(400).json({
+        success: false,
+        message:
+          "Twilio returned Not Found (20404). The Account SID and Auth Token do not match (or the account is closed / auth token was rotated). " +
+          (activeCreds._source === "firestore"
+            ? "Your credentials are stored in Firestore — go to Admin → Settings, re-enter the correct Account SID and Auth Token from Twilio Console → Account → API keys & tokens, then save. Or click 'Clear Firestore credentials' to fall back to .env vars."
+            : "Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in your .env file."),
+      });
+    }
     if (code === 21606 || msg.includes("21606") || msg.includes("not a valid message-capable")) {
       const normalized = to.replace(/\s/g, "");
       const isTollFree = /^\+1(800|888|877|866|855|844|833)\d{7}$/.test(normalized);
@@ -675,16 +719,25 @@ const sendTwilioTestSms = async (req, res, next) => {
 };
 
 /**
- * Save Twilio credentials to Firestore (admin only). Body: { accountSid?, authToken?, fromNumber?, apiKeySid?, apiKeySecret?, verifyServiceSid? }.
+ * Save Twilio credentials to Firestore (admin only). Body: { accountSid?, authToken?, fromNumber?, messagingServiceSid?, apiKeySid?, apiKeySecret?, verifyServiceSid? }.
  * Backend reads Twilio only from Firestore. Never log or return raw secrets.
  */
 const updateTwilioSettings = async (req, res, next) => {
   try {
     const body = req.body || {};
+    const messagingServiceSidRaw =
+      typeof body.messagingServiceSid === "string" ? body.messagingServiceSid.trim() : "";
+    if (messagingServiceSidRaw && !messagingServiceSidRaw.startsWith("MG")) {
+      return res.status(400).json({
+        success: false,
+        message: "messagingServiceSid must start with MG (Twilio Messaging Service SID).",
+      });
+    }
     const config = {
       accountSid: typeof body.accountSid === "string" ? body.accountSid.trim() : undefined,
       authToken: typeof body.authToken === "string" ? body.authToken.trim() : undefined,
       fromNumber: typeof body.fromNumber === "string" ? body.fromNumber.trim() : undefined,
+      messagingServiceSid: messagingServiceSidRaw || undefined,
       apiKeySid: typeof body.apiKeySid === "string" ? body.apiKeySid.trim() : undefined,
       apiKeySecret: typeof body.apiKeySecret === "string" ? body.apiKeySecret.trim() : undefined,
       verifyServiceSid: typeof body.verifyServiceSid === "string" ? body.verifyServiceSid.trim() : undefined,
@@ -693,7 +746,8 @@ const updateTwilioSettings = async (req, res, next) => {
     if (!hasAny) {
       return res.status(400).json({
         success: false,
-        message: "Provide at least one of: accountSid, authToken, fromNumber, apiKeySid, apiKeySecret, verifyServiceSid.",
+        message:
+          "Provide at least one of: accountSid, authToken, fromNumber, messagingServiceSid, apiKeySid, apiKeySecret, verifyServiceSid.",
       });
     }
     await twilioConfigService.setTwilioConfigInFirestore(config);
@@ -705,6 +759,20 @@ const updateTwilioSettings = async (req, res, next) => {
       success: false,
       message: error?.message || "Failed to save Twilio settings.",
     });
+  }
+};
+
+/**
+ * Clear Twilio credentials from Firestore (admin only). Backend falls back to .env TWILIO_* vars.
+ */
+const clearTwilioSettings = async (req, res, next) => {
+  try {
+    await twilioConfigService.clearTwilioConfigInFirestore();
+    twilioService.clearCache();
+    return res.json({ success: true, message: "Twilio credentials cleared from Firestore. Backend will use .env TWILIO_* vars." });
+  } catch (error) {
+    logger.error("Admin clearTwilioSettings error:", error);
+    return res.status(500).json({ success: false, message: error?.message || "Failed to clear Twilio settings." });
   }
 };
 
@@ -908,6 +976,7 @@ module.exports = {
   getBroadcastHistory,
   getSystemSettings,
   updateTwilioSettings,
+  clearTwilioSettings,
   sendTwilioTestSms,
   listCourses,
   getCourse,

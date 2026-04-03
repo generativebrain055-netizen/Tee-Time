@@ -1,6 +1,6 @@
 /**
  * Twilio config stored in Firestore (config/twilio).
- * Backend reads Twilio credentials only from this document (no .env).
+ * twilioService reads Firestore first, then falls back to TWILIO_* env vars.
  * Manage via admin dashboard → Settings. Only server-side Firebase Admin should access this document.
  */
 const admin = require("../config/firebaseAdmin");
@@ -15,7 +15,7 @@ function getFirestore() {
 
 /**
  * Get Twilio config from Firestore. Returns null if doc missing or empty.
- * @returns {Promise<{ accountSid?: string, authToken?: string, fromNumber?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string } | null>}
+ * @returns {Promise<{ accountSid?: string, authToken?: string, fromNumber?: string, messagingServiceSid?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string } | null>}
  */
 async function getTwilioConfigFromFirestore() {
   try {
@@ -26,11 +26,17 @@ async function getTwilioConfigFromFirestore() {
     const accountSid = typeof data.accountSid === "string" ? data.accountSid.trim() : "";
     const authToken = typeof data.authToken === "string" ? data.authToken.trim() : "";
     const fromNumber = typeof data.fromNumber === "string" ? data.fromNumber.trim() : "";
-    if (!accountSid && !authToken && !fromNumber) return null;
+    const messagingServiceSid =
+      typeof data.messagingServiceSid === "string" ? data.messagingServiceSid.trim() : "";
+    if (!accountSid && !authToken && !fromNumber && !messagingServiceSid) return null;
     return {
       accountSid: accountSid || undefined,
       authToken: authToken || undefined,
       fromNumber: fromNumber || undefined,
+      messagingServiceSid:
+        messagingServiceSid && messagingServiceSid.startsWith("MG")
+          ? messagingServiceSid
+          : undefined,
       apiKeySid: typeof data.apiKeySid === "string" ? data.apiKeySid.trim() || undefined : undefined,
       apiKeySecret: typeof data.apiKeySecret === "string" ? data.apiKeySecret.trim() || undefined : undefined,
       verifyServiceSid: typeof data.verifyServiceSid === "string" ? data.verifyServiceSid.trim() || undefined : undefined,
@@ -48,13 +54,21 @@ async function getTwilioConfigFromFirestore() {
 
 /**
  * Write Twilio config to Firestore. Only pass fields to update; do not log or return raw secrets.
- * @param { { accountSid?: string, authToken?: string, fromNumber?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string } } config
+ * @param { { accountSid?: string, authToken?: string, fromNumber?: string, messagingServiceSid?: string, apiKeySid?: string, apiKeySecret?: string, verifyServiceSid?: string } } config
  */
 async function setTwilioConfigInFirestore(config) {
   const db = getFirestore();
   const ref = db.collection(COLLECTION).doc(DOC_ID);
   const data = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-  const keys = ["accountSid", "authToken", "fromNumber", "apiKeySid", "apiKeySecret", "verifyServiceSid"];
+  const keys = [
+    "accountSid",
+    "authToken",
+    "fromNumber",
+    "messagingServiceSid",
+    "apiKeySid",
+    "apiKeySecret",
+    "verifyServiceSid",
+  ];
   for (const k of keys) {
     if (typeof config[k] === "string" && config[k].trim() !== "") data[k] = config[k].trim();
   }
@@ -62,7 +76,17 @@ async function setTwilioConfigInFirestore(config) {
   logger.info("[twilioConfig] Twilio config saved to Firestore");
 }
 
+/**
+ * Delete the Twilio config document from Firestore so the backend falls back to .env TWILIO_* vars.
+ */
+async function clearTwilioConfigInFirestore() {
+  const db = getFirestore();
+  await db.collection(COLLECTION).doc(DOC_ID).delete();
+  logger.info("[twilioConfig] Twilio config cleared from Firestore (will fall back to .env)");
+}
+
 module.exports = {
   getTwilioConfigFromFirestore,
   setTwilioConfigInFirestore,
+  clearTwilioConfigInFirestore,
 };

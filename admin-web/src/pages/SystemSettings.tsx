@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getSystemSettings, sendTwilioTestSms, updateTwilioSettings, type SystemSettings } from '../api/client';
+import { getSystemSettings, sendTwilioTestSms, updateTwilioSettings, clearTwilioSettings, type SystemSettings } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 
 const FIREBASE_CONSOLE_URL = 'https://console.firebase.google.com/';
@@ -15,12 +15,10 @@ export function SystemSettings() {
   const [twilioFirestore, setTwilioFirestore] = useState({
     accountSid: '',
     authToken: '',
-    fromNumber: '',
-    apiKeySid: '',
-    apiKeySecret: '',
-    verifyServiceSid: '',
+    messagingServiceSid: '',
   });
   const [twilioSaveLoading, setTwilioSaveLoading] = useState(false);
+  const [twilioClearLoading, setTwilioClearLoading] = useState(false);
 
   useEffect(() => {
     getSystemSettings()
@@ -61,18 +59,28 @@ export function SystemSettings() {
     }
   };
 
+  const handleClearTwilioFirestore = async () => {
+    if (!window.confirm('This will delete Twilio credentials from Firestore. The backend will fall back to .env TWILIO_* vars. Continue?')) return;
+    setTwilioClearLoading(true);
+    const res = await clearTwilioSettings();
+    setTwilioClearLoading(false);
+    if (res.success) {
+      notify.success('Firestore Twilio credentials cleared. Backend is now using .env vars.');
+      getSystemSettings().then((r) => { if (r.success && r.data) setSettings(r.data); });
+    } else {
+      notify.error(res.message || 'Failed to clear.');
+    }
+  };
+
   const handleSaveTwilioToFirestore = async () => {
     const config = {
       accountSid: twilioFirestore.accountSid.trim() || undefined,
       authToken: twilioFirestore.authToken.trim() || undefined,
-      fromNumber: twilioFirestore.fromNumber.trim() || undefined,
-      apiKeySid: twilioFirestore.apiKeySid.trim() || undefined,
-      apiKeySecret: twilioFirestore.apiKeySecret.trim() || undefined,
-      verifyServiceSid: twilioFirestore.verifyServiceSid.trim() || undefined,
+      messagingServiceSid: twilioFirestore.messagingServiceSid.trim() || undefined,
     };
     const hasAny = Object.values(config).some((v) => v && v.length > 0);
     if (!hasAny) {
-      notify.error('Enter at least one field (e.g. Account SID, Auth Token, From number).');
+      notify.error('Enter at least one value (e.g. Account SID, Auth Token, or Messaging Service SID).');
       return;
     }
     setTwilioSaveLoading(true);
@@ -80,7 +88,7 @@ export function SystemSettings() {
     setTwilioSaveLoading(false);
     if (res.success) {
       notify.success('Twilio credentials saved to Firestore. Backend will use them.');
-      setTwilioFirestore({ accountSid: '', authToken: '', fromNumber: '', apiKeySid: '', apiKeySecret: '', verifyServiceSid: '' });
+      setTwilioFirestore({ accountSid: '', authToken: '', messagingServiceSid: '' });
       getSystemSettings().then((r) => {
         if (r.success && r.data) setSettings(r.data);
       });
@@ -153,50 +161,51 @@ export function SystemSettings() {
             {settings.twilio.configured ? 'Configured' : 'Not configured'}
           </span>
         </div>
-        <p style={styles.desc}>{settings.twilio.description}</p>
-        {settings.twilio.configured && (
+        {settings.twilio.configured ? (
           <div style={styles.maskedBlock}>
-            {settings.twilio.accountSidMasked && (
-              <p style={styles.masked}>Account SID: <code style={styles.code}>{settings.twilio.accountSidMasked}</code></p>
-            )}
-            {settings.twilio.fromNumberMasked && (
-              <p style={styles.masked}>From number: <code style={styles.code}>{settings.twilio.fromNumberMasked}</code></p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ ...styles.badge, ...(settings.twilio.credentialSource === 'firestore' ? styles.badgeOk : styles.badgeInfo) }}>
+                {settings.twilio.credentialSource === 'firestore' ? 'Firestore' : '.env'}
+              </span>
+              {settings.twilio.accountSidMasked && (
+                <span style={styles.maskedInline}>Account SID <code style={styles.code}>{settings.twilio.accountSidMasked}</code></span>
+              )}
+              {settings.twilio.messagingServiceSidMasked && (
+                <span style={styles.maskedInline}>Messaging Service <code style={styles.code}>{settings.twilio.messagingServiceSidMasked}</code></span>
+              )}
+              {settings.twilio.fromNumberMasked && (
+                <span style={styles.maskedInline}>From <code style={styles.code}>{settings.twilio.fromNumberMasked}</code></span>
+              )}
+            </div>
+            {settings.twilio.credentialSource === 'firestore' && (
+              <button
+                type="button"
+                onClick={handleClearTwilioFirestore}
+                style={styles.clearBtn}
+                disabled={twilioClearLoading}
+                title="Delete Firestore credentials — backend falls back to .env"
+              >
+                {twilioClearLoading ? 'Clearing…' : 'Clear Firestore credentials'}
+              </button>
             )}
           </div>
-        )}
-        <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>SMS messaging and text invites</h4>
-          <p style={styles.desc}>
-            For text invites and SMS magic links to work, store your Twilio credentials in Firestore using the form below.
-          </p>
-          <ol style={styles.stepsList}>
-            <li>In Twilio Console, copy your <strong>Account SID</strong> and <strong>Auth Token</strong> (Account → API keys and tokens). Use the primary SID that starts with <code style={styles.code}>AC</code>.</li>
-            <li>Get a Twilio phone number (Phone Numbers → Manage → Buy a number) or use an existing one. This will be the From number for all SMS.</li>
-            <li>Enter Account SID, Auth Token, and From number below and click <strong>Save to Firestore</strong>. The backend reads Twilio only from Firestore.</li>
-          </ol>
-          <p style={styles.desc}>
-            Without Twilio configured, SMS magic links and text invites may only be logged in development and not sent. The status above shows whether the backend has valid credentials from Firestore.
-          </p>
-        </div>
-        {settings.twilio.envVars.length > 0 && (
-          <>
-            <p style={styles.envLabel}>Environment variables:</p>
-            <ul style={styles.envList}>
-              {settings.twilio.envVars.map((v) => (
-                <li key={v} style={styles.envItem}><code style={styles.code}>{v}</code></li>
-              ))}
-            </ul>
-          </>
+        ) : (
+          <p style={styles.warnInline}>Not configured. Save credentials below or set <code style={styles.code}>TWILIO_*</code> env vars.</p>
         )}
 
         <div style={styles.section}>
-          <h4 style={styles.sectionTitle}>Store credentials in Firestore</h4>
+          <h4 style={styles.sectionTitle}>Save credentials to Firestore</h4>
           <p style={styles.desc}>
-            Save Twilio secrets in Firestore (document <code style={styles.code}>config/twilio</code>). The backend reads Firestore first, then falls back to <code style={styles.code}>.env</code>. Only the server uses these; they are not exposed to the client. Provide at least one field to save.
+            Credentials are read from Firestore first, then from <code style={styles.code}>.env</code> as a fallback. Fill in the fields below and click <strong>Save</strong>.
           </p>
+          <ol style={styles.stepsList}>
+            <li>In <a href={TWILIO_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>Twilio Console</a> → Account → API keys and tokens, copy your <strong>Account SID</strong> and <strong>Auth Token</strong>.</li>
+            <li>Copy the <strong>Messaging Service SID</strong> (<code style={styles.code}>MG…</code>) linked to your A2P/10DLC campaign. This is what the backend uses to send SMS — not the Campaign SID (<code style={styles.code}>CM…</code>).</li>
+            <li>Paste below and click <strong>Save to Firestore</strong>. Only the fields you fill will be updated.</li>
+          </ol>
           <div style={styles.formGrid}>
             <label style={styles.fieldLabel}>
-              Account SID (starts with AC)
+              Account SID
               <input
                 type="text"
                 value={twilioFirestore.accountSid}
@@ -212,51 +221,18 @@ export function SystemSettings() {
                 type="password"
                 value={twilioFirestore.authToken}
                 onChange={(e) => setTwilioFirestore((p) => ({ ...p, authToken: e.target.value }))}
-                placeholder="••••••••"
+                placeholder="Your auth token"
                 style={styles.fieldInput}
                 autoComplete="new-password"
               />
             </label>
             <label style={styles.fieldLabel}>
-              From number (E.164)
-              <input
-                type="tel"
-                value={twilioFirestore.fromNumber}
-                onChange={(e) => setTwilioFirestore((p) => ({ ...p, fromNumber: e.target.value }))}
-                placeholder="+15551234567"
-                style={styles.fieldInput}
-                autoComplete="off"
-              />
-            </label>
-            <label style={styles.fieldLabel}>
-              API Key SID (optional)
+              Messaging Service SID (A2P / 10DLC)
               <input
                 type="text"
-                value={twilioFirestore.apiKeySid}
-                onChange={(e) => setTwilioFirestore((p) => ({ ...p, apiKeySid: e.target.value }))}
-                placeholder="SK..."
-                style={styles.fieldInput}
-                autoComplete="off"
-              />
-            </label>
-            <label style={styles.fieldLabel}>
-              API Key Secret (optional)
-              <input
-                type="password"
-                value={twilioFirestore.apiKeySecret}
-                onChange={(e) => setTwilioFirestore((p) => ({ ...p, apiKeySecret: e.target.value }))}
-                placeholder="••••••••"
-                style={styles.fieldInput}
-                autoComplete="new-password"
-              />
-            </label>
-            <label style={styles.fieldLabel}>
-              Verify Service SID (optional)
-              <input
-                type="text"
-                value={twilioFirestore.verifyServiceSid}
-                onChange={(e) => setTwilioFirestore((p) => ({ ...p, verifyServiceSid: e.target.value }))}
-                placeholder="VA..."
+                value={twilioFirestore.messagingServiceSid}
+                onChange={(e) => setTwilioFirestore((p) => ({ ...p, messagingServiceSid: e.target.value }))}
+                placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 style={styles.fieldInput}
                 autoComplete="off"
               />
@@ -269,9 +245,9 @@ export function SystemSettings() {
 
         {twilioCanTest && (
           <div style={styles.testSection}>
-            <h4 style={styles.sectionTitle}>Test Twilio (testing / trial account)</h4>
+            <h4 style={styles.sectionTitle}>Send a test SMS</h4>
             <p style={styles.desc}>
-              Send a test SMS to verify Twilio is working. Use E.164 format (e.g. +15551234567). With a Twilio trial account, the number must be verified in Twilio Console.
+              Enter a phone number in E.164 format to confirm SMS is working. Trial accounts can only send to verified numbers in Twilio Console.
             </p>
             <div style={styles.testRow}>
               <input
@@ -288,7 +264,7 @@ export function SystemSettings() {
             </div>
           </div>
         )}
-        <a href={TWILIO_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>
+        <a href={TWILIO_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={{ ...styles.link, display: 'inline-block', marginTop: 'var(--space-md)' }}>
           Open Twilio Console →
         </a>
       </div>
@@ -309,9 +285,13 @@ const styles: Record<string, React.CSSProperties> = {
   badge: { padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)', fontWeight: 600 },
   badgeOk: { background: 'var(--color-success-container)', color: 'var(--color-on-success-container)' },
   badgeWarn: { background: 'var(--color-warning-container)', color: 'var(--color-pending-text)' },
+  badgeInfo: { background: 'var(--color-surface-tertiary)', color: 'var(--color-text-secondary)' },
+  clearBtn: { padding: '3px 10px', background: 'transparent', color: 'var(--color-error, #dc2626)', border: '1px solid var(--color-error, #dc2626)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 500 },
   desc: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-md)' },
   masked: { fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-xs)' },
-  maskedBlock: { marginBottom: 'var(--space-md)' },
+  maskedInline: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
+  maskedBlock: { marginBottom: 'var(--space-md)', padding: '12px 14px', background: 'var(--color-surface-secondary, #f9fafb)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' },
+  warnInline: { fontSize: 'var(--font-size-sm)', color: 'var(--color-pending-text, #92400e)', background: 'var(--color-warning-container, #fef3c7)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-md)' },
   envLabel: { fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: 'var(--space-xs)' },
   envList: { margin: 0, paddingLeft: 'var(--space-xl)', marginBottom: 'var(--space-md)' },
   envItem: { marginBottom: 4 },
