@@ -2,7 +2,8 @@
  * Settings Screen (Figma 883-* Account + Profile Settings)
  * Main settings screen with account information and settings options
  */
-import React, { useEffect, useCallback } from "react";
+import React, { useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
     View,
     Text,
@@ -11,6 +12,7 @@ import {
     StyleSheet,
     ScrollView,
     Dimensions,
+    ActivityIndicator,
 } from "react-native";
 import { 
     User, 
@@ -32,15 +34,17 @@ import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { logger } from "../utils/logger";
 
 export default function SettingsScreen({ navigation }: any) {
-    const { profile, fetchProfile } = useUser();
+    const { profile, loading, fetchProfile } = useUser();
     const logout = useAuthStore((s) => s.logout);
     const colors = useColors();
     const theme = useTheme();
 
-    // Refetch profile when screen mounts so displayed settings reflect persisted DB state
-    useEffect(() => {
-        fetchProfile(true);
-    }, [fetchProfile]);
+    // Refetch every time this screen comes into focus so displayed settings always reflect the DB
+    useFocusEffect(
+        useCallback(() => {
+            fetchProfile(true);
+        }, [fetchProfile])
+    );
 
 
 
@@ -116,10 +120,10 @@ export default function SettingsScreen({ navigation }: any) {
 
                     {/* Account Info Items */}
                     {[
-                        { icon: User, label: 'Full Name', value: profile?.firstName && profile?.lastName ? `${profile.firstName} ${profile.lastName}` : "Not set", iconColor: '#3B82F6', iconBg: '#DBEAFE' },
-                        { icon: Mail, label: 'Email', value: profile?.email || "Not set", iconColor: '#10B981', iconBg: '#D1FAE5' },
-                        { icon: Phone, label: 'Phone', value: profile?.phoneNumber || "Not set", iconColor: '#9333EA', iconBg: '#E9D5FF' },
-                        { icon: MapPin, label: 'Location', value: profile?.location || "Not set", iconColor: '#F59E0B', iconBg: '#FEF3C7' },
+                        { icon: User, label: 'Full Name', value: profile?.firstName && profile?.lastName ? `${profile.firstName} ${profile.lastName}` : null, iconColor: '#3B82F6', iconBg: '#DBEAFE' },
+                        { icon: Mail, label: 'Email', value: profile?.email || null, iconColor: '#10B981', iconBg: '#D1FAE5' },
+                        { icon: Phone, label: 'Phone', value: profile?.phoneNumber || null, iconColor: '#9333EA', iconBg: '#E9D5FF' },
+                        { icon: MapPin, label: 'Location', value: profile?.location || null, iconColor: '#F59E0B', iconBg: '#FEF3C7' },
                     ].map((item, index, array) => {
                         const Icon = item.icon;
                         return (
@@ -138,9 +142,13 @@ export default function SettingsScreen({ navigation }: any) {
                                     <Text style={[styles.infoLabel, { color: colors.textMuted }]}>
                                         {item.label}
                                     </Text>
-                                    <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                                        {item.value}
-                                    </Text>
+                                    {loading && !item.value ? (
+                                        <ActivityIndicator size="small" color={colors.textMuted} style={{ alignSelf: 'flex-start', marginTop: 2 }} />
+                                    ) : (
+                                        <Text style={[styles.infoValue, { color: item.value ? colors.textPrimary : colors.textMuted }]}>
+                                            {item.value ?? "Not set"}
+                                        </Text>
+                                    )}
                                 </View>
                             </View>
                         );

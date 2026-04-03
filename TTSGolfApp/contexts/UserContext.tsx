@@ -71,6 +71,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchProfileRef = useRef<(forceRefresh?: boolean) => Promise<void>>(async () => {});
   /** Bumps when session changes so a slow initial cache read cannot overwrite another user's profile */
   const profileLoadEpochRef = useRef(0);
+  /** Refs that mirror state — used inside fetchProfile so it doesn't need to redeclare on every profile change */
+  const profileStateRef = useRef<UserProfile | null>(null);
+  const isProfileCachedRef = useRef(false);
 
   // Load cached profile on mount
   useEffect(() => {
@@ -81,6 +84,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     return subscribeProfileSession((event) => {
       profileLoadEpochRef.current += 1;
+      profileStateRef.current = null;
+      isProfileCachedRef.current = false;
       setProfile(null);
       setIsProfileCached(false);
       setError(null);
@@ -111,6 +116,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
           logger.debug('[UserContext] Loading profile from cache');
+          profileStateRef.current = cachedProfile;
+          isProfileCachedRef.current = true;
           setProfile(cachedProfile);
           setIsProfileCached(true);
           return;
@@ -138,8 +145,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchProfile = useCallback(async (forceRefresh = false) => {
-    // If we have cached data and not forcing refresh, skip fetch
-    if (profile && !forceRefresh && isProfileCached) {
+    // Use refs so this callback never needs to be recreated when profile/cache state changes
+    if (profileStateRef.current && !forceRefresh && isProfileCachedRef.current) {
       logger.debug('[UserContext] Using cached profile, skipping fetch');
       return;
     }
@@ -188,6 +195,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         logger.debug('[UserContext] Setting profile with clubs', userProfile.clubs);
+        profileStateRef.current = userProfile;
+        isProfileCachedRef.current = true;
         setProfile(userProfile);
         setIsProfileCached(true);
         await saveToCache(userProfile);
@@ -214,7 +223,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setLoading(false);
     }
-  }, [profile, isProfileCached]);
+  // Stable callback — reads profile/cache via refs, not closure
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   fetchProfileRef.current = fetchProfile;
 
@@ -222,6 +233,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile((prev) => {
       if (!prev) return null;
       const updated = { ...prev, ...updates };
+      profileStateRef.current = updated;
       // Update cache asynchronously
       saveToCache(updated);
       return updated;
@@ -230,6 +242,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearProfile = useCallback(async () => {
     logger.info('[UserContext] Clearing profile and cache');
+    profileStateRef.current = null;
+    isProfileCachedRef.current = false;
     setProfile(null);
     setIsProfileCached(false);
     setError(null);

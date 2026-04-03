@@ -465,6 +465,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             walkOrRide: finalData.preferences.playStyle || undefined,
             playingPartnerPreference: finalData.preferences.playingPartnerPreference || undefined,
           } : undefined,
+          // Save email if the user provided it during onboarding (e.g. EmailPage step)
+          ...(finalData.email?.trim() ? { email: finalData.email.trim() } : {}),
         };
         if (finalData.profilePhotoBase64) {
           try {

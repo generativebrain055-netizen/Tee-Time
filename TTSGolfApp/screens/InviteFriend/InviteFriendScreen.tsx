@@ -7,6 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Phone, X } from "lucide-react-native";
@@ -73,7 +76,11 @@ export default function InviteFriendScreen({ navigation }: Props) {
 
   return (
     <ScreenShell>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -84,7 +91,12 @@ export default function InviteFriendScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.iconCircle}>
             <Phone size={32} color={palette.green500} strokeWidth={2} />
           </View>
@@ -114,7 +126,7 @@ export default function InviteFriendScreen({ navigation }: Props) {
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
           <TouchableOpacity
@@ -130,13 +142,13 @@ export default function InviteFriendScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardAvoid: {
     flex: 1,
     backgroundColor: palette.white,
   },
@@ -150,9 +162,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: spacing["2xl"],
+    paddingBottom: spacing.lg,
   },
   iconCircle: {
     width: 64,

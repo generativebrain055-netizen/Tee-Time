@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Calendar, Check, Clock } from 'lucide-react-native';
 import { availabilityApi, type TimeSlot, type DayOfWeek, type TimeSlotType } from '../../services/api/availabilityApi';
+import { useUser } from '../../contexts';
 
 interface AvailabilityOnboardingScreenProps {
   navigation: any;
@@ -106,6 +107,7 @@ export default function AvailabilityOnboardingScreen({
   route,
 }: AvailabilityOnboardingScreenProps) {
   const insets = useSafeAreaInsets();
+  const { fetchProfile } = useUser();
   const [step, setStep] = useState<Step>('intro');
   const [showSuccess, setShowSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,9 +141,10 @@ export default function AvailabilityOnboardingScreen({
   }, []);
 
   const handleSkip = useCallback(() => {
-    // Dismiss without saving any availability; user can set it later from settings
+    // Pre-load fresh profile so Settings screen shows email/phone immediately after onboarding
+    fetchProfile(true);
     navigation?.replace('Home');
-  }, [navigation]);
+  }, [navigation, fetchProfile]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -171,6 +174,8 @@ export default function AvailabilityOnboardingScreen({
         throw new Error(msg);
       }
 
+      // Pre-load fresh profile in background so Settings screen shows email/phone immediately
+      fetchProfile(true);
       setShowSuccess(true);
       setTimeout(() => {
         navigation?.replace('Home');
@@ -186,7 +191,7 @@ export default function AvailabilityOnboardingScreen({
     } finally {
       setSaving(false);
     }
-  }, [selectedDays, isCustomizing, customTimes, globalTimes, navigation]);
+  }, [selectedDays, isCustomizing, customTimes, globalTimes, navigation, fetchProfile]);
 
   const getSummaryData = useCallback(() => {
     const sortedDays = WEEK_DAYS.filter((d) => selectedDays.includes(d.id));
