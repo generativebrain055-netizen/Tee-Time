@@ -196,16 +196,51 @@ const getUserWithProfile = async (userId) => {
 };
 
 /**
- * Update notification preferences
+ * Deep-merge incoming notification preferences onto existing JSON (partial PATCH safe).
+ * @param {Object|null|undefined} existing
+ * @param {Object} incoming
+ */
+function mergeNotificationPreferences(existing, incoming) {
+    if (!incoming || typeof incoming !== "object") {
+        return existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+    }
+    const base =
+        existing && typeof existing === "object" && !Array.isArray(existing)
+            ? { ...existing }
+            : {};
+    for (const [k, v] of Object.entries(incoming)) {
+        if (v === undefined) continue;
+        if (k === "types" && v && typeof v === "object" && !Array.isArray(v)) {
+            base.types = base.types && typeof base.types === "object" ? { ...base.types } : {};
+            for (const [typeKey, typeVal] of Object.entries(v)) {
+                if (typeVal && typeof typeVal === "object" && !Array.isArray(typeVal)) {
+                    base.types[typeKey] = { ...(base.types[typeKey] || {}), ...typeVal };
+                } else {
+                    base.types[typeKey] = typeVal;
+                }
+            }
+        } else {
+            base[k] = v;
+        }
+    }
+    return base;
+}
+
+/**
+ * Update notification preferences (merges with existing so partial updates do not wipe fields)
  * @param {string} userId
  * @param {Object} preferences
  * @returns {Promise<Object>}
  */
 const updateNotificationPreferences = async (userId, preferences) => {
     try {
+        const existing = await findByUserId(userId);
+        const current = existing?.notification_preferences || {};
+        const merged = mergeNotificationPreferences(current, preferences);
+
         const { data, error } = await supabaseAdmin
             .from("user_profiles")
-            .update({ notification_preferences: preferences })
+            .update({ notification_preferences: merged })
             .eq("user_id", userId)
             .select("id, notification_preferences")
             .single();

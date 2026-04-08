@@ -15,6 +15,7 @@ interface NotificationPreferences {
   email?: boolean;
   sms?: boolean;
   push?: boolean;
+  systemPushEnabled?: boolean;
   types?: { [key: string]: { push?: boolean; inApp?: boolean } };
 }
 

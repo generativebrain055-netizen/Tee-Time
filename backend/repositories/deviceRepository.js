@@ -437,6 +437,25 @@ const getAllPushTokens = async () => {
     }
 };
 
+/**
+ * Devices with push tokens for broadcast filtering (respect user notification_preferences).
+ * @returns {Promise<Array<{ push_token: string, user_id: string }>>}
+ */
+const getAllPushTokensWithUsers = async () => {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from("devices")
+            .select("push_token, user_id")
+            .eq("is_blocked", false)
+            .not("push_token", "is", null);
+
+        if (error) throw error;
+        return (data || []).filter((d) => d.push_token && d.user_id);
+    } catch (error) {
+        handleError(error, "getAllPushTokensWithUsers");
+    }
+};
+
 module.exports = {
     upsert,
     findByFingerprint,
@@ -454,4 +473,5 @@ module.exports = {
     getOsDistribution,
     findSuspiciousDevices,
     getAllPushTokens,
+    getAllPushTokensWithUsers,
 };

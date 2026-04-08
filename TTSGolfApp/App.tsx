@@ -1,6 +1,6 @@
 import "./global.css";
 import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PaperProvider } from "react-native-paper";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -11,6 +11,7 @@ import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { logger } from "./utils/logger";
 import { registerPushTokenIfNeeded } from "./utils/registerPushToken";
+import { syncSystemPushPreferenceFromOs } from "./utils/syncNotificationPermission";
 
 // New design system imports
 import {
@@ -183,6 +184,16 @@ export default function App(): React.ReactElement {
     pushTokenRegisteredRef.current = true;
     registerPushTokenIfNeeded();
   }, [currentScreen]);
+
+  // Keep OS notification permission in sync when user changes Settings → Notifications
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      if (next === "active") {
+        syncSystemPushPreferenceFromOs();
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // Set up session expired handler
   useEffect(() => {

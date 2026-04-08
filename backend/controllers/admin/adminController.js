@@ -433,15 +433,25 @@ const updateReport = async (req, res, next) => {
 const previewBroadcast = async (req, res, next) => {
   try {
     const { title, body } = req.body || {};
-    const tokenCount = await deviceRepository.getAllPushTokens();
-    const count = Array.isArray(tokenCount) ? tokenCount.length : 0;
+    const rows = await deviceRepository.getAllPushTokensWithUsers();
+    const list = Array.isArray(rows) ? rows : [];
+    const userAllow = new Map();
+    let eligible = 0;
+    for (const row of list) {
+      let allowed = userAllow.get(row.user_id);
+      if (allowed === undefined) {
+        allowed = await notificationService.checkNotificationPreference(row.user_id, "broadcast", "push");
+        userAllow.set(row.user_id, allowed);
+      }
+      if (allowed) eligible += 1;
+    }
     return res.json({
       success: true,
       data: {
         title: title || "(No title)",
         body: body || "(No message)",
-        recipientCount: count,
-        message: `Preview: ${count} device(s) would receive this notification.`,
+        recipientCount: eligible,
+        message: `Preview: ${eligible} device(s) would receive this notification (users with push enabled in app and OS).`,
       },
     });
   } catch (error) {
@@ -463,12 +473,27 @@ const sendBroadcast = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Body is required." });
     }
 
-    const tokens = await deviceRepository.getAllPushTokens();
-    const list = Array.isArray(tokens) ? tokens : [];
+    const rows = await deviceRepository.getAllPushTokensWithUsers();
+    const raw = Array.isArray(rows) ? rows : [];
+    const userAllow = new Map();
+    const list = [];
+    const seenToken = new Set();
+    for (const row of raw) {
+      if (!row.push_token || seenToken.has(row.push_token)) continue;
+      let allowed = userAllow.get(row.user_id);
+      if (allowed === undefined) {
+        allowed = await notificationService.checkNotificationPreference(row.user_id, "broadcast", "push");
+        userAllow.set(row.user_id, allowed);
+      }
+      if (!allowed) continue;
+      seenToken.add(row.push_token);
+      list.push(row.push_token);
+    }
+
     if (list.length === 0) {
       return res.json({
         success: true,
-        data: { sent: 0, failed: 0, total: 0, message: "No push tokens registered. No notifications sent." },
+        data: { sent: 0, failed: 0, total: 0, message: "No eligible push tokens (or all users disabled push). No notifications sent." },
       });
     }
 
@@ -490,7 +515,7 @@ const sendBroadcast = async (req, res, next) => {
       sent: totalSent,
       failed: totalFailed,
       total: list.length,
-      message: `Broadcast sent: ${totalSent} delivered, ${totalFailed} failed (${list.length} total devices).`,
+      message: `Broadcast sent: ${totalSent} delivered, ${totalFailed} failed (${list.length} eligible devices).`,
     };
 
     try {

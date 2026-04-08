@@ -176,40 +176,32 @@ class NotificationService {
         .single();
 
       if (error || !profile) {
-        // Default to enabled if we can't fetch preferences
+        // Cannot read preferences — default to enabled (same as historical behavior)
         return true;
       }
 
       const prefs = profile.notification_preferences || {};
-      
-      // Check global push setting first (only affects push notifications)
-      if (channel === 'push' && prefs.push === false) {
-        return false;
-      }
 
-      // Check per-type preferences if they exist
-      if (prefs.types && prefs.types[notificationType]) {
-        const typePrefs = prefs.types[notificationType];
-        if (channel === 'push') {
-          // For push: check type-specific preference, fallback to global push setting
-          return typePrefs.push !== false && prefs.push !== false;
-        }
-        if (channel === 'inApp') {
-          // For in-app: check type-specific preference, default to true if not set
+      if (channel === "inApp") {
+        if (prefs.types && prefs.types[notificationType]) {
+          const typePrefs = prefs.types[notificationType];
           return typePrefs.inApp !== false;
         }
+        return true;
       }
 
-      // Default behavior: 
-      // - Push: respect global push setting
-      // - In-app: always enabled by default (unless type-specific preference says otherwise)
-      if (channel === 'push') {
-        return prefs.push !== false;
+      // channel === 'push' — require app toggle, synced OS permission, and per-type when set
+      if (prefs.systemPushEnabled === false) return false;
+      if (prefs.push === false) return false;
+
+      if (prefs.types && prefs.types[notificationType]) {
+        const typePrefs = prefs.types[notificationType];
+        if (typePrefs.push === false) return false;
       }
-      return true; // In-app defaults to enabled
+
+      return true;
     } catch (error) {
       logger.warn(`Error checking notification preferences for user ${userId}:`, error.message);
-      // Default to enabled on error
       return true;
     }
   }

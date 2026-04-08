@@ -105,6 +105,8 @@ export interface NotificationPreferences {
   email: boolean;
   sms: boolean;
   push: boolean;
+  /** Synced from OS permission; when false, backend does not send remote push. */
+  systemPushEnabled?: boolean;
   // Per-type preferences for push and in-app notifications
   types?: {
     [key: string]: {

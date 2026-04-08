@@ -16,6 +16,7 @@ import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { profileApi } from "../services/api";
 import { useUser } from "../contexts";
+import { syncSystemPushPreferenceFromOs } from "../utils/syncNotificationPermission";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 
 interface NotificationSetting {
@@ -117,6 +118,10 @@ export default function NotificationSettingsScreen({ navigation }: any) {
             };
         }));
     }, [profile?.notificationPreferences]);
+
+    useEffect(() => {
+        syncSystemPushPreferenceFromOs();
+    }, []);
 
     const handleToggle = useCallback(async (key: 'email' | 'sms' | 'push') => {
         const setting = settings.find(s => s.key === key);
@@ -316,8 +321,9 @@ export default function NotificationSettingsScreen({ navigation }: any) {
 
                 {/* Info Text */}
                 <Text style={[styles.infoText, { color: colors.textMuted }]}>
-                    You control which notifications you get and how (push on your device or in-app only). 
-                    Changes take effect immediately.
+                    Remote push requires both: Push enabled here and notifications allowed for this app in
+                    system Settings. In-app notifications always use the toggles below regardless of system
+                    permission. Changes take effect immediately.
                 </Text>
             </ScrollView>
         </ScreenShell>

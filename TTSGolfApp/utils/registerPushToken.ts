@@ -9,6 +9,7 @@ import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { notificationApi } from "../services/api/notificationApi";
 import { logger } from "./logger";
+import { syncSystemPushPreferenceToBackend } from "./syncNotificationPermission";
 
 const PUSH_TOKEN_REGISTERED_KEY = "push_token_registered_v1";
 
@@ -34,8 +35,11 @@ export async function registerPushTokenIfNeeded(): Promise<void> {
     }
     if (status !== "granted") {
       logger.debug("[PushToken] Notification permission not granted");
+      await syncSystemPushPreferenceToBackend(false);
       return;
     }
+
+    await syncSystemPushPreferenceToBackend(true);
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     if (!projectId) {
