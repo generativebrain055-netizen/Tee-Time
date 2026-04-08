@@ -24,6 +24,21 @@ interface LocationSuggestion {
   lon?: number;
 }
 
+/** Remove a leading zip (and separators) so we do not show "92114 - 92114 - City". */
+function stripLeadingZipFromPlaceName(name: string, zip?: string): string {
+  const trimmed = name.trim();
+  if (!zip || !trimmed) return trimmed;
+  const escaped = zip.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return trimmed.replace(new RegExp(`^${escaped}\\s*[-–—,]?\\s*`, "i"), "").trim();
+}
+
+/** Single-line label: zip + place, without duplicating zip if name already included it. */
+function formatZipPlaceLabel(zip: string | undefined, placeName: string): string {
+  if (!zip) return placeName.trim();
+  const rest = stripLeadingZipFromPlaceName(placeName, zip);
+  return rest.length > 0 ? `${zip} - ${rest}` : zip;
+}
+
 export const LocationPage: React.FC<LocationPageProps> = ({
   onNext,
   onBack,
@@ -144,7 +159,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
     (location: LocationSuggestion): void => {
       setSelectedLocation(location);
       const zip = extractZip(searchQuery);
-      setSearchQuery(zip ? `${zip} - ${location.name}` : location.name);
+      setSearchQuery(formatZipPlaceLabel(zip, location.name));
       setSuggestions([]);
       Keyboard.dismiss();
     },
@@ -156,13 +171,25 @@ export const LocationPage: React.FC<LocationPageProps> = ({
     const hasAnyInput = (searchQuery || "").trim().length > 0;
     if (!selectedLocation && !zipCode && !hasAnyInput) return;
 
+    const rawPlaceName = selectedLocation ? selectedLocation.name : searchQuery;
+    const nameWithoutZip = stripLeadingZipFromPlaceName(
+      rawPlaceName.trim(),
+      zipCode,
+    );
+    const finalLocationName =
+      nameWithoutZip.length > 0
+        ? nameWithoutZip
+        : zipCode
+          ? ""
+          : rawPlaceName.trim();
+
     const locationData: Location = selectedLocation
       ? {
           id: selectedLocation.id,
-          name: selectedLocation.name,
+          name: finalLocationName,
           description: selectedLocation.description,
         }
-      : { name: searchQuery.trim().replace(/^\d{5}\s*-\s*/g, "") };
+      : { name: finalLocationName };
 
     onNext({
       zipCode: zipCode ?? undefined,
@@ -276,7 +303,7 @@ export const LocationPage: React.FC<LocationPageProps> = ({
                         <MapPin size={20} color={COLORS.primary} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 2 }}>
-                            {extractZip(searchQuery) ? `${extractZip(searchQuery)} - ${item.name}` : item.name}
+                            {formatZipPlaceLabel(extractZip(searchQuery), item.name)}
                           </Text>
                           <Text style={{ fontSize: 14, color: '#6B7280' }}>
                             {item.description}
