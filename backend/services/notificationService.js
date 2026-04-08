@@ -2,6 +2,23 @@ const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 const { invitesLogger } = require("../config/logger");
 const deviceRepository = require("../repositories/deviceRepository");
+const userRepository = require("../repositories/userRepository");
+
+/** Resolve profile avatar URL when callers pass a partial user (e.g. only id + names). */
+async function resolveUserAvatarUrl(userLike) {
+  if (!userLike || typeof userLike !== "object") return null;
+  const direct =
+    userLike.avatarUrl || userLike.avatar_url || userLike.avatar;
+  if (direct) return direct;
+  if (!userLike.id) return null;
+  try {
+    const u = await userRepository.findById(userLike.id);
+    if (!u) return null;
+    return u.avatar_url || u.avatarUrl || null;
+  } catch {
+    return null;
+  }
+}
 
 /** Expo push tokens start with this prefix. Others are treated as FCM tokens. */
 const EXPO_PUSH_TOKEN_PREFIX = "ExponentPushToken[";
@@ -333,6 +350,7 @@ class NotificationService {
   async notifyFriendRequest(receiverId, sender, requestId) {
     const senderName =
       `${sender.firstName || ""} ${sender.lastName || ""}`.trim() || "Someone";
+    const senderAvatar = await resolveUserAvatarUrl(sender);
     return this.createNotification({
       userId: receiverId,
       title: "New Friend Request",
@@ -341,7 +359,7 @@ class NotificationService {
         type: "friend_request",
         senderId: sender.id,
         senderName,
-        senderAvatar: sender.avatar || null,
+        senderAvatar: senderAvatar || null,
         requestId: requestId,
       },
     });
@@ -354,6 +372,7 @@ class NotificationService {
     const accepterName =
       `${accepter.firstName || ""} ${accepter.lastName || ""}`.trim() ||
       "Someone";
+    const userAvatar = await resolveUserAvatarUrl(accepter);
     return this.createNotification({
       userId: senderId,
       title: "Friend Request Accepted",
@@ -362,7 +381,7 @@ class NotificationService {
         type: "friend_accepted",
         userId: accepter.id,
         userName: accepterName,
-        userAvatar: accepter.avatar || null,
+        userAvatar: userAvatar || null,
       },
     });
   }
@@ -398,6 +417,8 @@ class NotificationService {
       body += `. Respond by ${deadlineStr}`;
     }
 
+    const inviterAvatar = await resolveUserAvatarUrl(inviter);
+
     return this.createNotification({
       userId,
       title: "Tee Time Invitation",
@@ -408,6 +429,7 @@ class NotificationService {
         teeTimeId: teeTime.id,
         inviterId: inviter.id,
         inviterName,
+        inviterAvatar,
         courseName: courseName || null,
         date: date || null,
         time: time || null,
@@ -446,7 +468,7 @@ class NotificationService {
    * Notify a user they have been invited to a roster group (Figma 1269-977).
    * Invitee sees "Group request" card with Accept/Decline.
    */
-  async notifyGroupInvite(inviteeUserId, inviter, groupId, groupName) {
+  async notifyGroupInvite(inviteeUserId, inviter, groupId, groupName, groupMeta = {}) {
     if (!inviter?.id) {
       logger.error("notifyGroupInvite: inviter missing id", { inviteeUserId, groupId });
       return null;
@@ -454,6 +476,14 @@ class NotificationService {
     const inviterName =
       `${inviter.firstName || inviter.first_name || ""} ${inviter.lastName || inviter.last_name || ""}`.trim() ||
       "Someone";
+    let inviterAvatar =
+      inviter.avatarUrl ||
+      inviter.avatar_url ||
+      inviter.avatar ||
+      null;
+    if (!inviterAvatar) {
+      inviterAvatar = await resolveUserAvatarUrl(inviter);
+    }
     return this.createNotification({
       userId: inviteeUserId,
       title: "Group invitation",
@@ -464,11 +494,10 @@ class NotificationService {
         groupName: groupName || null,
         inviterId: inviter.id,
         inviterName,
-        inviterAvatar:
-          inviter.avatarUrl ||
-          inviter.avatar_url ||
-          inviter.avatar ||
-          null,
+        inviterAvatar,
+        groupColor: groupMeta.color != null ? groupMeta.color : null,
+        groupIcon: groupMeta.icon != null ? groupMeta.icon : null,
+        memberCount: groupMeta.memberCount ?? null,
       },
       sendPush: true,
       forceInApp: true,
@@ -539,68 +568,26 @@ class NotificationService {
 
   /**
    * Notify a user they were removed from someone else's roster.
+   * Intentionally disabled — roster changes do not notify the contact.
    */
-  async notifyRemovedFromRoster(memberUserId, owner) {
-    const ownerName =
-      `${owner.firstName || owner.first_name || ""} ${
-        owner.lastName || owner.last_name || ""
-      }`.trim() || "Someone";
-    return this.createNotification({
-      userId: memberUserId,
-      title: "Removed from roster",
-      body: `${ownerName} removed you from their roster`,
-      data: {
-        type: "roster_removed",
-        ownerId: owner.id,
-        ownerName,
-      },
-      sendPush: true,
-    });
+  async notifyRemovedFromRoster(_memberUserId, _owner) {
+    return null;
   }
 
   /**
-   * Notify a roster contact that their On-Deck (availability) status was changed by the roster owner.
+   * Notify a roster contact that their On-Deck status changed.
+   * Intentionally disabled — on-deck changes do not notify the contact.
    */
-  async notifyOnDeckAvailability(memberUserId, owner, isOnDeck, rosterId) {
-    const ownerName =
-      `${owner.firstName || owner.first_name || ""} ${
-        owner.lastName || owner.last_name || ""
-      }`.trim() || "Someone";
-    const title = isOnDeck ? "On-Deck availability" : "On-Deck updated";
-    const body = isOnDeck
-      ? `${ownerName} marked you as On-Deck — you may receive fill-in invites from their tee times.`
-      : `${ownerName} removed you from On-Deck.`;
-    return this.createNotification({
-      userId: memberUserId,
-      title,
-      body,
-      data: {
-        type: isOnDeck ? "on_deck_added" : "on_deck_removed",
-        ownerId: owner.id,
-        ownerName,
-        rosterId: rosterId || null,
-        isOnDeck: !!isOnDeck,
-      },
-      sendPush: true,
-    });
+  async notifyOnDeckAvailability(_memberUserId, _owner, _isOnDeck, _rosterId) {
+    return null;
   }
 
   /**
-   * Create roster add notification
+   * Roster add notification (legacy API).
+   * Intentionally disabled — roster add does not notify the contact.
    */
-  async notifyAddedToRoster(userId, adder) {
-    const adderName =
-      `${adder.firstName || ""} ${adder.lastName || ""}`.trim() || "Someone";
-    return this.createNotification({
-      userId,
-      title: "Added to Roster",
-      body: `${adderName} added you to their roster`,
-      data: {
-        type: "roster_add",
-        ownerId: adder.id,
-        ownerName: adderName,
-      },
-    });
+  async notifyAddedToRoster(_userId, _adder) {
+    return null;
   }
 
   /**
@@ -694,6 +681,7 @@ class NotificationService {
       `${organizer.firstName || ""} ${organizer.lastName || ""}`.trim() ||
       "Someone";
     const dateStr = this.formatDateForNotification(teeTime.tee_date);
+    const organizerAvatar = await resolveUserAvatarUrl(organizer);
     return this.createNotification({
       userId,
       title: "Spot Opened Up!",
@@ -703,6 +691,7 @@ class NotificationService {
         teeTimeId: teeTime.id,
         organizerId: organizer.id,
         organizerName,
+        organizerAvatar,
         courseName: teeTime.course_name,
         date: teeTime.tee_date,
         time: teeTime.tee_time,

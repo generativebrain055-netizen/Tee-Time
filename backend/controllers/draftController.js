@@ -3,7 +3,6 @@ const rosterRepository = require("../repositories/rosterRepository");
 const rosterService = require("../services/rosterService");
 const friendRepository = require("../repositories/friendRepository");
 const userRepository = require("../repositories/userRepository");
-const rosterNotificationService = require("../services/rosterNotificationService");
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
@@ -293,15 +292,7 @@ class DraftController {
         }
       }
 
-      // Send notification to drafted user
-      rosterNotificationService
-        .sendRosterAddNotification(
-          { ...entry, contact_user_id: userId },
-          scanner
-        )
-        .catch((err) =>
-          logger.error("Failed to send draft notification:", err.message)
-        );
+      // Intentionally no roster-add notification to the drafted user (same as manual roster add).
 
       // Get the added user's name for response
       const addedUser = await userRepository.getPublicProfile(userId);

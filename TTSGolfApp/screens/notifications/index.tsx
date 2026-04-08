@@ -15,7 +15,7 @@ import {
     StyleSheet,
     Alert,
 } from "react-native";
-import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail } from "lucide-react-native";
+import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail, MapPin } from "lucide-react-native";
 import {
     notificationApi,
     friendApi,
@@ -31,13 +31,112 @@ import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
 import { formatRemainingClock } from "../../utils/formatting";
 
+function dayOrdinal(day: number): string {
+    const s = ["th", "st", "nd", "rd"];
+    const v = day % 100;
+    return `${day}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+/** e.g. "Sat, Jan 10 • 1:30 PM" for tee / spot-opened invites */
+function formatTeeInviteWhen(dateVal: unknown, timeVal: unknown): string {
+    const dateStr = dateVal != null ? String(dateVal) : "";
+    const timeStr = timeVal != null ? String(timeVal) : "";
+    let datePart = "";
+    if (dateStr) {
+        const d = new Date(dateStr);
+        if (!Number.isNaN(d.getTime())) {
+            const wk = d.toLocaleDateString("en-US", { weekday: "short" });
+            const mon = d.toLocaleDateString("en-US", { month: "short" });
+            datePart = `${wk}, ${mon} ${dayOrdinal(d.getDate())}`;
+        }
+    }
+    let timePart = "";
+    if (timeStr) {
+        if (/am|pm/i.test(timeStr)) {
+            timePart = timeStr.trim();
+        } else {
+            const parts = timeStr.split(":");
+            const h = parseInt(parts[0], 10);
+            const m = parseInt(parts[1] || "0", 10);
+            if (!Number.isNaN(h)) {
+                const period = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 || 12;
+                timePart = `${h12}:${String(m).padStart(2, "0")} ${period}`;
+            } else {
+                timePart = timeStr;
+            }
+        }
+    }
+    if (datePart && timePart) return `${datePart} • ${timePart}`;
+    if (datePart) return datePart;
+    if (timePart) return timePart;
+    return "";
+}
+
+function initialsFromGroupName(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function isRemoteImageUrl(url: string): boolean {
+    return /^https?:\/\//i.test(String(url).trim());
+}
+
+/** Use at most one image URL for group badge; reject JSON arrays / multiple URLs (member avatar collages). */
+function pickSingleGroupIconUrl(raw: string): string {
+    const s = raw.trim();
+    if (!s) return "";
+    if (s.startsWith("[") || s.startsWith("{")) {
+        try {
+            const parsed = JSON.parse(s) as unknown;
+            if (Array.isArray(parsed)) {
+                if (parsed.length === 1 && typeof parsed[0] === "string") {
+                    const one = String(parsed[0]).trim();
+                    return isRemoteImageUrl(one) ? one : "";
+                }
+                return "";
+            }
+        } catch {
+            return "";
+        }
+    }
+    const parts = s.split(",").map((p) => p.trim()).filter(Boolean);
+    const urlParts = parts.filter((p) => isRemoteImageUrl(p));
+    if (urlParts.length > 1) return "";
+    if (urlParts.length === 1) return urlParts[0];
+    return s;
+}
+
+function safeGroupColor(hex: unknown, fallback: string): string {
+    if (typeof hex === "string" && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex.trim())) {
+        return hex.trim();
+    }
+    return fallback;
+}
+
 type TabType = 'activity' | 'invites';
-type NotificationTypeFilter = 'all' | 'tee_time_invite' | 'tee_time_response' | 'friend_request' | 'friend_accepted' | 'roster_add' | 'spot_opened' | 'organizer_fill_warning' | 'waiver_wire' | 'group_invite' | 'player_cancelled' | 'group_updated' | 'group_deleted' | 'roster_removed' | 'on_deck_added' | 'on_deck_removed';
+type NotificationTypeFilter =
+    | 'all'
+    | 'tee_time_invite'
+    | 'tee_time_response'
+    | 'friend_request'
+    | 'friend_accepted'
+    | 'spot_opened'
+    | 'organizer_fill_warning'
+    | 'waiver_wire'
+    | 'group_invite'
+    | 'player_cancelled'
+    | 'group_updated'
+    | 'group_deleted';
 
 interface CategorySection {
     title: string;
     count: number;
     items: AppNotification[];
+    /** Invites tab: fixed section layout (tee / group / friend bundle) */
+    inviteKind?: "tee" | "group" | "friend";
 }
 
 export default function NotificationsScreen({ navigation }: any) {
@@ -353,11 +452,9 @@ export default function NotificationsScreen({ navigation }: any) {
             return [
                 ...baseOptions,
                 { key: 'tee_time_invite', label: 'Tee Time Invites' },
-                { key: 'friend_request', label: 'Friend Requests' },
-                { key: 'group_invite', label: 'Group Invites' },
                 { key: 'spot_opened', label: 'Spot Opened' },
-                { key: 'roster_add', label: 'Roster Adds' },
-                { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
+                { key: 'group_invite', label: 'Group Invites' },
+                { key: 'friend_request', label: 'Friend Requests' },
             ];
         }
         // activity tab
@@ -365,12 +462,8 @@ export default function NotificationsScreen({ navigation }: any) {
             ...baseOptions,
             { key: 'tee_time_response', label: 'Invite Responses' },
             { key: 'player_cancelled', label: 'Player Cancelled' },
-            { key: 'roster_add', label: 'Roster Adds' },
             { key: 'group_updated', label: 'Group Updated' },
             { key: 'group_deleted', label: 'Group Deleted' },
-            { key: 'roster_removed', label: 'Removed from Roster' },
-            { key: 'on_deck_added', label: 'On-Deck (added)' },
-            { key: 'on_deck_removed', label: 'On-Deck (removed)' },
             { key: 'organizer_fill_warning', label: 'Unfilled Alerts' },
             { key: 'waiver_wire', label: 'Waiver Wire' },
             { key: 'friend_accepted', label: 'Friend Accepted' },
@@ -388,79 +481,133 @@ export default function NotificationsScreen({ navigation }: any) {
 
     // Categorize notifications by tab (Figma 1269-817: Activity vs Invites)
     const categorizeNotifications = (notifs: AppNotification[], tab: TabType): CategorySection[] => {
-        let filtered: AppNotification[] = [];
+        const sortByCreated = (arr: AppNotification[]) =>
+            [...arr].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-        if (tab === 'invites') {
-            // Invites tab (1269-900, 1269-1025, 1269-1140, 1269-977): actionable invitations
-            filtered = notifs.filter(n => {
+        if (tab === "invites") {
+            let tee = notifs.filter(n => {
                 const t = getDataType(n);
-                return t === 'tee_time_invite' ||
-                       t === 'friend_request' ||
-                       t === 'group_invite' ||
-                       t === 'spot_opened' ||
-                       t === 'roster_add' ||
-                       t === 'organizer_fill_warning' ||
-                       t === 'tee_time_not_filled' ||
-                       t === 'organizer_invite_more';
+                return t === "tee_time_invite" || t === "spot_opened";
             });
-        } else {
-            // Activity tab: responses, social/roster activity, reminders, and other non-invite notices
-            filtered = notifs.filter(n => {
-                const t = getDataType(n);
-                return t === 'tee_time_response' || t === 'group_invite_accepted' || t === 'waiver_wire' || t === 'player_cancelled'
-                    || t === 'group_updated' || t === 'group_deleted' || t === 'roster_removed'
-                    || t === 'on_deck_added' || t === 'on_deck_removed'
-                    || t === 'friend_accepted' || t === 'check_in_reminder' || t === 'no_show'
-                    || t === 'roster_exhausted' || t === 'fcfs_deadline';
-            });
+            let group = notifs.filter(n => getDataType(n) === "group_invite");
+            let friend = notifs.filter(n => getDataType(n) === "friend_request");
+
+            if (typeFilter !== "all") {
+                const validFilters = getTypeFilterOptions(tab).map(opt => opt.key);
+                if (validFilters.includes(typeFilter)) {
+                    if (typeFilter === "tee_time_invite") {
+                        tee = tee.filter(n => getDataType(n) === "tee_time_invite");
+                        group = [];
+                        friend = [];
+                    } else if (typeFilter === "spot_opened") {
+                        tee = tee.filter(n => getDataType(n) === "spot_opened");
+                        group = [];
+                        friend = [];
+                    } else if (typeFilter === "group_invite") {
+                        tee = [];
+                        friend = [];
+                    } else if (typeFilter === "friend_request") {
+                        tee = [];
+                        group = [];
+                    }
+                }
+            }
+
+            const sections: CategorySection[] = [];
+            if (tee.length > 0) {
+                sections.push({
+                    title: "Tee time invites",
+                    count: tee.length,
+                    items: sortByCreated(tee),
+                    inviteKind: "tee",
+                });
+            }
+            if (group.length > 0) {
+                sections.push({
+                    title: "Group requests",
+                    count: group.length,
+                    items: sortByCreated(group),
+                    inviteKind: "group",
+                });
+            }
+            if (friend.length > 0) {
+                sections.push({
+                    title: "Friend requests",
+                    count: friend.length,
+                    items: sortByCreated(friend),
+                    inviteKind: "friend",
+                });
+            }
+            return sections;
         }
 
-        // Apply type filter if not 'all' and filter is valid for current tab
-        if (typeFilter !== 'all') {
-            // Validate that the filter is applicable to the current tab
+        // Activity tab
+        let filtered = notifs.filter(n => {
+            const t = getDataType(n);
+            return (
+                t === "tee_time_response" ||
+                t === "group_invite_accepted" ||
+                t === "waiver_wire" ||
+                t === "player_cancelled" ||
+                t === "group_updated" ||
+                t === "group_deleted" ||
+                t === "roster_removed" ||
+                t === "on_deck_added" ||
+                t === "on_deck_removed" ||
+                t === "friend_accepted" ||
+                t === "check_in_reminder" ||
+                t === "no_show" ||
+                t === "roster_exhausted" ||
+                t === "fcfs_deadline" ||
+                t === "roster_add" ||
+                t === "organizer_fill_warning" ||
+                t === "tee_time_not_filled" ||
+                t === "organizer_invite_more"
+            );
+        });
+
+        if (typeFilter !== "all") {
             const validFilters = getTypeFilterOptions(tab).map(opt => opt.key);
             if (validFilters.includes(typeFilter)) {
                 filtered = filterByType(filtered, typeFilter);
             }
-            // If filter is invalid for current tab, keep filtered as is (already filtered by tab)
         }
 
-        // Group by notification type for display
         const grouped: Record<string, AppNotification[]> = {};
         filtered.forEach(n => {
-            const t = getDataType(n) || 'other';
+            const t = getDataType(n) || "other";
             if (!grouped[t]) grouped[t] = [];
             grouped[t].push(n);
         });
 
-        // Convert to sections
         const sections: CategorySection[] = Object.entries(grouped).map(([type, items]) => {
             let title = type;
-            if (type === 'tee_time_invite') title = 'Tee Time Invites';
-            else if (type === 'friend_request') title = 'Friend Requests';
-            else if (type === 'spot_opened') title = 'Spot Opened';
-            else if (type === 'roster_add') title = 'Roster Adds';
-            else if (type === 'organizer_fill_warning' || type === 'tee_time_not_filled' || type === 'organizer_invite_more') title = 'Unfilled Slot Alerts';
-            else if (type === 'tee_time_response') title = 'Invite Responses';
-            else if (type === 'group_invite_accepted') title = 'Group Invitations';
-            else if (type === 'waiver_wire') title = 'Waiver Wire Posts';
-            else if (type === 'player_cancelled') title = 'Player Cancelled';
-            else if (type === 'group_updated') title = 'Group Updated';
-            else if (type === 'group_deleted') title = 'Group Deleted';
-            else if (type === 'roster_removed') title = 'Removed from Roster';
-            else if (type === 'on_deck_added') title = 'On-Deck availability';
-            else if (type === 'on_deck_removed') title = 'On-Deck removed';
-            else if (type === 'friend_accepted') title = 'Friend Requests Accepted';
-            else if (type === 'check_in_reminder') title = 'Check-In Reminders';
-            else if (type === 'no_show') title = 'No-Show';
-            else if (type === 'roster_exhausted') title = 'Roster Exhausted';
-            else if (type === 'fcfs_deadline') title = 'FCFS Deadlines';
-            else title = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            if (type === "tee_time_invite") title = "Tee Time Invites";
+            else if (type === "friend_request") title = "Friend Requests";
+            else if (type === "spot_opened") title = "Spot Opened";
+            else if (type === "roster_add") title = "Roster Adds";
+            else if (type === "organizer_fill_warning" || type === "tee_time_not_filled" || type === "organizer_invite_more")
+                title = "Unfilled Slot Alerts";
+            else if (type === "tee_time_response") title = "Invite Responses";
+            else if (type === "group_invite_accepted") title = "Group Invitations";
+            else if (type === "waiver_wire") title = "Waiver Wire Posts";
+            else if (type === "player_cancelled") title = "Player Cancelled";
+            else if (type === "group_updated") title = "Group Updated";
+            else if (type === "group_deleted") title = "Group Deleted";
+            else if (type === "roster_removed") title = "Removed from Roster";
+            else if (type === "on_deck_added") title = "On-Deck availability";
+            else if (type === "on_deck_removed") title = "On-Deck removed";
+            else if (type === "friend_accepted") title = "Friend Requests Accepted";
+            else if (type === "check_in_reminder") title = "Check-In Reminders";
+            else if (type === "no_show") title = "No-Show";
+            else if (type === "roster_exhausted") title = "Roster Exhausted";
+            else if (type === "fcfs_deadline") title = "FCFS Deadlines";
+            else title = type.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
             return {
                 title,
                 count: items.length,
-                items: items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                items: sortByCreated(items),
             };
         });
 
@@ -674,6 +821,109 @@ export default function NotificationsScreen({ navigation }: any) {
         </View>
     );
 
+    const resolveFriendRowDisplay = (item: AppNotification) => {
+        const d = item.data as Record<string, unknown> | undefined;
+        const sender = d?.sender as { name?: string; avatar?: string; location?: string } | undefined;
+        const senderName =
+            (d?.senderName as string | undefined) ||
+            sender?.name ||
+            (d?.name as string | undefined) ||
+            "Someone";
+        const senderAvatar =
+            (d?.senderAvatar as string | undefined) ||
+            (d?.sender_avatar as string | undefined) ||
+            sender?.avatar ||
+            (d?.avatar as string | undefined);
+        const locationStr = (d?.location as string | undefined) || sender?.location || "";
+        const initials = senderName
+            .split(" ")
+            .map((n: string) => n[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+        return { d, senderName, senderAvatar, locationStr, initials };
+    };
+
+    const renderFriendRequestsBundle = (items: AppNotification[]) => (
+        <View style={styles.friendBundleCard}>
+            {items.map((item, index) => {
+                const { d, senderName, senderAvatar, locationStr, initials } = resolveFriendRowDisplay(item);
+                const isAccepted =
+                    item.type.includes("accepted") ||
+                    item.status === "accepted" ||
+                    (d?.responded as boolean);
+                const isDeclined = item.status === "declined";
+                return (
+                    <View
+                        key={item.id}
+                        style={[
+                            styles.friendBundleRow,
+                            index < items.length - 1 && styles.friendBundleRowDivider,
+                            !item.isRead && styles.friendBundleRowUnread,
+                        ]}
+                    >
+                        <TouchableOpacity
+                            style={styles.friendBundleRowMain}
+                            activeOpacity={0.7}
+                            onPress={() => handleNotificationPress(item)}
+                            onLongPress={() => showReadUnreadMenu(item)}
+                        >
+                            <View style={styles.avatarContainer}>
+                                {senderAvatar ? (
+                                    <Image
+                                        source={{ uri: senderAvatar }}
+                                        style={styles.avatar}
+                                        resizeMode="cover"
+                                    />
+                                ) : (
+                                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                        <Text style={styles.avatarInitials}>{initials}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <View style={styles.friendBundleTextCol}>
+                                <Text style={styles.friendBundleName}>{senderName}</Text>
+                                {locationStr ? (
+                                    <Text style={styles.friendBundleLocation}>{locationStr}</Text>
+                                ) : null}
+                            </View>
+                        </TouchableOpacity>
+                        <View style={styles.friendBundleActions}>
+                            {!isAccepted && !isDeclined ? (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.friendDeclineCircle}
+                                        onPress={() => handleDecline(item.id, item.type, item.data)}
+                                        accessibilityLabel="Decline friend request"
+                                    >
+                                        <X size={18} color={palette.gray500} strokeWidth={2} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.friendAcceptPill}
+                                        onPress={() => handleAccept(item.id, item.type, item.data)}
+                                        activeOpacity={0.85}
+                                    >
+                                        <Text style={styles.friendAcceptPillText}>Accept</Text>
+                                    </TouchableOpacity>
+                                </>
+                            ) : isAccepted ? (
+                                <View style={styles.friendBundleStatus}>
+                                    <Check size={14} color={palette.emerald600} strokeWidth={2.5} />
+                                    <Text style={styles.friendBundleStatusText}>Accepted</Text>
+                                </View>
+                            ) : (
+                                <View style={styles.friendBundleStatusDeclined}>
+                                    <X size={14} color={palette.red600} strokeWidth={2.5} />
+                                    <Text style={styles.friendBundleStatusDeclinedText}>Declined</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                );
+            })}
+        </View>
+    );
+
     const renderNotificationItem = (item: AppNotification) => {
         const dataType = (item.data as Record<string, unknown> | undefined)?.type as string | undefined;
         const d = item.data as Record<string, unknown> | undefined;
@@ -682,6 +932,7 @@ export default function NotificationsScreen({ navigation }: any) {
         const isGroupInvite = dataType === "group_invite";
         const isRosterAdd = dataType === "roster_add";
         const isTeeTimeInvite = dataType === "tee_time_invite" || dataType === "spot_opened";
+        const isSpotOpened = dataType === "spot_opened";
         const isInvite = (dataType && (dataType.includes("invite") || dataType.includes("request"))) || item.type.includes("invite") || item.type.includes("request");
         const isAccepted = item.type.includes("accepted") || item.status === "accepted" || (d?.responded as boolean);
         const isDeclined = item.status === "declined";
@@ -694,16 +945,22 @@ export default function NotificationsScreen({ navigation }: any) {
             (d?.inviterName as string | undefined) ||
             sender?.name ||
             (d?.ownerName as string | undefined) ||
+            (d?.organizerName as string | undefined) ||
             (d?.name as string | undefined) ||
             (d?.firstName != null && d?.lastName != null ? `${String(d.firstName)} ${String(d.lastName)}`.trim() : null) ||
             "Someone";
+        const hostName = isSpotOpened
+            ? String(d?.organizerName || senderName)
+            : String(d?.inviterName || senderName);
         const senderAvatar =
             (d?.senderAvatar as string | undefined) ||
+            (d?.sender_avatar as string | undefined) ||
             (d?.inviterAvatar as string | undefined) ||
+            (d?.organizerAvatar as string | undefined) ||
             sender?.avatar ||
             (d?.avatar as string | undefined);
         const location = (d?.location as string | undefined) || sender?.location || "";
-        const initials = senderName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+        const initials = hostName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
         const handleUnfilledSlotPress = () => {
             if (d?.teeTimeId) {
@@ -718,16 +975,99 @@ export default function NotificationsScreen({ navigation }: any) {
             }
         };
 
-        // —— Tee time invitation card (Figma 1269-936) ——
+        // —— Tee time invitation card (Invites tab matches Figma: host, course, when, Decline | Accept) ——
         if (isTeeTimeInvite) {
             const courseName = (d?.courseName as string) || "Golf course";
-            const teeDate = (d?.teeDate as string) || d?.date as string || "";
-            const teeTime = (d?.teeTime as string) || d?.time as string || "";
-            const dateTimeStr = [teeDate, teeTime].filter(Boolean).join(teeTime ? " at " : "");
+            const teeDate = (d?.teeDate as string) || (d?.date as string) || "";
+            const teeTimeVal = (d?.teeTime as string) || (d?.time as string) || "";
+            const whenStr = formatTeeInviteWhen(teeDate, teeTimeVal);
+            const onInvitesTab = activeTab === "invites";
+
+            if (onInvitesTab) {
+                return (
+                    <TouchableOpacity
+                        key={item.id}
+                        style={[styles.inviteShellCard, !item.isRead && styles.inviteShellCardUnread]}
+                        activeOpacity={0.7}
+                        onPress={() => handleNotificationPress(item)}
+                        onLongPress={() => showReadUnreadMenu(item)}
+                    >
+                        <View style={styles.inviteShellRow}>
+                            <View style={styles.avatarContainer}>
+                                {senderAvatar ? (
+                                    <Image
+                                        source={{ uri: senderAvatar }}
+                                        style={styles.avatar}
+                                        resizeMode="cover"
+                                    />
+                                ) : (
+                                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                        <Text style={styles.avatarInitials}>{initials}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <View style={styles.inviteShellBody}>
+                                <Text style={styles.inviteHostLine}>
+                                    {hostName}
+                                    <Text style={styles.inviteHostSuffix}> (host)</Text>
+                                </Text>
+                                <View style={styles.inviteMetaRow}>
+                                    <MapPin size={15} color={palette.gray500} strokeWidth={2} />
+                                    <Text style={styles.inviteMetaText}>{courseName}</Text>
+                                </View>
+                                {whenStr ? (
+                                    <View style={styles.inviteMetaRow}>
+                                        <Clock size={15} color={palette.gray500} strokeWidth={2} />
+                                        <Text style={styles.inviteMetaText}>{whenStr}</Text>
+                                    </View>
+                                ) : null}
+                                {!isAccepted && !isDeclined && (
+                                    <View style={styles.inviteActionRow}>
+                                        <TouchableOpacity
+                                            style={styles.inviteDeclineBtn}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleDecline(item.id, item.type, item.data);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
+                                            <Text style={styles.inviteDeclineBtnText}>Decline</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.inviteAcceptBtn}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleAccept(item.id, item.type, item.data);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
+                                            <Text style={styles.inviteAcceptBtnText}>Accept</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {isAccepted && (
+                                    <View style={styles.statusBadgeAccepted}>
+                                        <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                        <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                                    </View>
+                                )}
+                                {isDeclined && (
+                                    <View style={styles.statusBadgeDeclined}>
+                                        <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                        <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                );
+            }
+
+            const dateTimeStr = [teeDate, teeTimeVal].filter(Boolean).join(teeTimeVal ? " at " : "");
             const maxPlayers = d?.maxPlayers as number | undefined;
             const deadlineText = getDeadlineText(d?.expiresAt as string | undefined);
             const expiresAtMs = d?.expiresAt ? new Date(d.expiresAt as string).getTime() : 0;
-            const isUrgent = expiresAtMs > Date.now() && (expiresAtMs - Date.now()) < 3600000;
+            const isUrgent = expiresAtMs > Date.now() && expiresAtMs - Date.now() < 3600000;
 
             return (
                 <TouchableOpacity
@@ -761,19 +1101,27 @@ export default function NotificationsScreen({ navigation }: any) {
                                 <Text style={styles.inviteCardMeta}>{maxPlayers} players</Text>
                             </View>
                         )}
-                        {deadlineText && (
+                        {deadlineText ? (
                             <View style={[styles.deadlinePill, isUrgent && styles.deadlinePillUrgent]}>
                                 <Clock size={12} color={isUrgent ? palette.red600 : palette.amber600} />
                                 <Text style={[styles.deadlinePillText, isUrgent && styles.deadlinePillTextUrgent]}>{deadlineText}</Text>
                             </View>
-                        )}
+                        ) : null}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {activeTab === "invites" && !isAccepted && !isDeclined && (
+                        {!isAccepted && !isDeclined && (
                             <View style={styles.actionRow}>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => handleAccept(item.id, item.type, item.data)} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonPrimary]}
+                                    onPress={() => handleAccept(item.id, item.type, item.data)}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={() => handleDecline(item.id, item.type, item.data)} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonSecondary]}
+                                    onPress={() => handleDecline(item.id, item.type, item.data)}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonSecondaryText}>Decline</Text>
                                 </TouchableOpacity>
                             </View>
@@ -796,10 +1144,110 @@ export default function NotificationsScreen({ navigation }: any) {
             );
         }
 
-        // —— Group invitation card (Figma 1269-977) ——
+        // —— Group invitation (Invites: initials avatar, group name, inviter line, Decline | Accept) ——
         if (isGroupInvite) {
             const groupInviteResponded = (d?.responded as boolean) === true;
             const groupInviteDeclined = (d?.declined as boolean) === true;
+            const groupName = String(d?.groupName || "Group");
+            const groupInitials = initialsFromGroupName(groupName);
+            const inviterLabel = String(d?.inviterName || "Someone");
+            const memberCount =
+                (d?.memberCount as number | undefined) ?? (d?.maxMembers as number | undefined);
+            const rawGroupIcon = String((d?.groupIcon as string | undefined) || "").trim();
+            const groupColorResolved = safeGroupColor(d?.groupColor, palette.blue500);
+            const singleIconUrl = pickSingleGroupIconUrl(rawGroupIcon);
+            const groupIconIsRemote = singleIconUrl.length > 0 && isRemoteImageUrl(singleIconUrl);
+            const groupIconTextDisplay =
+                !groupIconIsRemote &&
+                rawGroupIcon.length > 0 &&
+                rawGroupIcon.length <= 4 &&
+                !rawGroupIcon.includes(",") &&
+                !rawGroupIcon.startsWith("[")
+                    ? rawGroupIcon
+                    : groupInitials;
+            const groupAvatarEl = (
+                <View
+                    style={[
+                        styles.avatarContainer,
+                        styles.groupBadgeCircle,
+                        { backgroundColor: groupColorResolved },
+                    ]}
+                >
+                    {groupIconIsRemote ? (
+                        <Image
+                            source={{ uri: singleIconUrl }}
+                            style={styles.groupIconFill}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <Text style={styles.groupInviteInitialsWhite} numberOfLines={1}>
+                            {groupIconTextDisplay}
+                        </Text>
+                    )}
+                </View>
+            );
+
+            if (activeTab === "invites") {
+                return (
+                    <TouchableOpacity
+                        key={item.id}
+                        style={[styles.inviteShellCard, !item.isRead && styles.inviteShellCardUnread]}
+                        activeOpacity={0.7}
+                        onPress={() => handleNotificationPress(item)}
+                        onLongPress={() => showReadUnreadMenu(item)}
+                    >
+                        <View style={styles.inviteShellRow}>
+                            {groupAvatarEl}
+                            <View style={styles.inviteShellBody}>
+                                <Text style={styles.inviteHostLine}>{groupName}</Text>
+                                {memberCount != null && Number.isFinite(memberCount) ? (
+                                    <Text style={styles.groupMemberCount}>{memberCount} members</Text>
+                                ) : null}
+                                <Text style={styles.groupInviteSubline}>
+                                    {inviterLabel} invited you to this group
+                                </Text>
+                                {!groupInviteResponded && (
+                                    <View style={styles.inviteActionRow}>
+                                        <TouchableOpacity
+                                            style={styles.inviteDeclineBtn}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleDeclineGroupInvite(item);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
+                                            <Text style={styles.inviteDeclineBtnText}>Decline</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.inviteAcceptBtn}
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                handleAcceptGroupInvite(item);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
+                                            <Text style={styles.inviteAcceptBtnText}>Accept</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {groupInviteResponded && !groupInviteDeclined && (
+                                    <View style={styles.statusBadgeAccepted}>
+                                        <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                        <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                                    </View>
+                                )}
+                                {groupInviteDeclined && (
+                                    <View style={styles.statusBadgeDeclined}>
+                                        <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                        <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                );
+            }
+
             return (
                 <TouchableOpacity
                     key={item.id}
@@ -808,26 +1256,34 @@ export default function NotificationsScreen({ navigation }: any) {
                     onPress={() => handleNotificationPress(item)}
                     onLongPress={() => showReadUnreadMenu(item)}
                 >
-                    <View style={styles.avatarContainer}>
-                        {senderAvatar ? (
-                            <Image source={{ uri: senderAvatar }} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                                <Text style={styles.avatarInitials}>{initials}</Text>
-                            </View>
-                        )}
-                    </View>
+                    {groupAvatarEl}
                     <View style={styles.content}>
                         <Text style={styles.groupRequestLabel}>Group request</Text>
                         <Text style={styles.cardTitle}>{senderName}</Text>
-                        <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
+                        <Text style={styles.cardBody} numberOfLines={2}>
+                            {item.body}
+                        </Text>
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {activeTab === "invites" && !groupInviteResponded && (
+                        {!groupInviteResponded && (
                             <View style={styles.actionRow}>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={(e) => { e.stopPropagation(); handleAcceptGroupInvite(item); }} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonPrimary]}
+                                    onPress={(e) => {
+                                        e.stopPropagation();
+                                        handleAcceptGroupInvite(item);
+                                    }}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={(e) => { e.stopPropagation(); handleDeclineGroupInvite(item); }} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonSecondary]}
+                                    onPress={(e) => {
+                                        e.stopPropagation();
+                                        handleDeclineGroupInvite(item);
+                                    }}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonSecondaryText}>Decline</Text>
                                 </TouchableOpacity>
                             </View>
@@ -895,8 +1351,8 @@ export default function NotificationsScreen({ navigation }: any) {
             );
         }
 
-        // —— Friend request card (Figma 1269-903) ——
-        if (isFriendRequest) {
+        // —— Friend request (Invites tab uses bundled card; Activity fallback only) ——
+        if (isFriendRequest && activeTab === "activity") {
             return (
                 <TouchableOpacity
                     key={item.id}
@@ -918,12 +1374,20 @@ export default function NotificationsScreen({ navigation }: any) {
                         <Text style={styles.cardTitle}>{senderName}</Text>
                         {location ? <Text style={styles.cardSubtext}>{location}</Text> : null}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {activeTab === "invites" && !isAccepted && !isDeclined && (
+                        {!isAccepted && !isDeclined && (
                             <View style={styles.actionRow}>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => handleAccept(item.id, item.type, item.data)} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonPrimary]}
+                                    onPress={() => handleAccept(item.id, item.type, item.data)}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonPrimaryText}>Accept</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={() => handleDecline(item.id, item.type, item.data)} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.actionButtonSecondary]}
+                                    onPress={() => handleDecline(item.id, item.type, item.data)}
+                                    activeOpacity={0.8}
+                                >
                                     <Text style={styles.actionButtonSecondaryText}>Decline</Text>
                                 </TouchableOpacity>
                             </View>
@@ -944,6 +1408,10 @@ export default function NotificationsScreen({ navigation }: any) {
                     {renderCardActions(item)}
                 </TouchableOpacity>
             );
+        }
+
+        if (isFriendRequest && activeTab === "invites") {
+            return null;
         }
 
         // —— Default card (unfilled slot, spot_opened fallback, etc.) ——
@@ -1032,18 +1500,35 @@ export default function NotificationsScreen({ navigation }: any) {
     const invitesUnreadCount = notifications.filter(n => {
         const t = getDataType(n);
         return !n.isRead && (
-            t === "tee_time_invite" || t === "friend_request" || t === "group_invite" || t === "spot_opened" ||
-            t === "roster_add" || t === "organizer_fill_warning" || t === "tee_time_not_filled" || t === "organizer_invite_more"
+            t === "tee_time_invite" ||
+            t === "friend_request" ||
+            t === "group_invite" ||
+            t === "spot_opened"
         );
     }).length;
 
     const activityCount = notifications.filter(n => {
         const t = getDataType(n);
-        return t === "tee_time_response" || t === "waiver_wire" || t === "group_invite_accepted" || t === "player_cancelled"
-            || t === "group_updated" || t === "group_deleted" || t === "roster_removed"
-            || t === "on_deck_added" || t === "on_deck_removed"
-            || t === "friend_accepted" || t === "check_in_reminder" || t === "no_show"
-            || t === "roster_exhausted" || t === "fcfs_deadline";
+        return (
+            t === "tee_time_response" ||
+            t === "waiver_wire" ||
+            t === "group_invite_accepted" ||
+            t === "player_cancelled" ||
+            t === "group_updated" ||
+            t === "group_deleted" ||
+            t === "roster_removed" ||
+            t === "on_deck_added" ||
+            t === "on_deck_removed" ||
+            t === "friend_accepted" ||
+            t === "check_in_reminder" ||
+            t === "no_show" ||
+            t === "roster_exhausted" ||
+            t === "fcfs_deadline" ||
+            t === "roster_add" ||
+            t === "organizer_fill_warning" ||
+            t === "tee_time_not_filled" ||
+            t === "organizer_invite_more"
+        );
     }).length;
 
     const typeFilterOptions = getTypeFilterOptions(activeTab);
@@ -1117,74 +1602,77 @@ export default function NotificationsScreen({ navigation }: any) {
                 </TouchableOpacity>
             </View>
 
-            {/* Filter by Type */}
-            {showTypeFilter && (
+            {/* Filter by type — Activity tab only (Invites uses fixed sections) */}
+            {activeTab === "activity" && showTypeFilter && (
                 <TouchableWithoutFeedback onPress={() => setShowTypeFilter(false)}>
                     <View style={StyleSheet.absoluteFill} />
                 </TouchableWithoutFeedback>
             )}
-            <View style={styles.filterContainer}>
-                <Text style={styles.filterLabel}>Filter by type</Text>
-                <View style={styles.filterRow}>
-                    <TouchableOpacity
-                        style={styles.filterButton}
-                        onPress={() => setShowTypeFilter(!showTypeFilter)}
-                        activeOpacity={0.7}
-                        accessibilityLabel="Filter notifications by type"
-                        accessibilityHint={showTypeFilter ? "Closes filter menu" : "Opens filter menu"}
-                    >
-                        <Filter size={16} color={palette.gray600} />
-                        <Text style={styles.filterButtonText}>
-                            {typeFilterOptions.find(opt => opt.key === typeFilter)?.label || 'All Types'}
-                        </Text>
-                        {showTypeFilter ? (
-                            <ChevronUp size={16} color={palette.gray600} />
-                        ) : (
-                            <ChevronDown size={16} color={palette.gray600} />
-                        )}
-                    </TouchableOpacity>
-                    {typeFilter !== 'all' && (
+            {activeTab === "activity" && (
+                <View style={styles.filterContainer}>
+                    <Text style={styles.filterLabel}>Filter by type</Text>
+                    <View style={styles.filterRow}>
                         <TouchableOpacity
-                            style={styles.clearFilterButton}
-                            onPress={() => setTypeFilter('all')}
+                            style={styles.filterButton}
+                            onPress={() => setShowTypeFilter(!showTypeFilter)}
                             activeOpacity={0.7}
+                            accessibilityLabel="Filter notifications by type"
+                            accessibilityHint={showTypeFilter ? "Closes filter menu" : "Opens filter menu"}
                         >
-                            <Text style={styles.clearFilterText}>Clear</Text>
+                            <Filter size={16} color={palette.gray600} />
+                            <Text style={styles.filterButtonText}>
+                                {typeFilterOptions.find(opt => opt.key === typeFilter)?.label || "All Types"}
+                            </Text>
+                            {showTypeFilter ? (
+                                <ChevronUp size={16} color={palette.gray600} />
+                            ) : (
+                                <ChevronDown size={16} color={palette.gray600} />
+                            )}
                         </TouchableOpacity>
-                    )}
-                </View>
-                {showTypeFilter && (
-                    <View style={styles.filterDropdown}>
-                        {typeFilterOptions.map(option => (
+                        {typeFilter !== "all" && (
                             <TouchableOpacity
-                                key={option.key}
-                                style={[
-                                    styles.filterOption,
-                                    typeFilter === option.key && styles.filterOptionActive
-                                ]}
-                                onPress={() => {
-                                    setTypeFilter(option.key);
-                                    setShowTypeFilter(false);
-                                }}
+                                style={styles.clearFilterButton}
+                                onPress={() => setTypeFilter("all")}
                                 activeOpacity={0.7}
                             >
-                                <Text style={[
-                                    styles.filterOptionText,
-                                    typeFilter === option.key && styles.filterOptionTextActive
-                                ]}>
-                                    {option.label}
-                                </Text>
-                                {typeFilter === option.key && (
-                                    <Check size={16} color={palette.green600} />
-                                )}
+                                <Text style={styles.clearFilterText}>Clear</Text>
                             </TouchableOpacity>
-                        ))}
+                        )}
                     </View>
-                )}
-            </View>
+                    {showTypeFilter && (
+                        <View style={styles.filterDropdown}>
+                            {typeFilterOptions.map(option => (
+                                <TouchableOpacity
+                                    key={option.key}
+                                    style={[
+                                        styles.filterOption,
+                                        typeFilter === option.key && styles.filterOptionActive,
+                                    ]}
+                                    onPress={() => {
+                                        setTypeFilter(option.key);
+                                        setShowTypeFilter(false);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.filterOptionText,
+                                            typeFilter === option.key && styles.filterOptionTextActive,
+                                        ]}
+                                    >
+                                        {option.label}
+                                    </Text>
+                                    {typeFilter === option.key && <Check size={16} color={palette.green600} />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
+            )}
 
             <ScrollView
-                style={styles.scrollView}
+                style={[styles.scrollView, activeTab === "invites" && styles.scrollViewInvites]}
+                contentContainerStyle={activeTab === "invites" ? styles.scrollContentInvites : undefined}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={palette.green500} />
                 }
@@ -1218,13 +1706,29 @@ export default function NotificationsScreen({ navigation }: any) {
                     </View>
                 ) : (
                     sections.map((section, idx) => (
-                        <View key={idx}>
-                            <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>
+                        <View key={`${section.inviteKind ?? "act"}-${section.title}-${idx}`}>
+                            <View
+                                style={[
+                                    styles.sectionHeader,
+                                    activeTab === "invites" && styles.sectionHeaderInvites,
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        styles.sectionTitle,
+                                        activeTab === "invites" && styles.sectionTitleInvites,
+                                    ]}
+                                >
                                     {section.title} ({section.count})
                                 </Text>
                             </View>
-                            {section.items.map(item => renderNotificationItem(item))}
+                            {activeTab === "invites" && section.inviteKind === "friend" ? (
+                                renderFriendRequestsBundle(section.items)
+                            ) : (
+                                section.items.map(item => (
+                                    <View key={item.id}>{renderNotificationItem(item)}</View>
+                                ))
+                            )}
                         </View>
                     ))
                 )}
@@ -1318,6 +1822,227 @@ const styles = StyleSheet.create({
     scrollView: {
         flex: 1,
         backgroundColor: "#FFFFFF",
+    },
+    scrollViewInvites: {
+        backgroundColor: "#F3F4F6",
+    },
+    scrollContentInvites: {
+        flexGrow: 1,
+        paddingBottom: spacing.lg,
+    },
+    sectionHeaderInvites: {
+        backgroundColor: "transparent",
+        borderBottomWidth: 0,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.xs,
+    },
+    sectionTitleInvites: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.base,
+        color: palette.gray900,
+        textTransform: "none",
+        letterSpacing: 0,
+    },
+    inviteShellCard: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: radii.lg,
+        marginHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
+        padding: spacing.md,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    inviteShellCardUnread: {
+        backgroundColor: palette.green50,
+    },
+    inviteShellRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+    },
+    inviteShellBody: {
+        flex: 1,
+        minWidth: 0,
+    },
+    inviteHostLine: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.base,
+        color: palette.gray900,
+    },
+    inviteHostSuffix: {
+        fontFamily: "Inter_400Regular",
+        fontWeight: "400",
+        color: palette.gray600,
+    },
+    inviteMetaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: spacing.xs + 2,
+        gap: 6,
+    },
+    inviteMetaText: {
+        flex: 1,
+        fontFamily: "Inter_400Regular",
+        fontSize: 13,
+        color: palette.gray600,
+    },
+    inviteActionRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: spacing.md,
+    },
+    inviteDeclineBtn: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        borderRadius: radii.sm,
+        borderWidth: 1,
+        borderColor: palette.red500,
+        backgroundColor: "#FFFFFF",
+    },
+    inviteDeclineBtnText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.sm,
+        color: palette.red600,
+    },
+    inviteAcceptBtn: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        borderRadius: radii.sm,
+        backgroundColor: palette.green600,
+    },
+    inviteAcceptBtnText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.sm,
+        color: "#FFFFFF",
+    },
+    groupBadgeCircle: {
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+    },
+    groupIconFill: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+    },
+    groupInviteInitialsWhite: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.base,
+        color: "#FFFFFF",
+    },
+    groupMemberCount: {
+        fontFamily: "Inter_400Regular",
+        fontSize: 13,
+        color: palette.gray500,
+        marginTop: 2,
+    },
+    groupInviteSubline: {
+        fontFamily: "Inter_400Regular",
+        fontSize: 13,
+        color: palette.gray600,
+        marginTop: spacing.sm,
+        lineHeight: 18,
+    },
+    friendBundleCard: {
+        backgroundColor: "#FFFFFF",
+        marginHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
+        borderRadius: radii.lg,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    friendBundleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+    },
+    friendBundleRowDivider: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: palette.gray200,
+    },
+    friendBundleRowUnread: {
+        backgroundColor: palette.green50,
+    },
+    friendBundleRowMain: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        minWidth: 0,
+    },
+    friendBundleTextCol: {
+        flex: 1,
+        marginLeft: spacing.md,
+        minWidth: 0,
+    },
+    friendBundleName: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 15,
+        color: palette.gray900,
+    },
+    friendBundleLocation: {
+        fontFamily: "Inter_400Regular",
+        fontSize: 13,
+        color: palette.gray500,
+        marginTop: 2,
+    },
+    friendBundleActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        marginLeft: spacing.sm,
+    },
+    friendDeclineCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: palette.gray200,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    friendAcceptPill: {
+        backgroundColor: palette.green600,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: radii.sm,
+    },
+    friendAcceptPillText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 13,
+        color: "#FFFFFF",
+    },
+    friendBundleStatus: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    friendBundleStatusText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.xs,
+        color: palette.emerald600,
+    },
+    friendBundleStatusDeclined: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    friendBundleStatusDeclinedText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.xs,
+        color: palette.red600,
     },
     emptyContainer: {
         paddingTop: spacing["7xl"],

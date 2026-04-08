@@ -58,7 +58,6 @@ class FriendController {
                 id: senderId,
                 firstName: req.user.firstName,
                 lastName: req.user.lastName,
-                avatar: req.user.avatar,
             }, request.id);
             
             res.status(201).json({ success: true, request });
@@ -181,7 +180,6 @@ class FriendController {
                     id: userId,
                     firstName: req.user.firstName,
                     lastName: req.user.lastName,
-                    avatar: req.user.avatar,
                 });
             }
             

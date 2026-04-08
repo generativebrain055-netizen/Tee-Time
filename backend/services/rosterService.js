@@ -6,7 +6,6 @@
 
 const rosterRepository = require("../repositories/rosterRepository");
 const userRepository = require("../repositories/userRepository");
-const rosterNotificationService = require("./rosterNotificationService");
 const notificationService = require("./notificationService");
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
@@ -113,51 +112,9 @@ async function addToRoster(userId, contactData) {
     throw err;
   }
 
-  // Side effect: Send notification (fire and forget)
-  if (contactUserId) {
-    sendAddToRosterNotification(userId, entry).catch((err) => {
-      logger.error("Failed to send roster add notification:", err);
-    });
-  }
+  // Intentionally no push/in-app notify to contacts when they are added to a roster.
 
   return entry;
-}
-
-/**
- * Send notification when user is added to roster
- * @private
- */
-async function sendAddToRosterNotification(userId, entry) {
-  const user = await userRepository.findById(userId);
-  await rosterNotificationService.sendRosterAddNotification(entry, user);
-}
-
-/**
- * Notify a rostered user they were removed (fire-and-forget from removeFromRoster).
- * @private
- */
-async function sendRemovedFromRosterNotification(ownerUserId, removedEntry) {
-  const contactUserId = removedEntry.contact_user_id;
-  if (!contactUserId) return;
-  const owner = await userRepository.findById(ownerUserId);
-  if (!owner) return;
-  await notificationService.notifyRemovedFromRoster(contactUserId, owner);
-}
-
-/**
- * @private
- */
-async function sendOnDeckAvailabilityNotification(ownerUserId, entry, isOnDeck) {
-  const contactUserId = entry.contact_user_id;
-  if (!contactUserId) return;
-  const owner = await userRepository.findById(ownerUserId);
-  if (!owner) return;
-  await notificationService.notifyOnDeckAvailability(
-    contactUserId,
-    owner,
-    isOnDeck,
-    entry.id,
-  );
 }
 
 /**
@@ -242,11 +199,7 @@ async function removeFromRoster(userId, rosterId, options = {}) {
     if (!removed) {
       throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
     }
-    if (removed.contact_user_id) {
-      sendRemovedFromRosterNotification(userId, removed).catch((err) => {
-        logger.error("Failed to send roster removed notification:", err);
-      });
-    }
+    // Intentionally no notify when a contact is removed from roster / on-deck.
     return { action: "deleted", entry: removed };
   }
 
@@ -288,13 +241,7 @@ async function toggleOnDeck(userId, rosterId, isOnDeck) {
   if (!updated) {
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
   }
-  if (updated.contact_user_id) {
-    sendOnDeckAvailabilityNotification(userId, updated, isOnDeck).catch(
-      (err) => {
-        logger.error("Failed to send on-deck availability notification:", err);
-      },
-    );
-  }
+  // Intentionally no notify when roster ↔ on-deck changes.
   return updated;
 }
 
@@ -641,6 +588,11 @@ async function inviteToGroup(userId, groupId, memberUserIds) {
         inviter,
         groupId,
         groupName,
+        {
+          color: group.color != null ? group.color : null,
+          icon: group.icon != null ? group.icon : null,
+          memberCount: group.member_count != null ? group.member_count : null,
+        },
       );
       if (created) {
         sent++;
@@ -849,10 +801,6 @@ async function moveMember(
     );
   }
 
-  const before = await rosterRepository.getRosterOwnerRow(userId, rosterId);
-  if (!before) {
-    throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
-  }
   const updated = await rosterRepository.moveMember(
     userId,
     rosterId,
@@ -865,17 +813,7 @@ async function moveMember(
     throw new RosterServiceError("Roster entry not found", "NOT_FOUND", 404);
   }
 
-  const onDeckChanged =
-    updated.contact_user_id &&
-    typeof isOnDeck === "boolean" &&
-    Boolean(before.is_on_deck) !== Boolean(isOnDeck);
-  if (onDeckChanged) {
-    sendOnDeckAvailabilityNotification(userId, updated, isOnDeck).catch(
-      (err) => {
-        logger.error("Failed to send on-deck availability notification:", err);
-      },
-    );
-  }
+  // Intentionally no notify when roster ↔ on-deck changes (moveMember).
 
   return updated;
 }

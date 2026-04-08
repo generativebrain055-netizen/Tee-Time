@@ -1,102 +1,15 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
-const notificationService = require("./notificationService");
 
 /**
- * Service for handling roster-related notifications
- * Sends one-time notifications when users are added to someone's roster
+ * Roster-related notification helpers (roster add notify is disabled).
  */
 class RosterNotificationService {
   /**
-   * Send notification when a user is added to someone's roster
-   * Only sends once per roster entry (no spam on repeated adds)
+   * Roster add notifications are disabled — contacts are not notified when added to a roster.
    */
-  async sendRosterAddNotification(rosterEntry, ownerUser) {
-    const { id: rosterId, contact_user_id, group_id } = rosterEntry;
-    
-    // Can't notify non-users (phone-only contacts)
-    if (!contact_user_id) {
-      return { sent: false, reason: "non_user_contact" };
-    }
-    
-    try {
-      // Check if already notified for this roster entry
-      const { data: existing, error: checkError } = await supabaseAdmin
-        .from("roster_notifications")
-        .select("id")
-        .eq("roster_id", rosterId)
-        .eq("notified_user_id", contact_user_id)
-        .limit(1);
-
-      if (checkError) {
-        logger.error("Error checking existing notification:", checkError.message);
-        throw checkError;
-      }
-      
-      if (existing && existing.length > 0) {
-        return { sent: false, reason: "already_notified" };
-      }
-      
-      // Get group name if applicable
-      let groupName = null;
-      if (group_id) {
-        const { data: group, error: groupError } = await supabaseAdmin
-          .from("roster_groups")
-          .select("name")
-          .eq("id", group_id)
-          .single();
-
-        if (!groupError && group) {
-          groupName = group.name;
-        }
-      }
-      
-      // Create notification tracking record
-      const { error: trackError } = await supabaseAdmin
-        .from("roster_notifications")
-        .insert({
-          roster_id: rosterId,
-          notified_user_id: contact_user_id,
-          roster_owner_id: ownerUser.id,
-          group_id: group_id,
-          group_name: groupName,
-          notification_sent: true,
-          notification_sent_at: new Date().toISOString()
-        });
-
-      if (trackError) {
-        logger.error("Error creating notification tracking:", trackError.message);
-        throw trackError;
-      }
-
-      // Build notification message (uses notificationService for prefs + optional push)
-      const ownerName = `${ownerUser.first_name || ''} ${ownerUser.last_name || ''}`.trim() || 'Someone';
-      const title = 'Added to Roster';
-      const body = groupName
-        ? `${ownerName} added you to their roster "${groupName}"`
-        : `${ownerName} added you to their roster`;
-
-      await notificationService.createNotification({
-        userId: contact_user_id,
-        title,
-        body,
-        data: {
-          type: 'roster_add',
-          ownerId: ownerUser.id,
-          ownerName,
-          groupName: groupName || null,
-          rosterId,
-        },
-        sendPush: true,
-      });
-      
-      logger.info(`Roster add notification sent to user ${contact_user_id} from ${ownerUser.id}`);
-      
-      return { sent: true, notifiedUserId: contact_user_id };
-    } catch (error) {
-      logger.error("Failed to send roster add notification:", error.message);
-      return { sent: false, reason: "error", error: error.message };
-    }
+  async sendRosterAddNotification(_rosterEntry, _ownerUser) {
+    return { sent: false, reason: "roster_add_notifications_disabled" };
   }
 
   /**
