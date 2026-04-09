@@ -28,6 +28,7 @@ import type {
   OAuthSuccessData,
   OAuthProviderData,
 } from "../../types/oauth";
+import type { SignInResponse } from "@react-native-google-signin/google-signin";
 import Svg, { Path } from "react-native-svg";
 import GoogleLogo from "../GoogleLogo";
 import { logger } from "../../utils/logger";
@@ -84,6 +85,30 @@ function ensureGoogleSignInConfigured(): void {
   } catch (e) {
     logger.error("[Firebase] Google Sign-In configure failed:", e);
   }
+}
+
+/**
+ * Resolve ID token from signIn(). On Android, idToken is sometimes null on the success object until getTokens() runs.
+ */
+async function resolveGoogleIdToken(signInResult: SignInResponse): Promise<string | null> {
+  if (!signInResult || typeof signInResult !== "object") return null;
+  if ("type" in signInResult && signInResult.type === "cancelled") return null;
+  if ("type" in signInResult && signInResult.type === "success") {
+    const direct = signInResult.data?.idToken;
+    if (direct) return direct;
+    if (Platform.OS === "android") {
+      try {
+        logger.debug("[Firebase] idToken missing after signIn; calling getTokens() (Android)");
+        const tokens = await GoogleSignin.getTokens();
+        return tokens.idToken ?? null;
+      } catch (e) {
+        logger.warn("[Firebase] getTokens() after signIn failed:", e);
+        return null;
+      }
+    }
+    return signInResult.data?.idToken ?? null;
+  }
+  return null;
 }
 
 // ============================================================================
@@ -227,16 +252,16 @@ export function OAuthButtons({
         return;
       }
 
-      const data =
-        userInfo && typeof userInfo === "object" && "data" in userInfo
-          ? (userInfo as { data: { idToken?: string } | null }).data
-          : null;
-      const idToken = data?.idToken;
+      const idToken = await resolveGoogleIdToken(userInfo as SignInResponse);
 
       if (!idToken) {
         if (userInfo && typeof userInfo === "object" && "type" in userInfo && userInfo.type === "success") {
-          logger.warn("[Firebase] Google Sign-In succeeded but idToken missing — check OAuth client config");
-          onError("Could not complete Google sign-in. Please try again.");
+          logger.warn("[Firebase] Google Sign-In succeeded but idToken still missing — check Web Client ID and Android SHA-1 in Firebase");
+          onError(
+            Platform.OS === "android"
+              ? "Could not get a sign-in token. Confirm google-services.json is in the project, rebuild the app, and add this build’s SHA-1 in Firebase Console → Project settings → Your apps."
+              : "Could not complete Google sign-in. Please try again.",
+          );
         } else {
           logger.debug("[Firebase] Google Sign-In finished without an ID token");
         }
@@ -283,6 +308,19 @@ export function OAuthButtons({
 
       if (error.code === "PLAY_SERVICES_NOT_AVAILABLE") {
         onError("Google Play Services not available. Please update Google Play Services.");
+        return;
+      }
+
+      // Android: configuration mismatch (package name / SHA-1 / OAuth client in Firebase or Cloud Console)
+      const code = error?.code;
+      const msg = String(error?.message ?? "");
+      if (
+        Platform.OS === "android" &&
+        (code === "10" || code === 10 || msg.includes("DEVELOPER_ERROR") || msg.includes("Developer console"))
+      ) {
+        onError(
+          "Google Sign-In isn’t set up for this Android build. In Firebase Console, open Project settings → Your apps → Android app, and add the SHA-1 from your debug or release keystore. Then download google-services.json, place it in the app root, and rebuild.",
+        );
         return;
       }
 
