@@ -47,9 +47,10 @@ export const WelcomePage: React.FC<WelcomePageProps> = ({
         </TouchableOpacity>
 
         <Text className="text-xs text-gray-400 text-center leading-[18px]">
-          By continuing, you agree to our{" "}
+          By tapping Get Started, you agree to our{" "}
           <Text className="text-primary">Terms of Service</Text> and{" "}
-          <Text className="text-primary">Privacy Policy</Text>
+          <Text className="text-primary">Privacy Policy</Text>.{"\n"}
+          Log in does not require accepting them again.
         </Text>
       </View>
     </SafeAreaView>
