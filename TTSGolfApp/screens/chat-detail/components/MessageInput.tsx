@@ -1,8 +1,9 @@
 import React, { memo, useCallback, useState } from "react";
 import { View, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Image as ImageIcon, Smile, Send } from "lucide-react-native";
+import { Image as ImageIcon, Paperclip, Smile, Send } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import EmojiPicker from "rn-emoji-keyboard";
 import { COLORS, FIGMA } from "../styles";
 
@@ -12,6 +13,8 @@ interface MessageInputProps {
   onSend: () => void;
   /** Called when user picks an image. Passes uri and base64 (for sending). */
   onPickImage?: (uri: string, base64?: string) => void;
+  /** Called when user picks a document (PDF, etc.). Base64 payload for API. */
+  onPickFile?: (file: { base64: string; fileName: string; fileMime?: string }) => void;
   /** Called when user selects an emoji from the picker (emoji icon tap). */
   onEmojiSelected?: (emoji: string) => void;
   /** When true, input and all actions are non-interactive (e.g. blocked 1:1 chat). */
@@ -24,6 +27,7 @@ export const MessageInput = memo(
     onChangeText,
     onSend,
     onPickImage,
+    onPickFile,
     onEmojiSelected,
     disabled = false,
   }: MessageInputProps) => {
@@ -53,6 +57,49 @@ export const MessageInput = memo(
     }
   }, [onPickImage, disabled]);
 
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  const handleFilePress = useCallback(async () => {
+    if (disabled || !onPickFile) return;
+    try {
+      // Dynamic import so the rest of the app loads even if the dev client was built before
+      // expo-document-picker was added; native module is only required when attaching a file.
+      const { getDocumentAsync } = await import("expo-document-picker");
+      const result = await getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (asset.size != null && asset.size > MAX_FILE_BYTES) {
+        Alert.alert("File too large", "Maximum attachment size is 10 MB.");
+        return;
+      }
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      onPickFile({
+        base64,
+        fileName: asset.name || "attachment",
+        fileMime: asset.mimeType ?? undefined,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (
+        msg.includes("native module") ||
+        msg.includes("ExpoDocumentPicker") ||
+        msg.includes("Cannot find")
+      ) {
+        Alert.alert(
+          "Attachment needs a fresh native build",
+          "Your installed app was built before file attachments were added. From the TTSGolfApp folder run:\n\nnpx expo run:ios\nor\nnpx expo run:android\n\nThen open the new build (clear cache: npx expo start -c)."
+        );
+        return;
+      }
+      Alert.alert("Could not read file", "Try another file.");
+    }
+  }, [onPickFile, disabled]);
+
   const handleEmojiSelected = useCallback(
     (ev: { emoji: string }) => {
       onEmojiSelected?.(ev.emoji);
@@ -72,6 +119,16 @@ export const MessageInput = memo(
         >
           <ImageIcon size={20} color={COLORS.textSub} />
         </TouchableOpacity>
+        {onPickFile ? (
+          <TouchableOpacity
+            style={styles.iconBtn}
+            hitSlop={8}
+            onPress={handleFilePress}
+            disabled={disabled}
+          >
+            <Paperclip size={20} color={COLORS.textSub} />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}

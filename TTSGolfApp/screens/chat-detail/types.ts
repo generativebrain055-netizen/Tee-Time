@@ -6,6 +6,10 @@ export interface ChatMessage {
   message: string;
   /** Public URL of image attachment when message includes a photo */
   imageUrl?: string | null;
+  /** Non-image file attachment */
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileMime?: string | null;
   time: string;
   isMe: boolean;
   /** True for auto-generated tee time messages (e.g. Tee Time Social welcome) */

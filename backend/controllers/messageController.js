@@ -1,5 +1,6 @@
 const messageService = require("../services/messageService");
 const chatImageUploadService = require("../services/chatImageUploadService");
+const chatFileUploadService = require("../services/chatFileUploadService");
 const logger = require("../config/logger");
 
 /**
@@ -68,22 +69,34 @@ async function getMessages(req, res) {
 
 /**
  * POST /api/messages/conversations/:id/messages
- * Send a message. Body: { body?: string, imageBase64?: string }
- * At least one of body (non-empty) or imageBase64 is required. Image is uploaded to storage and URL stored.
+ * Send a message. Body: { body?, imageBase64?, fileBase64?, fileName?, fileMime? }
+ * At least one of: non-empty body, imageBase64, or fileBase64 (with fileName). Not both image and file in one message.
  */
 async function sendMessage(req, res) {
   try {
     const userId = req.user.id;
     const { id: conversationId } = req.params;
-    const { body = "", imageBase64 } = req.body;
+    const { body = "", imageBase64, fileBase64, fileName, fileMime } = req.body;
 
     const hasText = typeof body === "string" && body.trim().length > 0;
     const hasImage = typeof imageBase64 === "string" && imageBase64.length > 0;
+    const hasFile =
+      typeof fileBase64 === "string" &&
+      fileBase64.length > 0 &&
+      typeof fileName === "string" &&
+      fileName.trim().length > 0;
 
-    if (!hasText && !hasImage) {
+    if (!hasText && !hasImage && !hasFile) {
       return res.status(400).json({
         success: false,
-        message: "Provide message body and/or image (imageBase64)",
+        message: "Provide message text, image (imageBase64), and/or a file (fileBase64 + fileName).",
+      });
+    }
+
+    if (hasImage && hasFile) {
+      return res.status(400).json({
+        success: false,
+        message: "Send either an image or a file attachment, not both in one message.",
       });
     }
 
@@ -104,11 +117,31 @@ async function sendMessage(req, res) {
       }
     }
 
+    let file = null;
+    if (hasFile) {
+      try {
+        file = await chatFileUploadService.uploadChatFile(
+          fileBase64,
+          fileName.trim(),
+          typeof fileMime === "string" ? fileMime : "",
+          conversationId,
+          userId
+        );
+      } catch (uploadErr) {
+        logger.error("Chat file upload error:", uploadErr);
+        return res.status(400).json({
+          success: false,
+          message: uploadErr.message || "Failed to upload file",
+        });
+      }
+    }
+
     const message = await messageService.sendMessage(
       conversationId,
       userId,
       (body || "").trim(),
-      imageUrl
+      imageUrl,
+      file
     );
     return res.status(201).json({ success: true, message });
   } catch (error) {
@@ -244,6 +277,33 @@ async function deleteMessage(req, res) {
   }
 }
 
+/**
+ * PATCH /api/messages/conversations/:id/messages/:messageId
+ * Body: { body: string } — new text (may be empty if message is image-only)
+ */
+async function updateMessage(req, res) {
+  try {
+    const userId = req.user.id;
+    const { id: conversationId, messageId } = req.params;
+    const rawBody = req.body?.body;
+    const body = typeof rawBody === "string" ? rawBody : "";
+    const message = await messageService.updateMessage(conversationId, messageId, userId, body);
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+    return res.json({ success: true, message });
+  } catch (error) {
+    if (error.message && (error.message.includes("only edit") || error.message.includes("cannot be edited"))) {
+      return res.status(403).json({ success: false, message: error.message });
+    }
+    logger.error("Update message error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update message",
+    });
+  }
+}
+
 module.exports = {
   listConversations,
   getOrCreateConversation,
@@ -253,6 +313,7 @@ module.exports = {
   markRead,
   convertToGroupMessage,
   deleteMessage,
+  updateMessage,
   setMuted,
   leaveConversation,
 };

@@ -41,6 +41,10 @@ export interface ChatMessage {
   senderImg: string;
   message: string;
   imageUrl?: string | null;
+  /** Non-image file attachment */
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileMime?: string | null;
   time: string;
   createdAt: string;
   isMe: boolean;
@@ -102,27 +106,44 @@ export const messagesApi = {
       method: "POST",
     }),
 
-  /** Send a message (text and/or image). For image-only, pass body as "" and imageBase64. */
+  /**
+   * Send a message (text and/or image and/or file — not image + file together).
+   * For a file: pass `file` with base64 + name (+ optional mime from picker).
+   */
   sendMessage: (
     conversationId: string,
     body: string,
-    imageBase64?: string
-  ) =>
-    apiCall<{ success: boolean; message: ChatMessage }>(
+    imageBase64?: string,
+    file?: { base64: string; fileName: string; fileMime?: string }
+  ) => {
+    const payload: Record<string, string> = { body: body.trim() };
+    if (imageBase64) payload.imageBase64 = imageBase64;
+    if (file?.base64) {
+      payload.fileBase64 = file.base64;
+      payload.fileName = file.fileName;
+      if (file.fileMime) payload.fileMime = file.fileMime;
+    }
+    return apiCall<{ success: boolean; message: ChatMessage }>(
       API_ENDPOINTS.MESSAGES_SEND_MESSAGE(conversationId),
       {
         method: "POST",
-        body: JSON.stringify(
-          imageBase64 ? { body: body.trim(), imageBase64 } : { body: body.trim() }
-        ),
+        body: JSON.stringify(payload),
       }
-    ),
+    );
+  },
 
   /** Turn an auto-generated tee time message into a group message (claim as current user's). */
   convertToGroupMessage: (conversationId: string, messageId: string) =>
     apiCall<{ success: boolean; message: ChatMessage }>(
       API_ENDPOINTS.MESSAGES_CONVERT_TO_GROUP(conversationId, messageId),
       { method: "POST" }
+    ),
+
+  /** Edit message text (sender only). */
+  updateMessage: (conversationId: string, messageId: string, body: string) =>
+    apiCall<{ success: boolean; message: ChatMessage }>(
+      API_ENDPOINTS.MESSAGES_UPDATE_MESSAGE(conversationId, messageId),
+      { method: "PATCH", body: JSON.stringify({ body }) }
     ),
 
   /** Delete a message (sender; tee time organizer may delete any in tee time chat). */

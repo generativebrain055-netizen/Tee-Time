@@ -110,6 +110,8 @@ export interface ApiEndpoints {
   MESSAGES_MARK_READ: (id: string) => string;
   MESSAGES_CONVERT_TO_GROUP: (conversationId: string, messageId: string) => string;
   MESSAGES_DELETE_MESSAGE: (conversationId: string, messageId: string) => string;
+  /** PATCH same path — edit message body */
+  MESSAGES_UPDATE_MESSAGE: (conversationId: string, messageId: string) => string;
   // Health
   HEALTH: string;
   // Support
@@ -194,6 +196,8 @@ export const API_ENDPOINTS: ApiEndpoints = {
   MESSAGES_CONVERT_TO_GROUP: (conversationId: string, messageId: string) =>
     `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}/convert-to-group`,
   MESSAGES_DELETE_MESSAGE: (conversationId: string, messageId: string) =>
+    `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}`,
+  MESSAGES_UPDATE_MESSAGE: (conversationId: string, messageId: string) =>
     `${API_URL}/api/messages/conversations/${conversationId}/messages/${messageId}`,
   MESSAGES_CONVERSATION_MUTE: (id: string) =>
     `${API_URL}/api/messages/conversations/${id}/mute`,

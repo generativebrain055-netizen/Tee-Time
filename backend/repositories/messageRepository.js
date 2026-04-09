@@ -9,7 +9,9 @@ async function listByConversation(conversationId, options = {}) {
   const limit = Math.min(options.limit || 50, 100);
   let query = supabaseAdmin
     .from("messages")
-    .select("id, conversation_id, sender_id, body, image_url, created_at")
+    .select(
+      "id, conversation_id, sender_id, body, image_url, file_url, file_name, file_mime, created_at"
+    )
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(limit);
@@ -27,18 +29,24 @@ async function listByConversation(conversationId, options = {}) {
  * Add a message and update conversation.updated_at.
  * @param {string} [senderId] - User ID; null for system messages (e.g. Tee Time Social welcome)
  * @param {string} [imageUrl] - Optional public URL of attached image
+ * @param {{ url: string, name: string, mime: string } | null} [file] - Optional file attachment
  */
-async function create(conversationId, senderId, body, imageUrl = null) {
+async function create(conversationId, senderId, body, imageUrl = null, file = null) {
   const payload = {
     conversation_id: conversationId,
     body: (body || "").trim(),
     image_url: imageUrl || null,
+    file_url: file?.url || null,
+    file_name: file?.name || null,
+    file_mime: file?.mime || null,
   };
   if (senderId != null) payload.sender_id = senderId;
   const { data: msg, error: msgError } = await supabaseAdmin
     .from("messages")
     .insert(payload)
-    .select("id, conversation_id, sender_id, body, image_url, created_at")
+    .select(
+      "id, conversation_id, sender_id, body, image_url, file_url, file_name, file_mime, created_at"
+    )
     .single();
 
   if (msgError) handleError(msgError, "createMessage");
@@ -94,7 +102,9 @@ async function updateSender(messageId, conversationId, senderId) {
     .eq("id", messageId)
     .eq("conversation_id", conversationId)
     .is("sender_id", null)
-    .select("id, conversation_id, sender_id, body, image_url, created_at")
+    .select(
+      "id, conversation_id, sender_id, body, image_url, file_url, file_name, file_mime, created_at"
+    )
     .single();
 
   if (error || !msg) return null;
@@ -107,11 +117,38 @@ async function updateSender(messageId, conversationId, senderId) {
 async function getOne(messageId, conversationId) {
   const { data, error } = await supabaseAdmin
     .from("messages")
-    .select("id, conversation_id, sender_id, body, created_at")
+    .select(
+      "id, conversation_id, sender_id, body, image_url, file_url, file_name, file_mime, created_at"
+    )
     .eq("id", messageId)
     .eq("conversation_id", conversationId)
     .single();
   if (error || !data) return null;
+  return data;
+}
+
+/**
+ * Update message body (sender-only; enforced by service layer).
+ */
+async function updateBody(messageId, conversationId, senderId, body) {
+  const { data, error } = await supabaseAdmin
+    .from("messages")
+    .update({ body: (body || "").trim() })
+    .eq("id", messageId)
+    .eq("conversation_id", conversationId)
+    .eq("sender_id", senderId)
+    .select(
+      "id, conversation_id, sender_id, body, image_url, file_url, file_name, file_mime, created_at"
+    )
+    .single();
+
+  if (error || !data) return null;
+
+  await supabaseAdmin
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
   return data;
 }
 
@@ -142,5 +179,6 @@ module.exports = {
   getSendersInfo,
   updateSender,
   getOne,
+  updateBody,
   deleteOne,
 };

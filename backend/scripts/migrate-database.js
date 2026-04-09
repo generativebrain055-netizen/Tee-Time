@@ -132,7 +132,7 @@ async function migrate() {
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         event_type VARCHAR(50) NOT NULL,
         event_category VARCHAR(50) NOT NULL,
-        event_name VARCHAR(100) NOT NULL,
+        event_name VARCHAR(512) NOT NULL,
         event_data JSONB,
         ip_address INET,
         user_agent TEXT,

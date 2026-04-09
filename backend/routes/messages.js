@@ -94,7 +94,7 @@ router.post(
 
 /**
  * POST /api/messages/conversations/:id/messages
- * Body: { body?: string, imageBase64?: string } — at least one required
+ * Body: { body?, imageBase64?, fileBase64?, fileName?, fileMime? } — at least one of body / image / file
  */
 router.post(
   "/conversations/:id/messages",
@@ -102,6 +102,9 @@ router.post(
     param("id").isUUID(),
     body("body").optional().isString().isLength({ max: 10000 }),
     body("imageBase64").optional().isString(),
+    body("fileBase64").optional().isString(),
+    body("fileName").optional().isString().isLength({ max: 500 }),
+    body("fileMime").optional().isString().isLength({ max: 200 }),
   ],
   validateRequest,
   messageController.sendMessage
@@ -116,6 +119,21 @@ router.post(
   [param("id").isUUID(), param("messageId").isUUID()],
   validateRequest,
   messageController.convertToGroupMessage
+);
+
+/**
+ * PATCH /api/messages/conversations/:id/messages/:messageId
+ * Body: { body: string } — edit message text (sender only).
+ */
+router.patch(
+  "/conversations/:id/messages/:messageId",
+  [
+    param("id").isUUID(),
+    param("messageId").isUUID(),
+    body("body").optional().isString().isLength({ max: 10000 }),
+  ],
+  validateRequest,
+  messageController.updateMessage
 );
 
 /**

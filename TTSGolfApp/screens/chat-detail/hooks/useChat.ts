@@ -240,6 +240,48 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     ]
   );
 
+  const handleSendFile = useCallback(
+    async (file: { base64: string; fileName: string; fileMime?: string }, caption?: string) => {
+      if (!conversationId) return;
+
+      const isDirectDm = !chatInfo?.teeTimeId && !chatInfo?.groupId;
+      if (
+        isDirectDm &&
+        blockRelation &&
+        (blockRelation.iBlockedThem || blockRelation.theyBlockedYou)
+      ) {
+        Alert.alert(
+          "Messaging unavailable",
+          "You can’t send files while this chat is blocked."
+        );
+        return;
+      }
+
+      try {
+        const res = await messagesApi.sendMessage(
+          conversationId,
+          caption?.trim() ?? "",
+          undefined,
+          file
+        );
+        if (res.success && res.message) {
+          const m = res.message as ChatMessage;
+          setState((prev) => ({
+            ...prev,
+            messages: dedupeChatMessagesById([...prev.messages, m]),
+          }));
+        }
+      } catch (err) {
+        logger.warn("[useChat] Send file error", err);
+        Alert.alert(
+          "Could not send file",
+          "Use a file under 10 MB and a supported type (e.g. PDF, Word, images)."
+        );
+      }
+    },
+    [conversationId, chatInfo?.teeTimeId, chatInfo?.groupId, blockRelation]
+  );
+
   const handleConvertToGroupMessage = useCallback(
     async (messageId: string) => {
       if (!conversationId) return;
@@ -273,6 +315,28 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
       } catch (err) {
         logger.warn("[useChat] Delete message error", err);
         throw err; // So caller can show alert on 403
+      }
+    },
+    [conversationId]
+  );
+
+  const handleUpdateMessage = useCallback(
+    async (messageId: string, body: string) => {
+      if (!conversationId) return;
+      try {
+        const res = await messagesApi.updateMessage(conversationId, messageId, body);
+        if (res.success && res.message) {
+          const updated = res.message as ChatMessage;
+          setState((prev) => ({
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.id === messageId ? updated : m
+            ),
+          }));
+        }
+      } catch (err) {
+        logger.warn("[useChat] Update message error", err);
+        throw err;
       }
     },
     [conversationId]
@@ -325,8 +389,10 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     setShowMenu,
     handleSend,
     handleSendImage,
+    handleSendFile,
     handleConvertToGroupMessage,
     handleDeleteMessage,
+    handleUpdateMessage,
     handleMuteToggle,
     handleLeaveConversation,
   };

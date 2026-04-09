@@ -77,6 +77,7 @@
           "cameraPermission": "Tee Time needs access to your camera to take a profile photo."
         }
       ],
+      "expo-document-picker",
       "./plugins/withIosNoEmptyDsym.js",
       [
         "@react-native-google-signin/google-signin",

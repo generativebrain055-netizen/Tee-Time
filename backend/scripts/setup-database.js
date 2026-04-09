@@ -127,7 +127,7 @@ const setupDatabase = async () => {
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         event_type VARCHAR(50) NOT NULL,
         event_category VARCHAR(50),
-        event_name VARCHAR(100),
+        event_name VARCHAR(512),
         event_data JSONB,
         ip_address INET,
         user_agent TEXT,

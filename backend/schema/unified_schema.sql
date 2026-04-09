@@ -32,6 +32,8 @@
 --   011_broadcast_history.sql
 --   012_user_reports_app_support.sql (report_source, support_*, email_* on user_reports)
 --   013_disable_rls_except_user_availability.sql (repair DBs created from pre-6.1 unified only)
+--   017_messages_file_attachment.sql (file_url, file_name, file_mime on messages)
+--   018_analytics_event_name_length.sql (event_name VARCHAR(512) for long API paths)
 --
 -- This is a COMPLETE schema that:
 -- 1. Drops ALL existing tables (and listed functions)
@@ -1008,7 +1010,7 @@ CREATE TABLE analytics_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
-    event_name VARCHAR(100) NOT NULL,
+    event_name VARCHAR(512) NOT NULL,
     event_category VARCHAR(50),
     event_properties JSONB DEFAULT '{}'::jsonb,
     session_id UUID,
@@ -1276,6 +1278,9 @@ CREATE TABLE messages (
     sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
     body TEXT NOT NULL,
     image_url TEXT DEFAULT NULL,
+    file_url TEXT DEFAULT NULL,
+    file_name TEXT DEFAULT NULL,
+    file_mime TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

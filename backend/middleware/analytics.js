@@ -1,6 +1,16 @@
 const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
+/** Matches DB column width (see migrations/018_analytics_event_name_length.sql). */
+const MAX_EVENT_NAME_LENGTH = 512;
+
+function clampEventName(name) {
+  const s = name == null ? "" : String(name);
+  return s.length <= MAX_EVENT_NAME_LENGTH
+    ? s
+    : s.slice(0, MAX_EVENT_NAME_LENGTH);
+}
+
 /**
  * Analytics Middleware
  * Logs events to analytics_events table
@@ -27,7 +37,7 @@ const logEvent = async (eventData) => {
       .from("analytics_events")
       .insert({
         user_id: userId || null,
-        event_name: eventName,
+        event_name: clampEventName(eventName),
         event_category: eventCategory || null,
         event_properties: data || {},
         ip_address: ipAddress || null,

@@ -7,6 +7,10 @@ import {
     Platform,
     ActivityIndicator,
     Alert,
+    Modal,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useChat } from "./hooks/useChat";
@@ -48,17 +52,19 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
 
     const {
         messageText,
+        setMessageText,
         showMenu,
         messages,
         loading,
         scrollViewRef,
-        setMessageText,
         appendToMessageText,
         setShowMenu,
         handleSend,
         handleSendImage,
+        handleSendFile,
         handleConvertToGroupMessage,
         handleDeleteMessage,
+        handleUpdateMessage,
         isMuted,
         handleMuteToggle,
         handleLeaveConversation,
@@ -75,6 +81,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         : "";
 
     const [participants, setParticipants] = useState<string[]>([]);
+    const [editTarget, setEditTarget] = useState<{ id: string; text: string } | null>(null);
 
     // Extract participants from chat for "Create group" flow (Figma 1269-2563)
     useEffect(() => {
@@ -190,6 +197,16 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         [handleDeleteMessage, deleteDeniedFallback]
     );
 
+    const saveEditedMessage = useCallback(async () => {
+        if (!editTarget) return;
+        try {
+            await handleUpdateMessage(editTarget.id, editTarget.text.trim());
+            setEditTarget(null);
+        } catch (err: any) {
+            Alert.alert("Could not save", err?.message || "Try again.");
+        }
+    }, [editTarget, handleUpdateMessage]);
+
     const handlePickImage = useCallback(
         (uri: string, base64?: string) => {
             if (base64) {
@@ -199,6 +216,15 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
             }
         },
         [handleSendImage]
+    );
+
+    const handlePickFile = useCallback(
+        (file: { base64: string; fileName: string; fileMime?: string }) => {
+            const caption = messageText.trim();
+            setMessageText("");
+            void handleSendFile(file, caption);
+        },
+        [handleSendFile, messageText, setMessageText]
     );
 
     const handleEmojiSelected = useCallback(
@@ -251,6 +277,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                                 onConvertToGroupMessage={handleConvertToGroupMessage}
                                 canDelete={message.isMe || !!chatInfo.teeTimeId}
                                 onDelete={handleDeleteMessageWithAlert}
+                                onEdit={(id, text) => setEditTarget({ id, text })}
                             />
                         ))
                     )}
@@ -273,6 +300,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                     onChangeText={setMessageText}
                     onSend={handleSend}
                     onPickImage={handlePickImage}
+                    onPickFile={handlePickFile}
                     onEmojiSelected={handleEmojiSelected}
                     disabled={directMessagingBlocked}
                 />
@@ -285,8 +313,114 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                 onMuteToggle={handleMuteToggle}
                 onDeleteChat={handleDeleteChatFromMenu}
             />
+            <Modal
+                visible={editTarget != null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setEditTarget(null)}
+            >
+                <KeyboardAvoidingView
+                    style={editModalStyles.overlay}
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                >
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        activeOpacity={1}
+                        onPress={() => setEditTarget(null)}
+                    />
+                    <View style={editModalStyles.sheet}>
+                        <Text style={editModalStyles.sheetTitle}>Edit message</Text>
+                        <TextInput
+                            style={editModalStyles.input}
+                            value={editTarget?.text ?? ""}
+                            onChangeText={(t) =>
+                                editTarget && setEditTarget({ ...editTarget, text: t })
+                            }
+                            multiline
+                            maxLength={10000}
+                            placeholder="Message"
+                            placeholderTextColor="#9CA3AF"
+                            autoFocus
+                        />
+                        <View style={editModalStyles.sheetActions}>
+                            <TouchableOpacity
+                                style={editModalStyles.secondaryBtn}
+                                onPress={() => setEditTarget(null)}
+                            >
+                                <Text style={editModalStyles.secondaryBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={editModalStyles.primaryBtn}
+                                onPress={() => void saveEditedMessage()}
+                            >
+                                <Text style={editModalStyles.primaryBtnText}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
     );
 }
+
+const editModalStyles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: "center",
+        paddingHorizontal: 24,
+    },
+    sheet: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        padding: 20,
+        maxHeight: "70%",
+        zIndex: 10,
+        elevation: 10,
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: "#111827",
+        marginBottom: 12,
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 16,
+        minHeight: 100,
+        textAlignVertical: "top",
+        color: "#111827",
+    },
+    sheetActions: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        gap: 12,
+        marginTop: 16,
+    },
+    secondaryBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+    },
+    secondaryBtnText: {
+        fontSize: 16,
+        color: "#6B7280",
+        fontWeight: "600",
+    },
+    primaryBtn: {
+        backgroundColor: COLORS.primary,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+    },
+    primaryBtnText: {
+        fontSize: 16,
+        color: "#FFFFFF",
+        fontWeight: "600",
+    },
+});
 
 export default memo(ChatDetailScreen);
