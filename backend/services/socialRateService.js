@@ -2,19 +2,20 @@ const { supabaseAdmin } = require("../config/supabase");
 const logger = require("../config/logger");
 
 /**
- * Social score rules (clamped 0–200 in adjustScore):
- * - Baseline: 100
+ * Social score rules (starts at 100; no upper cap; floored at 0 for storage):
  * - Accept invite: +2
- * - Decline: -1 if declined more than 24h after invite was sent (spec: decline >24hr)
- * - Cancel participation within 24h of tee: -5 (spec: cancel <24hr)
+ * - Decline: -1 if declined more than 24h after invite was sent
+ * - Cancel participation within 24h of tee: -5
  * - No-show: -10
+ * - Host completes tee time check-in (reservation played): +5 (once per tee time)
  */
 const POINT_VALUES = {
   INVITE_ACCEPTED: 2,
   INVITE_DECLINED_LATE: -1,
   CANCELLATION_LATE: -5,
   NO_SHOW: -10,
-  INITIAL_SCORE: 100
+  INITIAL_SCORE: 100,
+  HOST_TEE_RESERVATION_COMPLETED: 5
 };
 
 // Reason codes for logging
@@ -25,7 +26,9 @@ const REASONS = {
   CANCELLATION_CONFIRMED: 'cancellation_confirmed', // legacy rows only; no longer written
   NO_SHOW: 'no_show',
   INITIAL_SCORE: 'initial_score',
-  ADMIN_ADJUSTMENT: 'admin_adjustment'
+  ADMIN_ADJUSTMENT: 'admin_adjustment',
+  // Host bonus when check-in is finalized (cancelled tee times never reach this)
+  HOST_TEE_RESERVATION_COMPLETED: 'host_tee_reservation_completed'
 };
 
 class SocialRateService {
@@ -143,6 +146,30 @@ class SocialRateService {
   }
 
   /**
+   * Host bonus (+5) when a tee time reservation is carried through to completed check-in.
+   * Idempotent per (userId, teeTimeId). Not applied for cancelled tee times (they never complete check-in).
+   */
+  async applyHostTeeReservationCompletedBonus(userId, teeTimeId) {
+    const existing = await this.findLogEntryByTeeTime(
+      userId,
+      teeTimeId,
+      REASONS.HOST_TEE_RESERVATION_COMPLETED,
+    );
+    if (existing) {
+      logger.info(
+        `Host tee reservation bonus already applied for user ${userId}, tee time ${teeTimeId}`,
+      );
+      return existing.new_score;
+    }
+
+    return this.adjustScore(userId, POINT_VALUES.HOST_TEE_RESERVATION_COMPLETED, {
+      reason: REASONS.HOST_TEE_RESERVATION_COMPLETED,
+      teeTimeId,
+      reasonDetails: "Hosted tee time (check-in completed)",
+    });
+  }
+
+  /**
    * Apply no-show penalty (-10 points)
    */
   async applyNoShowPenalty(userId, teeTimeId, markedBy) {
@@ -169,7 +196,8 @@ class SocialRateService {
    */
   async adjustScore(userId, delta, options = {}) {
     const currentScore = await this.getCurrentScore(userId) ?? POINT_VALUES.INITIAL_SCORE;
-    const newScore = Math.max(0, Math.min(200, currentScore + delta)); // Cap between 0-200
+    // No upper cap; DB enforces social_rate >= 0
+    const newScore = Math.max(0, currentScore + delta);
 
     await this.logScoreChange({
       userId,

@@ -15,6 +15,7 @@ import { ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react-native"
 import { ScreenShell, AppHeader } from "../../ui";
 import { socialRateApi, rosterApi } from "../../services/api";
 import { logger } from "../../utils/logger";
+import { formatDateMMDDYYYY, formatDateTimeMMDDYYYY } from "../../utils/formatting";
 import type { SocialRateLogEntry } from "../../services/api";
 
 const COLORS = {
@@ -37,19 +38,9 @@ const getReasonLabel = (reason: string): string => {
         no_show: "No Show",
         initial_score: "Initial Score",
         admin_adjustment: "Admin Adjustment",
+        host_tee_reservation_completed: "Hosted Tee Time",
     };
     return labels[reason] || reason.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
-};
-
-const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    });
 };
 
 interface HistoryItemProps {
@@ -105,7 +96,8 @@ const HistoryItem = ({ entry }: HistoryItemProps) => {
                                 color: COLORS.textSecondary,
                             }}
                         >
-                            {entry.teeTime.courseName} • {entry.teeTime.date}
+                            {entry.teeTime.courseName} •{" "}
+                            {formatDateMMDDYYYY(entry.teeTime.date)}
                         </Text>
                     )}
                 </View>
@@ -145,7 +137,7 @@ const HistoryItem = ({ entry }: HistoryItemProps) => {
                     borderTopColor: COLORS.border,
                 }}
             >
-                {formatDate(entry.createdAt)}
+                {formatDateTimeMMDDYYYY(entry.createdAt)}
             </Text>
         </View>
     );
@@ -266,7 +258,7 @@ export default function SocialRateHistoryScreen({ navigation, route }: any) {
                                 textAlign: "center",
                             }}
                         >
-                            Score range: 0-200
+                            Starts at 100; no upper limit (minimum 0)
                         </Text>
                     </View>
                 )}

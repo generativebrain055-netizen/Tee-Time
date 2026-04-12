@@ -4,7 +4,7 @@
 
 export type MessageTab = "All" | "Tee Times" | "Groups";
 
-/** Row for "All" tab - 1:1 conversation */
+/** Row for "All" tab when rendering a 1:1 (direct) thread */
 export interface AllConversationItem {
   id: string;
   type: "all";

@@ -35,6 +35,7 @@ module.exports = {
   // Profile operations
   getCurrentUser: profileController.getCurrentUser,
   updateProfile: profileController.updateProfile,
+  deleteAccount: profileController.deleteAccount,
 
   // Registration operations
   setPassword: registerController.setPassword,

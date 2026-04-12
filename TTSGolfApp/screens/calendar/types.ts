@@ -32,6 +32,8 @@ export interface CalendarTeeTime {
   course: string;
   location: string;
   players: number;
+  maxPlayers?: number;
+  participantCount?: number;
   status: "confirmed" | "pending" | "cancelled" | "completed" | "in_progress";
   creatorId?: string;
   isOrganizer?: boolean;

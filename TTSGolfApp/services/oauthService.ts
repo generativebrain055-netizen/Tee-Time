@@ -162,6 +162,9 @@ export function isUserCancellation(error: unknown): boolean {
  */
 export function formatOAuthError(error: unknown): string {
   if (error instanceof OAuthError) {
+    if (error.code === "ACCOUNT_DELETED") {
+      return "This account was deleted. To use Tee Time Social again, create a new account.";
+    }
     return error.message;
   }
   if (error instanceof Error) {

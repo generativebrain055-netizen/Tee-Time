@@ -107,7 +107,8 @@ class FCFSDeadlineService {
       // Returns { expired: [], warnings: [] }
       const results = await inviteRepository.processDueNotifications();
 
-      const expiredInvites = results.expired || [];
+      const expiredInvites =
+        results.expirations || results.expired || [];
       const warningInvites = results.warnings || [];
 
       if (expiredInvites.length > 0 || warningInvites.length > 0) {
@@ -157,6 +158,10 @@ class FCFSDeadlineService {
 
           const teeTimeInvites = expiredInvites.filter(
             (i) => i.tee_time_id === teeTimeId
+          );
+
+          await notificationService.removeInAppNotificationsForExpiredInvites(
+            teeTimeInvites,
           );
 
           // Notify each user their invite expired

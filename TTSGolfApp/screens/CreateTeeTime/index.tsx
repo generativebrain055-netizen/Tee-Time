@@ -11,7 +11,7 @@ import {
   ScrollView,
   Image,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import {
   teeTimeApi,
   inviteApi,
@@ -33,6 +33,7 @@ import FCFSInviteStep from "./FCFSInviteStep";
 import ReviewFCFSInviteStep from "./ReviewFCFSInviteStep";
 import ManualInviteStep from "./ManualInviteStep";
 import ReviewManualInviteStep from "./ReviewManualInviteStep";
+import SelectPlayersStep from "./SelectPlayersStep";
 import logger from "../../utils/logger";
 import { useAuthStore } from "../../stores";
 import { rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
@@ -124,6 +125,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   const [orderedPlayers, setOrderedPlayers] = useState<string[]>([]);
   const [phoneInvites, setPhoneInvites] = useState<Array<{ phone: string; name: string }>>([]);
   const [showAddMoreModal, setShowAddMoreModal] = useState(false);
+  /** Full-screen player picker from Review step ("Add more" → Select from players) — avoids jumping back to step 3 roster setup. */
+  const [showAddPlayersModal, setShowAddPlayersModal] = useState(false);
+  const [addPlayersDraft, setAddPlayersDraft] = useState<string[]>([]);
   const [showPhoneInviteModal, setShowPhoneInviteModal] = useState(false);
   const [phoneInviteInput, setPhoneInviteInput] = useState("");
   // Controlled phone-form state for RosterInviteStep (lifted so canContinue can see pending input)
@@ -719,6 +723,13 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     []
   );
 
+  /** Toggle selection in the "Add players" modal (draft until Done). */
+  const toggleAddPlayersDraft = useCallback((id: string) => {
+    setAddPlayersDraft((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
+  }, []);
+
   // Handle selecting multiple players from a group
   const handleSelectGroupMembers = useCallback(
     (memberIds: string[]) => {
@@ -944,6 +955,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             friends={friends}
             orderedPlayers={orderedPlayers}
             onReorderPlayers={setOrderedPlayers}
+            onReorderPhoneInvites={setPhoneInvites}
             teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
             teeTime={selectedTime}
             courseName={location.split(',')[0]?.trim() || ''}
@@ -1159,7 +1171,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
               style={addMoreStyles.optionRow}
               onPress={() => {
                 setShowAddMoreModal(false);
-                setStep(3);
+                setAddPlayersDraft([...orderedPlayers]);
+                setShowAddPlayersModal(true);
               }}
               activeOpacity={0.7}
             >
@@ -1184,6 +1197,79 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Select players (stay on Review step — same UI as manual “Your players”) */}
+      <Modal
+        visible={showAddPlayersModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAddPlayersModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }} edges={["top", "left", "right"]}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: "#E5E7EB",
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setShowAddPlayersModal(false)}
+              hitSlop={12}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={{
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 16,
+                  color: "#6B7280",
+                }}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <Text
+              style={{
+                fontFamily: "Inter_700Bold",
+                fontSize: 17,
+                color: "#111827",
+              }}
+            >
+              Add players
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setOrderedPlayers(addPlayersDraft);
+                setShowAddPlayersModal(false);
+              }}
+              hitSlop={12}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={{
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 16,
+                  color: "#22C55E",
+                }}
+              >
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ flex: 1 }}>
+            <SelectPlayersStep
+              friends={friends}
+              selectedPlayers={addPlayersDraft}
+              groupSize={groupSize}
+              onTogglePlayer={toggleAddPlayersDraft}
+            />
+          </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Invite via phone number modal */}

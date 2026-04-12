@@ -976,20 +976,13 @@ class TeeTimeRepository {
 
     try {
       const participantCount = await this.getParticipantCount(teeTimeId);
-      const checkInStarted = !!teeTime.check_in_started_at;
 
-      // Full group → confirmed (pending, or in_progress after a spot reopened and refilled).
-      // Skip when check-in has already started: keep in_progress during the check-in session while full.
+      // Full group → always confirmed. Check-in / reminders may move confirmed → in_progress;
+      // once all slots are filled again, restore confirmed so the product shows the right state.
       if (participantCount >= maxPlayers) {
-        if (teeTime.status === "pending") {
+        if (teeTime.status === "pending" || teeTime.status === "in_progress") {
           logger.info(
-            `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed`,
-          );
-          return this.updateStatus(teeTimeId, "confirmed");
-        }
-        if (teeTime.status === "in_progress" && !checkInStarted) {
-          logger.info(
-            `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}) while in_progress (pre-check-in), setting status to confirmed`,
+            `Tee time ${teeTimeId} full (${participantCount}/${maxPlayers}), setting status to confirmed (was ${teeTime.status})`,
           );
           return this.updateStatus(teeTimeId, "confirmed");
         }

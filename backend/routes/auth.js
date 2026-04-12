@@ -200,6 +200,13 @@ router.get("/me", authenticate, authController.getCurrentUser);
  * @desc    Update user profile
  * @access  Private
  */
+/**
+ * @route   DELETE /api/auth/account
+ * @desc    Soft-delete current user and revoke all sessions
+ * @access  Private
+ */
+router.delete("/account", authenticate, authController.deleteAccount);
+
 router.put(
   "/profile",
   authenticate,

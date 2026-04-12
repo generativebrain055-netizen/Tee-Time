@@ -13,15 +13,15 @@ import { WeekDay, UpcomingTeeTime } from "./types";
 import { Header, QuickActions, WeekCalendar, NextTeeTime } from "./components";
 import { BannerAd } from "../../components/BannerAd";
 import { palette, spacing, fontSize, radii } from "../../ui/theme/tokens";
+import { toCalendarDateKey } from "../../utils/formatting";
 
 const WEEKLY_AVAILABILITY_PROMPT_KEY = "weekly_availability_prompt_week";
 
 /** Returns YYYY-MM-DD of the Sunday that starts the current week (week runs Sun–Sat). */
 function getWeekKey(d: Date): string {
   const day = d.getDay();
-  const sunday = new Date(d);
-  sunday.setDate(d.getDate() - day);
-  return sunday.toISOString().slice(0, 10);
+  const sunday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
+  return toCalendarDateKey(sunday);
 }
 
 function isWeekend(d: Date): boolean {
@@ -29,20 +29,15 @@ function isWeekend(d: Date): boolean {
   return day === 0 || day === 6;
 }
 
-const toDateString = (d: Date | string) =>
-  new Date(d).toDateString();
-
-const getWeekDays = (selectedDate: Date, teeTimes: TeeTime[]): WeekDay[] => {
+const getWeekDays = (teeTimes: TeeTime[]): WeekDay[] => {
   const today = new Date();
   const currentDay = today.getDay();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - currentDay);
-  
-  // Create a set of dates that have tee times
-  const teeTimeDates = new Set(
-    teeTimes.map(tt => new Date(tt.teeDate).toDateString())
-  );
-  
+
+  // Match tee times by calendar date (avoid new Date("YYYY-MM-DD") UTC shift)
+  const teeTimeDates = new Set(teeTimes.map((tt) => toCalendarDateKey(tt.teeDate)));
+
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(startOfWeek);
     date.setDate(startOfWeek.getDate() + i);
@@ -50,8 +45,8 @@ const getWeekDays = (selectedDate: Date, teeTimes: TeeTime[]): WeekDay[] => {
       dayName: DAYS_SHORT[i],
       dayNumber: date.getDate(),
       date,
-      hasEvent: teeTimeDates.has(date.toDateString()),
-      isToday: date.toDateString() === today.toDateString(),
+      hasEvent: teeTimeDates.has(toCalendarDateKey(date)),
+      isToday: toCalendarDateKey(date) === toCalendarDateKey(today),
     };
   });
 };
@@ -65,6 +60,7 @@ const transformTeeTime = (tt: TeeTime): UpcomingTeeTime => ({
   status: tt.status,
   participants: tt.participants || [],
   maxPlayers: tt.maxPlayers,
+  participantCount: tt.participantCount,
 });
 
 function HomePage({ navigation }: any) {
@@ -129,14 +125,14 @@ function HomePage({ navigation }: any) {
   }, [fetchUpcoming]);
 
   const weekDays = useMemo(
-    () => getWeekDays(selectedDate, upcomingTeeTimes),
-    [selectedDate, upcomingTeeTimes]
+    () => getWeekDays(upcomingTeeTimes),
+    [upcomingTeeTimes]
   );
 
-  const selectedKey = toDateString(selectedDate);
+  const selectedKey = toCalendarDateKey(selectedDate);
   const teeTimeForSelectedDay = useMemo(() => {
     const found = upcomingTeeTimes.find(
-      (tt) => toDateString(tt.teeDate) === selectedKey
+      (tt) => toCalendarDateKey(tt.teeDate) === selectedKey
     );
     return found ? transformTeeTime(found) : null;
   }, [upcomingTeeTimes, selectedKey]);

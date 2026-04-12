@@ -208,7 +208,7 @@ async function removeFromRoster(userId, rosterId, options = {}) {
 }
 
 /**
- * Reorder roster entries
+ * Reorder roster entries (position-only). Intentionally does not notify contacts.
  * @throws {RosterServiceError} If orderedIds is not an array
  */
 async function reorderRoster(userId, orderedIds) {

@@ -23,4 +23,6 @@ export interface UpcomingTeeTime {
   status: "pending" | "confirmed" | "cancelled" | "completed" | "in_progress";
   participants: Participant[];
   maxPlayers: number;
+  /** From API; used with maxPlayers for full-roster → Confirmed display */
+  participantCount?: number;
 }

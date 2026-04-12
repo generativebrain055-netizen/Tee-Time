@@ -56,6 +56,8 @@ function mapApiToCalendar(
     course: api.courseName,
     location: api.courseLocation || "",
     players: api.participantCount ?? api.maxPlayers ?? 0,
+    maxPlayers: api.maxPlayers,
+    participantCount: api.participantCount,
     status,
     creatorId,
     isOrganizer,

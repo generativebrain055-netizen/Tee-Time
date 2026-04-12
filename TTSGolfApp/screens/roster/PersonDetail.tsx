@@ -247,7 +247,7 @@ export default function PersonDetail({ person, onBack, onRemoved, navigation }: 
                     </View>
                     <Text className="text-5xl font-bold text-amber-500">{formatSocialRateDisplay(profile?.stats.socialRate)}</Text>
                     <Text className="text-xs text-amber-900 text-center mt-1 px-2">
-                        Reliability score (0–200) from invites, cancellations, and attendance
+                        Reliability score from invites, cancellations, and attendance (starts at 100)
                     </Text>
                     <TouchableOpacity
                         className="mt-4 flex-row items-center justify-center gap-2 py-3 px-4 rounded-md bg-white border border-amber-200 w-full"

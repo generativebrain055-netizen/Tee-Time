@@ -65,6 +65,18 @@ function mapToTeeTimeItem(c: ConversationListItem): TeeTimeConversationItem {
   };
 }
 
+/** Most recent activity first (last message, else conversation updated/created). */
+function sortConversationsByRecent(
+  convs: ConversationListItem[]
+): ConversationListItem[] {
+  const sortKey = (c: ConversationListItem) => {
+    const lm = c.lastMessage?.created_at;
+    if (lm) return new Date(lm).getTime();
+    return new Date(c.updated_at || c.created_at).getTime();
+  };
+  return [...convs].sort((a, b) => sortKey(b) - sortKey(a));
+}
+
 function mapToGroupItem(c: ConversationListItem): GroupConversationItem {
   const avatars = c.participantAvatars ?? [];
   const count = c.participantCount ?? (avatars.length > 0 ? avatars.length + 1 : undefined);
@@ -484,24 +496,35 @@ function MessagesScreen({ navigation, route }: any) {
     loadData();
   }, [loadData]);
 
-  const allItems = useMemo(
-    () => conversations.filter((c) => c.type === "direct").map(mapToAllItem),
-    [conversations]
-  );
   const teeTimeItems = useMemo(
-    () => conversations.filter((c) => c.type === "tee_time").map(mapToTeeTimeItem),
+    () =>
+      sortConversationsByRecent(
+        conversations.filter((c) => c.type === "tee_time")
+      ).map(mapToTeeTimeItem),
     [conversations]
   );
   const groupItems = useMemo(
-    () => conversations.filter((c) => c.type === "group").map(mapToGroupItem),
+    () =>
+      sortConversationsByRecent(conversations.filter((c) => c.type === "group")).map(
+        mapToGroupItem
+      ),
     [conversations]
   );
 
+  /** "All" = direct + tee time + group threads, one unified inbox sorted by recency */
+  const allTabItems = useMemo(() => {
+    return sortConversationsByRecent(conversations).map((c) => {
+      if (c.type === "direct") return mapToAllItem(c);
+      if (c.type === "tee_time") return mapToTeeTimeItem(c);
+      return mapToGroupItem(c);
+    });
+  }, [conversations]);
+
   const currentList = useMemo(() => {
-    if (activeTab === "All") return allItems;
+    if (activeTab === "All") return allTabItems;
     if (activeTab === "Tee Times") return teeTimeItems;
     return groupItems;
-  }, [activeTab, allItems, teeTimeItems, groupItems]);
+  }, [activeTab, allTabItems, teeTimeItems, groupItems]);
 
   const handleCompose = useCallback(() => {
     navigation?.navigate("ComposeMessage");
@@ -588,7 +611,7 @@ function MessagesScreen({ navigation, route }: any) {
     );
   }, [loading]);
 
-  const totalUnreadAll = allItems.reduce((s, i) => s + (i.unread ?? 0), 0);
+  const totalUnreadAll = conversations.reduce((s, c) => s + (c.unreadCount ?? 0), 0);
   const totalUnreadTeeTimes = teeTimeItems.reduce((s, i) => s + (i.unread ?? 0), 0);
   const totalUnreadGroups = groupItems.reduce((s, i) => s + (i.unread ?? 0), 0);
   const tabLabel = (tab: MessageTab) => {

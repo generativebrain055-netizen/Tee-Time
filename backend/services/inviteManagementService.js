@@ -8,8 +8,8 @@
 const inviteRepository = require("../repositories/inviteRepository");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const rosterRepository = require("../repositories/rosterRepository");
-const notificationService = require("./notificationService");
 const organizerPipelineNudgeService = require("./organizerPipelineNudgeService");
+const notificationService = require("./notificationService");
 const logger = require("../config/logger");
 const { sendInviteSms } = require("../controllers/invite/smsService");
 const { INVITE_TYPES } = require("../controllers/invite/constants");
@@ -301,7 +301,10 @@ class InviteManagementService {
     try {
       // Expire old invites
       const expiredInvites = await inviteRepository.expireOldInvites();
-      
+      await notificationService.removeInAppNotificationsForExpiredInvites(
+        expiredInvites || [],
+      );
+
       // Group by tee time to check each one
       const teeTimeIds = [...new Set(expiredInvites.map(i => i.tee_time_id))];
       

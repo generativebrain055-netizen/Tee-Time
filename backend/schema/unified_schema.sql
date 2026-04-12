@@ -249,7 +249,7 @@ COMMENT ON COLUMN users.availability_completed IS 'True when user has set their 
 COMMENT ON COLUMN users.profile_completed IS 'True when user has completed basic profile setup';
 
 -- ============================================================================
--- 2. USER_PROFILES TABLE (integer social_rate, baseline 100, clamped 0–200 in app logic)
+-- 2. USER_PROFILES TABLE (integer social_rate, baseline 100, floored at 0 in app logic, no upper cap)
 -- ============================================================================
 CREATE TABLE user_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -688,7 +688,8 @@ CREATE TABLE social_rate_logs (
         'cancellation_confirmed',
         'no_show',
         'initial_score',
-        'admin_adjustment'
+        'admin_adjustment',
+        'host_tee_reservation_completed'
     ))
 );
 

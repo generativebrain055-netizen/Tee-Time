@@ -9,6 +9,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fontAssets } from "./theme/fonts";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { NotificationToastListener } from "./components/NotificationToastListener";
+import { PushNotificationRouter } from "./components/PushNotificationRouter";
 import { logger } from "./utils/logger";
 import { registerPushTokenIfNeeded } from "./utils/registerPushToken";
 import { syncSystemPushPreferenceFromOs } from "./utils/syncNotificationPermission";
@@ -514,7 +516,7 @@ export default function App(): React.ReactElement {
           <InviteDetailScreen
             key={`invite-detail-${screenKey}`}
             navigation={navigation as any}
-            route={{ params: routeParams }}
+            route={{ params: screenParams } as any}
           />
         );
       case "InviteFriend":
@@ -734,7 +736,11 @@ export default function App(): React.ReactElement {
   return (
     <ErrorBoundary>
       <AppThemeProvider>
-        <AppInner navigation={navigation} renderScreen={renderScreen} />
+        <AppInner
+          navigation={navigation}
+          renderScreen={renderScreen}
+          currentScreen={currentScreen}
+        />
       </AppThemeProvider>
     </ErrorBoundary>
   );
@@ -747,9 +753,11 @@ export default function App(): React.ReactElement {
 function AppInner({
   navigation,
   renderScreen,
+  currentScreen,
 }: {
   navigation: Navigation;
   renderScreen: () => React.ReactElement;
+  currentScreen: ScreenName;
 }) {
   const { isDark } = useAppTheme();
   const theme = isDark ? paperDarkTheme : paperLightTheme;
@@ -760,6 +768,11 @@ function AppInner({
         <SafeAreaProvider>
           <UserProvider>
             <ToastProvider>
+              <NotificationToastListener navigation={navigation} />
+              <PushNotificationRouter
+                navigation={navigation}
+                currentScreen={currentScreen}
+              />
               {renderScreen()}
             </ToastProvider>
           </UserProvider>

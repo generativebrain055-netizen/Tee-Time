@@ -15,7 +15,6 @@ import { useGroupDetail } from "./hooks/useGroupDetail";
 import { ActionButton, AddPeopleModal, MemberRow, TeeTimeCard } from "./components";
 import { getInitials } from "./utils";
 import { GroupDetailProps } from "./types";
-import { otherPeopleInGroupCount } from "../../../utils/groupMemberCount";
 
 function GroupDetail({
     groupId,
@@ -55,9 +54,10 @@ function GroupDetail({
         }
     }, [groupId, onNavigateToCreateTeeTime]);
 
+    /** Total people in the group (host + members), aligned with list that includes you */
     const peopleHeadingCount =
         group?.memberCount != null && !Number.isNaN(group.memberCount)
-            ? otherPeopleInGroupCount(group.memberCount)
+            ? group.memberCount
             : members.length;
 
     if (loading) {

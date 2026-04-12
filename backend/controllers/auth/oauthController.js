@@ -5,6 +5,22 @@ const sessionService = require("../../services/sessionService");
 const oauthService = require("../../services/oauthService");
 const { formatUser } = require("../../formatters/userFormatter");
 
+function isAccountDeletedError(error) {
+  return !!(error && error.code === "ACCOUNT_DELETED");
+}
+
+/** JSON response when OAuth provider links to a soft-deleted user */
+function respondOAuthAccountDeleted(res, error) {
+  const message =
+    error?.message ||
+    "This account has been deleted. Create a new account to use Tee Time Social again.";
+  return res.status(403).json({
+    success: false,
+    error: message,
+    code: "ACCOUNT_DELETED",
+  });
+}
+
 /**
  * OAuth Controller - Thin Controller Pattern
  *
@@ -105,6 +121,9 @@ const googleSignIn = async (req, res, next) => {
       }),
     });
   } catch (error) {
+    if (isAccountDeletedError(error)) {
+      return respondOAuthAccountDeleted(res, error);
+    }
     logger.error("Google sign in error:", {
       error: error.message,
       stack: error.stack,
@@ -319,6 +338,26 @@ const googleOAuthCallback = async (req, res, next) => {
       </html>
     `);
   } catch (error) {
+    if (isAccountDeletedError(error)) {
+      const msg =
+        error?.message ||
+        "This account has been deleted. Create a new account to continue.";
+      return res.status(403).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account deleted</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: sans-serif; text-align: center; padding: 40px;">
+        <h1>Account deleted</h1>
+        <p>${msg}</p>
+        <p>Return to the app to sign up with a new account.</p>
+        <a href="teetimesocial://" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background: #5DB075; color: white; text-decoration: none; border-radius: 8px;">Return to App</a>
+      </body>
+      </html>
+    `);
+    }
     logger.error("Google OAuth callback error:", {
       error: error.message,
       stack: error.stack,
@@ -428,6 +467,9 @@ const googleSignInWithCode = async (req, res, next) => {
       }),
     });
   } catch (error) {
+    if (isAccountDeletedError(error)) {
+      return respondOAuthAccountDeleted(res, error);
+    }
     logger.error("Google sign in (code exchange) error:", {
       error: error.message,
       stack: error.stack,
@@ -522,6 +564,9 @@ const googleSignInWithAccessToken = async (req, res, next) => {
       }),
     });
   } catch (error) {
+    if (isAccountDeletedError(error)) {
+      return respondOAuthAccountDeleted(res, error);
+    }
     logger.error("Google sign in (access token) error:", {
       error: error.message,
       stack: error.stack,
@@ -623,6 +668,9 @@ const appleSignIn = async (req, res, next) => {
       }),
     });
   } catch (error) {
+    if (isAccountDeletedError(error)) {
+      return respondOAuthAccountDeleted(res, error);
+    }
     logger.error("Apple sign in error:", {
       error: error.message,
       stack: error.stack,

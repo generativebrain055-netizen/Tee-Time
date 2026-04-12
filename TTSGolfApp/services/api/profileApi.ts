@@ -91,4 +91,12 @@ export const profileApi = {
       method: "PUT",
       body: JSON.stringify({ privacySettings: settings }),
     }),
+
+  /**
+   * Soft-delete the current account and revoke all sessions (requires auth).
+   */
+  deleteAccount: () =>
+    apiCall<{ success: boolean; message?: string }>(API_ENDPOINTS.DELETE_ACCOUNT, {
+      method: "DELETE",
+    }),
 };

@@ -92,6 +92,78 @@ export function padZero(num: number): string {
 }
 
 /**
+ * Calendar day key `YYYY-MM-DD` for matching tee times to week columns (no UTC shift).
+ * API `teeDate` strings use the leading Y-M-D as the intended play date.
+ */
+export function toCalendarDateKey(
+  input: Date | string | null | undefined,
+): string {
+  if (input == null || input === "") return "";
+  if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) return "";
+    return `${input.getFullYear()}-${padZero(input.getMonth() + 1)}-${padZero(input.getDate())}`;
+  }
+  const s = String(input).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return "";
+  return `${dt.getFullYear()}-${padZero(dt.getMonth() + 1)}-${padZero(dt.getDate())}`;
+}
+
+/** Parse `YYYY-MM-DD` (or leading prefix) as a local calendar date for display. */
+export function parseCalendarDateLocal(dateStr: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr).trim());
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  return new Date(dateStr);
+}
+
+/**
+ * US date display MM/DD/YYYY.
+ * Parses plain YYYY-MM-DD as a calendar date (no UTC midnight shift).
+ * Other values are parsed as Date (ISO timestamps use local calendar for display).
+ */
+export function formatDateMMDDYYYY(
+  input: string | Date | null | undefined,
+): string {
+  if (input == null || input === "") return "";
+  if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) return "";
+    return `${padZero(input.getMonth() + 1)}/${padZero(input.getDate())}/${input.getFullYear()}`;
+  }
+  const s = String(input).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [ys, ms, ds] = s.split("-");
+    const y = parseInt(ys, 10);
+    const m = parseInt(ms, 10);
+    const d = parseInt(ds, 10);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+      return "";
+    }
+    return `${padZero(m)}/${padZero(d)}/${y}`;
+  }
+  const dt = new Date(s);
+  if (Number.isNaN(dt.getTime())) return "";
+  return `${padZero(dt.getMonth() + 1)}/${padZero(dt.getDate())}/${dt.getFullYear()}`;
+}
+
+/** Timestamp as "MM/DD/YYYY, h:mm AM/PM" in local time */
+export function formatDateTimeMMDDYYYY(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return String(iso);
+  const d = formatDateMMDDYYYY(dt);
+  const t = dt.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${d}, ${t}`;
+}
+
+/**
  * Format remaining milliseconds as a countdown clock.
  * Always returns HH:MM or HH:MM:SS (hours can exceed 24).
  */

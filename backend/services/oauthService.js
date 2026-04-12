@@ -392,6 +392,16 @@ const findOrCreateOAuthUser = async ({
     await authProviderRepository.updateLastUsed(providerLink.id);
     const user = await userRepository.findById(providerLink.user_id);
 
+    if (!user) {
+      // Soft-deleted (or missing) user — provider row still points at old id
+      const err = new Error(
+        "This account has been deleted. Create a new account to use Tee Time Social again.",
+      );
+      err.code = "ACCOUNT_DELETED";
+      err.statusCode = 403;
+      throw err;
+    }
+
     logger.info("OAuth user found via provider link", {
       userId: user.id,
       provider,

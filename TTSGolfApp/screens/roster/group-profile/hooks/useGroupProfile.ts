@@ -13,7 +13,6 @@ import {
     TeeTime,
 } from "../../../../services/api";
 import { logger } from "../../../../utils/logger";
-import { otherPeopleInGroupCount, rosterGroupMembersExceptSelf } from "../../../../utils/groupMemberCount";
 import { useAuthStore } from "../../../../stores";
 
 export const useGroupProfile = (groupId: string, navigation?: any) => {
@@ -43,7 +42,7 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
             }
 
             if (membersRes.success) {
-                setMembers(rosterGroupMembersExceptSelf(membersRes.members, currentUserId));
+                setMembers(membersRes.members);
             }
             if (teeTimesRes.success) setUpcomingTeeTimes(teeTimesRes.teeTimes.slice(0, 3));
         } catch (error) {
@@ -51,7 +50,7 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
         } finally {
             setLoading(false);
         }
-    }, [groupId, currentUserId]);
+    }, [groupId]);
 
     useEffect(() => {
         loadGroupData();
@@ -147,14 +146,13 @@ export const useGroupProfile = (groupId: string, navigation?: any) => {
             typeof group.memberCount === "number" && !Number.isNaN(group.memberCount)
                 ? group.memberCount
                 : members.length + 1;
-        const otherMembers = otherPeopleInGroupCount(totalIncludingSelf);
         try {
             navigation?.navigate("ChatDetail", {
                 chatInfo: {
                     groupId: group.id,
                     id: group.id,
                     name: group.name,
-                    subtitle: `${otherMembers} members`,
+                    subtitle: `${totalIncludingSelf} members`,
                     img: group.avatar ?? group.icon ?? undefined,
                     isGroup: true,
                     participantCount: totalIncludingSelf,

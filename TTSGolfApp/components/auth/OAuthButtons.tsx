@@ -13,7 +13,7 @@ import {
   Alert,
 } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import { GoogleAuthProvider, signInWithCredential, signOut } from "firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { auth } from "../../config/firebase";
 
@@ -22,6 +22,7 @@ import {
   oauthService,
   isUserCancellation,
   formatOAuthError,
+  OAuthError,
 } from "../../services/oauthService";
 import type {
   OAuthButtonsProps,
@@ -206,6 +207,13 @@ export function OAuthButtons({
         }
       } catch (error) {
         logger.error("[Firebase] Backend verification error:", error);
+        if (error instanceof OAuthError && error.code === "ACCOUNT_DELETED" && auth) {
+          try {
+            await signOut(auth);
+          } catch {
+            /* ignore */
+          }
+        }
         if (typeof onError === "function") {
           onError(formatOAuthError(error));
         }

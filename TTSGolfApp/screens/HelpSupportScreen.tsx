@@ -41,7 +41,7 @@ const FAQ_DATA = [
     },
     {
         question: "What is Social Rate?",
-        answer: "Social Rate is a score that reflects your reliability as a golf partner. It increases when you show up on time and decreases when you no-show or cancel late. A higher Social Rate makes you more attractive to other players."
+        answer: "Social Rate starts at 100 points with no upper limit (minimum 0). You gain +2 for accepting a tee time invite, lose 1 point for declining more than 24 hours after the invite, lose 5 points for cancelling within 24 hours of the tee time, and lose 10 points for a no-show. Completing check-in as the organizer of a tee time can add bonus points. It reflects how reliable you are as a golf partner."
     },
     {
         question: "Why do some players have numbers next to their name?",

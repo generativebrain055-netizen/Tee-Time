@@ -13,10 +13,11 @@ import { Clock, MapPin, MoreHorizontal, Check, Users, ChevronRight } from "lucid
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
-import { attendanceApi } from "../../../services/api";
+import { attendanceApi, teeTimeApi } from "../../../services/api";
 import { useAuthStore } from "../../../stores";
 import { useToast } from "../../../ui/feedback";
 import { useUser } from "../../../contexts/UserContext";
+import { getDisplayTeeTimeStatus } from "../../../utils/teeTimeStatusDisplay";
 
 // Import tick icon
 const TickIcon = require('../../../assets/Tick.png');
@@ -75,53 +76,137 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
   const currentUserId = useAuthStore((s) => s.user?.id);
   const { fetchProfile } = useUser();
   const toast = useToast();
-  const statusDisplay = getStatusDisplay(teeTime.status);
+  const displayStatus = getDisplayTeeTimeStatus({
+    status: teeTime.status,
+    maxPlayers: teeTime.maxPlayers,
+    participantCount: teeTime.participantCount,
+  }) as CalendarTeeTime["status"];
+  const statusDisplay = getStatusDisplay(displayStatus);
   const StatusIcon = statusDisplay.icon;
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  const canCancelParticipation =
-    teeTime.status === "confirmed" || teeTime.status === "pending";
-  /** "Is everyone here?" / check-in — confirmed tee times only */
+  /** Guests only — leave the tee time (not "cancel event for everyone"). */
+  const canLeaveAsParticipant =
+    !teeTime.isOrganizer &&
+    (displayStatus === "confirmed" ||
+      displayStatus === "in_progress" ||
+      teeTime.status === "pending");
+
+  /** Host: end the tee time for all participants */
+  const canHostCancelTeeTime =
+    !!teeTime.isOrganizer &&
+    displayStatus !== "completed" &&
+    displayStatus !== "cancelled" &&
+    teeTime.status !== "completed" &&
+    teeTime.status !== "cancelled";
+
+  /** "Is everyone here?" / check-in — hosts with a locked-in group (confirmed) or active session (in_progress) */
   const showPreTeeTimeCheck =
     !!onPreTeeTimeCheck &&
     !!teeTime.isOrganizer &&
-    teeTime.status === "confirmed";
+    (displayStatus === "confirmed" || displayStatus === "in_progress");
+
+  const checkInCourseLine = `${formatTeeTimeDate(teeTime.date)}, ${formatTeeTimeTime(teeTime.time)} – ${teeTime.course}`;
 
   const handlePress = useCallback(() => {
     onPress?.(teeTime.id);
   }, [onPress, teeTime.id]);
 
+  const handleHostCancelTeeTime = useCallback(() => {
+    Alert.alert(
+      "Cancel tee time?",
+      "This cancels the tee time for everyone and notifies participants.",
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Cancel tee time",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await teeTimeApi.cancelTeeTime(teeTime.id);
+              if (res.success) {
+                toast?.show({ message: "Tee time cancelled", type: "success" });
+                onCancelSuccess?.();
+              }
+            } catch (e: any) {
+              Alert.alert("Error", e?.message || "Could not cancel tee time.");
+            }
+          },
+        },
+      ],
+    );
+  }, [teeTime.id, onCancelSuccess, toast]);
+
   const handleMorePress = useCallback(() => {
+    const openCheckIn = () => {
+      if (onPreTeeTimeCheck) onPreTeeTimeCheck(teeTime.id, checkInCourseLine);
+    };
+
     if (Platform.OS === "ios") {
-      const options = [
-        "View details",
-        ...(canCancelParticipation ? ["Cancel participation"] : []),
-        "Dismiss",
-      ];
+      const options: string[] = ["View details"];
+      if (showPreTeeTimeCheck) options.push("Check participant status");
+      if (canLeaveAsParticipant) options.push("Cancel participation");
+      if (canHostCancelTeeTime) options.push("Cancel tee time");
+      options.push("Dismiss");
+
+      let cancelParticipationIndex = -1;
+      let checkInIndex = -1;
+      let hostCancelIndex = -1;
+      let idx = 1;
+      if (showPreTeeTimeCheck) {
+        checkInIndex = idx;
+        idx++;
+      }
+      if (canLeaveAsParticipant) {
+        cancelParticipationIndex = idx;
+        idx++;
+      }
+      if (canHostCancelTeeTime) {
+        hostCancelIndex = idx;
+      }
+
+      const destructiveIndex =
+        hostCancelIndex >= 0 ? hostCancelIndex : cancelParticipationIndex >= 0 ? cancelParticipationIndex : undefined;
+
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
           cancelButtonIndex: options.length - 1,
-          destructiveButtonIndex: canCancelParticipation ? 1 : undefined,
+          destructiveButtonIndex: destructiveIndex,
         },
         (i) => {
           if (i === 0) handlePress();
-          else if (canCancelParticipation && i === 1) setShowCancelModal(true);
-        }
+          else if (showPreTeeTimeCheck && i === checkInIndex) openCheckIn();
+          else if (canLeaveAsParticipant && i === cancelParticipationIndex) setShowCancelModal(true);
+          else if (canHostCancelTeeTime && i === hostCancelIndex) handleHostCancelTeeTime();
+        },
       );
     } else {
       Alert.alert("Options", "", [
         { text: "View details", onPress: handlePress },
-        ...(canCancelParticipation
+        ...(showPreTeeTimeCheck
+          ? [{ text: "Check participant status", onPress: openCheckIn }]
+          : []),
+        ...(canLeaveAsParticipant
           ? [{ text: "Cancel participation", onPress: () => setShowCancelModal(true) }]
+          : []),
+        ...(canHostCancelTeeTime
+          ? [{ text: "Cancel tee time", style: "destructive" as const, onPress: handleHostCancelTeeTime }]
           : []),
         { text: "Dismiss", style: "cancel" },
       ]);
     }
-  }, [teeTime.status, canCancelParticipation, handlePress]);
-
-  const checkInCourseLine = `${formatTeeTimeDate(teeTime.date)}, ${formatTeeTimeTime(teeTime.time)} – ${teeTime.course}`;
+  }, [
+    teeTime.id,
+    handlePress,
+    showPreTeeTimeCheck,
+    canLeaveAsParticipant,
+    canHostCancelTeeTime,
+    onPreTeeTimeCheck,
+    checkInCourseLine,
+    handleHostCancelTeeTime,
+  ]);
 
   const handlePreTeeTimeCheckPress = useCallback(() => {
     onPreTeeTimeCheck?.(teeTime.id, checkInCourseLine);
@@ -197,13 +282,13 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 6,
-                backgroundColor: teeTime.status === "confirmed" ? PRIMARY_GREEN : "#E8F5E9",
+                backgroundColor: displayStatus === "confirmed" ? PRIMARY_GREEN : "#E8F5E9",
                 paddingHorizontal: 12,
                 paddingVertical: 6,
                 borderRadius: 9999,
               }}
             >
-              {teeTime.status === "confirmed" ? (
+              {displayStatus === "confirmed" ? (
                 <Image source={TickIcon} style={{ width: 12, height: 12 }} resizeMode="contain" />
               ) : (
                 <StatusIcon size={12} color={statusDisplay.color} strokeWidth={3} />
@@ -212,7 +297,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
                 style={{
                   fontSize: 11,
                   fontFamily: "Inter_600SemiBold",
-                  color: teeTime.status === "confirmed" ? "#FFFFFF" : statusDisplay.color,
+                  color: displayStatus === "confirmed" ? "#FFFFFF" : statusDisplay.color,
                 }}
               >
                 {statusDisplay.label}

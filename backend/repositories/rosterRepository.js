@@ -310,7 +310,7 @@ class RosterRepository {
 
   async reorderRoster(userId, orderedIds) {
     try {
-      // Batch update positions
+      // Batch update positions only — must not emit notifications to contacts.
       const updates = orderedIds.map((id, index) =>
         supabaseAdmin
           .from("roster")

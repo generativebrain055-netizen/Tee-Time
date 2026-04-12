@@ -408,6 +408,10 @@ class NotificationService {
       });
       body += `. Respond by ${deadlineStr}`;
     }
+    // Second line: full course name (avoids truncation in the middle of a long inline sentence on push/OS previews)
+    if (courseName && String(courseName).trim()) {
+      body += `\n${String(courseName).trim()}`;
+    }
 
     const inviterAvatar = await resolveUserAvatarUrl(inviter);
 
@@ -810,19 +814,25 @@ class NotificationService {
   }
 
   /**
-   * Helper to format date for notifications
-   * Uses UTC methods to avoid timezone shift with PostgreSQL DATE type
+   * Helper to format date for notifications as MM/DD/YYYY
+   * Plain YYYY-MM-DD strings: calendar date (no UTC midnight shift)
+   * Date from PostgreSQL DATE: UTC y/m/d → local calendar
    */
   formatDateForNotification(date) {
     if (!date) return "";
 
     let d;
     if (typeof date === "string") {
-      // Parse string date as local time
-      const [year, month, day] = date.split("-").map(Number);
-      d = new Date(year, month - 1, day);
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date.trim());
+      if (m) {
+        const y = Number(m[1]);
+        const mo = Number(m[2]);
+        const day = Number(m[3]);
+        d = new Date(y, mo - 1, day);
+      } else {
+        d = new Date(date);
+      }
     } else {
-      // Date object from PostgreSQL - use UTC values to avoid shift
       d = new Date(
         date.getUTCFullYear(),
         date.getUTCMonth(),
@@ -830,11 +840,12 @@ class NotificationService {
       );
     }
 
-    return d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    if (Number.isNaN(d.getTime())) return "";
+
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
   }
 
   /**
@@ -843,11 +854,7 @@ class NotificationService {
    */
   async notifyWaiverWirePost(userId, poster, waiverWireEntry) {
     const posterName = `${poster.firstName || ""} ${poster.lastName || ""}`.trim() || "Someone";
-    const dateStr = new Date(waiverWireEntry.availableDate).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    const dateStr = this.formatDateForNotification(waiverWireEntry.availableDate);
     
     // Format time slot label properly
     const timeSlotLabels = {
@@ -878,6 +885,42 @@ class NotificationService {
       },
       sendPush: true, // Enable push notifications for Waiver Wire posts
     });
+  }
+
+  /**
+   * Remove in-app rows tied to a tee-time invite (data.inviteId), e.g. pending invite and 5m warning.
+   * Call when the invite expires so actionable cards do not linger.
+   */
+  async removeInAppNotificationsForInvite(inviteeUserId, inviteId) {
+    if (!inviteeUserId || !inviteId) return;
+    try {
+      const { error } = await supabaseAdmin
+        .from("notifications")
+        .delete()
+        .eq("user_id", inviteeUserId)
+        .filter("data->>inviteId", "eq", String(inviteId));
+
+      if (error) {
+        logger.warn(
+          `removeInAppNotificationsForInvite(${inviteId}):`,
+          error.message,
+        );
+      }
+    } catch (err) {
+      logger.warn("removeInAppNotificationsForInvite:", err?.message);
+    }
+  }
+
+  /**
+   * Batch: clear stale invite notifications for each expired invite row.
+   */
+  async removeInAppNotificationsForExpiredInvites(invites) {
+    if (!invites?.length) return;
+    for (const inv of invites) {
+      if (inv.invitee_user_id) {
+        await this.removeInAppNotificationsForInvite(inv.invitee_user_id, inv.id);
+      }
+    }
   }
 
   /**

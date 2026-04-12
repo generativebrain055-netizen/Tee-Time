@@ -1,6 +1,7 @@
 const userRepository = require("../../repositories/userRepository");
 const profileRepository = require("../../repositories/profileRepository");
 const teeTimeRepository = require("../../repositories/teeTimeRepository");
+const sessionService = require("../../services/sessionService");
 const logger = require("../../config/logger");
 
 /**
@@ -259,7 +260,27 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+/**
+ * DELETE /api/auth/account — soft-delete current user and revoke all sessions
+ */
+const deleteAccount = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await sessionService.revokeAllSessions(userId, null, "account_deleted");
+    await userRepository.softDelete(userId);
+    logger.info("[deleteAccount] Account soft-deleted", { userId });
+    return res.json({
+      success: true,
+      message: "Your account has been deleted.",
+    });
+  } catch (error) {
+    logger.error("Error in deleteAccount:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   getCurrentUser,
   updateProfile,
+  deleteAccount,
 };

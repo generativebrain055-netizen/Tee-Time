@@ -13,7 +13,7 @@ import {
     Image,
 } from "react-native";
 import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck, Check, UserPlus } from "lucide-react-native";
-import { teeTimeApi, attendanceApi } from "../services/api";
+import { teeTimeApi, attendanceApi, inviteApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { TeeTimeConfirmSheet } from "../ui/sheets/TeeTimeConfirmSheet";
 import { ConfirmModal, useToast } from "../ui/feedback";
@@ -22,6 +22,7 @@ import { useAuthStore } from "../stores";
 import { useUser } from "../contexts/UserContext";
 import { logger } from "../utils/logger";
 import { formatRemainingClock } from "../utils/formatting";
+import { getDisplayTeeTimeStatus } from "../utils/teeTimeStatusDisplay";
 
 // Import tick and cross assets
 const TickIcon = require('../assets/Tick.png');
@@ -97,6 +98,17 @@ interface TeeTimeDetail {
     };
 }
 
+/** Full roster → show Confirmed even if API still has in_progress/pending */
+function effectiveTeeStatusForUi(teeTime: TeeTimeDetail | null): string {
+    if (!teeTime) return "";
+    return getDisplayTeeTimeStatus({
+        status: teeTime.status,
+        maxPlayers: teeTime.maxPlayers,
+        participantCount: teeTime.acceptedCount,
+        slotsOpen: teeTime.slotsOpen,
+    });
+}
+
 const StatusBadge = memo(({ status }: { status: string }) => {
     const s = String(status ?? '')
         .toLowerCase()
@@ -156,19 +168,31 @@ const formatTime = (timeStr: string): string => {
     return `${hour12}:${minutes} ${ampm}`;
 };
 
+const MS_PER_DAY = 86400000;
+
 /**
  * Check if we're in the check-in window (Figma 437-321).
- * Matches backend: calendar day of the tee, until 4 hours after tee time.
+ * Same calendar day as tee: from midnight until 4 hours after scheduled tee time.
+ * If tee was yesterday, still allow prompting so the host can open attendance the next morning
+ * (matches backend grace for unfinished check-in).
  */
 function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
     const teeDate = new Date(y, (m ?? 1) - 1, d ?? 1);
-    if (today.getTime() !== teeDate.getTime()) return false;
+    const diffDays = Math.round((today.getTime() - teeDate.getTime()) / MS_PER_DAY);
 
-    const [teeH = 0, teeM = 0, teeS = 0] = teeTimeStr.split(":").map(Number);
-    const teeMinutes = teeH * 60 + teeM + teeS / 60;
+    if (diffDays === 1) {
+        return true;
+    }
+    if (diffDays !== 0) {
+        return false;
+    }
+
+    const timePart = String(teeTimeStr || "00:00").trim();
+    const [teeH = 0, teeM = 0, teeS = 0] = timePart.split(":").map((x) => parseFloat(x));
+    const teeMinutes = teeH * 60 + teeM + (Number.isFinite(teeS) ? teeS / 60 : 0);
     const currentMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
     const minutesUntilTeeTime = teeMinutes - currentMinutes;
 
@@ -176,7 +200,7 @@ function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
     return true;
 }
 
-const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, isActiveInvitedSlot, onSkip, canSkip, parallelInviteFlow }: { 
+const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, isActiveInvitedSlot, onSkip, canSkip }: { 
     participant: Participant; 
     showTimeLeft?: boolean;
     calculateTimeLeft?: (expiresAt: string) => string | null;
@@ -185,10 +209,7 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
     isActiveInvitedSlot?: boolean;
     onSkip?: (inviteId: string) => void;
     canSkip?: boolean;
-    /** FCFS / manual / open use “Invited”; roster uses “Queued” when a deadline applies. */
-    parallelInviteFlow?: boolean;
 }) => {
-    const parallelFlow = parallelInviteFlow !== false;
     const getStatusConfig = () => {
         // Check if expired (by status or by time)
         const isExpiredByTime = participant.expiresAt && calculateTimeLeft && !calculateTimeLeft(participant.expiresAt);
@@ -206,20 +227,19 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
             case 'pending':
                 return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'queued':
-                // Roster backups: no deadline yet — match design (white row, “Queued”, no arrow)
+                // Invite sent / active wave: waiting on invitee (FCFS, roster with deadline, etc.)
                 if (!participant.expiresAt) {
-                    return { color: 'text-gray-600', text: 'Queued', showBadge: false, badgeIcon: null, showArrow: false };
+                    return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: false };
                 }
-                // Parallel: “Invited”. Roster with a deadline: “Queued” (arrow + timer when active).
                 return {
                     color: 'text-gray-600',
-                    text: parallelFlow ? 'Invited' : 'Queued',
+                    text: 'Awaiting response',
                     showBadge: false,
                     badgeIcon: null,
                     showArrow: true,
                 };
             case 'invited':
-                return { color: 'text-gray-400', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
+                return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'waitlist':
                 return { color: 'text-gray-600', text: 'Waitlist', showBadge: false, badgeIcon: null, showArrow: true };
             case 'expired':
@@ -227,7 +247,7 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
             case 'cancelled':
                 return { color: 'text-gray-500', text: 'Cancelled', showBadge: true, badgeIcon: 'decline', showArrow: false };
             default:
-                return { color: 'text-gray-600', text: 'Invited', showBadge: false, badgeIcon: null, showArrow: true };
+                return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
         }
     };
 
@@ -388,6 +408,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [respondingToInvite, setRespondingToInvite] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const hasNavigatedToCheckIn = useRef(false);
 
@@ -559,7 +580,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
 
     useEffect(() => {
         if (!teeTime || !showAllSetParam) return;
-        if (normalizeTeeDetailStatus(teeTime.status) === "confirmed") {
+        if (normalizeTeeDetailStatus(effectiveTeeStatusForUi(teeTime)) === "confirmed") {
             setShowConfirmSheet(true);
         }
         navigation?.setParams?.({ showAllSet: false });
@@ -603,12 +624,13 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         return isInCheckInWindow(teeTime.teeDate, teeTime.teeTime);
     }, [teeTime]);
 
-    // Auto open check-in only for confirmed tee times in the check-in window
+    // Auto open check-in for hosts in the check-in window (confirmed or in_progress e.g. after reminder / refill)
     useEffect(() => {
+        const st = normalizeTeeDetailStatus(effectiveTeeStatusForUi(teeTime));
         if (
             !teeTime ||
             !isOrganizer ||
-            normalizeTeeDetailStatus(teeTime.status) !== "confirmed" ||
+            (st !== "confirmed" && st !== "in_progress") ||
             !inCheckInWindow ||
             hasNavigatedToCheckIn.current
         ) {
@@ -629,12 +651,104 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         return teeTime.participants.some(p => p.userId === currentUserId && p.status === 'accepted');
     }, [teeTime, currentUserId]);
 
-    const normalizedTeeStatus = normalizeTeeDetailStatus(teeTime?.status);
-
-    const canShowCheckParticipantStatus = useMemo(
-        () => !!teeTime && isOrganizer && normalizedTeeStatus === "confirmed",
-        [isOrganizer, teeTime, normalizedTeeStatus],
+    const normalizedTeeStatus = useMemo(
+        () => normalizeTeeDetailStatus(effectiveTeeStatusForUi(teeTime)),
+        [teeTime],
     );
+
+    /** Raw pending invite for the current user (same source as Invite Detail). */
+    const pendingInviteForMe = useMemo(() => {
+        if (!teeTime?.invites?.length || !currentUserId) return null;
+        return (
+            teeTime.invites.find(
+                (inv) =>
+                    String(inv.invitee?.userId ?? "") === String(currentUserId) &&
+                    inv.status === "pending",
+            ) ?? null
+        );
+    }, [teeTime, currentUserId]);
+
+    const isPendingInviteExpired = useMemo(() => {
+        if (!pendingInviteForMe?.expiresAt) return false;
+        return new Date(pendingInviteForMe.expiresAt).getTime() <= currentTime.getTime();
+    }, [pendingInviteForMe, currentTime]);
+
+    const showInviteResponseCta = useMemo(() => {
+        if (!pendingInviteForMe || isOrganizer || isPendingInviteExpired) return false;
+        const st = normalizedTeeStatus;
+        if (st === "cancelled" || st === "canceled" || st === "completed") return false;
+        return true;
+    }, [pendingInviteForMe, isOrganizer, isPendingInviteExpired, normalizedTeeStatus]);
+
+    const handleInviteRespond = useCallback(
+        async (response: "accepted" | "declined") => {
+            if (!pendingInviteForMe?.id) return;
+            setRespondingToInvite(true);
+            try {
+                const result = (await inviteApi.respondToInvite(
+                    pendingInviteForMe.id,
+                    response,
+                )) as {
+                    success: boolean;
+                    message?: string;
+                    code?: string;
+                    status?: string;
+                    socialRateDelta?: number;
+                    newSocialRate?: number;
+                };
+                if (result.success) {
+                    const delta = result.socialRateDelta;
+                    const newScore = result.newSocialRate;
+                    if (delta != null && delta !== 0 && typeof fetchProfile === "function") {
+                        await fetchProfile(true);
+                        const sign = delta > 0 ? "+" : "";
+                        const msg =
+                            newScore != null
+                                ? `${sign}${delta} Social Rate (${newScore})`
+                                : `${sign}${delta} Social Rate`;
+                        toast?.show({ message: msg, type: delta > 0 ? "success" : "info" });
+                    }
+                    await fetchTeeTimeDetails();
+                    const acceptTitle =
+                        response === "accepted"
+                            ? result.status === "waitlist"
+                                ? "Waitlist"
+                                : "Accepted!"
+                            : "Declined";
+                    const acceptBody =
+                        result.message ||
+                        (response === "accepted"
+                            ? result.status === "waitlist"
+                                ? "You're on the waitlist for this tee time."
+                                : "You've been added to the tee time!"
+                            : "You've declined the invite.");
+                    Alert.alert(acceptTitle, acceptBody);
+                } else {
+                    const full = result.code === "TEE_TIME_FULL";
+                    Alert.alert(
+                        full ? "Tee time full" : "Error",
+                        result.message || "Failed to respond to invite. Please try again.",
+                    );
+                }
+            } catch (error: any) {
+                Alert.alert(
+                    "Error",
+                    error?.message || "Failed to respond to invite. Please try again.",
+                );
+            } finally {
+                setRespondingToInvite(false);
+            }
+        },
+        [pendingInviteForMe, fetchProfile, fetchTeeTimeDetails, toast],
+    );
+
+    /** Host must see check-in while group is active — not only when API says "confirmed" (in_progress after check-in reminder / cancel flow is common). */
+    const canShowCheckParticipantStatus = useMemo(() => {
+        if (!teeTime || !isOrganizer) return false;
+        const s = normalizedTeeStatus;
+        if (s === "completed" || s === "cancelled" || s === "canceled") return false;
+        return s === "confirmed" || s === "in_progress";
+    }, [isOrganizer, teeTime, normalizedTeeStatus]);
     const showLeaveTeeTimeButton = useMemo(
         () =>
             !!teeTime &&
@@ -814,7 +928,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 <Text className="font-jakarta-bold text-lg text-gray-900">
                     Tee time status
                 </Text>
-                {normalizeTeeDetailStatus(teeTime.status) === "confirmed" && (
+                {normalizedTeeStatus === "confirmed" && (
                     <TouchableOpacity 
                         onPress={() => navigation?.navigate("ChatDetail", { chatInfo: { teeTimeId: teeTimeId } })} 
                         className="p-1 -mr-1" 
@@ -823,7 +937,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         <MessageCircle size={24} color="#5EBC68" strokeWidth={2} />
                     </TouchableOpacity>
                 )}
-                {normalizeTeeDetailStatus(teeTime.status) !== "confirmed" && <View className="w-8" />}
+                {normalizedTeeStatus !== "confirmed" && <View className="w-8" />}
             </View>
 
             <ScrollView
@@ -846,7 +960,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                 {formatTime(teeTime.teeTime)}
                             </Text>
                         </View>
-                        <StatusBadge status={teeTime.status} />
+                        <StatusBadge status={effectiveTeeStatusForUi(teeTime)} />
                     </View>
 
                     {/* Location */}
@@ -892,7 +1006,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     </View>
 
                     {/* Invite Type — omit when confirmed to match status/detail designs */}
-                    {teeTime.inviteType && normalizeTeeDetailStatus(teeTime.status) !== "confirmed" && (
+                    {teeTime.inviteType && normalizedTeeStatus !== "confirmed" && (
                         <View className="flex-row items-start">
                             <View className="mr-3.5 mt-0.5">
                                 <Users size={22} color="#6B7280" strokeWidth={2} />
@@ -912,6 +1026,70 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     )}
                 </View>
 
+                {/* Invitee: accept / decline without leaving tee time summary */}
+                {showInviteResponseCta && pendingInviteForMe && (
+                    <View className="bg-white px-6 pb-6 -mt-2">
+                        <View
+                            className="rounded-xl border px-4 py-4"
+                            style={{ borderColor: "#A7F3D0", backgroundColor: "#ECFDF5" }}
+                        >
+                            <Text className="font-jakarta-bold text-base text-gray-900 mb-1">
+                                You&apos;re invited to this tee time
+                            </Text>
+                            {pendingInviteForMe.expiresAt && calculateTimeLeft(pendingInviteForMe.expiresAt) ? (
+                                <Text className="font-jakarta text-sm text-gray-600 mb-3">
+                                    Respond within{" "}
+                                    <Text className="font-jakarta-semibold text-emerald-800">
+                                        {calculateTimeLeft(pendingInviteForMe.expiresAt)}
+                                    </Text>
+                                </Text>
+                            ) : (
+                                <Text className="font-jakarta text-sm text-gray-600 mb-3">
+                                    Accept to join the group, or decline to pass.
+                                </Text>
+                            )}
+                            <View className="flex-row gap-3">
+                                <TouchableOpacity
+                                    className="flex-1 flex-row items-center justify-center py-3.5 px-4 rounded-lg"
+                                    style={{ backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" }}
+                                    onPress={() => handleInviteRespond("declined")}
+                                    disabled={respondingToInvite}
+                                    activeOpacity={0.7}
+                                >
+                                    {respondingToInvite ? (
+                                        <ActivityIndicator size="small" color="#DC2626" />
+                                    ) : (
+                                        <>
+                                            <X size={18} color="#DC2626" strokeWidth={2.5} />
+                                            <Text className="font-jakarta-semibold text-base text-red-700 ml-2">
+                                                Decline
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    className="flex-1 flex-row items-center justify-center py-3.5 px-4 rounded-lg"
+                                    style={{ backgroundColor: "#5EBC68" }}
+                                    onPress={() => handleInviteRespond("accepted")}
+                                    disabled={respondingToInvite}
+                                    activeOpacity={0.7}
+                                >
+                                    {respondingToInvite ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <Check size={18} color="#FFFFFF" strokeWidth={2.5} />
+                                            <Text className="font-jakarta-semibold text-base text-white ml-2">
+                                                Accept
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                )}
+
                 {/* Divider */}
                 <View className="h-2.5 bg-gray-50" />
 
@@ -923,7 +1101,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             key={p.id}
                             participant={p}
                             calculateTimeLeft={calculateTimeLeft}
-                            parallelInviteFlow={parallelInviteDetail}
                         />
                     ))}
 
@@ -935,7 +1112,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                     key={p.id}
                                     participant={p}
                                     calculateTimeLeft={calculateTimeLeft}
-                                    parallelInviteFlow={parallelInviteDetail}
                                 />
                             ))}
                             {expiredParticipants.map((p) => (
@@ -944,7 +1120,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                     participant={p}
                                     calculateTimeLeft={calculateTimeLeft}
                                     showTimeLeft={!!p.expiresAt}
-                                    parallelInviteFlow={parallelInviteDetail}
                                 />
                             ))}
 
@@ -958,7 +1133,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                         isActiveInvitedSlot={
                                             i === firstQueuedWithDeadlineIdx && firstQueuedWithDeadlineIdx >= 0
                                         }
-                                        parallelInviteFlow
                                     />
                                 ))}
 
@@ -972,7 +1146,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                         isInAwaitingGroup
                                         canSkip={isOrganizer}
                                         onSkip={handleSkipInvite}
-                                        parallelInviteFlow={false}
                                     />
                                 ))}
                             {!parallelInviteDetail &&
@@ -985,7 +1158,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                         isActiveInvitedSlot={
                                             i === firstQueuedWithDeadlineIdx && firstQueuedWithDeadlineIdx >= 0
                                         }
-                                        parallelInviteFlow={false}
                                     />
                                 ))}
                         </>
@@ -1015,7 +1187,6 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                         key={p.id}
                                         participant={p}
                                         calculateTimeLeft={calculateTimeLeft}
-                                        parallelInviteFlow={parallelInviteDetail}
                                     />
                                 ))}
                         </>
@@ -1144,7 +1315,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
             <ConfirmModal
                 visible={showLeaveModal}
                 title="Leave tee time?"
-                message={normalizeTeeDetailStatus(teeTime.status) === "confirmed"
+                message={normalizedTeeStatus === "confirmed"
                     ? `You will lose 10 points if you cancel your Tee Time now. Confirm cancellation?`
                     : "You will be removed from this tee time and your spot will be available to others."}
                 confirmText={isLeaving ? "Leaving..." : "Yes"}

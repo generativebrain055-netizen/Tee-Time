@@ -495,6 +495,20 @@ class AttendanceService {
         throw error;
       }
 
+      if (data?.creator_id) {
+        try {
+          await socialRateService.applyHostTeeReservationCompletedBonus(
+            data.creator_id,
+            teeTimeId,
+          );
+        } catch (srErr) {
+          logger.error(
+            `Host Social Rate bonus failed for tee time ${teeTimeId}:`,
+            srErr?.message || srErr,
+          );
+        }
+      }
+
       logger.info(`Check-in completed for tee time ${teeTimeId} by ${completedBy}`);
       return data;
     } catch (error) {
@@ -599,17 +613,31 @@ class AttendanceService {
     }
 
     // Complete the tee time
-    const { error: completeError } = await supabaseAdmin
+    const { data: completedTt, error: completeError } = await supabaseAdmin
       .from("tee_times")
       .update({
         check_in_completed_at: new Date().toISOString(),
         status: "completed",
         updated_at: new Date().toISOString()
       })
-      .eq("id", teeTimeId);
+      .eq("id", teeTimeId)
+      .select("creator_id")
+      .single();
 
     if (completeError) {
       logger.error(`Error completing tee time ${teeTimeId}:`, completeError.message);
+    } else if (completedTt?.creator_id) {
+      try {
+        await socialRateService.applyHostTeeReservationCompletedBonus(
+          completedTt.creator_id,
+          teeTimeId,
+        );
+      } catch (srErr) {
+        logger.error(
+          `Host Social Rate bonus failed (auto-complete) for tee time ${teeTimeId}:`,
+          srErr?.message || srErr,
+        );
+      }
     }
     
     logger.info(`Auto-completed check-in for tee time ${teeTimeId}`);
@@ -631,42 +659,53 @@ class AttendanceService {
     if (error || !teeTime) {
       return { available: false, reason: 'Tee time not found' };
     }
-    
-    // Use JavaScript local time
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    // Parse tee_date
-    const teeDateStr = formatDateLocal(teeTime.tee_date);
-    const [year, month, day] = teeDateStr.split('-').map(Number);
-    const teeDate = new Date(year, month - 1, day);
-    const isToday = today.getTime() === teeDate.getTime();
-    
-    if (!isToday) {
-      if (teeDate < today) {
-        return { available: false, reason: 'Check-in window closed' };
-      }
-      return { available: false, reason: 'Check-in not available yet' };
-    }
-    
-    // Calculate minutes until tee time
-    const currentTimeStr = now.toTimeString().slice(0, 8);
-    const teeTimeStr = teeTime.tee_time;
-    
-    const [currentH, currentM, currentS] = currentTimeStr.split(':').map(Number);
-    const [teeH, teeM, teeS] = teeTimeStr.split(':').map(Number);
-    
-    const currentMinutes = currentH * 60 + currentM + currentS / 60;
-    const teeMinutes = teeH * 60 + teeM + teeS / 60;
-    const minutesUntilTeeTime = teeMinutes - currentMinutes;
-    
-    logger.debug(`Check-in availability: current=${currentTimeStr}, teeTime=${teeTimeStr}, minutesUntil=${minutesUntilTeeTime.toFixed(1)}`);
 
     if (teeTime.check_in_completed_at) {
       return { available: false, reason: "Check-in already completed" };
     }
+    if (teeTime.status === "completed" || teeTime.status === "cancelled") {
+      return { available: false, reason: "Tee time closed" };
+    }
 
-    // Same calendar day: allow any time until 4 hours after scheduled tee time
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const teeDateStr = formatDateLocal(teeTime.tee_date);
+    const [year, month, day] = teeDateStr.split("-").map(Number);
+    const teeDate = new Date(year, month - 1, day);
+
+    const diffMs = today.getTime() - teeDate.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+
+    if (diffDays < 0) {
+      return { available: false, reason: "Check-in not available yet" };
+    }
+
+    // Previous calendar day: grace period so hosts can finish attendance the morning after
+    if (diffDays === 1) {
+      logger.debug(`Check-in grace day for tee time ${teeTimeId} (yesterday)`);
+      return { available: true, teeTime };
+    }
+
+    if (diffDays > 1) {
+      return { available: false, reason: "Check-in window closed" };
+    }
+
+    // Same calendar day as tee: until 4 hours after scheduled tee time
+    const currentTimeStr = now.toTimeString().slice(0, 8);
+    const teeTimeStr = teeTime.tee_time || "00:00:00";
+
+    const [currentH, currentM, currentS] = currentTimeStr.split(":").map(Number);
+    const [teeH, teeM, teeS] = String(teeTimeStr).split(":").map(Number);
+
+    const currentMinutes = currentH * 60 + currentM + currentS / 60;
+    const teeMinutes = teeH * 60 + teeM + (teeS || 0) / 60;
+    const minutesUntilTeeTime = teeMinutes - currentMinutes;
+
+    logger.debug(
+      `Check-in availability: current=${currentTimeStr}, teeTime=${teeTimeStr}, minutesUntil=${minutesUntilTeeTime.toFixed(1)}`,
+    );
+
     if (minutesUntilTeeTime < -240) {
       return { available: false, reason: "Check-in window closed" };
     }

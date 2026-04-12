@@ -16,7 +16,7 @@ import {
 } from "lucide-react-native";
 import { COLORS } from "../../constants/colors";
 import { AppNotification } from "../../services/api";
-import { formatRemainingClock } from "../../utils/formatting";
+import { formatRemainingClock, formatDateMMDDYYYY } from "../../utils/formatting";
 
 interface NotificationItemProps {
   item: AppNotification;
@@ -44,7 +44,7 @@ const getTimeAgo = (dateStr: string): string => {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+  return formatDateMMDDYYYY(date);
 };
 
 /**
@@ -214,9 +214,9 @@ export const NotificationItem = memo(
           {item.data?.type === "tee_time_invite" && (
             <View className="mt-3 bg-gray-50 rounded-md p-3">
               {item.data?.courseName && (
-                <View className="flex-row items-center mb-2">
-                  <Calendar size={14} color={COLORS.primary} />
-                  <Text className="text-xs text-gray-600 ml-2 font-medium">
+                <View className="flex-row items-start mb-2">
+                  <Calendar size={14} color={COLORS.primary} style={{ marginTop: 2 }} />
+                  <Text className="flex-1 min-w-0 text-xs text-gray-600 ml-2 font-medium">
                     {item.data.courseName}
                   </Text>
                 </View>
@@ -225,8 +225,12 @@ export const NotificationItem = memo(
                 <View className="flex-row items-center mb-2">
                   <Clock size={14} color={COLORS.primary} />
                   <Text className="text-xs text-gray-600 ml-2">
-                    {item.data.date || item.data.teeDate}
-                    {item.data?.time || item.data?.teeTime ? ` at ${item.data.time || item.data.teeTime}` : ""}
+                    {formatDateMMDDYYYY(
+                      String(item.data.date || item.data.teeDate || ""),
+                    )}
+                    {item.data?.time || item.data?.teeTime
+                      ? ` at ${item.data.time || item.data.teeTime}`
+                      : ""}
                   </Text>
                 </View>
               )}

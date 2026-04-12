@@ -2,7 +2,7 @@
  * Settings Screen (Figma 883-* Account + Profile Settings)
  * Main settings screen with account information and settings options
  */
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -24,6 +24,7 @@ import {
     HelpCircle,
     LogOut,
     ChevronRight,
+    Trash2,
 } from "lucide-react-native";
 import { useUser } from "../contexts";
 import { useAuthStore } from "../stores";
@@ -31,10 +32,12 @@ import { ScreenShell, AppHeader } from "../ui";
 import { useColors, useTheme } from "../ui/theme";
 import { spacing, fontSize, fontFamily, radii } from "../ui/theme/tokens";
 import { logger } from "../utils/logger";
+import { profileApi } from "../services/api";
 
 export default function SettingsScreen({ navigation }: any) {
     const { profile, loading, fetchProfile } = useUser();
     const logout = useAuthStore((s) => s.logout);
+    const [deletingAccount, setDeletingAccount] = useState(false);
     const colors = useColors();
     const theme = useTheme();
 
@@ -91,6 +94,42 @@ export default function SettingsScreen({ navigation }: any) {
             ]
         );
     }, [navigation, logout]);
+
+    const handleDeleteAccount = useCallback(() => {
+        if (deletingAccount) return;
+        Alert.alert(
+            "Delete account?",
+            "Your Tee Time Social account will be permanently closed. You will be signed out and cannot use this account again.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete account",
+                    style: "destructive",
+                    onPress: async () => {
+                        setDeletingAccount(true);
+                        try {
+                            const res = await profileApi.deleteAccount();
+                            if (res?.success !== false) {
+                                await logout();
+                                navigation?.reset({ index: 0, routes: [{ name: "Login" }] });
+                            } else {
+                                Alert.alert("Error", "Could not delete account. Try again.");
+                            }
+                        } catch (error: unknown) {
+                            logger.error("[SettingsScreen] Delete account error", error);
+                            const msg =
+                                error && typeof error === "object" && "message" in error
+                                    ? String((error as { message?: string }).message)
+                                    : "Try again later.";
+                            Alert.alert("Could not delete account", msg);
+                        } finally {
+                            setDeletingAccount(false);
+                        }
+                    },
+                },
+            ]
+        );
+    }, [navigation, logout, deletingAccount]);
 
     return (
         <ScreenShell>
@@ -192,6 +231,35 @@ export default function SettingsScreen({ navigation }: any) {
                         );
                     })}
                 </View>
+
+                {/* Delete account */}
+                <TouchableOpacity
+                    style={[
+                        styles.logoutCard,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                        deletingAccount && { opacity: 0.6 },
+                    ]}
+                    onPress={handleDeleteAccount}
+                    disabled={deletingAccount}
+                    activeOpacity={0.7}
+                >
+                    <View style={[styles.logoutIcon, { backgroundColor: "rgba(220, 38, 38, 0.12)" }]}>
+                        {deletingAccount ? (
+                            <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                            <Trash2 size={20} color={colors.error} strokeWidth={2} />
+                        )}
+                    </View>
+                    <View style={styles.logoutText}>
+                        <Text style={[styles.logoutLabel, { color: colors.error }]}>
+                            Delete account
+                        </Text>
+                        <Text style={[styles.logoutSubtitle, { color: colors.textSecondary }]}>
+                            Permanently remove your account and data
+                        </Text>
+                    </View>
+                    <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
+                </TouchableOpacity>
 
                 {/* Logout Button */}
                 <TouchableOpacity 

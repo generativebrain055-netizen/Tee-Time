@@ -56,6 +56,7 @@ export interface ApiEndpoints {
   REGISTER: string;
   REGISTER_USERNAME: string;
   UPDATE_PROFILE: string;
+  DELETE_ACCOUNT: string;
   GOOGLE_SIGNIN: string;
   // Roster
   ROSTER: string;
@@ -139,6 +140,7 @@ export const API_ENDPOINTS: ApiEndpoints = {
   REGISTER: `${API_URL}/auth/register`,
   REGISTER_USERNAME: `${API_URL}/auth/register-username`,
   UPDATE_PROFILE: `${API_URL}/auth/profile`,
+  DELETE_ACCOUNT: `${API_URL}/auth/account`,
   GOOGLE_SIGNIN: `${API_URL}/auth/google`,
   // Roster
   ROSTER: `${API_URL}/api/roster`,

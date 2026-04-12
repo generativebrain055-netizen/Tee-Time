@@ -29,26 +29,16 @@ import { useToast } from "../../ui/feedback";
 import { useUser } from "../../contexts/UserContext";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
-import { formatRemainingClock } from "../../utils/formatting";
+import { formatRemainingClock, formatDateMMDDYYYY } from "../../utils/formatting";
+import { navigateFromNotificationData } from "../../utils/navigateFromNotificationData";
 
-function dayOrdinal(day: number): string {
-    const s = ["th", "st", "nd", "rd"];
-    const v = day % 100;
-    return `${day}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}
-
-/** e.g. "Sat, Jan 10 • 1:30 PM" for tee / spot-opened invites */
+/** e.g. "04/12/2026 • 1:30 PM" for tee / spot-opened invites */
 function formatTeeInviteWhen(dateVal: unknown, timeVal: unknown): string {
     const dateStr = dateVal != null ? String(dateVal) : "";
     const timeStr = timeVal != null ? String(timeVal) : "";
     let datePart = "";
     if (dateStr) {
-        const d = new Date(dateStr);
-        if (!Number.isNaN(d.getTime())) {
-            const wk = d.toLocaleDateString("en-US", { weekday: "short" });
-            const mon = d.toLocaleDateString("en-US", { month: "short" });
-            datePart = `${wk}, ${mon} ${dayOrdinal(d.getDate())}`;
-        }
+        datePart = formatDateMMDDYYYY(dateStr);
     }
     let timePart = "";
     if (timeStr) {
@@ -208,85 +198,8 @@ export default function NotificationsScreen({ navigation }: any) {
             }
         }
         const d = item.data as Record<string, unknown> | undefined;
-        const dataType = d?.type as string | undefined;
-
-        if (
-            dataType === "organizer_fill_warning" ||
-            dataType === "tee_time_not_filled" ||
-            dataType === "organizer_invite_more" ||
-            dataType === "roster_exhausted"
-        ) {
-            if (d?.teeTimeId) {
-                const unfilled =
-                    dataType === "tee_time_not_filled" ||
-                    dataType === "organizer_fill_warning" ||
-                    dataType === "organizer_invite_more";
-                navigation?.navigate("SelectOnDeck", {
-                    teeTimeId: d.teeTimeId,
-                    spotsRemaining: (d.spotsRemaining as number) ?? 1,
-                    courseName: d.courseName as string | undefined,
-                    teeDate: d.teeDate as string | undefined,
-                    teeTime: d.teeTime as string | undefined,
-                    unfilledSlotAlert: unfilled,
-                });
-            }
-            return;
-        }
-
-        if (dataType === "friend_request" && d?.senderId) {
-            navigation?.navigate("FriendProfile", { userId: String(d.senderId) });
-            return;
-        }
-        if (dataType === "friend_accepted" && d?.userId) {
-            navigation?.navigate("FriendProfile", { userId: String(d.userId) });
-            return;
-        }
-        if (dataType === "tee_time_invite" || dataType === "spot_opened") {
-            if (d?.teeTimeId) {
-                navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
-            } else {
-                navigation?.navigate("Invites");
-            }
-            return;
-        }
-        if (dataType === "no_show") {
-            navigation?.navigate("Profile");
-            return;
-        }
-
-        if (
-            dataType === "roster_add" ||
-            dataType === "roster_removed" ||
-            dataType === "group_updated" ||
-            dataType === "group_deleted" ||
-            dataType === "on_deck_added" ||
-            dataType === "on_deck_removed"
-        ) {
-            if (d?.ownerId) {
-                navigation?.navigate("FriendProfile", {
-                    userId: String(d.ownerId),
-                });
-            }
-            return;
-        }
-
-        if (dataType === "waiver_wire") {
-            navigation?.navigate("WaiverWire");
-            return;
-        }
-
-        if (
-            (dataType === "tee_time_response" ||
-                dataType === "player_cancelled" ||
-                dataType === "check_in_reminder") &&
-            d?.teeTimeId
-        ) {
-            navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
-            return;
-        }
-
-        if (d?.teeTimeId) {
-            navigation?.navigate("TeeTimeDetail", { teeTimeId: d.teeTimeId });
+        if (navigation?.navigate) {
+            navigateFromNotificationData(navigation.navigate.bind(navigation), d);
         }
     }, [navigation]);
 
@@ -1063,7 +976,12 @@ export default function NotificationsScreen({ navigation }: any) {
                 );
             }
 
-            const dateTimeStr = [teeDate, teeTimeVal].filter(Boolean).join(teeTimeVal ? " at " : "");
+            const dateTimeStr = [
+                teeDate ? formatDateMMDDYYYY(teeDate) : "",
+                teeTimeVal,
+            ]
+                .filter(Boolean)
+                .join(teeTimeVal ? " at " : "");
             const maxPlayers = d?.maxPlayers as number | undefined;
             const deadlineText = getDeadlineText(d?.expiresAt as string | undefined);
             const expiresAtMs = d?.expiresAt ? new Date(d.expiresAt as string).getTime() : 0;
@@ -1494,7 +1412,7 @@ export default function NotificationsScreen({ navigation }: any) {
         const diffDays = Math.floor(diffHours / 24);
         if (diffDays < 7) return `${diffDays}d ago`;
         
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatDateMMDDYYYY(date);
     };
 
     const invitesUnreadCount = notifications.filter(n => {
@@ -1879,12 +1797,14 @@ const styles = StyleSheet.create({
     },
     inviteMetaRow: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-start",
         marginTop: spacing.xs + 2,
         gap: 6,
     },
     inviteMetaText: {
         flex: 1,
+        minWidth: 0,
+        flexShrink: 1,
         fontFamily: "Inter_400Regular",
         fontSize: 13,
         color: palette.gray600,
@@ -2115,6 +2035,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: palette.gray900,
         marginTop: spacing.xs,
+        flexShrink: 1,
     },
     inviteCardRow: {
         flexDirection: "row",
@@ -2184,6 +2105,7 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+        minWidth: 0,
     },
     unfilledLabel: {
         fontFamily: "Inter_500Medium",

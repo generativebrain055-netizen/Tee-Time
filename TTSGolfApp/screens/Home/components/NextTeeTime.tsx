@@ -6,6 +6,8 @@ import { UpcomingTeeTime } from "../types";
 import { transitions } from "../../../theme/animations";
 import { spacing, fontSize, radii, shadows, palette } from "../../../ui/theme/tokens";
 import { colorTokens } from "../../../theme/tokens";
+import { parseCalendarDateLocal } from "../../../utils/formatting";
+import { getDisplayTeeTimeStatus } from "../../../utils/teeTimeStatusDisplay";
 
 const TickIcon = require("../../../assets/Tick.png");
 
@@ -34,7 +36,7 @@ const getDateSuffix = (day: number): string => {
 };
 
 const formatDateWithSuffix = (dateStr: string): string => {
-  const date = new Date(dateStr);
+  const date = parseCalendarDateLocal(dateStr);
   const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
   const month = date.toLocaleDateString("en-US", { month: "short" });
   const day = date.getDate();
@@ -97,7 +99,13 @@ function NextTeeTime({
   }
 
   const formattedDate = formatDateWithSuffix(teeTime.teeDate);
-  const statusBadge = getStatusBadge(teeTime.status);
+  const statusBadge = getStatusBadge(
+    getDisplayTeeTimeStatus({
+      status: teeTime.status,
+      maxPlayers: teeTime.maxPlayers,
+      participantCount: teeTime.participantCount,
+    }),
+  );
   const borderLeftColor =
     teeTime.status === "confirmed"
       ? palette.emerald600
