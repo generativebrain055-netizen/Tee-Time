@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node scripts/sync-node-executable-to-android.js && patch-package",
     "setup:api": "node scripts/setup-api-url.js",
     "start:with-backend": "node scripts/start-with-backend.js",
     "start": "expo start",
@@ -51,6 +52,7 @@
     "expo-location": "~18.0.7",
     "expo-notifications": "^0.29.14",
     "expo-status-bar": "~3.0.9",
+    "expo-system-ui": "^55.0.15",
     "expo-web-browser": "^15.0.10",
     "firebase": "^12.8.0",
     "lucide-react-native": "^0.561.0",
@@ -82,6 +84,7 @@
     "@types/react-native": "^0.72.8",
     "@types/react-navigation": "^3.0.8",
     "eas-cli": "^18.4.0",
+    "patch-package": "^8.0.1",
     "typescript": "^5.9.3"
   }
 }

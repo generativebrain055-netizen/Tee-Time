@@ -1,0 +1,206 @@
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/AutolinkigCommandBuilder.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/AutolinkigCommandBuilder.kt
+index 2064ca4..fe6e47a 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/AutolinkigCommandBuilder.kt
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/AutolinkigCommandBuilder.kt
+@@ -1,14 +1,25 @@
+ package expo.modules.plugin
+ 
++import java.io.File
++
+ /**
+  * Builder for creating command to run using `expo-modules-autolinking`.
+  */
+ class AutolinkingCommandBuilder {
++  private var androidRoot: File? = null
++
++  /**
++   * Android project root (directory containing `settings.gradle`), used to resolve `node` and `local.properties`.
++   */
++  fun withAndroidRoot(root: File) = apply {
++    androidRoot = root
++  }
++
+   /**
+    * Command for finding and running `expo-modules-autolinking`.
+    */
+-  private val baseCommand = listOf(
+-    "node",
++  private fun baseCommand() = listOf(
++    NodeExecutable.path(androidRoot),
+     "--no-warnings",
+     "--eval",
+     "require('expo/bin/autolinking')",
+@@ -67,7 +78,7 @@ class AutolinkingCommandBuilder {
+   }
+ 
+   fun build(): List<String> {
+-    val command = baseCommand +
++    val command = baseCommand() +
+       autolinkingCommand +
+       platform +
+       useJson +
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/NodeExecutable.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/NodeExecutable.kt
+new file mode 100644
+index 0000000..7b4c866
+--- /dev/null
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/src/main/kotlin/expo/modules/plugin/NodeExecutable.kt
+@@ -0,0 +1,92 @@
++package expo.modules.plugin
++
++import java.io.File
++import java.util.Properties
++
++/**
++ * Resolves the Node.js binary when `node` is not on PATH (common when Gradle is started from Android Studio).
++ * Order: NODE_BINARY, local.properties `node.executable`, Homebrew paths, login-shell `command -v node`, then `node`.
++ */
++object NodeExecutable {
++  @Volatile
++  private var loginShellNode: String? = null
++
++  fun path(androidRootOrNull: File? = null): String {
++    System.getenv("NODE_BINARY")?.trim()?.takeIf { it.isNotEmpty() }?.let {
++      if (File(it).exists()) return it
++    }
++    androidRootOrNull?.let { root ->
++      val lp = File(root, "local.properties")
++      if (lp.exists()) {
++        try {
++          val p = Properties()
++          lp.inputStream().use { stream -> p.load(stream) }
++          p.getProperty("node.executable")?.trim()?.takeIf { it.isNotEmpty() }?.let {
++            if (File(it).exists()) return it
++          }
++        } catch (_: Exception) {
++        }
++      }
++    }
++    listOf("/opt/homebrew/bin/node", "/usr/local/bin/node").forEach {
++      if (File(it).exists()) return it
++    }
++    resolveViaLoginShell()?.let { return it }
++    if (Os.isWindows()) {
++      resolveWhereNode()?.let { return it }
++    }
++    return "node"
++  }
++
++  private fun shellLookupCommands(): List<List<String>> =
++    when {
++      Os.isWindows() -> emptyList()
++      isMacOs() -> listOf(
++        listOf("/bin/zsh", "-lic", "command -v node"),
++        listOf("/bin/bash", "-lc", "command -v node"),
++      )
++      else -> listOf(listOf("/bin/bash", "-lc", "command -v node"))
++    }
++
++  private fun resolveViaLoginShell(): String? {
++    val commands = shellLookupCommands()
++    if (commands.isEmpty()) return null
++    loginShellNode?.let { return it }
++    synchronized(NodeExecutable::class.java) {
++      loginShellNode?.let { return it }
++      for (cmd in commands) {
++        try {
++          val proc = ProcessBuilder(cmd)
++            .redirectErrorStream(true)
++            .start()
++          val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
++          if (proc.waitFor() != 0 || out.isEmpty()) continue
++          val first = out.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: continue
++          if (File(first).exists()) {
++            loginShellNode = first
++            return first
++          }
++        } catch (_: Exception) {
++        }
++      }
++      return null
++    }
++  }
++
++  private fun resolveWhereNode(): String? {
++    try {
++      val proc = ProcessBuilder("cmd.exe", "/c", "where.exe node")
++        .redirectErrorStream(true)
++        .start()
++      val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
++      if (proc.waitFor() != 0 || out.isEmpty()) return null
++      val first = out.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: return null
++      return if (File(first).exists()) first else null
++    } catch (_: Exception) {
++      return null
++    }
++  }
++
++  private fun isMacOs(): Boolean =
++    System.getProperty("os.name")?.lowercase()?.contains("mac") == true
++}
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/src/main/kotlin/expo/modules/plugin/GeneratePackagesListTask.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/src/main/kotlin/expo/modules/plugin/GeneratePackagesListTask.kt
+index 1d6a8ba..2308e37 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/src/main/kotlin/expo/modules/plugin/GeneratePackagesListTask.kt
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/src/main/kotlin/expo/modules/plugin/GeneratePackagesListTask.kt
+@@ -43,6 +43,7 @@ abstract class GeneratePackagesListTask : Exec() {
+     val autolinkingOptions = AutolinkingOptions.fromJson(options.get())
+     commandLine(
+       AutolinkingCommandBuilder()
++        .withAndroidRoot(project.rootProject.projectDir)
+         .command("generate-package-list")
+         .option("namespace", namespace.get())
+         .option("target", outputFile.get().asFile.absolutePath)
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsExtension.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsExtension.kt
+index 4255d95..6d670e5 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsExtension.kt
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsExtension.kt
+@@ -24,6 +24,7 @@ open class ExpoAutolinkingSettingsExtension(
+    */
+   val rnConfigCommand by lazy {
+     val commandBuilder = AutolinkingCommandBuilder()
++      .withAndroidRoot(settings.rootDir)
+       .command("react-native-config")
+       .useJson()
+ 
+@@ -57,7 +58,7 @@ open class ExpoAutolinkingSettingsExtension(
+     File(
+       settings.providers.exec { env ->
+         env.workingDir(projectRoot)
+-        env.commandLine("node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
++        env.commandLine(NodeExecutable.path(projectRoot), "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
+       }.standardOutput.asText.get().trim(),
+     ).parentFile
+   }
+@@ -69,7 +70,7 @@ open class ExpoAutolinkingSettingsExtension(
+     File(
+       settings.providers.exec { env ->
+         env.workingDir(projectRoot)
+-        env.commandLine("node", "--print", "require.resolve('react-native/package.json')")
++        env.commandLine(NodeExecutable.path(projectRoot), "--print", "require.resolve('react-native/package.json')")
+       }.standardOutput.asText.get().trim(),
+     ).parentFile
+   }
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsPlugin.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsPlugin.kt
+index 99ccc9f..96f2162 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsPlugin.kt
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/ExpoAutolinkingSettingsPlugin.kt
+@@ -36,7 +36,7 @@ open class ExpoAutolinkingSettingsPlugin : Plugin<Settings> {
+     val expoModulesAutolinkingPath =
+       settings.providers.exec { env ->
+         env.workingDir(settings.rootDir)
+-        env.commandLine("node", "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
++        env.commandLine(NodeExecutable.path(settings.rootDir), "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
+       }.standardOutput.asText.get().trim()
+ 
+     val expoAutolinkingDir = File(expoModulesAutolinkingPath).parentFile
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/SettingsManager.kt b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/SettingsManager.kt
+index 85bcd5c..176f480 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/SettingsManager.kt
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/src/main/kotlin/expo/modules/plugin/SettingsManager.kt
+@@ -52,6 +52,7 @@ class SettingsManager(
+    */
+   private val config by lazy {
+     val command = AutolinkingCommandBuilder()
++      .withAndroidRoot(projectRoot)
+       .command("resolve")
+       .useJson()
+       .useAutolinkingOptions(autolinkingOptions)
