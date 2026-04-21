@@ -68,6 +68,37 @@ export function formatRelativeMessageTime(iso: string): string {
 }
 
 /**
+ * Compact time label for toast / notification rows (e.g. "Today", "1m ago", "1w ago")
+ */
+export function formatRelativeToastTime(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const startD = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const startN = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayDiff = Math.round((startN - startD) / 86400000);
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === 1) return "Yesterday";
+
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffWeeks >= 1 && diffWeeks < 5) return `${diffWeeks}w ago`;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+/**
  * Deterministic avatar background color based on an ID
  */
 const AVATAR_COLORS = [

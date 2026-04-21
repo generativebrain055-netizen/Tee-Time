@@ -15,7 +15,7 @@ import {
     StyleSheet,
     Alert,
 } from "react-native";
-import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail, MapPin } from "lucide-react-native";
+import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail, MapPin, MessageCircle } from "lucide-react-native";
 import {
     notificationApi,
     friendApi,
@@ -26,6 +26,7 @@ import {
 } from "../../services/api";
 import { ScreenShell, AppHeader } from "../../ui";
 import { useToast } from "../../ui/feedback";
+import { useUnreadConversations } from "../../components/MessageToastListener";
 import { useUser } from "../../contexts/UserContext";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
@@ -132,6 +133,7 @@ interface CategorySection {
 export default function NotificationsScreen({ navigation }: any) {
     const { fetchProfile } = useUser();
     const toast = useToast();
+    const { unreadConversations } = useUnreadConversations();
     const [activeTab, setActiveTab] = useState<TabType>('activity');
     const [typeFilter, setTypeFilter] = useState<NotificationTypeFilter>('all');
     const [showTypeFilter, setShowTypeFilter] = useState(false);
@@ -1595,6 +1597,83 @@ export default function NotificationsScreen({ navigation }: any) {
                     <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={palette.green500} />
                 }
             >
+                {/* Unread messages section — shown on Activity tab when there are unread conversations */}
+                {activeTab === "activity" && unreadConversations.length > 0 && (
+                    <View style={styles.msgSection}>
+                        <View style={styles.msgSectionHeader}>
+                            <MessageCircle size={15} color={palette.green600} />
+                            <Text style={styles.msgSectionTitle}>New Messages</Text>
+                            <View style={styles.msgBadge}>
+                                <Text style={styles.msgBadgeText}>
+                                    {unreadConversations.reduce((s, c) => s + (c.unreadCount ?? 0), 0)}
+                                </Text>
+                            </View>
+                        </View>
+                        {unreadConversations.slice(0, 5).map((conv) => (
+                            <TouchableOpacity
+                                key={conv.id}
+                                style={styles.msgRow}
+                                activeOpacity={0.8}
+                                onPress={() =>
+                                    navigation?.navigate("ChatDetail", {
+                                        chatInfo: {
+                                            conversationId: conv.id,
+                                            recipientId: conv.otherUserId ?? undefined,
+                                            id: conv.id,
+                                            name: conv.title,
+                                            subtitle: conv.subtitle,
+                                            img: conv.avatarUrl ?? undefined,
+                                            isGroup: conv.type !== "direct",
+                                        },
+                                    })
+                                }
+                            >
+                                <View style={styles.msgAvatar}>
+                                    {conv.avatarUrl ? (
+                                        <Image
+                                            source={{ uri: conv.avatarUrl }}
+                                            style={styles.msgAvatarImg}
+                                        />
+                                    ) : (
+                                        <View style={[styles.msgAvatarImg, styles.msgAvatarPlaceholder]}>
+                                            <Text style={styles.msgAvatarInitials}>
+                                                {conv.title ? conv.title.slice(0, 2).toUpperCase() : "?"}
+                                            </Text>
+                                        </View>
+                                    )}
+                                    {(conv.unreadCount ?? 0) > 0 && (
+                                        <View style={styles.msgUnreadDot}>
+                                            <Text style={styles.msgUnreadDotText}>
+                                                {(conv.unreadCount ?? 0) > 9 ? "9+" : conv.unreadCount}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <View style={styles.msgContent}>
+                                    <Text style={styles.msgName} numberOfLines={1}>{conv.title}</Text>
+                                    {conv.lastMessage?.body ? (
+                                        <Text style={styles.msgPreview} numberOfLines={1}>
+                                            {conv.lastMessage.body}
+                                        </Text>
+                                    ) : null}
+                                </View>
+                                <MessageCircle size={16} color={palette.green500} />
+                            </TouchableOpacity>
+                        ))}
+                        {unreadConversations.length > 5 && (
+                            <TouchableOpacity
+                                style={styles.msgViewAll}
+                                onPress={() => navigation?.navigate("Messages")}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.msgViewAllText}>
+                                    View all {unreadConversations.length} conversations →
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
                 {sections.length === 0 ? (
                     <View style={styles.emptyContainer}>
                         <View style={styles.emptyIconCircle}>
@@ -2333,5 +2412,114 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_400Regular",
         fontSize: fontSize.xs,
         color: palette.gray500,
+    },
+    // ── New Messages section ──────────────────────────────────────────────────
+    msgSection: {
+        marginHorizontal: spacing.lg,
+        marginTop: spacing.md,
+        marginBottom: spacing.sm,
+        backgroundColor: "#ECFDF3",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#B7EBCB",
+        overflow: "hidden",
+    },
+    msgSectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: "#B7EBCB",
+    },
+    msgSectionTitle: {
+        fontFamily: "Inter_700Bold",
+        fontSize: 13,
+        color: "#065F46",
+        flex: 1,
+    },
+    msgBadge: {
+        backgroundColor: palette.green600,
+        borderRadius: 999,
+        minWidth: 20,
+        height: 20,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 6,
+    },
+    msgBadgeText: {
+        fontFamily: "Inter_700Bold",
+        fontSize: 11,
+        color: "#FFFFFF",
+    },
+    msgRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: "#D1FAE5",
+        gap: spacing.sm,
+    },
+    msgAvatar: {
+        position: "relative",
+    },
+    msgAvatarImg: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+    },
+    msgAvatarPlaceholder: {
+        backgroundColor: palette.green600,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    msgAvatarInitials: {
+        fontFamily: "Inter_700Bold",
+        fontSize: 14,
+        color: "#FFFFFF",
+    },
+    msgUnreadDot: {
+        position: "absolute",
+        bottom: -2,
+        right: -2,
+        backgroundColor: palette.green600,
+        borderRadius: 999,
+        minWidth: 18,
+        height: 18,
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 2,
+        borderColor: "#ECFDF3",
+        paddingHorizontal: 3,
+    },
+    msgUnreadDotText: {
+        fontFamily: "Inter_700Bold",
+        fontSize: 10,
+        color: "#FFFFFF",
+    },
+    msgContent: {
+        flex: 1,
+    },
+    msgName: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 13,
+        color: "#065F46",
+    },
+    msgPreview: {
+        fontFamily: "Inter_400Regular",
+        fontSize: 12,
+        color: "#047857",
+        marginTop: 1,
+    },
+    msgViewAll: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+    },
+    msgViewAllText: {
+        fontFamily: "Inter_500Medium",
+        fontSize: 12,
+        color: palette.green600,
     },
 });

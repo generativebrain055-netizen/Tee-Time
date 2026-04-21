@@ -10,6 +10,7 @@ import { fontAssets } from "./theme/fonts";
 import { sessionManager } from "./utils/sessionManager";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { NotificationToastListener } from "./components/NotificationToastListener";
+import { MessageToastListener } from "./components/MessageToastListener";
 import { PushNotificationRouter } from "./components/PushNotificationRouter";
 import { logger } from "./utils/logger";
 import { registerPushTokenIfNeeded } from "./utils/registerPushToken";
@@ -768,12 +769,14 @@ function AppInner({
         <SafeAreaProvider>
           <UserProvider>
             <ToastProvider>
-              <NotificationToastListener navigation={navigation} />
-              <PushNotificationRouter
-                navigation={navigation}
-                currentScreen={currentScreen}
-              />
-              {renderScreen()}
+              <MessageToastListener navigation={navigation}>
+                <NotificationToastListener navigation={navigation} />
+                <PushNotificationRouter
+                  navigation={navigation}
+                  currentScreen={currentScreen}
+                />
+                {renderScreen()}
+              </MessageToastListener>
             </ToastProvider>
           </UserProvider>
         </SafeAreaProvider>

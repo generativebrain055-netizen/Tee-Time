@@ -15,4 +15,4 @@ export { LoadingOverlay, type LoadingOverlayProps } from './LoadingOverlay';
 export { AppModal, type AppModalProps } from './AppModal';
 export { ConfirmModal, type ConfirmModalProps } from './ConfirmModal';
 export { CustomDatePicker, type CustomDatePickerProps } from './CustomDatePicker';
-export { ToastProvider, useToast } from './ToastProvider';
+export { ToastProvider, useToast, type ToastLeadingIcon } from './ToastProvider';
