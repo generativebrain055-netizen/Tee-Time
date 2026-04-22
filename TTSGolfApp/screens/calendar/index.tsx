@@ -194,6 +194,13 @@ export default function FullCalendarScreen({ navigation }: Props) {
     [navigation]
   );
 
+  const handleOpenTeeTimeChat = useCallback(
+    (teeTimeId: string) => {
+      navigation?.navigate("ChatDetail", { chatInfo: { teeTimeId } });
+    },
+    [navigation]
+  );
+
   return (
     <ScreenShell>
       <AppHeader title="Schedule" onBack={handleBack} />
@@ -299,6 +306,7 @@ export default function FullCalendarScreen({ navigation }: Props) {
                 onTeeTimePress={handleTeeTimePress}
                 onCancelSuccess={onRefresh}
                 onPreTeeTimeCheck={handlePreTeeTimeCheck}
+                onOpenTeeTimeChat={handleOpenTeeTimeChat}
               />
             </View>
           </View>

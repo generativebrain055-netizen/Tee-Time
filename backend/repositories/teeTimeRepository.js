@@ -540,6 +540,31 @@ class TeeTimeRepository {
     }
 
     try {
+      const attendanceByParticipant = new Map();
+      const attendanceByUser = new Map();
+      const { data: attendanceRows, error: attendanceError } = await supabaseAdmin
+        .from("tee_time_attendance")
+        .select("tee_time_id, participant_id, user_id, status")
+        .in("tee_time_id", teeTimeIds);
+      if (attendanceError) {
+        logger.warn("getParticipantsBatch attendance lookup failed:", attendanceError.message);
+      } else {
+        (attendanceRows || []).forEach((row) => {
+          if (row?.participant_id) {
+            attendanceByParticipant.set(
+              `${row.tee_time_id}:${row.participant_id}`,
+              row.status || null,
+            );
+          }
+          if (row?.user_id) {
+            attendanceByUser.set(
+              `${row.tee_time_id}:${row.user_id}`,
+              row.status || null,
+            );
+          }
+        });
+      }
+
       const { data, error } = await supabaseAdmin
         .from("tee_time_participants")
         .select(
@@ -576,6 +601,12 @@ class TeeTimeRepository {
         const teeTimeId = p.tee_time_id;
         delete p.users;
 
+        const attendanceStatus =
+          attendanceByParticipant.get(`${teeTimeId}:${p.id}`) ||
+          attendanceByUser.get(`${teeTimeId}:${p.user_id}`) ||
+          p.tee_time_attendance?.[0]?.status ||
+          null;
+
         participantsByTeeTime[teeTimeId].push({
           ...p,
           first_name: user.first_name,
@@ -583,7 +614,7 @@ class TeeTimeRepository {
           username: user.username,
           avatar_url: profile.avatar_url,
           user_handicap: profile.handicap,
-          attendance_status: p.tee_time_attendance?.[0]?.status || null,
+          attendance_status: attendanceStatus,
         });
       });
 

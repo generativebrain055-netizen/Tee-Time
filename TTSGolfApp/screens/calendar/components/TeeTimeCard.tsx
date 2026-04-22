@@ -6,10 +6,21 @@ import {
   Modal,
   Alert,
   Image,
-  ActionSheetIOS,
-  Platform,
 } from "react-native";
-import { Clock, MapPin, MoreHorizontal, Check, Users, ChevronRight } from "lucide-react-native";
+import {
+  Clock,
+  MapPin,
+  MoreHorizontal,
+  Check,
+  Users,
+  ChevronRight,
+  X,
+  MessageCircle,
+  Pencil,
+  UserRoundCog,
+  CalendarX2,
+  LogOut,
+} from "lucide-react-native";
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
@@ -26,12 +37,24 @@ const CrossIcon = require('../../../assets/Cross.png');
 const PRIMARY_GREEN = "#5EBC68";
 const IN_PROGRESS_ORANGE = "#F59E0B";
 
+function isFutureTeeDate(dateStr?: string): boolean {
+  if (!dateStr) return false;
+  const [y, m, d] = String(dateStr).split(/[-/]/).map(Number);
+  const teeDay = new Date(y || 0, (m || 1) - 1, d || 1);
+  if (Number.isNaN(teeDay.getTime())) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return teeDay.getTime() > today.getTime();
+}
+
 interface TeeTimeCardProps {
   teeTime: CalendarTeeTime;
   onPress?: (teeTimeId: string) => void;
   onCancelSuccess?: () => void;
   /** Organizer-only: navigate to pre–tee time check-in. */
   onPreTeeTimeCheck?: (teeTimeId: string, courseLine: string) => void;
+  /** Open tee time chat thread */
+  onOpenTeeTimeChat?: (teeTimeId: string) => void;
 }
 
 const CANCEL_PENALTY_CONFIRMED = 10;
@@ -73,7 +96,7 @@ function getStatusDisplay(status: CalendarTeeTime["status"]) {
   }
 }
 
-const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck }: TeeTimeCardProps) => {
+const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck, onOpenTeeTimeChat }: TeeTimeCardProps) => {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const { fetchProfile } = useUser();
   const toast = useToast();
@@ -85,6 +108,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
   const statusDisplay = getStatusDisplay(displayStatus);
   const StatusIcon = statusDisplay.icon;
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   /** Guests only — leave the tee time (not "cancel event for everyone"). */
@@ -109,6 +133,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
     (displayStatus === "confirmed" || displayStatus === "in_progress");
 
   const checkInCourseLine = `${formatTeeTimeDate(teeTime.date)}, ${formatTeeTimeTime(teeTime.time)} – ${teeTime.course}`;
+  const hideManagePlayersForFuture = isFutureTeeDate(teeTime.date);
 
   const handlePress = useCallback(() => {
     onPress?.(teeTime.id);
@@ -140,74 +165,95 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
   }, [teeTime.id, onCancelSuccess, toast]);
 
   const handleMorePress = useCallback(() => {
-    const openCheckIn = () => {
-      if (onPreTeeTimeCheck) onPreTeeTimeCheck(teeTime.id, checkInCourseLine);
-    };
+    setShowOptionsModal(true);
+  }, []);
 
-    if (Platform.OS === "ios") {
-      const options: string[] = ["View details"];
-      if (showPreTeeTimeCheck) options.push("Check participant status");
-      if (canLeaveAsParticipant) options.push("Cancel participation");
-      if (canHostCancelTeeTime) options.push("Cancel tee time");
-      options.push("Dismiss");
+  const closeOptionsModal = useCallback(() => {
+    setShowOptionsModal(false);
+  }, []);
 
-      let cancelParticipationIndex = -1;
-      let checkInIndex = -1;
-      let hostCancelIndex = -1;
-      let idx = 1;
-      if (showPreTeeTimeCheck) {
-        checkInIndex = idx;
-        idx++;
-      }
-      if (canLeaveAsParticipant) {
-        cancelParticipationIndex = idx;
-        idx++;
-      }
-      if (canHostCancelTeeTime) {
-        hostCancelIndex = idx;
-      }
+  const openTeeTimeChat = useCallback(() => {
+    closeOptionsModal();
+    onOpenTeeTimeChat?.(teeTime.id);
+  }, [closeOptionsModal, onOpenTeeTimeChat, teeTime.id]);
 
-      const destructiveIndex =
-        hostCancelIndex >= 0 ? hostCancelIndex : cancelParticipationIndex >= 0 ? cancelParticipationIndex : undefined;
+  const openEditDetails = useCallback(() => {
+    closeOptionsModal();
+    // No dedicated edit flow yet; route to detail.
+    onPress?.(teeTime.id);
+  }, [closeOptionsModal, onPress, teeTime.id]);
 
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: options.length - 1,
-          destructiveButtonIndex: destructiveIndex,
-        },
-        (i) => {
-          if (i === 0) handlePress();
-          else if (showPreTeeTimeCheck && i === checkInIndex) openCheckIn();
-          else if (canLeaveAsParticipant && i === cancelParticipationIndex) setShowCancelModal(true);
-          else if (canHostCancelTeeTime && i === hostCancelIndex) handleHostCancelTeeTime();
-        },
-      );
-    } else {
-      Alert.alert("Options", "", [
-        { text: "View details", onPress: handlePress },
-        ...(showPreTeeTimeCheck
-          ? [{ text: "Check participant status", onPress: openCheckIn }]
-          : []),
-        ...(canLeaveAsParticipant
-          ? [{ text: "Cancel participation", onPress: () => setShowCancelModal(true) }]
-          : []),
-        ...(canHostCancelTeeTime
-          ? [{ text: "Cancel tee time", style: "destructive" as const, onPress: handleHostCancelTeeTime }]
-          : []),
-        { text: "Dismiss", style: "cancel" },
-      ]);
-    }
-  }, [
-    teeTime.id,
-    handlePress,
-    showPreTeeTimeCheck,
-    canLeaveAsParticipant,
-    canHostCancelTeeTime,
-    onPreTeeTimeCheck,
-    checkInCourseLine,
-    handleHostCancelTeeTime,
-  ]);
+  const openManagePlayers = useCallback(() => {
+    closeOptionsModal();
+    if (onPreTeeTimeCheck) onPreTeeTimeCheck(teeTime.id, checkInCourseLine);
+    else onPress?.(teeTime.id);
+  }, [closeOptionsModal, onPreTeeTimeCheck, teeTime.id, checkInCourseLine, onPress]);
+
+  const openLeaveTeeTime = useCallback(() => {
+    closeOptionsModal();
+    if (canLeaveAsParticipant) setShowCancelModal(true);
+    else Alert.alert("Leave tee time", "You can't leave this tee time right now.");
+  }, [closeOptionsModal, canLeaveAsParticipant]);
+
+  const openCancelTeeTime = useCallback(() => {
+    closeOptionsModal();
+    handleHostCancelTeeTime();
+  }, [closeOptionsModal, handleHostCancelTeeTime]);
+
+  const hostOptions = [
+    { key: "chat", label: "Open tee time chat", icon: MessageCircle, onPress: openTeeTimeChat },
+    { key: "edit", label: "Edit details", icon: Pencil, onPress: openEditDetails },
+    ...(!hideManagePlayersForFuture
+      ? [{ key: "manage", label: "Manage players", icon: UserRoundCog, onPress: openManagePlayers }]
+      : []),
+    ...(canHostCancelTeeTime
+      ? [{ key: "cancel", label: "Cancel tee time", icon: CalendarX2, onPress: openCancelTeeTime, danger: true }]
+      : []),
+  ];
+
+  const memberOptions = [
+    { key: "chat", label: "Open tee time chat", icon: MessageCircle, onPress: openTeeTimeChat },
+    { key: "leave", label: "Leave tee time", icon: LogOut, onPress: openLeaveTeeTime, danger: true },
+  ];
+
+  const options = teeTime.isOrganizer ? hostOptions : memberOptions;
+  const renderOptionRow = (opt: {
+    key: string;
+    label: string;
+    icon: any;
+    onPress: () => void;
+    danger?: boolean;
+  }) => {
+    const Icon = opt.icon;
+    const tint = opt.danger ? "#DC2626" : "#111827";
+    return (
+      <TouchableOpacity
+        key={opt.key}
+        onPress={opt.onPress}
+        activeOpacity={0.7}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 18,
+          borderBottomWidth: 1,
+          borderBottomColor: "#EFEFEF",
+        }}
+      >
+        <Icon size={20} color={tint} strokeWidth={2} />
+        <Text
+          style={{
+            marginLeft: 12,
+            fontSize: 24 / 2,
+            fontFamily: "Inter_500Medium",
+            color: tint,
+          }}
+        >
+          {opt.label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const handlePreTeeTimeCheckPress = useCallback(() => {
     onPreTeeTimeCheck?.(teeTime.id, checkInCourseLine);
@@ -478,6 +524,32 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
           </TouchableOpacity>
         ) : null}
       </View>
+
+      <Modal
+        visible={showOptionsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeOptionsModal}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.15)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: "#FFFFFF", borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
+            <View
+              style={{
+                height: 56,
+                justifyContent: "center",
+                borderBottomWidth: 1,
+                borderBottomColor: "#EFEFEF",
+                paddingHorizontal: 20,
+              }}
+            >
+              <TouchableOpacity onPress={closeOptionsModal} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={22} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            {options.map(renderOptionRow)}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showCancelModal}
