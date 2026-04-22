@@ -624,12 +624,15 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         return isInCheckInWindow(teeTime.teeDate, teeTime.teeTime);
     }, [teeTime]);
 
-    // Auto open check-in for hosts in the check-in window (confirmed or in_progress e.g. after reminder / refill)
+    const autoOpenCheckInParam = route?.params?.autoOpenCheckIn === true;
+
+    // Auto open check-in only when explicitly requested (e.g. check-in reminder notification).
     useEffect(() => {
         const st = normalizeTeeDetailStatus(effectiveTeeStatusForUi(teeTime));
         if (
             !teeTime ||
             !isOrganizer ||
+            !autoOpenCheckInParam ||
             (st !== "confirmed" && st !== "in_progress") ||
             !inCheckInWindow ||
             hasNavigatedToCheckIn.current
@@ -637,13 +640,14 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
             return;
         }
         hasNavigatedToCheckIn.current = true;
+        navigation?.setParams?.({ autoOpenCheckIn: false });
         navigation?.navigate("CheckIn", {
             teeTimeId: teeTime.id,
             courseName: teeTime.courseName,
             teeDate: teeTime.teeDate,
             teeTime: teeTime.teeTime,
         });
-    }, [teeTime, isOrganizer, inCheckInWindow, navigation]);
+    }, [teeTime, isOrganizer, autoOpenCheckInParam, inCheckInWindow, navigation]);
 
     // Check if current user is a participant
     const isParticipant = useMemo(() => {

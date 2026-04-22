@@ -275,7 +275,10 @@ export function getNotificationNavigation(item: AppNotification): {
       return item.data?.teeTimeId
         ? {
             screen: "TeeTimeDetail",
-            params: { teeTimeId: item.data.teeTimeId },
+            params: {
+              teeTimeId: item.data.teeTimeId,
+              autoOpenCheckIn: notifType === "check_in_reminder",
+            },
           }
         : { screen: null };
 

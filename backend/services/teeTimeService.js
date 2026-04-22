@@ -244,6 +244,27 @@ async function skipInvite(teeTimeId, inviteId, userId) {
       nextInvite.id,
       expiresAt,
     );
+
+    // Notify the next candidate immediately after activation.
+    if (nextInvite.invitee_user_id) {
+      await notificationService.notifyTeeTimeInvite(
+        nextInvite.invitee_user_id,
+        {
+          id: teeTime.id,
+          date: teeTime.tee_date,
+          time: teeTime.tee_time,
+          courseName: teeTime.course_name,
+          maxPlayers: teeTime.max_players,
+        },
+        {
+          id: teeTime.creator_id,
+          firstName: teeTime.first_name || "",
+          lastName: teeTime.last_name || "",
+        },
+        expiresAt,
+        nextInvite.id,
+      );
+    }
   }
 
   // Get updated invites list

@@ -63,6 +63,7 @@ export function useNotificationActions({
           if (item.data?.teeTimeId)
             navigation?.navigate("TeeTimeDetail", {
               teeTimeId: item.data.teeTimeId,
+              autoOpenCheckIn: notifType === "check_in_reminder",
             });
           break;
         case "no_show":

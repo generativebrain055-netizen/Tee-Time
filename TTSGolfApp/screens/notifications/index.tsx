@@ -64,6 +64,17 @@ function formatTeeInviteWhen(dateVal: unknown, timeVal: unknown): string {
     return "";
 }
 
+function isExpiredTeeTimeInviteNotification(notification: AppNotification, nowMs: number): boolean {
+    const data = (notification.data || {}) as Record<string, unknown>;
+    const type = String(data.type || "");
+    if (type !== "tee_time_invite") return false;
+    const expiresRaw = data.expiresAt ?? data.expires_at;
+    if (!expiresRaw) return false;
+    const expiresMs = new Date(String(expiresRaw)).getTime();
+    if (Number.isNaN(expiresMs)) return false;
+    return expiresMs <= nowMs;
+}
+
 function initialsFromGroupName(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 0) return "?";
@@ -153,11 +164,13 @@ export default function NotificationsScreen({ navigation }: any) {
         try {
             const response = await notificationApi.getNotifications({ limit: 100 });
             if (response.success) {
+                const nowMs = Date.now();
                 // Filter out notifications that have been responded to
                 const filteredNotifications = response.notifications.filter(n => {
                     const notifData = n.data || {};
                     if (notifData.type === "tee_time_invite" && notifData.responded === true) return false;
                     if (notifData.type === "friend_request" && notifData.responded === true) return false;
+                    if (isExpiredTeeTimeInviteNotification(n, nowMs)) return false;
                     return true;
                 });
                 setNotifications(filteredNotifications);
@@ -669,6 +682,11 @@ export default function NotificationsScreen({ navigation }: any) {
         const interval = setInterval(() => setNowTick(Date.now()), 1000);
         return () => clearInterval(interval);
     }, []);
+
+    // Keep invite cards clean while the screen is open by dropping newly-expired tee time invites.
+    useEffect(() => {
+        setNotifications((prev) => prev.filter((n) => !isExpiredTeeTimeInviteNotification(n, nowTick)));
+    }, [nowTick]);
 
     const getDeadlineText = (expiresAt?: string): string | null => {
         if (!expiresAt) return null;

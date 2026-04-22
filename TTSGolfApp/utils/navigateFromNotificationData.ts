@@ -128,7 +128,10 @@ export function navigateFromNotificationData(
       dataType === "check_in_reminder") &&
     d.teeTimeId
   ) {
-    navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+    navigate("TeeTimeDetail", {
+      teeTimeId: String(d.teeTimeId),
+      autoOpenCheckIn: dataType === "check_in_reminder",
+    });
     return;
   }
 

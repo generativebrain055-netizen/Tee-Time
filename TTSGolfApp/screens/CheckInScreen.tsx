@@ -300,7 +300,7 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
         const response = await attendanceApi.checkInAll(teeTimeId);
         if (response.success) {
           Alert.alert("Saved", `All ${response.checkedIn} players checked in. Have a great round!`, [
-            { text: "OK", onPress: () => navigation.goBack() },
+            { text: "OK", onPress: () => navigation?.replace?.("TeeTimeDetail", { teeTimeId }) },
           ]);
         } else {
           throw new Error(response.message || "Check-in failed");
@@ -312,7 +312,7 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
             response.noShow > 0
               ? `${response.noShow} marked no-show. Penalties applied where applicable.`
               : response.message || "Check-in saved.";
-          Alert.alert("Saved", msg, [{ text: "OK", onPress: () => navigation.goBack() }]);
+          Alert.alert("Saved", msg, [{ text: "OK", onPress: () => navigation?.replace?.("TeeTimeDetail", { teeTimeId }) }]);
         } else {
           throw new Error(response.message || "Failed to update attendance");
         }
