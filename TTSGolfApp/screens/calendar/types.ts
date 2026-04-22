@@ -22,7 +22,8 @@ export interface CalendarParticipant {
   name: string;
   avatar?: string;
   isCreator: boolean;
-  status?: "confirmed" | "pending";
+  status?: "confirmed" | "pending" | "no_show";
+  attendanceStatus?: "present" | "no_show" | "pending" | null;
 }
 
 export interface CalendarTeeTime {

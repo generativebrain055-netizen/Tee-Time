@@ -29,7 +29,15 @@ function mapApiToCalendar(
     name: p.name,
     avatar: p.avatar,
     isCreator: p.isCreator,
-    status: "confirmed" as const,
+    status:
+      (p as any).attendanceStatus === "no_show" ||
+      (p as any).attendance_status === "no_show"
+        ? ("no_show" as const)
+        : ("confirmed" as const),
+    attendanceStatus:
+      ((p as any).attendanceStatus ??
+        (p as any).attendance_status ??
+        null) as "present" | "no_show" | "pending" | null,
   }));
   const creatorId =
     participants.find((p) => p.isCreator)?.userId ?? api.creatorId;

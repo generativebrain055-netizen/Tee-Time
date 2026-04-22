@@ -45,6 +45,7 @@ const formatParticipant = (p) => ({
   handicap: p.handicap,
   position: p.position,
   isCreator: p.is_creator,
+  attendanceStatus: p.attendance_status || null,
 });
 
 /**

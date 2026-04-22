@@ -245,7 +245,7 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
         setParticipants(active);
         const next: Record<string, "present" | "no_show"> = {};
         active.forEach((p) => {
-          next[p.id] = "present";
+          next[p.id] = p.status === "no_show" ? "no_show" : "present";
         });
         setPresenceById(next);
         setCheckInAvailable(response.checkInAvailable);
@@ -271,16 +271,32 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
   }, []);
 
   const handleHeaderBack = useCallback(() => {
+    if (teeTimeId) {
+      navigation?.replace?.("TeeTimeDetail", {
+        teeTimeId,
+        autoOpenCheckIn: false,
+        showAllSet: false,
+      });
+      return;
+    }
     navigation?.goBack?.();
-  }, [navigation]);
+  }, [navigation, teeTimeId]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      navigation?.goBack?.();
+      if (teeTimeId) {
+        navigation?.replace?.("TeeTimeDetail", {
+          teeTimeId,
+          autoOpenCheckIn: false,
+          showAllSet: false,
+        });
+      } else {
+        navigation?.goBack?.();
+      }
       return true;
     });
     return () => sub.remove();
-  }, [navigation]);
+  }, [navigation, teeTimeId]);
 
   const handleSave = useCallback(async () => {
     if (!teeTimeId) return;
@@ -292,34 +308,25 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
       status: (presenceById[p.id] === "no_show" ? "no_show" : "present") as "present" | "no_show",
     }));
 
-    const anyNoShow = updates.some((u) => u.status === "no_show");
-
     setSubmitting(true);
     try {
-      if (!anyNoShow) {
-        const response = await attendanceApi.checkInAll(teeTimeId);
-        if (response.success) {
-          Alert.alert("Saved", `All ${response.checkedIn} players checked in. Have a great round!`, [
-            { text: "OK", onPress: () => navigation?.replace?.("TeeTimeDetail", { teeTimeId }) },
-          ]);
-        } else {
-          throw new Error(response.message || "Check-in failed");
-        }
+      const response = await attendanceApi.batchUpdateAttendance(teeTimeId, updates);
+      if (response.success) {
+        const msg =
+          response.noShow > 0
+            ? `${response.noShow} marked no-show. Penalties applied where applicable.`
+            : response.message || "Check-in saved.";
+        Alert.alert("Saved", msg, [{ text: "OK", onPress: () => navigation?.replace?.("TeeTimeDetail", { teeTimeId }) }]);
       } else {
-        const response = await attendanceApi.batchUpdateAttendance(teeTimeId, updates);
-        if (response.success) {
-          const msg =
-            response.noShow > 0
-              ? `${response.noShow} marked no-show. Penalties applied where applicable.`
-              : response.message || "Check-in saved.";
-          Alert.alert("Saved", msg, [{ text: "OK", onPress: () => navigation?.replace?.("TeeTimeDetail", { teeTimeId }) }]);
-        } else {
-          throw new Error(response.message || "Failed to update attendance");
-        }
+        throw new Error(response.message || "Failed to update attendance");
       }
     } catch (error: unknown) {
       if (isCheckInAlreadyFinalizedApiError(error)) {
-        navigation.goBack();
+        navigation?.replace?.("TeeTimeDetail", {
+          teeTimeId,
+          autoOpenCheckIn: false,
+          showAllSet: false,
+        });
         return;
       }
       if (isAttendanceRecordNotFoundApiError(error)) {
@@ -391,11 +398,7 @@ export default function CheckInScreen({ route, navigation }: CheckInScreenProps)
 
           {!checkInAvailable && checkInMessage && (
             <View style={[styles.warningBanner, { backgroundColor: colors.warningContainer }]}>
-              <Text style={[styles.warningText, { color: colors.onWarningContainer }]}>
-                {checkInMessage}
-                {"\n\n"}
-                You can still tap Save until check-in has been completed for this tee time.
-              </Text>
+              <Text style={[styles.warningText, { color: colors.onWarningContainer }]}>{checkInMessage}</Text>
             </View>
           )}
 

@@ -21,6 +21,7 @@ import { getDisplayTeeTimeStatus } from "../../../utils/teeTimeStatusDisplay";
 
 // Import tick icon
 const TickIcon = require('../../../assets/Tick.png');
+const CrossIcon = require('../../../assets/Cross.png');
 
 const PRIMARY_GREEN = "#5EBC68";
 const IN_PROGRESS_ORANGE = "#F59E0B";
@@ -344,6 +345,7 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16, flex: 1, flexWrap: "wrap" }}>
               {participants.map((p) => {
                 const isYou = currentUserId === p.userId;
+                const isNoShow = p.attendanceStatus === "no_show" || p.status === "no_show";
                 const parts = p.name.trim().split(/\s+/);
                 const displayName = isYou
                   ? "You"
@@ -394,7 +396,11 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
                           justifyContent: "center",
                         }}
                       >
-                        <Image source={TickIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                        <Image
+                          source={isNoShow ? CrossIcon : TickIcon}
+                          style={{ width: 18, height: 18 }}
+                          resizeMode="contain"
+                        />
                       </View>
                     </View>
                     <Text

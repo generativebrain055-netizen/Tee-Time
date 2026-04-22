@@ -232,9 +232,13 @@ class AttendanceService {
       let checkedInCount = 0;
       const now = new Date().toISOString();
       
-      // Mark all pending participants as present
+      // Mark all non-cancelled participants as present, including previously no-show rows.
       for (const record of attendance) {
-        if (record.status === 'pending' || record.status === null) {
+        if (
+          record.status === "pending" ||
+          record.status === null ||
+          record.status === "no_show"
+        ) {
           try {
             await this.markPresent(record.id, organizerId);
             checkedInCount++;
@@ -280,6 +284,8 @@ class AttendanceService {
         status: "present",
         checked_in_at: new Date().toISOString(),
         checked_in_by: checkedInBy,
+        marked_no_show_at: null,
+        marked_no_show_by: null,
         updated_at: new Date().toISOString()
       })
       .eq("id", attendanceId)
@@ -304,9 +310,9 @@ class AttendanceService {
       throw new Error('Attendance record not found');
     }
 
-    // Prevent duplicate penalties
-    if (record.penalty_applied) {
-      throw new Error('Penalty already applied for this attendance');
+    // Idempotent save: if already no-show with penalty already applied, keep it saved.
+    if (record.status === "no_show" && record.penalty_applied) {
+      return record;
     }
 
     // Cannot mark cancelled participant as no-show
@@ -330,15 +336,25 @@ class AttendanceService {
       throw new Error('Cannot mark organizer as no-show');
     }
 
-    // Apply no-show penalty if user exists
+    // Apply no-show penalty if user exists.
+    // If penalty calc fails, still persist no-show status so host changes are not lost.
     let penaltyLogId = null;
+    let penaltyApplied = false;
     if (record.user_id) {
-      const penaltyLog = await socialRateService.applyNoShowPenalty(
-        record.user_id,
-        record.tee_time_id,
-        markedBy
-      );
-      penaltyLogId = penaltyLog?.id;
+      try {
+        const penaltyLog = await socialRateService.applyNoShowPenalty(
+          record.user_id,
+          record.tee_time_id,
+          markedBy
+        );
+        penaltyLogId = penaltyLog?.id || null;
+        penaltyApplied = !!penaltyLogId;
+      } catch (penaltyError) {
+        logger.warn(
+          `No-show penalty failed for attendance ${attendanceId}; saving no_show anyway`,
+          penaltyError?.message || penaltyError
+        );
+      }
     }
 
     // Update attendance record
@@ -348,7 +364,7 @@ class AttendanceService {
         status: "no_show",
         marked_no_show_at: new Date().toISOString(),
         marked_no_show_by: markedBy,
-        penalty_applied: true,
+        penalty_applied: penaltyApplied,
         penalty_log_id: penaltyLogId,
         updated_at: new Date().toISOString()
       })
@@ -660,10 +676,7 @@ class AttendanceService {
       return { available: false, reason: 'Tee time not found' };
     }
 
-    if (teeTime.check_in_completed_at) {
-      return { available: false, reason: "Check-in already completed" };
-    }
-    if (teeTime.status === "completed" || teeTime.status === "cancelled") {
+    if (teeTime.status === "cancelled") {
       return { available: false, reason: "Tee time closed" };
     }
 
@@ -679,6 +692,11 @@ class AttendanceService {
 
     if (diffDays < 0) {
       return { available: false, reason: "Check-in not available yet" };
+    }
+
+    // For today/past rounds, keep attendance editable even when tee time status is completed.
+    if (teeTime.status === "completed" || teeTime.check_in_completed_at) {
+      return { available: true, teeTime };
     }
 
     // Previous calendar day: grace period so hosts can finish attendance the morning after
@@ -731,6 +749,19 @@ class AttendanceService {
     }
     if (teeTime.status === "cancelled") {
       return { ok: false, reason: "Tee time cancelled" };
+    }
+    const [year, month, day] = String(teeTime.tee_date || "").split("-").map(Number);
+    const teeDay = new Date(year || 0, (month || 1) - 1, day || 1);
+    const now = new Date();
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const isTodayOrPastByDate = !Number.isNaN(teeDay.getTime()) && teeDay.getTime() <= todayOnly.getTime();
+
+    // Hosts can adjust attendance on today's/past confirmed or completed tee times.
+    if (
+      isTodayOrPastByDate &&
+      (teeTime.status === "confirmed" || teeTime.status === "completed")
+    ) {
+      return { ok: true, teeTime };
     }
     if (this.isBeforeScheduledTeeTime(teeTime)) {
       return { ok: true, teeTime };

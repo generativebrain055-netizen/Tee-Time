@@ -443,6 +443,7 @@ class TeeTimeRepository {
         .select(
           `
           *,
+          tee_time_attendance!left (status),
           users!tee_time_participants_user_id_fkey (
             first_name, 
             last_name, 
@@ -473,6 +474,7 @@ class TeeTimeRepository {
           username: user.username,
           avatar_url: profile.avatar_url,
           user_handicap: profile.handicap,
+          attendance_status: p.tee_time_attendance?.[0]?.status || null,
         };
       });
     } catch (error) {
@@ -488,6 +490,7 @@ class TeeTimeRepository {
         .select(
           `
           *,
+          tee_time_attendance!left (status),
           users!tee_time_participants_user_id_fkey (
             first_name,
             last_name,
@@ -518,6 +521,7 @@ class TeeTimeRepository {
           username: user.username,
           avatar_url: profile.avatar_url,
           user_handicap: profile.handicap,
+          attendance_status: p.tee_time_attendance?.[0]?.status || null,
         };
       });
     } catch (error) {
@@ -541,6 +545,7 @@ class TeeTimeRepository {
         .select(
           `
           *,
+          tee_time_attendance!left (status),
           users!tee_time_participants_user_id_fkey (
             first_name, 
             last_name, 
@@ -578,6 +583,7 @@ class TeeTimeRepository {
           username: user.username,
           avatar_url: profile.avatar_url,
           user_handicap: profile.handicap,
+          attendance_status: p.tee_time_attendance?.[0]?.status || null,
         });
       });
 

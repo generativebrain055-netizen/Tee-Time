@@ -41,10 +41,12 @@ interface Participant {
         | 'invited'
         | 'expired'
         | 'cancelled'
-        | 'waitlist';
+        | 'waitlist'
+        | 'no_show';
     isCreator: boolean;
     expiresAt?: string;
     inviteId?: string; // For skip functionality
+    attendanceStatus?: 'present' | 'no_show' | 'pending' | null;
     /** True when this row came from tee_time_participants with status cancelled (left after joining). */
     fromParticipationRecord?: boolean;
 }
@@ -200,6 +202,33 @@ function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
     return true;
 }
 
+function isPastScheduledTeeTime(teeDateStr: string, teeTimeStr: string): boolean {
+    if (!teeDateStr || !teeTimeStr) return false;
+    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
+    const [hh = 0, mm = 0, ss = 0] = String(teeTimeStr).split(":").map((x) => parseInt(x, 10));
+    const scheduledAt = new Date(
+        y || 0,
+        (m || 1) - 1,
+        d || 1,
+        Number.isNaN(hh) ? 0 : hh,
+        Number.isNaN(mm) ? 0 : mm,
+        Number.isNaN(ss) ? 0 : ss,
+        0,
+    );
+    if (Number.isNaN(scheduledAt.getTime())) return false;
+    return scheduledAt.getTime() < Date.now();
+}
+
+function isTodayOrPastTeeDate(teeDateStr: string): boolean {
+    if (!teeDateStr) return false;
+    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
+    const teeDate = new Date(y || 0, (m || 1) - 1, d || 1);
+    if (Number.isNaN(teeDate.getTime())) return false;
+    const today = new Date();
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return teeDate.getTime() <= todayOnly.getTime();
+}
+
 const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isInAwaitingGroup, isActiveInvitedSlot, onSkip, canSkip }: { 
     participant: Participant; 
     showTimeLeft?: boolean;
@@ -246,6 +275,8 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
                 return { color: 'text-gray-400', text: 'Expired', showBadge: true, badgeIcon: 'timeout', showArrow: false };
             case 'cancelled':
                 return { color: 'text-gray-500', text: 'Cancelled', showBadge: true, badgeIcon: 'decline', showArrow: false };
+            case 'no_show':
+                return { color: 'text-red-600', text: 'No-show', showBadge: true, badgeIcon: 'decline', showArrow: false };
             default:
                 return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
         }
@@ -436,6 +467,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
             const response = await teeTimeApi.getTeeTime(teeTimeId);
             if (response.success && response.teeTime) {
                 const data = response.teeTime as any;
+                const applySavedAttendanceStatus = isTodayOrPastTeeDate(String(data.teeDate || ""));
                 
                 // Combine participants and invites into a single list
                 const allParticipants: Participant[] = [];
@@ -450,13 +482,18 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                         const dedupeKey = uid || p.id;
                         if (!seenUserIds.has(dedupeKey)) {
                             seenUserIds.add(dedupeKey);
+                            const attendanceStatus = (p.attendanceStatus || null) as Participant["attendanceStatus"];
                             allParticipants.push({
                                 id: p.id,
                                 userId: p.userId,
                                 name: p.name,
                                 avatar: p.avatar,
-                                status: 'accepted',
+                                status:
+                                    applySavedAttendanceStatus && attendanceStatus === "no_show"
+                                        ? "no_show"
+                                        : "accepted",
                                 isCreator: p.isCreator || false,
+                                attendanceStatus,
                             });
                         }
                     });
@@ -476,6 +513,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                 status: 'cancelled',
                                 isCreator: p.isCreator || false,
                                 fromParticipationRecord: true,
+                                attendanceStatus: (p.attendanceStatus || null) as Participant["attendanceStatus"],
                             });
                         }
                     });
@@ -545,7 +583,9 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                     });
                 }
                 
-                const acceptedCount = allParticipants.filter(p => p.status === 'accepted').length;
+                const acceptedCount = allParticipants.filter(
+                    (p) => p.status === 'accepted' || p.status === 'no_show',
+                ).length;
                 const slotsOpen = data.maxPlayers - acceptedCount;
                 
                 setTeeTime({
@@ -622,6 +662,16 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const inCheckInWindow = useMemo(() => {
         if (!teeTime?.teeDate || !teeTime?.teeTime) return false;
         return isInCheckInWindow(teeTime.teeDate, teeTime.teeTime);
+    }, [teeTime]);
+
+    const isPastTeeTime = useMemo(() => {
+        if (!teeTime?.teeDate || !teeTime?.teeTime) return false;
+        return isPastScheduledTeeTime(teeTime.teeDate, teeTime.teeTime);
+    }, [teeTime]);
+
+    const isTodayOrPastDate = useMemo(() => {
+        if (!teeTime?.teeDate) return false;
+        return isTodayOrPastTeeDate(teeTime.teeDate);
     }, [teeTime]);
 
     const autoOpenCheckInParam = route?.params?.autoOpenCheckIn === true;
@@ -750,9 +800,9 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const canShowCheckParticipantStatus = useMemo(() => {
         if (!teeTime || !isOrganizer) return false;
         const s = normalizedTeeStatus;
-        if (s === "completed" || s === "cancelled" || s === "canceled") return false;
-        return s === "confirmed" || s === "in_progress";
-    }, [isOrganizer, teeTime, normalizedTeeStatus]);
+        if (s === "cancelled" || s === "canceled") return false;
+        return isTodayOrPastDate;
+    }, [isOrganizer, teeTime, normalizedTeeStatus, isTodayOrPastDate]);
     const showLeaveTeeTimeButton = useMemo(
         () =>
             !!teeTime &&
@@ -765,9 +815,11 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const showOrganizerCancelTeeTimeCta = useMemo(
         () =>
             isOrganizer &&
+            !isPastTeeTime &&
+            normalizedTeeStatus !== "completed" &&
             normalizedTeeStatus !== "cancelled" &&
             normalizedTeeStatus !== "canceled",
-        [isOrganizer, normalizedTeeStatus],
+        [isOrganizer, normalizedTeeStatus, isPastTeeTime],
     );
 
     // Handle leave tee time (cancel participation)
@@ -859,6 +911,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     }
 
     const acceptedParticipants = teeTime.participants.filter(p => p.status === 'accepted');
+    const noShowParticipants = teeTime.participants.filter(p => p.status === 'no_show');
     const showExpandedBackupAndCancelled =
         normalizedTeeStatus === 'confirmed' ||
         normalizedTeeStatus === 'completed' ||
@@ -1107,6 +1160,13 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                             calculateTimeLeft={calculateTimeLeft}
                         />
                     ))}
+                    {noShowParticipants.map((p) => (
+                        <ParticipantRow
+                            key={p.id}
+                            participant={p}
+                            calculateTimeLeft={calculateTimeLeft}
+                        />
+                    ))}
 
                     {/* Pending / in-progress / confirmed with open spots: single scroll (declined inline, pipeline below) */}
                     {!useFilledConfirmedMemberLayout && (
@@ -1266,7 +1326,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                                     className="flex-row items-center justify-center py-4 px-6 rounded-lg mb-3"
                                     style={{ backgroundColor: '#16A34A', borderWidth: 0 }}
                                     onPress={() =>
-                                        navigation?.navigate("CheckIn", {
+                                        navigation?.replace?.("CheckIn", {
                                             teeTimeId,
                                             courseName: teeTime.courseName,
                                             teeDate: teeTime.teeDate,
