@@ -56,12 +56,18 @@ export const notificationApi = {
     ),
 
   /**
-   * Mark notification as responded (for actionable notifications)
+   * Mark notification as responded (for actionable notifications).
+   * Optional `declined` persists accept vs decline on `data` for notification history after refresh.
    */
-  markAsResponded: (notificationId: string) =>
+  markAsResponded: (notificationId: string, opts?: { declined?: boolean }) =>
     apiCall<{ success: boolean; message: string }>(
       `${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/responded`,
-      { method: "PUT" },
+      {
+        method: "PUT",
+        ...(typeof opts?.declined === "boolean"
+          ? { body: JSON.stringify({ declined: opts.declined }) }
+          : {}),
+      },
     ),
 
   /**

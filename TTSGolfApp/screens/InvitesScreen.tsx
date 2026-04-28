@@ -7,8 +7,6 @@ import {
     RefreshControl,
     Alert,
     ActivityIndicator,
-    AppState,
-    type AppStateStatus,
 } from "react-native";
 import {
     Calendar,
@@ -43,7 +41,6 @@ type InviteRespondApiResult = {
     socialRateDelta?: number;
     newSocialRate?: number;
 };
-const REMOVED_INVITE_STATUSES = new Set(["expired", "cancelled", "canceled", "skipped"]);
 
 // Helper for status badge colors
 const getStatusBadgeClass = (status: string): string => {
@@ -67,113 +64,30 @@ export default function InvitesScreen({ navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [responding, setResponding] = useState<string | null>(null);
 
-    const applyInviteFilters = useCallback((invites: Invite[]) => {
-        return invites.filter(
-            (invite) => !REMOVED_INVITE_STATUSES.has(String(invite.status || "").toLowerCase()),
-        );
+    useEffect(() => {
+        loadInvites();
     }, []);
 
-    const syncInvites = useCallback(async () => {
-        const [pendingRes, sentRes] = await Promise.all([
-            inviteApi.getPendingInvites(),
-            inviteApi.getSentInvites(),
-        ]);
-        if (pendingRes.success) {
-            setPendingInvites(applyInviteFilters(pendingRes.invites));
+    const loadInvites = async () => {
+        try {
+            const [pendingRes, sentRes] = await Promise.all([
+                inviteApi.getPendingInvites(),
+                inviteApi.getSentInvites(),
+            ]);
+            if (pendingRes.success) setPendingInvites(pendingRes.invites);
+            if (sentRes.success) setSentInvites(sentRes.invites);
+        } catch (error) {
+            logger.error("[InvitesScreen] Failed to load invites", error);
+        } finally {
+            setLoading(false);
         }
-        if (sentRes.success) {
-            setSentInvites(applyInviteFilters(sentRes.invites));
-        }
-    }, [applyInviteFilters]);
-
-    useEffect(() => {
-        const load = async () => {
-            try {
-                await syncInvites();
-            } catch (error) {
-                logger.error("[InvitesScreen] Failed to load invites", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        void load();
-    }, [syncInvites]);
-
-    // Keep inbox live: as soon as invite window passes, remove it from Received.
-    useEffect(() => {
-        const pruneExpired = () => {
-            const nowMs = Date.now();
-            setPendingInvites((prev) => {
-                const next = prev.filter((invite) => {
-                    const status = String(invite.status || "").toLowerCase();
-                    if (REMOVED_INVITE_STATUSES.has(status)) return false;
-                    if (!invite.expiresAt) return true;
-                    const expiresMs = new Date(invite.expiresAt).getTime();
-                    if (!Number.isFinite(expiresMs)) return true;
-                    return expiresMs > nowMs;
-                });
-                return next.length === prev.length ? prev : next;
-            });
-            setSentInvites((prev) => {
-                const next = prev.filter((invite) => {
-                    const status = String(invite.status || "").toLowerCase();
-                    if (REMOVED_INVITE_STATUSES.has(status)) return false;
-                    if (!invite.expiresAt) return true;
-                    const expiresMs = new Date(invite.expiresAt).getTime();
-                    if (!Number.isFinite(expiresMs)) return true;
-                    // Remove sent invites that have passed deadline even if backend status update lags.
-                    if (status === "pending" && expiresMs <= nowMs) return false;
-                    return true;
-                });
-                return next.length === prev.length ? prev : next;
-            });
-        };
-
-        pruneExpired();
-        const interval = setInterval(pruneExpired, 1000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Keep invites in near real-time sync with server state (e.g. host skips your invite).
-    // This screen is mounted only while visible in our custom navigation, so fast polling is scoped.
-    useEffect(() => {
-        let syncing = false;
-        let activeState: AppStateStatus = "active";
-        const syncIfIdle = async () => {
-            if (syncing || activeState !== "active") return;
-            syncing = true;
-            try {
-                await syncInvites();
-            } finally {
-                syncing = false;
-            }
-        };
-
-        // Immediate sync so changes made from another device/user appear quickly.
-        void syncIfIdle();
-
-        const interval = setInterval(() => {
-            void syncIfIdle();
-        }, 1500);
-
-        const appSub = AppState.addEventListener("change", (next: AppStateStatus) => {
-            activeState = next;
-            if (next === "active") {
-                void syncIfIdle();
-            }
-        });
-
-        return () => {
-            clearInterval(interval);
-            appSub.remove();
-        };
-    }, [syncInvites]);
+    };
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await syncInvites();
+        await loadInvites();
         setRefreshing(false);
-    }, [syncInvites]);
+    }, []);
 
     const handleRespond = async (inviteId: string, response: "accepted" | "declined") => {
         console.log("🔵 [InvitesScreen] handleRespond CALLED", { inviteId, response });
@@ -202,7 +116,7 @@ export default function InvitesScreen({ navigation }: any) {
                 setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
                 
                 // Refresh invites list to ensure UI is updated
-                await syncInvites();
+                await loadInvites();
                 
                 // Show Social Rate change in real-time and refresh profile
                 const delta = result.socialRateDelta;
@@ -303,7 +217,14 @@ export default function InvitesScreen({ navigation }: any) {
         };
         const [countdown, setCountdown] = useState<string | null>(null);
         const [isUrgent, setIsUrgent] = useState(false);
-        const [isExpired, setIsExpired] = useState(false);
+        const [isCountdownExpired, setIsCountdownExpired] = useState(false);
+        const statusRaw = String((invite as any).status || "pending").toLowerCase();
+        const isAccepted = statusRaw === "accepted";
+        const isDeclined = statusRaw === "declined";
+        const isServerExpired = statusRaw === "expired";
+        const isExpired = isServerExpired || isCountdownExpired;
+        const isHistorical = isAccepted || isDeclined || isExpired;
+        const canRespond = statusRaw === "pending" && !isExpired;
 
         // Real-time countdown timer - updates every second
         useEffect(() => {
@@ -318,7 +239,7 @@ export default function InvitesScreen({ navigation }: any) {
                 const diffMs = expiresAt.getTime() - now.getTime();
 
                 if (diffMs <= 0) {
-                    setIsExpired(true);
+                    setIsCountdownExpired(true);
                     setIsUrgent(true);
                     setCountdown(null);
                     return;
@@ -340,33 +261,48 @@ export default function InvitesScreen({ navigation }: any) {
                 activeOpacity={0.9}
             >
             <View 
-                className={`bg-white rounded-md p-4 mb-3.5 shadow-sm ${isUrgent ? "border border-red-200" : ""}`}
+                className={`rounded-md p-4 mb-3.5 shadow-sm ${
+                    isHistorical
+                        ? "bg-gray-100 border border-gray-300"
+                        : `bg-white ${isUrgent ? "border border-red-200" : ""}`
+                }`}
                 style={{ elevation: 3 }}
             >
                 {/* Header */}
                 <View className="flex-row justify-between items-center mb-3.5">
                     <View className="flex-row items-center">
-                        <View className={`w-10 h-10 rounded-full justify-center items-center mr-3 ${isUrgent ? "bg-red-600" : "bg-green-600"}`}>
+                        <View className={`w-10 h-10 rounded-full justify-center items-center mr-3 ${
+                            isHistorical ? "bg-gray-500" : (isUrgent ? "bg-red-600" : "bg-green-600")
+                        }`}>
                             <Users size={18} color={COLORS.white} />
                         </View>
                         <View>
-                            <Text className="text-base font-semibold text-gray-900">
+                            <Text className={`text-base font-semibold ${isHistorical ? "text-gray-600" : "text-gray-900"}`}>
                                 {invite.inviter?.firstName} {invite.inviter?.lastName}
                             </Text>
-                            <Text className="text-[13px] text-gray-500 mt-px">invited you to play</Text>
+                            <Text className={`text-[13px] mt-px ${isHistorical ? "text-gray-500" : "text-gray-500"}`}>
+                                {isAccepted ? "invite accepted" : isDeclined ? "invite declined" : isExpired ? "invite expired" : "invited you to play"}
+                            </Text>
                         </View>
                     </View>
+                    {isHistorical && (
+                        <View className={`px-2.5 py-1 rounded-md ${isDeclined ? "bg-gray-300" : "bg-gray-300"}`}>
+                            <Text className="text-xs font-semibold text-gray-700">
+                                {isAccepted ? "Accepted" : isDeclined ? "Declined" : "Expired"}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Details Section */}
-                <View className="bg-gray-50 rounded-md p-3.5 mb-3.5">
+                <View className={`rounded-md p-3.5 mb-3.5 ${isHistorical ? "bg-gray-200" : "bg-gray-50"}`}>
                     <View className="flex-row items-center">
                         <View className="w-8 h-8 rounded-md bg-green-100 justify-center items-center mr-3">
                             <MapPin size={16} color={COLORS.primary} />
                         </View>
                         <View className="flex-1">
                             <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Course</Text>
-                            <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{invite.courseName}</Text>
+                            <Text className={`text-[15px] font-semibold mt-0.5 ${isHistorical ? "text-gray-600" : "text-gray-900"}`}>{invite.courseName}</Text>
                         </View>
                     </View>
 
@@ -379,7 +315,7 @@ export default function InvitesScreen({ navigation }: any) {
                             </View>
                             <View className="flex-1">
                                 <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Date</Text>
-                                <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{formatDate(invite.teeDate)}</Text>
+                                <Text className={`text-[15px] font-semibold mt-0.5 ${isHistorical ? "text-gray-600" : "text-gray-900"}`}>{formatDate(invite.teeDate)}</Text>
                             </View>
                         </View>
                         <View className="flex-1 flex-row items-center">
@@ -388,7 +324,7 @@ export default function InvitesScreen({ navigation }: any) {
                             </View>
                             <View className="flex-1">
                                 <Text className="text-[11px] text-gray-500 uppercase tracking-wide">Time</Text>
-                                <Text className="text-[15px] font-semibold text-gray-900 mt-0.5">{invite.teeTime}</Text>
+                                <Text className={`text-[15px] font-semibold mt-0.5 ${isHistorical ? "text-gray-600" : "text-gray-900"}`}>{invite.teeTime}</Text>
                             </View>
                         </View>
                     </View>
@@ -396,7 +332,9 @@ export default function InvitesScreen({ navigation }: any) {
 
                 {/* Countdown Timer - Always show response window info */}
                 <View className={`rounded-md p-3.5 mb-3.5 border ${
-                    !invite.expiresAt 
+                    isHistorical
+                        ? "bg-gray-200 border-gray-300"
+                        : !invite.expiresAt 
                         ? "bg-gray-100 border-gray-200" 
                         : isUrgent 
                             ? "bg-red-50 border-red-200" 
@@ -405,17 +343,19 @@ export default function InvitesScreen({ navigation }: any) {
                     <View className="flex-row items-center justify-center gap-2 mb-3">
                         <Timer size={16} color={invite.expiresAt ? (isUrgent ? "#DC2626" : "#D97706") : "#6B7280"} />
                         <Text className={`text-[13px] font-semibold uppercase tracking-wide ${
-                            !invite.expiresAt 
+                            isHistorical
+                                ? "text-gray-600"
+                                : !invite.expiresAt 
                                 ? "text-gray-500" 
                                 : isUrgent 
                                     ? "text-red-600" 
                                     : "text-amber-600"
                         }`}>
-                            {!invite.expiresAt ? "Response Window" : isExpired ? "Invite Expired" : "Time Remaining"}
+                            {isDeclined ? "Invite Declined" : (!invite.expiresAt ? "Response Window" : isExpired ? "Invite Expired" : "Time Remaining")}
                         </Text>
                     </View>
 
-                    {invite.expiresAt && !isExpired && countdown && (
+                    {invite.expiresAt && !isHistorical && !isExpired && countdown && (
                         <View className="flex-row items-center justify-center">
                             <View className={`rounded-md py-3 px-4 min-w-[180px] items-center ${isUrgent ? "bg-red-100" : "bg-amber-100"}`}>
                                 <Text
@@ -429,8 +369,19 @@ export default function InvitesScreen({ navigation }: any) {
                     )}
 
                     {invite.expiresAt && isExpired && (
-                        <Text className="text-[13px] text-red-800 text-center leading-[18px]">
+                        <Text className="text-[13px] text-gray-700 text-center leading-[18px]">
                             This invite has expired. The spot may have been offered to someone else.
+                        </Text>
+                    )}
+
+                    {isDeclined && (
+                        <Text className="text-[13px] text-gray-700 text-center leading-[18px]">
+                            You declined this invite.
+                        </Text>
+                    )}
+                    {isAccepted && (
+                        <Text className="text-[13px] text-gray-700 text-center leading-[18px]">
+                            You accepted this invite.
                         </Text>
                     )}
 
@@ -442,40 +393,58 @@ export default function InvitesScreen({ navigation }: any) {
                 </View>
 
                 {/* Action Buttons */}
-                <View className="flex-row gap-3">
-                    <TouchableOpacity
-                        className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
-                            isExpired ? "bg-gray-200 opacity-70" : "bg-red-100"
-                        }`}
-                        onPress={() => handleRespond(invite.id, "declined")}
-                        disabled={responding === invite.id || isExpired}
-                    >
-                        {responding === invite.id ? (
-                            <ActivityIndicator size="small" color={COLORS.red} />
-                        ) : (
-                            <>
-                                <X size={18} color={isExpired ? "#9CA3AF" : COLORS.red} />
-                                <Text className={`text-[15px] font-semibold ${isExpired ? "text-gray-400" : "text-red-500"}`}>Decline</Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
-                            isExpired ? "bg-gray-200 opacity-70" : "bg-green-600"
-                        }`}
-                        onPress={() => handleRespond(invite.id, "accepted")}
-                        disabled={responding === invite.id || isExpired}
-                    >
-                        {responding === invite.id ? (
-                            <ActivityIndicator size="small" color={COLORS.white} />
-                        ) : (
-                            <>
-                                <Check size={18} color={COLORS.white} />
-                                <Text className="text-[15px] font-semibold text-white">Accept</Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-                </View>
+                {canRespond && (
+                    <View className="flex-row gap-3">
+                        <TouchableOpacity
+                            className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
+                                "bg-red-100"
+                            }`}
+                            onPress={() => handleRespond(invite.id, "declined")}
+                            disabled={responding === invite.id}
+                        >
+                            {responding === invite.id ? (
+                                <ActivityIndicator size="small" color={COLORS.red} />
+                            ) : (
+                                <>
+                                    <X size={18} color={COLORS.red} />
+                                    <Text className="text-[15px] font-semibold text-red-500">Decline</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            className={`flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 ${
+                                "bg-green-600"
+                            }`}
+                            onPress={() => handleRespond(invite.id, "accepted")}
+                            disabled={responding === invite.id}
+                        >
+                            {responding === invite.id ? (
+                                <ActivityIndicator size="small" color={COLORS.white} />
+                            ) : (
+                                <>
+                                    <Check size={18} color={COLORS.white} />
+                                    <Text className="text-[15px] font-semibold text-white">Accept</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
+                {!canRespond && isAccepted && (
+                    <View className="flex-row">
+                        <View className="flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 bg-green-600">
+                            <Check size={18} color={COLORS.white} />
+                            <Text className="text-[15px] font-semibold text-white">Accepted</Text>
+                        </View>
+                    </View>
+                )}
+                {!canRespond && isDeclined && (
+                    <View className="flex-row">
+                        <View className="flex-1 flex-row items-center justify-center py-3.5 rounded-md gap-2 bg-red-100">
+                            <X size={18} color={COLORS.red} />
+                            <Text className="text-[15px] font-semibold text-red-500">Declined</Text>
+                        </View>
+                    </View>
+                )}
             </View>
             </TouchableOpacity>
         );

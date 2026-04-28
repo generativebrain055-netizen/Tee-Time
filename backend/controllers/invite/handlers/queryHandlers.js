@@ -90,6 +90,7 @@ const getPendingInvites = async (req, res) => {
             teeTime: i.tee_time,
             inviteType: i.invite_type,
             maxPlayers: i.max_players,
+            status: i.status,
             expiresAt: i.expires_at,
             inviter: {
                 firstName: i.inviter_first_name,

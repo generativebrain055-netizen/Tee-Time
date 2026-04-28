@@ -193,10 +193,6 @@ class InviteRepository {
 
   async getPendingInvites(userId) {
     try {
-      // Use current ISO time for strict filtering of expired invites
-      // This ensures users don't see invites that are technically expired but not yet processed by the scheduler
-      const nowIso = new Date().toISOString();
-
       const { data, error } = await supabaseAdmin
         .from("invites")
         .select(
@@ -211,9 +207,9 @@ class InviteRepository {
         `
         )
         .eq("invitee_user_id", userId)
-        .eq("status", "pending")
-        // Filter out invites where deadline has passed
-        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+        // Keep actionable + historical invites in inbox:
+        // pending + accepted/declined/expired history
+        .in("status", ["pending", "accepted", "declined", "expired"])
         .order("tee_times(tee_date)", { ascending: true });
 
       if (error) throw error;
@@ -741,33 +737,6 @@ class InviteRepository {
     }
   }
 
-  /**
-   * When organizer cancels a tee time, all still-active invites should be cancelled too
-   * so invitees no longer see actionable invite cards.
-   */
-  async cancelActiveInvitesForTeeTime(teeTimeId) {
-    try {
-      if (!teeTimeId) return 0;
-      const { data, error } = await supabaseAdmin
-        .from("invites")
-        .update({
-          status: "cancelled",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("tee_time_id", teeTimeId)
-        .in("status", ["pending", "waitlist"]);
-
-      if (error) {
-        logger.error("cancelActiveInvitesForTeeTime:", error.message);
-        return 0;
-      }
-      return Array.isArray(data) ? data.length : 0;
-    } catch (error) {
-      logger.error("cancelActiveInvitesForTeeTime:", error.message);
-      return 0;
-    }
-  }
-
   async getSentInvites(userId) {
     try {
       const nowIso = new Date().toISOString();
@@ -777,11 +746,9 @@ class InviteRepository {
         .eq("inviter_id", userId)
         // Hide expired invites from Sent inbox:
         // - explicit expired status
-        // - cancelled invites
         // - pending invite past deadline (scheduler race)
         .neq("status", "expired")
-        .neq("status", "cancelled")
-        .or(`expires_at.is.null,expires_at.gt.${nowIso},status.in.(accepted,declined,waitlist)`)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso},status.in.(accepted,declined,waitlist,cancelled)`)
         .order("created_at", { ascending: false });
 
       if (error) throw error;

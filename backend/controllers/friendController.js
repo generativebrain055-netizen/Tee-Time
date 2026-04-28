@@ -165,6 +165,7 @@ class FriendController {
                 await notificationService.markFriendRequestNotificationsResponded(
                     userId,
                     request.id || requestId,
+                    response,
                 );
             } catch (markErr) {
                 logger.warn("Mark friend request notification responded:", markErr?.message);

@@ -84,7 +84,6 @@ const UNFILLED_SLOT_ALERT_TYPES = new Set([
 ]);
 
 const CLOSED_TEE_TIME_STATUSES = new Set(["completed", "finished", "cancelled", "canceled"]);
-const ACTIVE_INVITE_STATUSES = new Set(["pending"]);
 
 async function filterClosedTeeTimeUnfilledAlerts(list: AppNotification[]): Promise<AppNotification[]> {
     const teeTimeIds = Array.from(
@@ -130,51 +129,6 @@ async function filterClosedTeeTimeUnfilledAlerts(list: AppNotification[]): Promi
         const id = data.teeTimeId;
         if (id == null) return true;
         return !closedIds.has(String(id));
-    });
-}
-
-async function filterInactiveTeeTimeInviteNotifications(list: AppNotification[]): Promise<AppNotification[]> {
-    const inviteIds = Array.from(
-        new Set(
-            list
-                .map((n) => {
-                    const data = (n.data || {}) as Record<string, unknown>;
-                    if (String(data.type || "") !== "tee_time_invite") return null;
-                    const id = data.inviteId ?? data.invite_id;
-                    if (id == null) return null;
-                    const s = String(id).trim();
-                    return s.length > 0 ? s : null;
-                })
-                .filter((id): id is string => !!id),
-        ),
-    );
-
-    if (inviteIds.length === 0) return list;
-
-    const inactiveInviteIds = new Set<string>();
-    await Promise.all(
-        inviteIds.map(async (inviteId) => {
-            try {
-                const res = await inviteApi.getInviteById(inviteId);
-                if (!res?.success || !res?.invite) return;
-                const status = String((res.invite as { status?: string }).status || "").toLowerCase();
-                if (!ACTIVE_INVITE_STATUSES.has(status)) {
-                    inactiveInviteIds.add(inviteId);
-                }
-            } catch {
-                // Keep item if status lookup fails.
-            }
-        }),
-    );
-
-    if (inactiveInviteIds.size === 0) return list;
-
-    return list.filter((n) => {
-        const data = (n.data || {}) as Record<string, unknown>;
-        if (String(data.type || "") !== "tee_time_invite") return true;
-        const id = data.inviteId ?? data.invite_id;
-        if (id == null) return true;
-        return !inactiveInviteIds.has(String(id));
     });
 }
 
@@ -267,18 +221,8 @@ export default function NotificationsScreen({ navigation }: any) {
         try {
             const response = await notificationApi.getNotifications({ limit: 100 });
             if (response.success) {
-                const nowMs = Date.now();
-                // Filter out notifications that have been responded to
-                const filteredNotifications = response.notifications.filter(n => {
-                    const notifData = n.data || {};
-                    if (notifData.type === "tee_time_invite" && notifData.responded === true) return false;
-                    if (notifData.type === "friend_request" && notifData.responded === true) return false;
-                    if (isExpiredTeeTimeInviteNotification(n, nowMs)) return false;
-                    return true;
-                });
-                const withoutClosedAlerts = await filterClosedTeeTimeUnfilledAlerts(filteredNotifications);
-                const withoutInactiveInvites = await filterInactiveTeeTimeInviteNotifications(withoutClosedAlerts);
-                setNotifications(withoutInactiveInvites);
+                const withoutClosedAlerts = await filterClosedTeeTimeUnfilledAlerts(response.notifications);
+                setNotifications(withoutClosedAlerts);
             }
         } catch (error) {
             logger.error('[NotificationsScreen] Error loading notifications', error);
@@ -323,10 +267,27 @@ export default function NotificationsScreen({ navigation }: any) {
         }
     }, [navigation]);
 
+    const markNotificationHistorical = useCallback((notificationId: string, response: "accepted" | "declined") => {
+        setNotifications((prev) =>
+            prev.map((n) => {
+                if (n.id !== notificationId) return n;
+                const data = ((n.data || {}) as Record<string, unknown>);
+                return {
+                    ...n,
+                    isRead: true,
+                    status: response,
+                    data: {
+                        ...data,
+                        responded: true,
+                        declined: response === "declined",
+                    },
+                };
+            }),
+        );
+    }, []);
+
     const handleAccept = async (notificationId: string, type: string, data?: any) => {
         console.log("🔵 [NotificationsScreen] handleAccept CALLED", { notificationId, type, data });
-        // Remove notification from UI immediately for better UX
-        setNotifications(prev => prev.filter(n => n.id !== notificationId));
         
         try {
             // Check data.type instead of type (type is channel like "in_app", data.type is notification type)
@@ -343,10 +304,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 }
                 await friendApi.respondToRequest(String(requestId), "accepted");
                 try {
-                    await notificationApi.markAsResponded(notificationId);
+                    await notificationApi.markAsResponded(notificationId, { declined: false });
                 } catch (markError) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
                 }
+                markNotificationHistorical(notificationId, "accepted");
             } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
@@ -386,17 +348,25 @@ export default function NotificationsScreen({ navigation }: any) {
                 }
                 // Mark notification as responded in backend
                 try {
-                    await notificationApi.markAsResponded(notificationId);
+                    await notificationApi.markAsResponded(notificationId, { declined: false });
                     console.log("🟢 [NotificationsScreen] Notification marked as responded", { notificationId });
                 } catch (markError) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark notification as responded", { notificationId, error: markError });
                 }
+                markNotificationHistorical(notificationId, "accepted");
             } else {
                 console.warn("🟡 [NotificationsScreen] Unknown notification type, cannot handle", { notificationId, type, dataType, data });
             }
             
-            // Refresh notifications list to ensure UI is in sync
-            await fetchNotifications();
+            // Refresh notifications list to ensure UI is in sync (skip when we keep the row and update locally)
+            const persistInviteLocally =
+                dataType.includes("tee_time") ||
+                dataType.includes("invite") ||
+                dataType.includes("friend") ||
+                type.includes("friend");
+            if (!persistInviteLocally) {
+                await fetchNotifications();
+            }
         } catch (error: any) {
             console.error("🔴 [NotificationsScreen] Accept error", { notificationId, type, dataType: data?.type, error: error.message, stack: error.stack });
             logger.error('[NotificationsScreen] Accept error', error);
@@ -407,8 +377,6 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const handleDecline = async (notificationId: string, type: string, data?: any) => {
         console.log("🔵 [NotificationsScreen] handleDecline CALLED", { notificationId, type, data });
-        // Remove notification from UI immediately for better UX
-        setNotifications(prev => prev.filter(n => n.id !== notificationId));
         
         try {
             // Check data.type instead of type (type is channel like "in_app", data.type is notification type)
@@ -425,10 +393,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 }
                 await friendApi.respondToRequest(String(requestId), "declined");
                 try {
-                    await notificationApi.markAsResponded(notificationId);
+                    await notificationApi.markAsResponded(notificationId, { declined: true });
                 } catch (markError) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
                 }
+                markNotificationHistorical(notificationId, "declined");
             } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
@@ -454,17 +423,25 @@ export default function NotificationsScreen({ navigation }: any) {
                 }
                 // Mark notification as responded in backend
                 try {
-                    await notificationApi.markAsResponded(notificationId);
+                    await notificationApi.markAsResponded(notificationId, { declined: true });
                     console.log("🟢 [NotificationsScreen] Notification marked as responded", { notificationId });
                 } catch (markError) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark notification as responded", { notificationId, error: markError });
                 }
+                markNotificationHistorical(notificationId, "declined");
             } else {
                 console.warn("🟡 [NotificationsScreen] Unknown notification type, cannot handle", { notificationId, type, dataType, data });
             }
             
-            // Refresh notifications list to ensure UI is in sync
-            await fetchNotifications();
+            // Refresh notifications list to ensure UI is in sync (skip when we keep the row and update locally)
+            const persistInviteLocally =
+                dataType.includes("tee_time") ||
+                dataType.includes("invite") ||
+                dataType.includes("friend") ||
+                type.includes("friend");
+            if (!persistInviteLocally) {
+                await fetchNotifications();
+            }
         } catch (error: any) {
             console.error("🔴 [NotificationsScreen] Decline error", { notificationId, type, dataType: data?.type, error: error.message, stack: error.stack });
             logger.error('[NotificationsScreen] Decline error', error);
@@ -660,7 +637,7 @@ export default function NotificationsScreen({ navigation }: any) {
             logger.error('[NotificationsScreen] Delete error', error);
             Alert.alert("Error", "Failed to delete notification");
         }
-    }, []);
+    }, [markNotificationHistorical]);
 
     const handleDeleteAllRead = useCallback(() => {
         const readCount = notifications.filter(n => n.isRead).length;
@@ -761,8 +738,8 @@ export default function NotificationsScreen({ navigation }: any) {
         try {
             const res = await rosterApi.acceptGroupInvite(item.id);
             if (res?.success) {
-                await notificationApi.markAsResponded(item.id);
-                setNotifications(prev => prev.filter(n => n.id !== item.id));
+                await notificationApi.markAsResponded(item.id, { declined: false });
+                markNotificationHistorical(item.id, "accepted");
                 const groupName = (item.data as Record<string, unknown>)?.groupName as string | undefined;
                 Alert.alert("Joined!", `You've been added to ${groupName || "the group"}.`, [{ text: "OK" }]);
             }
@@ -770,28 +747,25 @@ export default function NotificationsScreen({ navigation }: any) {
             logger.error("[NotificationsScreen] Accept group invite error", error);
             Alert.alert("Error", error?.message || "Failed to accept group invitation");
         }
-    }, []);
+    }, [markNotificationHistorical]);
 
     const handleDeclineGroupInvite = useCallback(async (item: AppNotification) => {
         try {
             await rosterApi.declineGroupInvite(item.id);
-            await notificationApi.markAsResponded(item.id);
-            setNotifications(prev => prev.filter(n => n.id !== item.id));
+            await notificationApi.markAsResponded(item.id, { declined: true });
+            markNotificationHistorical(item.id, "declined");
         } catch (error: any) {
             logger.error("[NotificationsScreen] Decline group invite error", error);
             Alert.alert("Error", error?.message || "Failed to decline");
         }
-    }, []);
+    }, [markNotificationHistorical]);
 
     useEffect(() => {
         const interval = setInterval(() => setNowTick(Date.now()), 1000);
         return () => clearInterval(interval);
     }, []);
 
-    // Keep invite cards clean while the screen is open by dropping newly-expired tee time invites.
-    useEffect(() => {
-        setNotifications((prev) => prev.filter((n) => !isExpiredTeeTimeInviteNotification(n, nowTick)));
-    }, [nowTick]);
+    // Keep invite card countdown/status live while screen is open.
 
     const getDeadlineText = (expiresAt?: string): string | null => {
         if (!expiresAt) return null;
@@ -886,49 +860,96 @@ export default function NotificationsScreen({ navigation }: any) {
         <View style={styles.friendBundleCard}>
             {items.map((item, index) => {
                 const { d, senderName, senderAvatar, locationStr, initials } = resolveFriendRowDisplay(item);
+                const isDeclined = item.status === "declined" || (d?.declined as boolean) === true;
                 const isAccepted =
                     item.type.includes("accepted") ||
                     item.status === "accepted" ||
-                    (d?.responded as boolean);
-                const isDeclined = item.status === "declined";
+                    (((d?.responded as boolean) === true) && !isDeclined);
+                const isHistoricalFriend = isAccepted || isDeclined;
                 return (
                     <View
                         key={item.id}
                         style={[
                             styles.friendBundleRow,
+                            isHistoricalFriend && styles.friendBundleRowHistorical,
                             index < items.length - 1 && styles.friendBundleRowDivider,
                             !item.isRead && styles.friendBundleRowUnread,
+                            isHistoricalFriend && styles.inviteShellCardExpired,
                         ]}
                     >
-                        <TouchableOpacity
-                            style={styles.friendBundleRowMain}
-                            activeOpacity={0.7}
-                            onPress={() => handleNotificationPress(item)}
-                            onLongPress={() => showReadUnreadMenu(item)}
-                        >
-                            <View style={styles.avatarContainer}>
-                                {senderAvatar ? (
-                                    <Image
-                                        source={{ uri: senderAvatar }}
-                                        style={styles.avatar}
-                                        resizeMode="cover"
-                                    />
+                        {isHistoricalFriend ? (
+                            <>
+                                <TouchableOpacity
+                                    style={styles.friendBundleHistoricalTop}
+                                    activeOpacity={0.7}
+                                    onPress={() => handleNotificationPress(item)}
+                                    onLongPress={() => showReadUnreadMenu(item)}
+                                >
+                                    <View style={styles.avatarContainer}>
+                                        {senderAvatar ? (
+                                            <Image
+                                                source={{ uri: senderAvatar }}
+                                                style={styles.avatar}
+                                                resizeMode="cover"
+                                            />
+                                        ) : (
+                                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                                <Text style={styles.avatarInitials}>{initials}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.friendBundleTextCol}>
+                                        <Text style={[styles.friendBundleName, styles.inviteMutedText]}>{senderName}</Text>
+                                        {locationStr ? (
+                                            <Text style={[styles.friendBundleLocation, styles.inviteMutedText]}>{locationStr}</Text>
+                                        ) : null}
+                                    </View>
+                                </TouchableOpacity>
+                                {isAccepted ? (
+                                    <View style={[styles.inviteActionRow, styles.friendBundleHistoricalActionRow]}>
+                                        <View style={styles.inviteAcceptedBtnStatic}>
+                                            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                            <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                        </View>
+                                    </View>
                                 ) : (
-                                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                                        <Text style={styles.avatarInitials}>{initials}</Text>
+                                    <View style={[styles.inviteActionRow, styles.friendBundleHistoricalActionRow]}>
+                                        <View style={styles.inviteDeclinedBtnStatic}>
+                                            <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                            <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                        </View>
                                     </View>
                                 )}
-                            </View>
-                            <View style={styles.friendBundleTextCol}>
-                                <Text style={styles.friendBundleName}>{senderName}</Text>
-                                {locationStr ? (
-                                    <Text style={styles.friendBundleLocation}>{locationStr}</Text>
-                                ) : null}
-                            </View>
-                        </TouchableOpacity>
-                        <View style={styles.friendBundleActions}>
-                            {!isAccepted && !isDeclined ? (
-                                <>
+                            </>
+                        ) : (
+                            <>
+                                <TouchableOpacity
+                                    style={styles.friendBundleRowMain}
+                                    activeOpacity={0.7}
+                                    onPress={() => handleNotificationPress(item)}
+                                    onLongPress={() => showReadUnreadMenu(item)}
+                                >
+                                    <View style={styles.avatarContainer}>
+                                        {senderAvatar ? (
+                                            <Image
+                                                source={{ uri: senderAvatar }}
+                                                style={styles.avatar}
+                                                resizeMode="cover"
+                                            />
+                                        ) : (
+                                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                                <Text style={styles.avatarInitials}>{initials}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.friendBundleTextCol}>
+                                        <Text style={styles.friendBundleName}>{senderName}</Text>
+                                        {locationStr ? (
+                                            <Text style={styles.friendBundleLocation}>{locationStr}</Text>
+                                        ) : null}
+                                    </View>
+                                </TouchableOpacity>
+                                <View style={styles.friendBundleActions}>
                                     <TouchableOpacity
                                         style={styles.friendDeclineCircle}
                                         onPress={() => handleDecline(item.id, item.type, item.data)}
@@ -943,19 +964,9 @@ export default function NotificationsScreen({ navigation }: any) {
                                     >
                                         <Text style={styles.friendAcceptPillText}>Accept</Text>
                                     </TouchableOpacity>
-                                </>
-                            ) : isAccepted ? (
-                                <View style={styles.friendBundleStatus}>
-                                    <Check size={14} color={palette.emerald600} strokeWidth={2.5} />
-                                    <Text style={styles.friendBundleStatusText}>Accepted</Text>
                                 </View>
-                            ) : (
-                                <View style={styles.friendBundleStatusDeclined}>
-                                    <X size={14} color={palette.red600} strokeWidth={2.5} />
-                                    <Text style={styles.friendBundleStatusDeclinedText}>Declined</Text>
-                                </View>
-                            )}
-                        </View>
+                            </>
+                        )}
                     </View>
                 );
             })}
@@ -972,8 +983,18 @@ export default function NotificationsScreen({ navigation }: any) {
         const isTeeTimeInvite = dataType === "tee_time_invite" || dataType === "spot_opened";
         const isSpotOpened = dataType === "spot_opened";
         const isInvite = (dataType && (dataType.includes("invite") || dataType.includes("request"))) || item.type.includes("invite") || item.type.includes("request");
-        const isAccepted = item.type.includes("accepted") || item.status === "accepted" || (d?.responded as boolean);
-        const isDeclined = item.status === "declined";
+        const isDeclined = item.status === "declined" || (d?.declined as boolean) === true;
+        const isAccepted =
+            item.type.includes("accepted") ||
+            item.status === "accepted" ||
+            ((d?.responded as boolean) && !isDeclined);
+        const expiresRaw = (d?.expiresAt as string | undefined) || (d?.expires_at as string | undefined);
+        const expiresMs = expiresRaw ? new Date(expiresRaw).getTime() : NaN;
+        const isExpiredInvite =
+            dataType === "tee_time_invite" &&
+            Number.isFinite(expiresMs) &&
+            expiresMs <= nowTick;
+        const isHistoricalInvite = isTeeTimeInvite && (isAccepted || isDeclined || isExpiredInvite);
         const isRosterAddActionable = isRosterAdd && d?.ownerId && !(d?.responded as boolean);
         const timeAgo = getTimeAgo(item.createdAt);
 
@@ -1025,7 +1046,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 return (
                     <TouchableOpacity
                         key={item.id}
-                        style={[styles.inviteShellCard, !item.isRead && styles.inviteShellCardUnread]}
+                        style={[
+                            styles.inviteShellCard,
+                            !item.isRead && styles.inviteShellCardUnread,
+                            isHistoricalInvite && styles.inviteShellCardExpired,
+                        ]}
                         activeOpacity={0.7}
                         onPress={() => handleNotificationPress(item)}
                         onLongPress={() => showReadUnreadMenu(item)}
@@ -1045,21 +1070,21 @@ export default function NotificationsScreen({ navigation }: any) {
                                 )}
                             </View>
                             <View style={styles.inviteShellBody}>
-                                <Text style={styles.inviteHostLine}>
+                                <Text style={[styles.inviteHostLine, isExpiredInvite && styles.inviteMutedText]}>
                                     {hostName}
                                     <Text style={styles.inviteHostSuffix}> (host)</Text>
                                 </Text>
                                 <View style={styles.inviteMetaRow}>
                                     <MapPin size={15} color={palette.gray500} strokeWidth={2} />
-                                    <Text style={styles.inviteMetaText}>{courseName}</Text>
+                                    <Text style={[styles.inviteMetaText, isExpiredInvite && styles.inviteMutedText]}>{courseName}</Text>
                                 </View>
                                 {whenStr ? (
                                     <View style={styles.inviteMetaRow}>
                                         <Clock size={15} color={palette.gray500} strokeWidth={2} />
-                                        <Text style={styles.inviteMetaText}>{whenStr}</Text>
+                                        <Text style={[styles.inviteMetaText, isExpiredInvite && styles.inviteMutedText]}>{whenStr}</Text>
                                     </View>
                                 ) : null}
-                                {!isAccepted && !isDeclined && (
+                                {!isAccepted && !isDeclined && !isExpiredInvite && (
                                     <View style={styles.inviteActionRow}>
                                         <TouchableOpacity
                                             style={styles.inviteDeclineBtn}
@@ -1084,15 +1109,25 @@ export default function NotificationsScreen({ navigation }: any) {
                                     </View>
                                 )}
                                 {isAccepted && (
-                                    <View style={styles.statusBadgeAccepted}>
-                                        <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                        <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                                    <View style={styles.inviteActionRow}>
+                                        <View style={styles.inviteAcceptedBtnStatic}>
+                                            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                            <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                        </View>
                                     </View>
                                 )}
                                 {isDeclined && (
-                                    <View style={styles.statusBadgeDeclined}>
-                                        <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                        <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                                    <View style={styles.inviteActionRow}>
+                                        <View style={styles.inviteDeclinedBtnStatic}>
+                                            <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                            <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                        </View>
+                                    </View>
+                                )}
+                                {isExpiredInvite && (
+                                    <View style={styles.statusBadgeExpired}>
+                                        <Clock size={14} color={palette.gray600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                        <Text style={styles.statusBadgeExpiredText}>Expired</Text>
                                     </View>
                                 )}
                             </View>
@@ -1115,7 +1150,12 @@ export default function NotificationsScreen({ navigation }: any) {
             return (
                 <TouchableOpacity
                     key={item.id}
-                    style={[styles.card, styles.inviteCard, !item.isRead && styles.cardUnread]}
+                    style={[
+                        styles.card,
+                        styles.inviteCard,
+                        !item.isRead && styles.cardUnread,
+                        isHistoricalInvite && styles.inviteShellCardExpired,
+                    ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
                     onLongPress={() => showReadUnreadMenu(item)}
@@ -1130,18 +1170,18 @@ export default function NotificationsScreen({ navigation }: any) {
                         )}
                     </View>
                     <View style={styles.content}>
-                        <Text style={styles.cardTitle}>{item.title}</Text>
-                        <Text style={styles.inviteCardCourse}>{courseName}</Text>
+                        <Text style={[styles.cardTitle, isExpiredInvite && styles.inviteMutedText]}>{item.title}</Text>
+                        <Text style={[styles.inviteCardCourse, isExpiredInvite && styles.inviteMutedText]}>{courseName}</Text>
                         {dateTimeStr ? (
                             <View style={styles.inviteCardRow}>
                                 <Clock size={14} color={palette.gray500} />
-                                <Text style={styles.inviteCardMeta}>{dateTimeStr}</Text>
+                                <Text style={[styles.inviteCardMeta, isExpiredInvite && styles.inviteMutedText]}>{dateTimeStr}</Text>
                             </View>
                         ) : null}
                         {maxPlayers != null && (
                             <View style={styles.inviteCardRow}>
                                 <Users size={14} color={palette.gray500} />
-                                <Text style={styles.inviteCardMeta}>{maxPlayers} players</Text>
+                                <Text style={[styles.inviteCardMeta, isExpiredInvite && styles.inviteMutedText]}>{maxPlayers} players</Text>
                             </View>
                         )}
                         {deadlineText ? (
@@ -1151,7 +1191,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             </View>
                         ) : null}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {!isAccepted && !isDeclined && (
+                        {!isAccepted && !isDeclined && !isExpiredInvite && (
                             <View style={styles.actionRow}>
                                 <TouchableOpacity
                                     style={[styles.actionButton, styles.actionButtonPrimary]}
@@ -1170,15 +1210,23 @@ export default function NotificationsScreen({ navigation }: any) {
                             </View>
                         )}
                         {isAccepted && (
-                            <View style={styles.statusBadgeAccepted}>
-                                <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                            <View style={styles.actionRow}>
+                                <View style={styles.actionButtonPrimary}>
+                                    <Text style={styles.actionButtonPrimaryText}>Accepted</Text>
+                                </View>
                             </View>
                         )}
                         {isDeclined && (
-                            <View style={styles.statusBadgeDeclined}>
-                                <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                            <View style={styles.actionRow}>
+                                <View style={styles.actionButtonSecondary}>
+                                    <Text style={styles.actionButtonSecondaryText}>Declined</Text>
+                                </View>
+                            </View>
+                        )}
+                        {isExpiredInvite && (
+                            <View style={styles.statusBadgeExpired}>
+                                <Clock size={14} color={palette.gray600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                <Text style={styles.statusBadgeExpiredText}>Expired</Text>
                             </View>
                         )}
                     </View>
@@ -1189,8 +1237,13 @@ export default function NotificationsScreen({ navigation }: any) {
 
         // —— Group invitation (Invites: initials avatar, group name, inviter line, Decline | Accept) ——
         if (isGroupInvite) {
-            const groupInviteResponded = (d?.responded as boolean) === true;
-            const groupInviteDeclined = (d?.declined as boolean) === true;
+            const groupInviteDeclined =
+                item.status === "declined" || (d?.declined as boolean) === true;
+            const groupInviteAccepted =
+                item.type.includes("accepted") ||
+                item.status === "accepted" ||
+                (((d?.responded as boolean) === true) && !groupInviteDeclined);
+            const isGroupInviteHistorical = groupInviteAccepted || groupInviteDeclined;
             const groupName = String(d?.groupName || "Group");
             const groupInitials = initialsFromGroupName(groupName);
             const inviterLabel = String(d?.inviterName || "Someone");
@@ -1234,7 +1287,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 return (
                     <TouchableOpacity
                         key={item.id}
-                        style={[styles.inviteShellCard, !item.isRead && styles.inviteShellCardUnread]}
+                        style={[
+                            styles.inviteShellCard,
+                            !item.isRead && styles.inviteShellCardUnread,
+                            isGroupInviteHistorical && styles.inviteShellCardExpired,
+                        ]}
                         activeOpacity={0.7}
                         onPress={() => handleNotificationPress(item)}
                         onLongPress={() => showReadUnreadMenu(item)}
@@ -1242,14 +1299,14 @@ export default function NotificationsScreen({ navigation }: any) {
                         <View style={styles.inviteShellRow}>
                             {groupAvatarEl}
                             <View style={styles.inviteShellBody}>
-                                <Text style={styles.inviteHostLine}>{groupName}</Text>
+                                <Text style={[styles.inviteHostLine, isGroupInviteHistorical && styles.inviteMutedText]}>{groupName}</Text>
                                 {memberCount != null && Number.isFinite(memberCount) ? (
-                                    <Text style={styles.groupMemberCount}>{memberCount} members</Text>
+                                    <Text style={[styles.groupMemberCount, isGroupInviteHistorical && styles.inviteMutedText]}>{memberCount} members</Text>
                                 ) : null}
-                                <Text style={styles.groupInviteSubline}>
+                                <Text style={[styles.groupInviteSubline, isGroupInviteHistorical && styles.inviteMutedText]}>
                                     {inviterLabel} invited you to this group
                                 </Text>
-                                {!groupInviteResponded && (
+                                {!isGroupInviteHistorical && (
                                     <View style={styles.inviteActionRow}>
                                         <TouchableOpacity
                                             style={styles.inviteDeclineBtn}
@@ -1273,16 +1330,20 @@ export default function NotificationsScreen({ navigation }: any) {
                                         </TouchableOpacity>
                                     </View>
                                 )}
-                                {groupInviteResponded && !groupInviteDeclined && (
-                                    <View style={styles.statusBadgeAccepted}>
-                                        <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                        <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                                {groupInviteAccepted && (
+                                    <View style={styles.inviteActionRow}>
+                                        <View style={styles.inviteAcceptedBtnStatic}>
+                                            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                            <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                        </View>
                                     </View>
                                 )}
                                 {groupInviteDeclined && (
-                                    <View style={styles.statusBadgeDeclined}>
-                                        <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                        <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                                    <View style={styles.inviteActionRow}>
+                                        <View style={styles.inviteDeclinedBtnStatic}>
+                                            <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                            <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                        </View>
                                     </View>
                                 )}
                             </View>
@@ -1294,7 +1355,11 @@ export default function NotificationsScreen({ navigation }: any) {
             return (
                 <TouchableOpacity
                     key={item.id}
-                    style={[styles.card, !item.isRead && styles.cardUnread]}
+                    style={[
+                        styles.card,
+                        !item.isRead && styles.cardUnread,
+                        isGroupInviteHistorical && styles.inviteShellCardExpired,
+                    ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
                     onLongPress={() => showReadUnreadMenu(item)}
@@ -1307,7 +1372,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             {item.body}
                         </Text>
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
-                        {!groupInviteResponded && (
+                        {!isGroupInviteHistorical && (
                             <View style={styles.actionRow}>
                                 <TouchableOpacity
                                     style={[styles.actionButton, styles.actionButtonPrimary]}
@@ -1331,16 +1396,20 @@ export default function NotificationsScreen({ navigation }: any) {
                                 </TouchableOpacity>
                             </View>
                         )}
-                        {groupInviteResponded && !groupInviteDeclined && (
-                            <View style={styles.statusBadgeAccepted}>
-                                <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                        {groupInviteAccepted && (
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteAcceptedBtnStatic}>
+                                    <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                    <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                </View>
                             </View>
                         )}
                         {groupInviteDeclined && (
-                            <View style={styles.statusBadgeDeclined}>
-                                <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteDeclinedBtnStatic}>
+                                    <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                    <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                </View>
                             </View>
                         )}
                     </View>
@@ -1396,10 +1465,15 @@ export default function NotificationsScreen({ navigation }: any) {
 
         // —— Friend request (Invites tab uses bundled card; Activity fallback only) ——
         if (isFriendRequest && activeTab === "activity") {
+            const isFriendHistorical = isAccepted || isDeclined;
             return (
                 <TouchableOpacity
                     key={item.id}
-                    style={[styles.card, !item.isRead && styles.cardUnread]}
+                    style={[
+                        styles.card,
+                        !item.isRead && styles.cardUnread,
+                        isFriendHistorical && styles.inviteShellCardExpired,
+                    ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
                     onLongPress={() => showReadUnreadMenu(item)}
@@ -1414,8 +1488,10 @@ export default function NotificationsScreen({ navigation }: any) {
                         )}
                     </View>
                     <View style={styles.content}>
-                        <Text style={styles.cardTitle}>{senderName}</Text>
-                        {location ? <Text style={styles.cardSubtext}>{location}</Text> : null}
+                        <Text style={[styles.cardTitle, isFriendHistorical && styles.inviteMutedText]}>{senderName}</Text>
+                        {location ? (
+                            <Text style={[styles.cardSubtext, isFriendHistorical && styles.inviteMutedText]}>{location}</Text>
+                        ) : null}
                         <Text style={styles.timeAgo}>{timeAgo}</Text>
                         {!isAccepted && !isDeclined && (
                             <View style={styles.actionRow}>
@@ -1436,15 +1512,19 @@ export default function NotificationsScreen({ navigation }: any) {
                             </View>
                         )}
                         {isAccepted && (
-                            <View style={styles.statusBadgeAccepted}>
-                                <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteAcceptedBtnStatic}>
+                                    <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                    <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                </View>
                             </View>
                         )}
                         {isDeclined && (
-                            <View style={styles.statusBadgeDeclined}>
-                                <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                                <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteDeclinedBtnStatic}>
+                                    <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                    <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                </View>
                             </View>
                         )}
                     </View>
@@ -1458,10 +1538,16 @@ export default function NotificationsScreen({ navigation }: any) {
         }
 
         // —— Default card (unfilled slot, spot_opened fallback, etc.) ——
+        const isDefaultInvitesHistorical =
+            activeTab === "invites" && isInvite && !isUnfilledSlotAlert && (isAccepted || isDeclined);
         return (
             <TouchableOpacity
                 key={item.id}
-                style={[styles.card, !item.isRead && styles.cardUnread]}
+                style={[
+                    styles.card,
+                    !item.isRead && styles.cardUnread,
+                    isDefaultInvitesHistorical && styles.inviteShellCardExpired,
+                ]}
                 activeOpacity={0.7}
                 onPress={() => handleNotificationPress(item)}
                 onLongPress={() => showReadUnreadMenu(item)}
@@ -1484,8 +1570,11 @@ export default function NotificationsScreen({ navigation }: any) {
                         </>
                     )}
                     {!isUnfilledSlotAlert && (
-                        <Text style={styles.cardBody}>
-                            <Text style={styles.cardTitleInline}>{senderName}</Text> {item.body}
+                        <Text style={[styles.cardBody, isDefaultInvitesHistorical && styles.inviteMutedText]}>
+                            <Text style={[styles.cardTitleInline, isDefaultInvitesHistorical && styles.inviteMutedText]}>
+                                {senderName}
+                            </Text>{" "}
+                            {item.body}
                         </Text>
                     )}
                     <Text style={styles.timeAgo}>{timeAgo}</Text>
@@ -1504,18 +1593,34 @@ export default function NotificationsScreen({ navigation }: any) {
                             </TouchableOpacity>
                         </View>
                     )}
-                    {isAccepted && (
-                        <View style={styles.statusBadgeAccepted}>
-                            <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                            <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
-                        </View>
-                    )}
-                    {isDeclined && (
-                        <View style={styles.statusBadgeDeclined}>
-                            <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
-                            <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
-                        </View>
-                    )}
+                    {isAccepted &&
+                        (isDefaultInvitesHistorical ? (
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteAcceptedBtnStatic}>
+                                    <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                                    <Text style={styles.inviteAcceptedBtnStaticText}>Accepted</Text>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.statusBadgeAccepted}>
+                                <Check size={14} color={palette.emerald600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                <Text style={styles.statusBadgeAcceptedText}>Accepted</Text>
+                            </View>
+                        ))}
+                    {isDeclined &&
+                        (isDefaultInvitesHistorical ? (
+                            <View style={styles.inviteActionRow}>
+                                <View style={styles.inviteDeclinedBtnStatic}>
+                                    <X size={16} color={palette.red600} strokeWidth={2.5} />
+                                    <Text style={styles.inviteDeclinedBtnStaticText}>Declined</Text>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.statusBadgeDeclined}>
+                                <X size={14} color={palette.red600} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                                <Text style={styles.statusBadgeDeclinedText}>Declined</Text>
+                            </View>
+                        ))}
                 </View>
                 {renderCardActions(item)}
             </TouchableOpacity>
@@ -1979,6 +2084,9 @@ const styles = StyleSheet.create({
     inviteShellCardUnread: {
         backgroundColor: palette.green50,
     },
+    inviteShellCardExpired: {
+        backgroundColor: palette.gray100,
+    },
     inviteShellRow: {
         flexDirection: "row",
         alignItems: "flex-start",
@@ -2010,6 +2118,9 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_400Regular",
         fontSize: 13,
         color: palette.gray600,
+    },
+    inviteMutedText: {
+        color: palette.gray500,
     },
     inviteActionRow: {
         flexDirection: "row",
@@ -2043,6 +2154,38 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_600SemiBold",
         fontSize: fontSize.sm,
         color: "#FFFFFF",
+    },
+    inviteAcceptedBtnStatic: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: radii.sm,
+        backgroundColor: palette.green600,
+    },
+    inviteAcceptedBtnStaticText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.sm,
+        color: "#FFFFFF",
+    },
+    inviteDeclinedBtnStatic: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 12,
+        borderRadius: radii.sm,
+        borderWidth: 1,
+        borderColor: palette.red500,
+        backgroundColor: "#FFFFFF",
+    },
+    inviteDeclinedBtnStaticText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: fontSize.sm,
+        color: palette.red600,
     },
     groupBadgeCircle: {
         alignItems: "center",
@@ -2090,6 +2233,16 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
     },
+    /** Stack avatar row + outcome button vertically so Accept/Declined pill stays inside card width */
+    friendBundleRowHistorical: {
+        flexDirection: "column",
+        alignItems: "stretch",
+        alignSelf: "stretch",
+    },
+    friendBundleHistoricalActionRow: {
+        alignSelf: "stretch",
+        width: "100%",
+    },
     friendBundleRowDivider: {
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: palette.gray200,
@@ -2099,6 +2252,12 @@ const styles = StyleSheet.create({
     },
     friendBundleRowMain: {
         flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        minWidth: 0,
+    },
+    friendBundleHistoricalTop: {
+        width: "100%",
         flexDirection: "row",
         alignItems: "center",
         minWidth: 0,
@@ -2420,6 +2579,21 @@ const styles = StyleSheet.create({
         fontFamily: "Inter_600SemiBold",
         fontSize: 13,
         color: palette.red600,
+    },
+    statusBadgeExpired: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: spacing.sm,
+        paddingVertical: 6,
+        paddingHorizontal: spacing.md,
+        backgroundColor: palette.gray200,
+        borderRadius: radii.sm,
+        alignSelf: "flex-start",
+    },
+    statusBadgeExpiredText: {
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 13,
+        color: palette.gray600,
     },
     unreadDot: {
         width: 8,

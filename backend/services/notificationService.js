@@ -927,7 +927,7 @@ class NotificationService {
    * Mark in-app friend_request rows as responded for the receiver (matches data.requestId).
    * Called after accept/decline so the notification list stays correct on refresh and other devices.
    */
-  async markFriendRequestNotificationsResponded(receiverUserId, friendRequestId) {
+  async markFriendRequestNotificationsResponded(receiverUserId, friendRequestId, response) {
     if (!receiverUserId || !friendRequestId) return { updated: 0 };
     try {
       const { data: notifications, error: notifError } = await supabaseAdmin
@@ -948,8 +948,14 @@ class NotificationService {
         );
       });
 
+      const declined = response === "declined";
+
       for (const notif of matching) {
-        const updatedData = { ...(notif.data || {}), responded: true };
+        const updatedData = {
+          ...(notif.data || {}),
+          responded: true,
+          declined,
+        };
         await supabaseAdmin
           .from("notifications")
           .update({

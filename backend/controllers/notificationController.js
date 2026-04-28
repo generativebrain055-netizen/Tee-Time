@@ -73,19 +73,7 @@ class NotificationController {
         return res.status(500).json({ success: false, message: "Failed to get notifications" });
       }
 
-      // Filter out actionable notifications that have been responded to
-      const notifications = (data || [])
-        .filter(n => {
-          const notifData = n.data || {};
-          if (notifData.type === "tee_time_invite" && notifData.responded === true) {
-            return false;
-          }
-          if (notifData.type === "friend_request" && notifData.responded === true) {
-            return false;
-          }
-          return true;
-        })
-        .map(n => ({
+      const notifications = (data || []).map(n => ({
           id: n.id,
           type: n.type,
           channel: n.channel,
@@ -228,8 +216,12 @@ class NotificationController {
         return res.status(404).json({ success: false, message: "Notification not found" });
       }
 
-      // Update with responded flag
+      const bodyDeclined = req.body && typeof req.body.declined === "boolean" ? req.body.declined : undefined;
+      // Persist responded; optional declined mirrors invite/friend/group flows so history shows accept vs decline after refresh.
       const updatedData = { ...(notification.data || {}), responded: true };
+      if (typeof bodyDeclined === "boolean") {
+        updatedData.declined = bodyDeclined;
+      }
 
       const { error } = await supabaseAdmin
         .from("notifications")

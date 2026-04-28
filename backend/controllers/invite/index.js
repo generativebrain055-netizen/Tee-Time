@@ -391,7 +391,11 @@ class InviteController {
                         
                         // Mark each matching notification as responded and read
                         for (const notif of matchingNotifications) {
-                            const updatedData = { ...(notif.data || {}), responded: true };
+                            const updatedData = {
+                                ...(notif.data || {}),
+                                responded: true,
+                                declined: response === INVITE_RESPONSES.DECLINED,
+                            };
                             await supabaseAdmin
                                 .from("notifications")
                                 .update({
