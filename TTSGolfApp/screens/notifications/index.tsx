@@ -21,6 +21,7 @@ import {
     friendApi,
     inviteApi,
     rosterApi,
+    teeTimeApi,
     AppNotification,
     isDuplicateRosterContactApiError,
 } from "../../services/api";
@@ -73,6 +74,108 @@ function isExpiredTeeTimeInviteNotification(notification: AppNotification, nowMs
     const expiresMs = new Date(String(expiresRaw)).getTime();
     if (Number.isNaN(expiresMs)) return false;
     return expiresMs <= nowMs;
+}
+
+const UNFILLED_SLOT_ALERT_TYPES = new Set([
+    "roster_exhausted",
+    "organizer_fill_warning",
+    "tee_time_not_filled",
+    "organizer_invite_more",
+]);
+
+const CLOSED_TEE_TIME_STATUSES = new Set(["completed", "finished", "cancelled", "canceled"]);
+const ACTIVE_INVITE_STATUSES = new Set(["pending"]);
+
+async function filterClosedTeeTimeUnfilledAlerts(list: AppNotification[]): Promise<AppNotification[]> {
+    const teeTimeIds = Array.from(
+        new Set(
+            list
+                .map((n) => {
+                    const data = (n.data || {}) as Record<string, unknown>;
+                    const type = String(data.type || "");
+                    if (!UNFILLED_SLOT_ALERT_TYPES.has(type)) return null;
+                    const id = data.teeTimeId;
+                    if (id == null) return null;
+                    const s = String(id).trim();
+                    return s.length > 0 ? s : null;
+                })
+                .filter((id): id is string => !!id),
+        ),
+    );
+
+    if (teeTimeIds.length === 0) return list;
+
+    const closedIds = new Set<string>();
+    await Promise.all(
+        teeTimeIds.map(async (teeTimeId) => {
+            try {
+                const res = await teeTimeApi.getTeeTime(teeTimeId);
+                if (!res?.success || !res?.teeTime) return;
+                const status = String((res.teeTime as { status?: string }).status || "").toLowerCase();
+                if (CLOSED_TEE_TIME_STATUSES.has(status)) {
+                    closedIds.add(teeTimeId);
+                }
+            } catch {
+                // Keep alert when status lookup fails to avoid accidentally hiding active items.
+            }
+        }),
+    );
+
+    if (closedIds.size === 0) return list;
+
+    return list.filter((n) => {
+        const data = (n.data || {}) as Record<string, unknown>;
+        const type = String(data.type || "");
+        if (!UNFILLED_SLOT_ALERT_TYPES.has(type)) return true;
+        const id = data.teeTimeId;
+        if (id == null) return true;
+        return !closedIds.has(String(id));
+    });
+}
+
+async function filterInactiveTeeTimeInviteNotifications(list: AppNotification[]): Promise<AppNotification[]> {
+    const inviteIds = Array.from(
+        new Set(
+            list
+                .map((n) => {
+                    const data = (n.data || {}) as Record<string, unknown>;
+                    if (String(data.type || "") !== "tee_time_invite") return null;
+                    const id = data.inviteId ?? data.invite_id;
+                    if (id == null) return null;
+                    const s = String(id).trim();
+                    return s.length > 0 ? s : null;
+                })
+                .filter((id): id is string => !!id),
+        ),
+    );
+
+    if (inviteIds.length === 0) return list;
+
+    const inactiveInviteIds = new Set<string>();
+    await Promise.all(
+        inviteIds.map(async (inviteId) => {
+            try {
+                const res = await inviteApi.getInviteById(inviteId);
+                if (!res?.success || !res?.invite) return;
+                const status = String((res.invite as { status?: string }).status || "").toLowerCase();
+                if (!ACTIVE_INVITE_STATUSES.has(status)) {
+                    inactiveInviteIds.add(inviteId);
+                }
+            } catch {
+                // Keep item if status lookup fails.
+            }
+        }),
+    );
+
+    if (inactiveInviteIds.size === 0) return list;
+
+    return list.filter((n) => {
+        const data = (n.data || {}) as Record<string, unknown>;
+        if (String(data.type || "") !== "tee_time_invite") return true;
+        const id = data.inviteId ?? data.invite_id;
+        if (id == null) return true;
+        return !inactiveInviteIds.has(String(id));
+    });
 }
 
 function initialsFromGroupName(name: string): string {
@@ -173,7 +276,9 @@ export default function NotificationsScreen({ navigation }: any) {
                     if (isExpiredTeeTimeInviteNotification(n, nowMs)) return false;
                     return true;
                 });
-                setNotifications(filteredNotifications);
+                const withoutClosedAlerts = await filterClosedTeeTimeUnfilledAlerts(filteredNotifications);
+                const withoutInactiveInvites = await filterInactiveTeeTimeInviteNotifications(withoutClosedAlerts);
+                setNotifications(withoutInactiveInvites);
             }
         } catch (error) {
             logger.error('[NotificationsScreen] Error loading notifications', error);

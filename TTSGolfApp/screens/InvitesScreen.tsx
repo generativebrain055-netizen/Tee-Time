@@ -7,6 +7,8 @@ import {
     RefreshControl,
     Alert,
     ActivityIndicator,
+    AppState,
+    type AppStateStatus,
 } from "react-native";
 import {
     Calendar,
@@ -41,6 +43,7 @@ type InviteRespondApiResult = {
     socialRateDelta?: number;
     newSocialRate?: number;
 };
+const REMOVED_INVITE_STATUSES = new Set(["expired", "cancelled", "canceled", "skipped"]);
 
 // Helper for status badge colors
 const getStatusBadgeClass = (status: string): string => {
@@ -64,30 +67,113 @@ export default function InvitesScreen({ navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [responding, setResponding] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadInvites();
+    const applyInviteFilters = useCallback((invites: Invite[]) => {
+        return invites.filter(
+            (invite) => !REMOVED_INVITE_STATUSES.has(String(invite.status || "").toLowerCase()),
+        );
     }, []);
 
-    const loadInvites = async () => {
-        try {
-            const [pendingRes, sentRes] = await Promise.all([
-                inviteApi.getPendingInvites(),
-                inviteApi.getSentInvites(),
-            ]);
-            if (pendingRes.success) setPendingInvites(pendingRes.invites);
-            if (sentRes.success) setSentInvites(sentRes.invites);
-        } catch (error) {
-            logger.error("[InvitesScreen] Failed to load invites", error);
-        } finally {
-            setLoading(false);
+    const syncInvites = useCallback(async () => {
+        const [pendingRes, sentRes] = await Promise.all([
+            inviteApi.getPendingInvites(),
+            inviteApi.getSentInvites(),
+        ]);
+        if (pendingRes.success) {
+            setPendingInvites(applyInviteFilters(pendingRes.invites));
         }
-    };
+        if (sentRes.success) {
+            setSentInvites(applyInviteFilters(sentRes.invites));
+        }
+    }, [applyInviteFilters]);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                await syncInvites();
+            } catch (error) {
+                logger.error("[InvitesScreen] Failed to load invites", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        void load();
+    }, [syncInvites]);
+
+    // Keep inbox live: as soon as invite window passes, remove it from Received.
+    useEffect(() => {
+        const pruneExpired = () => {
+            const nowMs = Date.now();
+            setPendingInvites((prev) => {
+                const next = prev.filter((invite) => {
+                    const status = String(invite.status || "").toLowerCase();
+                    if (REMOVED_INVITE_STATUSES.has(status)) return false;
+                    if (!invite.expiresAt) return true;
+                    const expiresMs = new Date(invite.expiresAt).getTime();
+                    if (!Number.isFinite(expiresMs)) return true;
+                    return expiresMs > nowMs;
+                });
+                return next.length === prev.length ? prev : next;
+            });
+            setSentInvites((prev) => {
+                const next = prev.filter((invite) => {
+                    const status = String(invite.status || "").toLowerCase();
+                    if (REMOVED_INVITE_STATUSES.has(status)) return false;
+                    if (!invite.expiresAt) return true;
+                    const expiresMs = new Date(invite.expiresAt).getTime();
+                    if (!Number.isFinite(expiresMs)) return true;
+                    // Remove sent invites that have passed deadline even if backend status update lags.
+                    if (status === "pending" && expiresMs <= nowMs) return false;
+                    return true;
+                });
+                return next.length === prev.length ? prev : next;
+            });
+        };
+
+        pruneExpired();
+        const interval = setInterval(pruneExpired, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Keep invites in near real-time sync with server state (e.g. host skips your invite).
+    // This screen is mounted only while visible in our custom navigation, so fast polling is scoped.
+    useEffect(() => {
+        let syncing = false;
+        let activeState: AppStateStatus = "active";
+        const syncIfIdle = async () => {
+            if (syncing || activeState !== "active") return;
+            syncing = true;
+            try {
+                await syncInvites();
+            } finally {
+                syncing = false;
+            }
+        };
+
+        // Immediate sync so changes made from another device/user appear quickly.
+        void syncIfIdle();
+
+        const interval = setInterval(() => {
+            void syncIfIdle();
+        }, 1500);
+
+        const appSub = AppState.addEventListener("change", (next: AppStateStatus) => {
+            activeState = next;
+            if (next === "active") {
+                void syncIfIdle();
+            }
+        });
+
+        return () => {
+            clearInterval(interval);
+            appSub.remove();
+        };
+    }, [syncInvites]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await loadInvites();
+        await syncInvites();
         setRefreshing(false);
-    }, []);
+    }, [syncInvites]);
 
     const handleRespond = async (inviteId: string, response: "accepted" | "declined") => {
         console.log("🔵 [InvitesScreen] handleRespond CALLED", { inviteId, response });
@@ -116,7 +202,7 @@ export default function InvitesScreen({ navigation }: any) {
                 setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
                 
                 // Refresh invites list to ensure UI is updated
-                await loadInvites();
+                await syncInvites();
                 
                 // Show Social Rate change in real-time and refresh profile
                 const delta = result.socialRateDelta;

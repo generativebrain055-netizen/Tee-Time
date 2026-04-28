@@ -126,6 +126,8 @@ async function cancelTeeTime(teeTimeId, userId) {
       404,
     );
   }
+  // Cancel any still-active invites for this tee time so invitees no longer see them.
+  await inviteRepository.cancelActiveInvitesForTeeTime(teeTimeId);
   return cancelled;
 }
 

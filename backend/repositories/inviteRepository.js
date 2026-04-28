@@ -741,12 +741,47 @@ class InviteRepository {
     }
   }
 
+  /**
+   * When organizer cancels a tee time, all still-active invites should be cancelled too
+   * so invitees no longer see actionable invite cards.
+   */
+  async cancelActiveInvitesForTeeTime(teeTimeId) {
+    try {
+      if (!teeTimeId) return 0;
+      const { data, error } = await supabaseAdmin
+        .from("invites")
+        .update({
+          status: "cancelled",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("tee_time_id", teeTimeId)
+        .in("status", ["pending", "waitlist"]);
+
+      if (error) {
+        logger.error("cancelActiveInvitesForTeeTime:", error.message);
+        return 0;
+      }
+      return Array.isArray(data) ? data.length : 0;
+    } catch (error) {
+      logger.error("cancelActiveInvitesForTeeTime:", error.message);
+      return 0;
+    }
+  }
+
   async getSentInvites(userId) {
     try {
+      const nowIso = new Date().toISOString();
       const { data, error } = await supabaseAdmin
         .from("invites")
         .select("*")
         .eq("inviter_id", userId)
+        // Hide expired invites from Sent inbox:
+        // - explicit expired status
+        // - cancelled invites
+        // - pending invite past deadline (scheduler race)
+        .neq("status", "expired")
+        .neq("status", "cancelled")
+        .or(`expires_at.is.null,expires_at.gt.${nowIso},status.in.(accepted,declined,waitlist)`)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
