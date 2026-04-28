@@ -28,7 +28,20 @@ async function getTwilioConfigFromFirestore() {
     const fromNumber = typeof data.fromNumber === "string" ? data.fromNumber.trim() : "";
     const messagingServiceSid =
       typeof data.messagingServiceSid === "string" ? data.messagingServiceSid.trim() : "";
-    if (!accountSid && !authToken && !fromNumber && !messagingServiceSid) return null;
+    const apiKeySid = typeof data.apiKeySid === "string" ? data.apiKeySid.trim() : "";
+    const apiKeySecret = typeof data.apiKeySecret === "string" ? data.apiKeySecret.trim() : "";
+    const verifyServiceSid = typeof data.verifyServiceSid === "string" ? data.verifyServiceSid.trim() : "";
+    if (
+      !accountSid &&
+      !authToken &&
+      !fromNumber &&
+      !messagingServiceSid &&
+      !apiKeySid &&
+      !apiKeySecret &&
+      !verifyServiceSid
+    ) {
+      return null;
+    }
     return {
       accountSid: accountSid || undefined,
       authToken: authToken || undefined,
@@ -37,9 +50,9 @@ async function getTwilioConfigFromFirestore() {
         messagingServiceSid && messagingServiceSid.startsWith("MG")
           ? messagingServiceSid
           : undefined,
-      apiKeySid: typeof data.apiKeySid === "string" ? data.apiKeySid.trim() || undefined : undefined,
-      apiKeySecret: typeof data.apiKeySecret === "string" ? data.apiKeySecret.trim() || undefined : undefined,
-      verifyServiceSid: typeof data.verifyServiceSid === "string" ? data.verifyServiceSid.trim() || undefined : undefined,
+      apiKeySid: apiKeySid || undefined,
+      apiKeySecret: apiKeySecret || undefined,
+      verifyServiceSid: verifyServiceSid || undefined,
     };
   } catch (err) {
     const msg = err?.message || "";

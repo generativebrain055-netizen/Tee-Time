@@ -117,6 +117,22 @@ function useMessagingService(creds) {
   return !!sid && sid.startsWith("MG");
 }
 
+function hasTwilioAuth(creds) {
+  return !!(
+    (creds?.accountSid && creds?.authToken && creds.accountSid.startsWith("AC")) ||
+    (creds?.accountSid && creds?.apiKeySid && creds?.apiKeySecret && creds.accountSid.startsWith("AC"))
+  );
+}
+
+function hasTwilioSender(creds) {
+  return !!(creds?.fromNumber && creds.fromNumber.trim()) || useMessagingService(creds);
+}
+
+function hasTwilioVerify(creds) {
+  const sid = creds?.verifyServiceSid?.trim();
+  return !!sid && sid.startsWith("VA");
+}
+
 /**
  * Get Twilio client and verify service (async). Uses Firestore then .env, caches by creds key.
  */
@@ -343,12 +359,12 @@ const getClient = async () => {
  */
 const isConfiguredAsync = async () => {
   const creds = await getCredentials();
-  const hasAuth =
-    (creds.accountSid && creds.authToken && creds.accountSid.startsWith("AC")) ||
-    (creds.accountSid && creds.apiKeySid && creds.apiKeySecret && creds.accountSid.startsWith("AC"));
-  const hasSender =
-    !!(creds.fromNumber && creds.fromNumber.trim()) || useMessagingService(creds);
-  return !!(hasAuth && hasSender);
+  return !!(hasTwilioAuth(creds) && hasTwilioSender(creds));
+};
+
+const isVerifyConfiguredAsync = async () => {
+  const creds = await getCredentials();
+  return !!(hasTwilioAuth(creds) && hasTwilioVerify(creds));
 };
 
 /** @deprecated Use isConfiguredAsync. Sync version returns false until first async load. */
@@ -367,7 +383,11 @@ module.exports = {
   isUsableCreds,
   buildClientFromCreds,
   useMessagingService,
+  hasTwilioAuth,
+  hasTwilioSender,
+  hasTwilioVerify,
   isConfigured,
   isConfiguredAsync,
+  isVerifyConfiguredAsync,
   clearCache,
 };

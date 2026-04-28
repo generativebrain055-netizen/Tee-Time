@@ -1,14 +1,21 @@
 /**
- * Renders a single banner ad slot (banner_1, banner_2, or banner_3) when the admin has configured it.
- * Same content as admin "Ads preview": image as background with description overlay.
+ * Renders a single ad slot (loading_screen, banner_1, banner_2, or banner_3)
+ * when the admin has configured it.
  */
 import React, { useEffect, useState } from "react";
-import { View, ImageBackground, TouchableOpacity, Linking, StyleSheet, Dimensions, Text } from "react-native";
+import { View, Image, ImageBackground, TouchableOpacity, Linking, StyleSheet, Dimensions, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { fetchAdSlots, type AdSlotItem, AD_DESCRIPTION_MAX_LENGTH } from "../services/api/adSlotsApi";
+import {
+  fetchAdSlots,
+  getCachedAdSlot,
+  subscribeAdSlots,
+  type AdSlotItem,
+  AD_DESCRIPTION_MAX_LENGTH,
+} from "../services/api/adSlotsApi";
 
 const { width } = Dimensions.get("window");
-const BANNER_HEIGHT = 52;
+export const BANNER_AD_HEIGHT = 52;
+export const BANNER_AD_WIDTH = width - 32;
 
 function truncateDescription(text: string | null | undefined): string {
   if (text == null || text === "") return "";
@@ -16,7 +23,7 @@ function truncateDescription(text: string | null | undefined): string {
   return text.slice(0, AD_DESCRIPTION_MAX_LENGTH) + "…";
 }
 
-type BannerSlotKey = "banner_1" | "banner_2" | "banner_3";
+type BannerSlotKey = "loading_screen" | "banner_1" | "banner_2" | "banner_3";
 
 interface BannerAdProps {
   slotKey: BannerSlotKey;
@@ -24,18 +31,48 @@ interface BannerAdProps {
 }
 
 export function BannerAd({ slotKey, style }: BannerAdProps): React.ReactElement | null {
-  const [slot, setSlot] = useState<AdSlotItem | null>(null);
+  const [slot, setSlot] = useState<AdSlotItem | null>(() => getCachedAdSlot(slotKey));
+  const [loading, setLoading] = useState(!getCachedAdSlot(slotKey));
 
   useEffect(() => {
-    fetchAdSlots().then((res) => {
-      if (res.success && res.data?.length) {
-        const s = res.data.find((x) => x.slot_key === slotKey && x.image_url);
-        if (s) setSlot(s);
+    let alive = true;
+    const unsubscribe = subscribeAdSlots((payload) => {
+      if (!alive) return;
+      const liveSlot = payload.data.find((x) => x.slot_key === slotKey && x.image_url);
+      if (liveSlot) {
+        setSlot(liveSlot);
       }
     });
+
+    fetchAdSlots().then(async (res) => {
+      if (!alive) return;
+      if (res.success && res.data?.length) {
+        const s = res.data.find((x) => x.slot_key === slotKey && x.image_url);
+        if (s?.image_url) {
+          try {
+            await Image.prefetch(s.image_url);
+          } catch {
+            // Non-fatal: still render ad if prefetch fails.
+          }
+          if (!alive) return;
+          setSlot(s);
+        }
+      }
+      if (alive) setLoading(false);
+    });
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
   }, [slotKey]);
 
-  if (!slot?.image_url) return null;
+  if (!slot?.image_url) {
+    if (loading) {
+      // Keep a stable reserved area while ad data resolves, preventing layout flicker.
+      return <View style={[styles.wrapper, styles.placeholder, style]} />;
+    }
+    return null;
+  }
 
   const description = truncateDescription(slot.description);
 
@@ -70,14 +107,17 @@ export function BannerAd({ slotKey, style }: BannerAdProps): React.ReactElement 
 
 const styles = StyleSheet.create({
   wrapper: {
-    width: width - 32,
+    width: BANNER_AD_WIDTH,
     maxWidth: "100%",
-    height: BANNER_HEIGHT,
+    height: BANNER_AD_HEIGHT,
     alignSelf: "center",
     marginVertical: 8,
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: "#f5f5f5",
+  },
+  placeholder: {
+    backgroundColor: "#f3f4f6",
   },
   touchable: {
     flex: 1,

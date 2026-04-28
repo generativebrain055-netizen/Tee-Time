@@ -103,6 +103,14 @@ router.post(
   adminController.sendTwilioTestSms
 );
 
+router.post(
+  "/twilio/test-oauth",
+  authenticateAdmin,
+  [body("to").trim().notEmpty().withMessage("Phone number (E.164) is required")],
+  validateRequest,
+  adminController.sendTwilioTestOauth
+);
+
 // ---------- Ad slots (loading screen + 3 banner placements) ----------
 router.get("/ad-slots", authenticateAdmin, adminController.listAdSlots);
 router.put("/ad-slots/:slotKey", authenticateAdmin, adminController.updateAdSlot);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getSystemSettings, sendTwilioTestSms, updateTwilioSettings, clearTwilioSettings, type SystemSettings } from '../api/client';
+import { getSystemSettings, sendTwilioTestSms, sendTwilioTestOauth, updateTwilioSettings, clearTwilioSettings, type SystemSettings } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 
 const FIREBASE_CONSOLE_URL = 'https://console.firebase.google.com/';
@@ -12,9 +12,12 @@ export function SystemSettings() {
   const [error, setError] = useState<string | null>(null);
   const [twilioTestTo, setTwilioTestTo] = useState('');
   const [twilioTestLoading, setTwilioTestLoading] = useState(false);
+  const [twilioOauthTestLoading, setTwilioOauthTestLoading] = useState(false);
   const [twilioFirestore, setTwilioFirestore] = useState({
     accountSid: '',
     authToken: '',
+    verifyServiceSid: '',
+    fromNumber: '',
     messagingServiceSid: '',
   });
   const [twilioSaveLoading, setTwilioSaveLoading] = useState(false);
@@ -59,6 +62,26 @@ export function SystemSettings() {
     }
   };
 
+  const handleTwilioOauthTest = async () => {
+    const to = twilioTestTo.trim();
+    if (!to) {
+      notify.error('Enter a phone number in E.164 format (e.g. +15551234567).');
+      return;
+    }
+    if (!/^\+[1-9]\d{1,14}$/.test(to)) {
+      notify.error('Invalid format. Use E.164 (e.g. +15551234567).');
+      return;
+    }
+    setTwilioOauthTestLoading(true);
+    const res = await sendTwilioTestOauth(to);
+    setTwilioOauthTestLoading(false);
+    if (res.success) {
+      notify.success('OAuth Verify OTP sent.');
+    } else {
+      notify.error(res.message || 'Failed to send test OAuth OTP.');
+    }
+  };
+
   const handleClearTwilioFirestore = async () => {
     if (!window.confirm('This will delete Twilio credentials from Firestore. The backend will fall back to .env TWILIO_* vars. Continue?')) return;
     setTwilioClearLoading(true);
@@ -76,11 +99,13 @@ export function SystemSettings() {
     const config = {
       accountSid: twilioFirestore.accountSid.trim() || undefined,
       authToken: twilioFirestore.authToken.trim() || undefined,
+      verifyServiceSid: twilioFirestore.verifyServiceSid.trim() || undefined,
+      fromNumber: twilioFirestore.fromNumber.trim() || undefined,
       messagingServiceSid: twilioFirestore.messagingServiceSid.trim() || undefined,
     };
     const hasAny = Object.values(config).some((v) => v && v.length > 0);
     if (!hasAny) {
-      notify.error('Enter at least one value (e.g. Account SID, Auth Token, or Messaging Service SID).');
+      notify.error('Enter at least one value (e.g. Account SID, Auth Token, Verify Service SID, From Number, or Messaging Service SID).');
       return;
     }
     setTwilioSaveLoading(true);
@@ -88,7 +113,13 @@ export function SystemSettings() {
     setTwilioSaveLoading(false);
     if (res.success) {
       notify.success('Twilio credentials saved to Firestore. Backend will use them.');
-      setTwilioFirestore({ accountSid: '', authToken: '', messagingServiceSid: '' });
+      setTwilioFirestore({
+        accountSid: '',
+        authToken: '',
+        verifyServiceSid: '',
+        fromNumber: '',
+        messagingServiceSid: '',
+      });
       getSystemSettings().then((r) => {
         if (r.success && r.data) setSettings(r.data);
       });
@@ -192,6 +223,30 @@ export function SystemSettings() {
         ) : (
           <p style={styles.warnInline}>Not configured. Save credentials below or set <code style={styles.code}>TWILIO_*</code> env vars.</p>
         )}
+        <div style={styles.modePanel}>
+          <div style={styles.modePanelHeader}>Twilio mode status</div>
+          <div style={styles.modeRow}>
+            <span style={styles.modeLabel}>Auth ready</span>
+            <span style={{ ...styles.badge, ...((settings.twilio.authReady ?? false) ? styles.badgeOk : styles.badgeWarn) }}>
+              {(settings.twilio.authReady ?? false) ? 'Ready' : 'Missing'}
+            </span>
+          </div>
+          <div style={styles.modeRow}>
+            <span style={styles.modeLabel}>Sender ready</span>
+            <span style={{ ...styles.badge, ...((settings.twilio.senderReady ?? false) ? styles.badgeOk : styles.badgeWarn) }}>
+              {(settings.twilio.senderReady ?? false) ? 'Ready' : 'Missing'}
+            </span>
+          </div>
+          <div style={styles.modeRow}>
+            <span style={styles.modeLabel}>Verify ready (OAuth phone)</span>
+            <span style={{ ...styles.badge, ...((settings.twilio.verifyReady ?? false) ? styles.badgeOk : styles.badgeWarn) }}>
+              {(settings.twilio.verifyReady ?? false) ? 'Ready' : 'Missing'}
+            </span>
+          </div>
+          <p style={styles.modeHint}>
+            SMS send requires <strong>Auth + Sender</strong>. OAuth phone verification requires <strong>Auth + Verify Service SID (VA...)</strong>.
+          </p>
+        </div>
 
         <div style={styles.section}>
           <h4 style={styles.sectionTitle}>Save credentials to Firestore</h4>
@@ -200,7 +255,9 @@ export function SystemSettings() {
           </p>
           <ol style={styles.stepsList}>
             <li>In <a href={TWILIO_CONSOLE_URL} target="_blank" rel="noopener noreferrer" style={styles.link}>Twilio Console</a> → Account → API keys and tokens, copy your <strong>Account SID</strong> and <strong>Auth Token</strong>.</li>
+            <li>For OAuth/phone verification flow, copy your <strong>Verify Service SID</strong> (<code style={styles.code}>VA…</code>) from Twilio Verify.</li>
             <li>Copy the <strong>Messaging Service SID</strong> (<code style={styles.code}>MG…</code>) linked to your A2P/10DLC campaign. This is what the backend uses to send SMS — not the Campaign SID (<code style={styles.code}>CM…</code>).</li>
+            <li>Optionally set a <strong>From Number</strong> (<code style={styles.code}>+1...</code>) when not using Messaging Service SID.</li>
             <li>Paste below and click <strong>Save to Firestore</strong>. Only the fields you fill will be updated.</li>
           </ol>
           <div style={styles.formGrid}>
@@ -224,6 +281,28 @@ export function SystemSettings() {
                 placeholder="Your auth token"
                 style={styles.fieldInput}
                 autoComplete="new-password"
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              Verify Service SID (OAuth phone auth)
+              <input
+                type="text"
+                value={twilioFirestore.verifyServiceSid}
+                onChange={(e) => setTwilioFirestore((p) => ({ ...p, verifyServiceSid: e.target.value }))}
+                placeholder="VAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                style={styles.fieldInput}
+                autoComplete="off"
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              From Number (optional if using Messaging Service SID)
+              <input
+                type="text"
+                value={twilioFirestore.fromNumber}
+                onChange={(e) => setTwilioFirestore((p) => ({ ...p, fromNumber: e.target.value }))}
+                placeholder="+15551234567"
+                style={styles.fieldInput}
+                autoComplete="off"
               />
             </label>
             <label style={styles.fieldLabel}>
@@ -261,6 +340,9 @@ export function SystemSettings() {
               <button type="button" onClick={handleTwilioTest} style={styles.testBtn} disabled={twilioTestLoading}>
                 {twilioTestLoading ? 'Sending…' : 'Send test SMS'}
               </button>
+              <button type="button" onClick={handleTwilioOauthTest} style={styles.testBtn} disabled={twilioOauthTestLoading}>
+                {twilioOauthTestLoading ? 'Sending…' : 'Send OAuth Verify test'}
+              </button>
             </div>
           </div>
         )}
@@ -291,6 +373,11 @@ const styles: Record<string, React.CSSProperties> = {
   masked: { fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-xs)' },
   maskedInline: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
   maskedBlock: { marginBottom: 'var(--space-md)', padding: '12px 14px', background: 'var(--color-surface-secondary, #f9fafb)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' },
+  modePanel: { marginBottom: 'var(--space-md)', padding: '12px 14px', background: 'var(--color-surface-secondary, #f9fafb)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' },
+  modePanelHeader: { fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-sm)' },
+  modeRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  modeLabel: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' },
+  modeHint: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', margin: '6px 0 0 0' },
   warnInline: { fontSize: 'var(--font-size-sm)', color: 'var(--color-pending-text, #92400e)', background: 'var(--color-warning-container, #fef3c7)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--space-md)' },
   envLabel: { fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: 'var(--space-xs)' },
   envList: { margin: 0, paddingLeft: 'var(--space-xl)', marginBottom: 'var(--space-md)' },

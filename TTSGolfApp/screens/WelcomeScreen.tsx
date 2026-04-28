@@ -112,7 +112,7 @@ export default function WelcomeScreen({
             transform: [{ translateY: buttonsSlideAnim }],
           }}
         >
-          <BannerAd slotKey="banner_1" />
+          <BannerAd slotKey="loading_screen" />
           <PrimaryButton
             title="Create account"
             onPress={handleCreateAccountPress}

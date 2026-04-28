@@ -173,7 +173,7 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
                   <Text style={styles.dividerText}>or</Text>
                   <View style={styles.dividerLine} />
                 </View>
-                <View style={styles.bottomSection}>
+                <View style={styles.oauthSection}>
                   <OAuthButtons
                     onSuccess={onOAuthSuccess}
                     onError={(err) => {
@@ -185,8 +185,15 @@ export const SignUpOptionsPage: React.FC<SignUpOptionsPageProps> = ({
               </>
             )}
 
-            {/* Ad container area (Figma: designated position for ad) */}
-            <AdContainerPlaceholder />
+            <View
+              style={[
+                styles.bottomSection,
+                { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+              ]}
+            >
+              {/* Ad container area aligned with sign-in screen footer position */}
+              <AdContainerPlaceholder />
+            </View>
           </View>
         </TouchableWithoutFeedback>
       </View>
@@ -305,8 +312,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   bottomSection: {
-    paddingBottom: 32,
+    marginTop: "auto",
+    paddingTop: 16,
     gap: 16,
+  },
+  oauthSection: {
+    paddingBottom: 8,
   },
   nextButton: {
     height: 54,

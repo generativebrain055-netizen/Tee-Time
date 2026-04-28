@@ -59,7 +59,7 @@ const TeeTimesList = memo(({
 
   const content = (
     <>
-      <BannerAd slotKey="banner_2" />
+      <BannerAd slotKey="banner_3" />
       {loading ? (
         <ActivityIndicator size="large" color={CALENDAR_COLORS.primary} style={{ marginTop: spacing.xl }} />
       ) : teeTimes.length > 0 ? (

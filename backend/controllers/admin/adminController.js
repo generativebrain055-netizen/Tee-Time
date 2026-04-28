@@ -596,6 +596,10 @@ const getSystemSettings = async (req, res, next) => {
 
     const twilioCreds = await twilioService.getCredentials();
     const twilioConfigured = await twilioService.isConfiguredAsync();
+    const twilioVerifyConfigured = await twilioService.isVerifyConfiguredAsync();
+    const twilioAuthReady = twilioService.hasTwilioAuth(twilioCreds);
+    const twilioSenderReady = twilioService.hasTwilioSender(twilioCreds);
+    const twilioVerifyReady = twilioService.hasTwilioVerify(twilioCreds);
     const availableForTest = twilioConfigured;
     const firestoreTwilio = await twilioConfigService.getTwilioConfigFromFirestore();
     const storedInFirestore =
@@ -616,6 +620,10 @@ const getSystemSettings = async (req, res, next) => {
         },
         twilio: {
           configured: twilioConfigured,
+          verifyConfigured: twilioVerifyConfigured,
+          authReady: twilioAuthReady,
+          senderReady: twilioSenderReady,
+          verifyReady: twilioVerifyReady,
           availableForTest,
           accountSidMasked: twilioCreds.accountSid ? maskValue(twilioCreds.accountSid) : null,
           fromNumberMasked: twilioCreds.fromNumber ? maskPhone(twilioCreds.fromNumber) : null,
@@ -739,6 +747,53 @@ const sendTwilioTestSms = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       message: error?.message || "Failed to send test SMS.",
+    });
+  }
+};
+
+/**
+ * Send a Twilio Verify OTP test for OAuth/phone auth path (admin only).
+ * Body: { to: "+15551234567" } (E.164).
+ * Requires Account SID + auth method + Verify Service SID (VA...).
+ */
+const sendTwilioTestOauth = async (req, res, next) => {
+  try {
+    if (!(await twilioService.isVerifyConfiguredAsync())) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "Twilio Verify is not configured. Save Account SID, Auth Token (or API key pair), and Verify Service SID (VA...) in Admin → Settings.",
+      });
+    }
+    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    const e164 = /^\+[1-9]\d{1,14}$/;
+    if (!e164.test(to)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number. Use E.164 format (e.g. +15551234567).",
+      });
+    }
+    const result = await twilioService.sendOTP(to);
+    if (!result?.success) {
+      return res.status(500).json({ success: false, message: "Failed to send Twilio Verify test OTP." });
+    }
+    if (result.mode !== "verify_api") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Twilio Verify test did not run via Verify API. Check Verify Service SID (VA...) and Twilio credentials.",
+      });
+    }
+    return res.json({
+      success: true,
+      data: { to, mode: result.mode, sid: result.sid, status: result.status || null },
+      message: "Twilio Verify OTP sent.",
+    });
+  } catch (error) {
+    logger.error("Admin sendTwilioTestOauth error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Failed to send Twilio Verify test OTP.",
     });
   }
 };
@@ -1003,6 +1058,7 @@ module.exports = {
   updateTwilioSettings,
   clearTwilioSettings,
   sendTwilioTestSms,
+  sendTwilioTestOauth,
   listCourses,
   getCourse,
   createCourse,

@@ -8,6 +8,15 @@ export type NotificationNavigateFn = (
   params?: Record<string, unknown>,
 ) => void;
 
+function tryParseJsonString(s: string): Record<string, unknown> | null {
+  try {
+    const p = JSON.parse(s);
+    return p && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Expo / FCM flatten all `data` values to strings; coerce booleans and numbers we rely on. */
 export function normalizePushNotificationData(
   raw: Record<string, unknown> | null | undefined,
@@ -36,12 +45,50 @@ export function normalizePushNotificationData(
 }
 
 /**
+ * Merge platform/backend quirks: nested JSON strings, snake_case, missing `type` when `inviteId` exists.
+ * Call on raw `content.data` before `normalizePushNotificationData`.
+ */
+export function prepareNotificationDataForNavigation(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!raw || typeof raw !== "object") return {};
+  let out: Record<string, unknown> = { ...raw };
+
+  const dataStr = out.data;
+  if (typeof dataStr === "string") {
+    const inner = tryParseJsonString(dataStr);
+    if (inner) {
+      out = { ...out, ...inner };
+    }
+  }
+
+  if (out.invite_id != null && out.inviteId == null) {
+    out.inviteId = out.invite_id;
+  }
+  if (out.tee_time_id != null && out.teeTimeId == null) {
+    out.teeTimeId = out.tee_time_id;
+  }
+  if (out.notificationType != null && out.type == null) {
+    out.type = out.notificationType;
+  }
+
+  const inviteId = out.inviteId;
+  const hasInviteId = inviteId !== null && inviteId !== undefined && String(inviteId).length > 0;
+  if (!out.type && hasInviteId) {
+    out.type = "tee_time_invite";
+  }
+
+  return normalizePushNotificationData(out);
+}
+
+/**
  * Navigate based on API / push `data` (expects `type` and related ids).
+ * @returns true if a `navigate()` was invoked (stack update scheduled).
  */
 export function navigateFromNotificationData(
   navigate: NotificationNavigateFn,
   rawData: Record<string, unknown> | null | undefined,
-): void {
+): boolean {
   const d = rawData && typeof rawData === "object" ? rawData : {};
   const dataType = d.type as string | undefined;
 
@@ -64,22 +111,23 @@ export function navigateFromNotificationData(
         teeTime: d.teeTime as string | undefined,
         unfilledSlotAlert: unfilled,
       });
+      return true;
     }
-    return;
+    return false;
   }
 
   if (dataType === "friend_request" && d.senderId) {
     navigate("FriendProfile", { userId: String(d.senderId) });
-    return;
+    return true;
   }
   if (dataType === "friend_accepted" && d.userId) {
     navigate("FriendProfile", { userId: String(d.userId) });
-    return;
+    return true;
   }
 
   if (dataType === "group_invite" && d.groupId) {
     navigate("GroupProfile", { groupId: String(d.groupId) });
-    return;
+    return true;
   }
 
   if (dataType === "tee_time_invite" || dataType === "spot_opened") {
@@ -90,17 +138,17 @@ export function navigateFromNotificationData(
     } else {
       navigate("Invites");
     }
-    return;
+    return true;
   }
 
   if (dataType === "fcfs_deadline" && d.teeTimeId) {
     navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
-    return;
+    return true;
   }
 
   if (dataType === "no_show") {
     navigate("Profile");
-    return;
+    return true;
   }
 
   if (
@@ -113,13 +161,14 @@ export function navigateFromNotificationData(
   ) {
     if (d.ownerId) {
       navigate("FriendProfile", { userId: String(d.ownerId) });
+      return true;
     }
-    return;
+    return false;
   }
 
   if (dataType === "waiver_wire") {
     navigate("WaiverWire");
-    return;
+    return true;
   }
 
   if (
@@ -132,10 +181,18 @@ export function navigateFromNotificationData(
       teeTimeId: String(d.teeTimeId),
       autoOpenCheckIn: dataType === "check_in_reminder",
     });
-    return;
+    return true;
   }
 
   if (d.teeTimeId) {
     navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+    return true;
   }
+
+  if (d.inviteId) {
+    navigate("InviteDetail", { inviteId: String(d.inviteId) });
+    return true;
+  }
+
+  return false;
 }

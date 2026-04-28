@@ -827,7 +827,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             <InviteTypeStep inviteType={inviteType} onSelectType={setInviteType} />
           </View>
           <View style={{ backgroundColor: "#F3F4F6" }}>
-            <BannerAd slotKey="banner_3" />
+            <BannerAd slotKey="banner_2" />
           </View>
         </>
       )}

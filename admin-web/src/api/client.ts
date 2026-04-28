@@ -415,6 +415,10 @@ export type FirebaseSettingsStatus = {
 
 export type TwilioSettingsStatus = {
   configured: boolean;
+  verifyConfigured?: boolean;
+  authReady?: boolean;
+  senderReady?: boolean;
+  verifyReady?: boolean;
   availableForTest?: boolean;
   accountSidMasked: string | null;
   fromNumberMasked: string | null;
@@ -450,6 +454,19 @@ export async function sendTwilioTestSms(to: string): Promise<{ success: true; da
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { success: false, message: data.message || 'Failed to send test SMS' };
+  if (data.success && data.data) return { success: true, data: data.data };
+  return { success: false, message: data.message || 'Invalid response' };
+}
+
+/** Send a test OAuth phone verification OTP via Twilio Verify API. */
+export async function sendTwilioTestOauth(to: string): Promise<{ success: true; data: { to: string; mode?: string; sid?: string; status?: string | null } } | { success: false; message: string }> {
+  const res = await authFetch('/api/admin/twilio/test-oauth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to: to.trim() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { success: false, message: data.message || 'Failed to send test OAuth OTP' };
   if (data.success && data.data) return { success: true, data: data.data };
   return { success: false, message: data.message || 'Invalid response' };
 }
