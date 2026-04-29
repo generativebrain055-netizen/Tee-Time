@@ -19,6 +19,7 @@ const {
   formatSkipInviteResponse,
   formatOnDeckInvites,
 } = require("../formatters/teeTimeFormatter");
+const { parseApiDateToISO } = require("../utils/dateUtils");
 
 class TeeTimeController {
   constructor() {
@@ -337,7 +338,7 @@ class TeeTimeController {
       }
 
       const maxDist = maxDistance ? parseFloat(maxDistance) : null;
-      const filterDate = date || null;
+      const filterDate = date ? parseApiDateToISO(date) : null;
       const filterTime = time || null; // "morning", "afternoon", "evening"
       const filterCourse = course || null;
       

@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X, Calendar, MapPin, Check } from "lucide-react-native";
 import { fontFamily, fontSize, palette, radii } from "../theme/tokens";
+import { parseCalendarDateLocal } from "../../utils/formatting";
 
 export type TeeTimeConfirmParticipant = {
   id: string;
@@ -37,11 +38,8 @@ export interface TeeTimeConfirmSheetProps {
 }
 
 function formatSheetDate(dateStr: string): string {
-  const parts = dateStr.split(/[-/]/).map(Number);
-  const hasYmd = parts.length >= 3 && Number.isFinite(parts[0]) && Number.isFinite(parts[1]) && Number.isFinite(parts[2]);
-  const date = hasYmd
-    ? new Date(parts[0], (parts[1] ?? 1) - 1, parts[2] ?? 1)
-    : new Date(dateStr);
+  const date = parseCalendarDateLocal(dateStr);
+  if (Number.isNaN(date.getTime())) return dateStr;
   const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const d = date.getDate();

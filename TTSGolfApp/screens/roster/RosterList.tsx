@@ -14,6 +14,7 @@ import { Calendar, MessageCircle, Menu, X, UserMinus, ArrowDown } from "lucide-r
 import { COLORS } from "../../constants/colors";
 import { friendApi, Friend } from "../../services/api";
 import { logger } from "../../utils/logger";
+import { formatDateMMDDYYYY } from "../../utils/formatting";
 
 interface RosterListProps {
     navigation: any;
@@ -33,7 +34,7 @@ const formatLastPlayed = (dateStr?: string): string => {
     if (diffDays < 30) return `Last played: ${Math.floor(diffDays / 7)} weeks ago`;
     if (diffDays < 60) return "Last played: last month";
 
-    return `Last played: ${date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" })}`;
+    return `Last played: ${formatDateMMDDYYYY(date)}`;
 };
 
 const getInitials = (firstName: string, lastName: string): string => {

@@ -135,8 +135,10 @@ export function toCalendarDateKey(
     return `${input.getFullYear()}-${padZero(input.getMonth() + 1)}-${padZero(input.getDate())}`;
   }
   const s = String(input).trim();
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{2})-(\d{2})-(\d{4})/.exec(s);
+  if (m) return `${m[3]}-${m[1]}-${m[2]}`;
   const dt = new Date(s);
   if (Number.isNaN(dt.getTime())) return "";
   return `${dt.getFullYear()}-${padZero(dt.getMonth() + 1)}-${padZero(dt.getDate())}`;
@@ -144,9 +146,14 @@ export function toCalendarDateKey(
 
 /** Parse `YYYY-MM-DD` (or leading prefix) as a local calendar date for display. */
 export function parseCalendarDateLocal(dateStr: string): Date {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr).trim());
+  const s = String(dateStr).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) {
     return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  m = /^(\d{2})-(\d{2})-(\d{4})/.exec(s);
+  if (m) {
+    return new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
   }
   return new Date(dateStr);
 }
@@ -165,6 +172,16 @@ export function formatDateMMDDYYYY(
     return `${padZero(input.getMonth() + 1)}/${padZero(input.getDate())}/${input.getFullYear()}`;
   }
   const s = String(input).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) {
+    const [ms, ds, ys] = s.split("-");
+    const y = parseInt(ys, 10);
+    const m = parseInt(ms, 10);
+    const d = parseInt(ds, 10);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+      return "";
+    }
+    return `${padZero(m)}/${padZero(d)}/${y}`;
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     const [ys, ms, ds] = s.split("-");
     const y = parseInt(ys, 10);

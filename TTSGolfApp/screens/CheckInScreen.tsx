@@ -17,6 +17,7 @@ import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenShell, AppHeader } from "../ui";
 import { useColors } from "../ui/theme";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../utils/formatting";
 import {
   attendanceApi,
   AttendanceRecord,
@@ -40,17 +41,14 @@ interface CheckInScreenProps {
 
 function formatCheckInSummaryLine(teeDate?: string, teeTime?: string, courseName?: string): string {
   if (!teeDate?.trim() || !teeTime?.trim() || !courseName?.trim()) return "";
-  const parts = teeDate.split(/[-/]/).map(Number);
-  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return "";
-  const d = new Date(parts[0], (parts[1] ?? 1) - 1, parts[2] ?? 1);
+  const d = parseCalendarDateLocal(teeDate);
   if (Number.isNaN(d.getTime())) return "";
-  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
-  const md = `${d.getMonth() + 1}/${d.getDate()}`;
+  const md = formatDateMMDDYYYY(d);
   const [h = 0, m = 0] = teeTime.split(":").map((x) => parseInt(x, 10));
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
   const timeLabel = `${h12}:${(Number.isNaN(m) ? 0 : m).toString().padStart(2, "0")} ${ampm}`;
-  return `${weekday}, ${md}, ${timeLabel} – ${courseName}`;
+  return `${md}, ${timeLabel} – ${courseName}`;
 }
 
 const YesNoToggle = memo(

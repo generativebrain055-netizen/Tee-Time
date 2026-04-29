@@ -24,6 +24,7 @@ import {
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
+import { parseCalendarDateLocal } from "../../../utils/formatting";
 import { attendanceApi, teeTimeApi } from "../../../services/api";
 import { useAuthStore } from "../../../stores";
 import { useToast } from "../../../ui/feedback";
@@ -39,9 +40,9 @@ const IN_PROGRESS_ORANGE = "#F59E0B";
 
 function isFutureTeeDate(dateStr?: string): boolean {
   if (!dateStr) return false;
-  const [y, m, d] = String(dateStr).split(/[-/]/).map(Number);
-  const teeDay = new Date(y || 0, (m || 1) - 1, d || 1);
-  if (Number.isNaN(teeDay.getTime())) return false;
+  const cal = parseCalendarDateLocal(String(dateStr));
+  if (Number.isNaN(cal.getTime())) return false;
+  const teeDay = new Date(cal.getFullYear(), cal.getMonth(), cal.getDate());
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return teeDay.getTime() > today.getTime();

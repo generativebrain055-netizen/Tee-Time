@@ -33,6 +33,7 @@ import {
 import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { rosterApi, TimeSlot, WaiverWireEntry } from "../services/api";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../utils/formatting";
 import { useAuthStore } from "../stores";
 import { spacing, fontSize, radii, palette } from "../ui/theme/tokens";
 import {
@@ -253,12 +254,7 @@ export default function WaiverWireScreen({ navigation }: any) {
     }, [selectedDate]);
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-        });
+        return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
     };
 
     const getTimeSlotLabel = (slot?: TimeSlot) => {

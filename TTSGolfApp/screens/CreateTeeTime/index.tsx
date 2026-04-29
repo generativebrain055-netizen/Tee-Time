@@ -39,6 +39,7 @@ import { useAuthStore } from "../../stores";
 import { rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
 import { X, Users, Phone, ChevronRight } from "lucide-react-native";
 import { BannerAd } from "../../components/BannerAd";
+import { formatDateMMDDYYYY } from "../../utils/formatting";
 
 type FCFSTargetType = "roster" | "group";
 
@@ -418,16 +419,12 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     const y = date.getFullYear();
     const m = (date.getMonth() + 1).toString().padStart(2, "0");
     const d = date.getDate().toString().padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return `${m}-${d}-${y}`;
   };
 
-  /** M/D/Y display format for invite flow (Figma) */
+  /** MM-DD-YYYY display format for invite flow */
   const formatDateMDY = (date: Date | null) => {
-    if (!date) return "";
-    const m = date.getMonth() + 1;
-    const d = date.getDate();
-    const y = date.getFullYear();
-    return `${m}/${d}/${y}`;
+    return formatDateMMDDYYYY(date);
   };
 
   const formatTimeForApi = (time: string) => {
@@ -996,7 +993,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             orderedPlayers={orderedPlayers}
             onReorderPlayers={setOrderedPlayers}
             onReorderPhoneInvites={setPhoneInvites}
-            teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+            teeDate={formatDateMDY(selectedDate)}
             teeTime={selectedTime}
             courseName={location.split(',')[0]?.trim() || ''}
             groupSize={groupSize}
@@ -1014,7 +1011,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
           onRemovePlayer={(playerId) => {
             setFcfsSelectedPlayers(prev => prev.filter(id => id !== playerId));
           }}
-          teeDate={selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+          teeDate={formatDateMDY(selectedDate)}
           teeTime={selectedTime}
           courseName={location.split(',')[0]?.trim() || ''}
           groupName={selectedGroupId ? groups.find(g => g.id === selectedGroupId)?.name : undefined}

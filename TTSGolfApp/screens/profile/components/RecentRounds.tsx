@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { COLORS } from "../../../constants/colors";
 import { TeeTime } from "../../../services/api";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../../../utils/formatting";
 
 interface RecentRoundCardProps {
     teeTime: TeeTime;
@@ -10,8 +11,7 @@ interface RecentRoundCardProps {
 }
 
 const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
 };
 
 const getInitials = (name: string): string => {

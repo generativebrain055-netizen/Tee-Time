@@ -13,6 +13,7 @@
 import React, { memo, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
+import { formatDateMMDDYYYY } from '../../utils/formatting';
 
 export interface CustomDatePickerProps {
   visible: boolean;
@@ -62,9 +63,7 @@ function CustomDatePickerInner({
   const times = generateTimes();
 
   const formatDate = (date: Date) => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+    return formatDateMMDDYYYY(date);
   };
 
   const formatTime = (hour: number, minute: number) => {

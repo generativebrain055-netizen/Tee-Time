@@ -21,7 +21,7 @@ import { Alert } from "react-native";
 import { useAuthStore } from "../stores";
 import { useUser } from "../contexts/UserContext";
 import { logger } from "../utils/logger";
-import { formatRemainingClock } from "../utils/formatting";
+import { formatDateMMDDYYYY, formatRemainingClock, parseCalendarDateLocal } from "../utils/formatting";
 import { getDisplayTeeTimeStatus } from "../utils/teeTimeStatusDisplay";
 
 // Import tick and cross assets
@@ -181,8 +181,9 @@ const MS_PER_DAY = 86400000;
 function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
-    const teeDate = new Date(y, (m ?? 1) - 1, d ?? 1);
+    const cal = parseCalendarDateLocal(teeDateStr);
+    if (Number.isNaN(cal.getTime())) return false;
+    const teeDate = new Date(cal.getFullYear(), cal.getMonth(), cal.getDate());
     const diffDays = Math.round((today.getTime() - teeDate.getTime()) / MS_PER_DAY);
 
     if (diffDays === 1) {
@@ -204,12 +205,13 @@ function isInCheckInWindow(teeDateStr: string, teeTimeStr: string): boolean {
 
 function isPastScheduledTeeTime(teeDateStr: string, teeTimeStr: string): boolean {
     if (!teeDateStr || !teeTimeStr) return false;
-    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
+    const cal = parseCalendarDateLocal(teeDateStr);
+    if (Number.isNaN(cal.getTime())) return false;
     const [hh = 0, mm = 0, ss = 0] = String(teeTimeStr).split(":").map((x) => parseInt(x, 10));
     const scheduledAt = new Date(
-        y || 0,
-        (m || 1) - 1,
-        d || 1,
+        cal.getFullYear(),
+        cal.getMonth(),
+        cal.getDate(),
         Number.isNaN(hh) ? 0 : hh,
         Number.isNaN(mm) ? 0 : mm,
         Number.isNaN(ss) ? 0 : ss,
@@ -221,9 +223,9 @@ function isPastScheduledTeeTime(teeDateStr: string, teeTimeStr: string): boolean
 
 function isTodayOrPastTeeDate(teeDateStr: string): boolean {
     if (!teeDateStr) return false;
-    const [y, m, d] = teeDateStr.split(/[-/]/).map(Number);
-    const teeDate = new Date(y || 0, (m || 1) - 1, d || 1);
-    if (Number.isNaN(teeDate.getTime())) return false;
+    const cal = parseCalendarDateLocal(teeDateStr);
+    if (Number.isNaN(cal.getTime())) return false;
+    const teeDate = new Date(cal.getFullYear(), cal.getMonth(), cal.getDate());
     const today = new Date();
     const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     return teeDate.getTime() <= todayOnly.getTime();
@@ -964,15 +966,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 queuedParticipants.length === 0));
 
     const formatDate = (dateStr: string) => {
-        // Parse YYYY-MM-DD as local date (not UTC) to avoid day-shift bugs.
-        const parts = dateStr.split(/[-/]/).map(Number);
-        const hasYmd = parts.length >= 3 && Number.isFinite(parts[0]) && Number.isFinite(parts[1]) && Number.isFinite(parts[2]);
-        const date = hasYmd
-            ? new Date(parts[0], (parts[1] ?? 1) - 1, parts[2] ?? 1)
-            : new Date(dateStr);
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${days[date.getDay()]}, ${date.getDate()}${date.getDate() === 1 ? 'st' : date.getDate() === 2 ? 'nd' : date.getDate() === 3 ? 'rd' : 'th'} ${months[date.getMonth()]} ${date.getFullYear()}`;
+        return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
     };
 
     return (

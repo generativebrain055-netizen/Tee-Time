@@ -10,17 +10,39 @@
  * Using getUTC* methods ensures we get the stored date without local timezone shift
  * 
  * @param {Date|string|null} date - Date to format
- * @returns {string|null} - Formatted date string (YYYY-MM-DD) or null
+ * @returns {string|null} - Formatted date string (MM-DD-YYYY) or null
  */
 function formatDateLocal(date) {
     if (!date) return null;
-    if (typeof date === 'string') return date; // Already a string
+    if (typeof date === 'string') {
+        const iso = parseApiDateToISO(date);
+        if (!iso) return date;
+        const [y, m, d] = iso.split("-");
+        return `${m}-${d}-${y}`;
+    }
     
     // Use UTC methods since PostgreSQL DATE is stored without timezone
     const y = date.getUTCFullYear();
     const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     const d = date.getUTCDate().toString().padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${m}-${d}-${y}`;
+}
+
+/**
+ * Normalize API date input to ISO calendar format (YYYY-MM-DD).
+ * Accepts YYYY-MM-DD and MM-DD-YYYY.
+ *
+ * @param {string|null|undefined} value
+ * @returns {string|null}
+ */
+function parseApiDateToISO(value) {
+    if (!value) return null;
+    const s = String(value).trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s);
+    if (m) return `${m[3]}-${m[1]}-${m[2]}`;
+    return null;
 }
 
 /**
@@ -47,5 +69,6 @@ function createTeeDateTime(pgDate, timeStr) {
 
 module.exports = {
     formatDateLocal,
-    createTeeDateTime
+  createTeeDateTime,
+  parseApiDateToISO,
 };

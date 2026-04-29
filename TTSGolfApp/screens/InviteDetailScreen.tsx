@@ -30,7 +30,7 @@ import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
 import { useAuthStore } from "../stores";
 import logger from "../utils/logger";
-import { formatRemainingClock } from "../utils/formatting";
+import { formatDateMMDDYYYY, formatRemainingClock, parseCalendarDateLocal } from "../utils/formatting";
 
 interface InviteDetailScreenProps {
     navigation?: any;
@@ -217,13 +217,8 @@ export default function InviteDetailScreen({ navigation, route }: InviteDetailSc
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-        });
+        const date = parseCalendarDateLocal(dateStr);
+        return formatDateMMDDYYYY(date);
     };
 
     const getInitials = (firstName?: string, lastName?: string) => {

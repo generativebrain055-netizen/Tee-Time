@@ -11,6 +11,7 @@ import { MapPin, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "luci
 import { ScreenShell, AppHeader } from "../ui";
 import { teeTimeApi, TeeTimeHistoryEntry } from "../services/api";
 import { logger } from "../utils/logger";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../utils/formatting";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -39,12 +40,7 @@ const FILTERS: { key: FilterType; label: string }[] = [
 ];
 
 const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-    });
+    return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
 };
 
 const formatTime = (timeStr: string) => {

@@ -6,7 +6,7 @@ import { UpcomingTeeTime } from "../types";
 import { transitions } from "../../../theme/animations";
 import { spacing, fontSize, radii, shadows, palette } from "../../../ui/theme/tokens";
 import { colorTokens } from "../../../theme/tokens";
-import { parseCalendarDateLocal } from "../../../utils/formatting";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../../../utils/formatting";
 import { getDisplayTeeTimeStatus } from "../../../utils/teeTimeStatusDisplay";
 
 const TickIcon = require("../../../assets/Tick.png");
@@ -25,22 +25,9 @@ const formatTime = (timeStr: string): string => {
   return `${hour12}:${minutes} ${ampm}`;
 };
 
-const getDateSuffix = (day: number): string => {
-  if (day >= 11 && day <= 13) return "th";
-  switch (day % 10) {
-    case 1: return "st";
-    case 2: return "nd";
-    case 3: return "rd";
-    default: return "th";
-  }
-};
-
 const formatDateWithSuffix = (dateStr: string): string => {
   const date = parseCalendarDateLocal(dateStr);
-  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  const day = date.getDate();
-  return `${weekday}, ${month} ${day}${getDateSuffix(day)}`;
+  return formatDateMMDDYYYY(date);
 };
 
 const getInitials = (name: string): string => {

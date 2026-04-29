@@ -2,6 +2,7 @@
  * Calendar utility functions
  */
 import { CalendarDay, CalendarTeeTime, TeeTimesMap } from "./types";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../../utils/formatting";
 
 export const getDaysInMonth = (year: number, month: number): number => {
   return new Date(year, month + 1, 0).getDate();
@@ -14,11 +15,9 @@ export const getFirstDayOfMonth = (year: number, month: number): number => {
 /** Key for calendar map: year-month-day (month 0-indexed). Returns "" if dateStr is missing or invalid. */
 export const getDateKeyFromDateStr = (dateStr: string | undefined | null): string => {
   if (dateStr == null || typeof dateStr !== "string" || !dateStr.trim()) return "";
-  const parts = dateStr.split("-");
-  if (parts.length < 3) return "";
-  const [y, m, d] = parts.map(Number);
-  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return "";
-  return `${y}-${m - 1}-${d}`;
+  const d = parseCalendarDateLocal(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 };
 
 export const generateCalendarDays = (
@@ -142,24 +141,15 @@ export const parseCalendarDateKey = (key: string): Date | null => {
 };
 
 export const formatSelectedDate = (date: Date): string => {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return formatDateMMDDYYYY(date);
 };
 
-/** "Mon, July 24th" */
+/** "MM-DD-YYYY" */
 export const formatTeeTimeDate = (dateStr: string | undefined | null): string => {
   if (dateStr == null || typeof dateStr !== "string" || !dateStr.trim()) return "";
-  const d = new Date(dateStr + "T12:00:00");
+  const d = parseCalendarDateLocal(dateStr);
   if (Number.isNaN(d.getTime())) return "";
-  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
-  const month = d.toLocaleDateString("en-US", { month: "short" });
-  const day = d.getDate();
-  const suffix =
-    day >= 11 && day <= 13 ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th";
-  return `${weekday}, ${month} ${day}${suffix}`;
+  return formatDateMMDDYYYY(d);
 };
 
 /** "3:15 PM" from "15:15" */

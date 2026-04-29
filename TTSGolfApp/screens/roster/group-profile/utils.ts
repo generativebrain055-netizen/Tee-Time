@@ -1,6 +1,7 @@
 /**
  * Group Profile utility functions
  */
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../../../utils/formatting";
 
 export const getGroupInitials = (name?: string): string => {
     if (!name) return "GR";
@@ -17,8 +18,7 @@ export const getFriendInitials = (firstName?: string, lastName?: string): string
 };
 
 export const formatTeeTimeDate = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
 };
 
 export const calculateAvgHandicap = (members: { contact?: { handicap?: number } }[]): string => {

@@ -24,7 +24,7 @@ import { useColors } from "../ui/theme/ThemeContext";
 import { useToast } from "../ui/feedback";
 import { useUser } from "../contexts/UserContext";
 import { inviteApi, Invite } from "../services/api";
-import { formatRemainingClock } from "../utils/formatting";
+import { formatDateMMDDYYYY, formatRemainingClock, parseCalendarDateLocal } from "../utils/formatting";
 
 const COLORS = {
     primary: "#5EBC68",
@@ -182,12 +182,8 @@ export default function InvitesScreen({ navigation }: any) {
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-        });
+        const date = parseCalendarDateLocal(dateStr);
+        return formatDateMMDDYYYY(date);
     };
 
     const TabBar = () => (

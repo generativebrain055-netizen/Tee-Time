@@ -24,6 +24,7 @@ import { logger } from "../utils/logger";
 import { ScreenShell, AppHeader } from "../ui";
 import { teeTimeApi } from "../services/api";
 import { useAuthStore } from "../stores";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../utils/formatting";
 import {
     requestForegroundPermissionsAsync,
     getCurrentPositionAsync,
@@ -181,10 +182,7 @@ export default function CommunityBoardScreen({ navigation }: any) {
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+        return formatDateMMDDYYYY(parseCalendarDateLocal(dateStr));
     };
 
     const formatTime = (timeStr: string) => {

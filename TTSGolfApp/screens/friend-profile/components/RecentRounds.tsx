@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { View, Text } from "react-native";
+import { formatDateMMDDYYYY, parseCalendarDateLocal } from "../../../utils/formatting";
 
 export interface RoundEntry {
   courseName: string;
@@ -87,11 +88,7 @@ const RecentRounds = memo(({ rounds }: Props) => {
               fontSize: 13,
               color: '#6B7280',
             }}>
-              {round.date ? new Date(round.date).toLocaleDateString('en-US', { 
-                month: 'long', 
-                day: 'numeric', 
-                year: 'numeric' 
-              }) : round.date}
+              {round.date ? formatDateMMDDYYYY(parseCalendarDateLocal(round.date)) : round.date}
             </Text>
           </View>
         ))}

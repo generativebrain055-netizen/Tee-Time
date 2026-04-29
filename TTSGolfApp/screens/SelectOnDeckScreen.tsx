@@ -19,7 +19,7 @@ import { ScreenShell, AppHeader } from "../ui";
 import { rosterApi, teeTimeApi } from "../services/api";
 import { logger } from "../utils/logger";
 import { useAuthStore } from "../stores";
-import { formatTime } from "../utils/formatting";
+import { formatDateMMDDYYYY, formatTime, parseCalendarDateLocal } from "../utils/formatting";
 import type { RosterContact } from "../services/api/types/roster";
 import type { TeeTime, TeeTimeParticipant } from "../services/api/types/teeTime";
 
@@ -47,22 +47,9 @@ interface SelectOnDeckScreenProps {
   };
 }
 
-function getDateSuffix(day: number): string {
-  if (day >= 11 && day <= 13) return "th";
-  switch (day % 10) {
-    case 1: return "st";
-    case 2: return "nd";
-    case 3: return "rd";
-    default: return "th";
-  }
-}
-
 function formatTeeDateAndTime(teeDate: string, teeTime: string): string {
-  const date = new Date(teeDate);
-  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  const day = date.getDate();
-  const dateStr = `${weekday}, ${day}${getDateSuffix(day)} ${month} ${date.getFullYear()}`;
+  const date = parseCalendarDateLocal(teeDate);
+  const dateStr = formatDateMMDDYYYY(date);
   const timeStr = formatTime(teeTime);
   return timeStr ? `${dateStr} - ${timeStr}` : dateStr;
 }

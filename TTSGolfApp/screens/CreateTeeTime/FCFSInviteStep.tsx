@@ -23,6 +23,7 @@ import { Friend, RosterGroup, rosterApi, RosterContact } from "../../services/ap
 import logger from "../../utils/logger";
 import { otherPeopleInGroupCount, rosterGroupMembersExceptSelf } from "../../utils/groupMemberCount";
 import { useAuthStore } from "../../stores";
+import { formatDateMMDDYYYY } from "../../utils/formatting";
 
 type TargetType = "roster" | "group";
 type PickerMode = "date" | "time" | null;
@@ -187,11 +188,7 @@ export default function FCFSInviteStep({
     };
 
     const formatDeadlineDate = (date: Date): string => {
-        return date.toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-        });
+        return formatDateMMDDYYYY(date);
     };
 
     const formatDeadlineTime = (date: Date): string => {

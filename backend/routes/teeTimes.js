@@ -19,7 +19,9 @@ router.post(
   [
     body("courseName").trim().notEmpty().withMessage("Course name is required"),
     body("courseLocation").optional().trim(),
-    body("teeDate").isDate().withMessage("Valid date required (YYYY-MM-DD)"),
+    body("teeDate")
+      .matches(/^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$/)
+      .withMessage("Valid date required (MM-DD-YYYY)"),
     body("teeTime")
       .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
       .withMessage("Valid time required (HH:MM)"),
@@ -74,8 +76,12 @@ router.post("/:id/join", teeTimeController.joinOpenInvite);
 router.get(
   "/calendar",
   [
-    query("start").isDate().withMessage("Start date required"),
-    query("end").isDate().withMessage("End date required"),
+    query("start")
+      .matches(/^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$/)
+      .withMessage("Start date required (MM-DD-YYYY)"),
+    query("end")
+      .matches(/^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$/)
+      .withMessage("End date required (MM-DD-YYYY)"),
   ],
   validateRequest,
   teeTimeController.getCalendar,

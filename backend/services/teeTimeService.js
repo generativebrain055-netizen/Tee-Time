@@ -9,6 +9,7 @@ const inviteRepository = require("../repositories/inviteRepository");
 const inviteManagementService = require("./inviteManagementService");
 const notificationService = require("./notificationService");
 const logger = require("../config/logger");
+const { parseApiDateToISO } = require("../utils/dateUtils");
 
 /**
  * Custom error for tee time business logic violations
@@ -36,10 +37,14 @@ async function createTeeTime(userId, data) {
     inviteType,
     notes,
   } = data;
+  const normalizedTeeDate = parseApiDateToISO(teeDate);
+  if (!normalizedTeeDate) {
+    throw new TeeTimeServiceError("Invalid tee date format", "INVALID_DATE");
+  }
 
   // Business rule: Cannot create tee time in the past
   const now = new Date();
-  const teeDateTime = new Date(`${teeDate}T${teeTime}`);
+  const teeDateTime = new Date(`${normalizedTeeDate}T${teeTime}`);
 
   if (teeDateTime < now) {
     throw new TeeTimeServiceError(
@@ -51,7 +56,7 @@ async function createTeeTime(userId, data) {
   return teeTimeRepository.createTeeTime(userId, {
     courseName,
     courseLocation,
-    teeDate,
+    teeDate: normalizedTeeDate,
     teeTime,
     maxPlayers,
     inviteType,
@@ -134,7 +139,9 @@ async function cancelTeeTime(teeTimeId, userId) {
  * @throws {TeeTimeServiceError} If dates are missing
  */
 async function getCalendar(userId, startDate, endDate) {
-  if (!startDate || !endDate) {
+  const normalizedStartDate = parseApiDateToISO(startDate);
+  const normalizedEndDate = parseApiDateToISO(endDate);
+  if (!normalizedStartDate || !normalizedEndDate) {
     throw new TeeTimeServiceError(
       "start and end dates required",
       "MISSING_DATES",
@@ -149,8 +156,8 @@ async function getCalendar(userId, startDate, endDate) {
 
   const teeTimes = await teeTimeRepository.getTeeTimesByDateRange(
     userId,
-    startDate,
-    endDate,
+    normalizedStartDate,
+    normalizedEndDate,
   );
 
   if (!teeTimes || teeTimes.length === 0) {
