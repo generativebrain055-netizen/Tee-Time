@@ -256,9 +256,9 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
             case 'pending':
                 return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: true };
             case 'queued':
-                // Invite sent / active wave: waiting on invitee (FCFS, roster with deadline, etc.)
+                // No deadline yet = not an active invite (e.g. roster backup not notified) — show Queued, not Awaiting response
                 if (!participant.expiresAt) {
-                    return { color: 'text-gray-600', text: 'Awaiting response', showBadge: false, badgeIcon: null, showArrow: false };
+                    return { color: 'text-gray-600', text: 'Queued', showBadge: false, badgeIcon: null, showArrow: false };
                 }
                 return {
                     color: 'text-gray-600',
