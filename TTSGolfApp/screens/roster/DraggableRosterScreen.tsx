@@ -11,7 +11,9 @@ import {
     Platform,
     Modal,
 } from "react-native";
-import { Star, ChevronDown, ChevronUp, ArrowUp, ArrowDown, SlidersHorizontal, Check, X } from "lucide-react-native";
+import { Star, ChevronDown, ChevronUp, SlidersHorizontal, Check, X, GripVertical } from "lucide-react-native";
+import DraggableFlatList, { ScaleDecorator, ShadowDecorator, RenderItemParams } from "react-native-draggable-flatlist";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { COLORS } from "../../constants/colors";
 import { rosterApi, type RosterContact } from "../../services/api";
 import { logger } from "../../utils/logger";
@@ -27,26 +29,22 @@ interface RosterMember {
     isOnDeck: boolean;
     position: number;
     friendId: string;
-    // Additional fields for sorting
     socialRate?: number;
     handicap?: number;
     distance?: number;
     membership?: string;
 }
 
-/** Roster row UUID for API calls (row id vs contact user id). */
 function rosterRowIdForApi(m: RosterMember): string | undefined {
     return m.rosterId ?? (m.id !== m.friendId ? m.id : undefined);
 }
 
-/** API row shape for roster + on-deck formatters (extra sort fields). */
 type RosterListRow = RosterContact & {
     distanceToCourse?: number;
     membership?: string;
     contact: RosterContact["contact"] & { socialRate?: number };
 };
 
-/** Map API roster/on-deck row to UI model (roster data only — not friends). */
 function mapRosterRowToMember(r: RosterListRow, idx: number, isOnDeck: boolean): RosterMember {
     const contact = r.contact;
     const name = (contact.name || "").trim();
@@ -78,64 +76,53 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
     { key: "name", label: "Name (A-Z)" },
 ];
 
-const getInitials = (firstName: string, lastName: string): string => {
-    return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
-};
+const getInitials = (firstName: string, lastName: string): string =>
+    `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
 
 const formatSortValue = (item: RosterMember, sortBy: SortOption): string => {
     switch (sortBy) {
-        case "socialRate":
-            return item.socialRate !== undefined ? `${item.socialRate} SR` : "—";
-        case "handicap":
-            return item.handicap !== undefined ? `HCP ${item.handicap}` : "—";
-        case "distance":
-            return item.distance !== undefined ? `${item.distance} mi` : "—";
-        case "membership":
-            return item.membership || "—";
-        default:
-            return "";
+        case "socialRate": return item.socialRate !== undefined ? `${item.socialRate} SR` : "—";
+        case "handicap":   return item.handicap  !== undefined ? `HCP ${item.handicap}` : "—";
+        case "distance":   return item.distance  !== undefined ? `${item.distance} mi`  : "—";
+        case "membership": return item.membership || "—";
+        default:           return "";
     }
 };
 
-
-// Memoized roster item component
+// ─── Roster Item ──────────────────────────────────────────────────────────────
 interface RosterItemProps {
     item: RosterMember;
     index: number;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
+    drag: () => void;
+    isActive: boolean;
     onToggleSection: () => void;
     onPress: () => void;
-    isFirst: boolean;
-    isLast: boolean;
     isOnDeck: boolean;
     sortBy: SortOption;
-    showReorderButtons: boolean;
 }
 
-const RosterItem = memo(({ item, index, onMoveUp, onMoveDown, onToggleSection, onPress, isFirst, isLast, isOnDeck, sortBy, showReorderButtons }: RosterItemProps) => {
+const RosterItem = memo(({ item, index, drag, isActive, onToggleSection, onPress, isOnDeck, sortBy }: RosterItemProps) => {
     const sortValue = formatSortValue(item, sortBy);
+    const showDragHandle = sortBy === "position";
 
     return (
-        <TouchableOpacity className="flex-row items-center py-3 px-3 bg-white border-b border-gray-100" onPress={onPress} activeOpacity={0.7}>
-            {/* Reorder buttons - only show when sorting by position */}
-            {showReorderButtons && (
-                <View className="flex-col mr-2 gap-0.5">
-                    <TouchableOpacity
-                        className={`p-1 rounded bg-gray-100 ${isFirst ? 'opacity-30' : ''}`}
-                        onPress={onMoveUp}
-                        disabled={isFirst}
-                    >
-                        <ArrowUp size={16} color={isFirst ? COLORS.textSub : COLORS.textMain} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        className={`p-1 rounded bg-gray-100 ${isLast ? 'opacity-30' : ''}`}
-                        onPress={onMoveDown}
-                        disabled={isLast}
-                    >
-                        <ArrowDown size={16} color={isLast ? COLORS.textSub : COLORS.textMain} />
-                    </TouchableOpacity>
-                </View>
+        <TouchableOpacity
+            className="flex-row items-center py-3 px-3 bg-white border-b border-gray-100"
+            style={isActive ? { backgroundColor: "#F9FAFB", shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 } : undefined}
+            onPress={onPress}
+            activeOpacity={0.7}
+        >
+            {/* Drag handle — shown only in manual order mode */}
+            {showDragHandle ? (
+                <TouchableOpacity
+                    onPressIn={drag}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    className="mr-1 p-1.5"
+                >
+                    <GripVertical size={20} color={COLORS.textSub} />
+                </TouchableOpacity>
+            ) : (
+                <View className="w-8" />
             )}
 
             <Text className="text-sm font-semibold text-gray-500 w-6 text-center">{index + 1}</Text>
@@ -161,9 +148,9 @@ const RosterItem = memo(({ item, index, onMoveUp, onMoveDown, onToggleSection, o
                 </Text>
             </View>
 
-            {/* Move to other section button */}
+            {/* Move to other section */}
             <TouchableOpacity
-                className={`w-10 h-10 rounded-md justify-center items-center ${isOnDeck ? 'bg-green-50' : 'bg-amber-100'}`}
+                className={`w-10 h-10 rounded-md justify-center items-center ${isOnDeck ? "bg-green-50" : "bg-amber-100"}`}
                 onPress={(e) => { e.stopPropagation(); onToggleSection(); }}
             >
                 <Star
@@ -178,7 +165,7 @@ const RosterItem = memo(({ item, index, onMoveUp, onMoveDown, onToggleSection, o
 
 RosterItem.displayName = "RosterItem";
 
-// Sort Modal Component
+// ─── Sort Modal ───────────────────────────────────────────────────────────────
 interface SortModalProps {
     visible: boolean;
     onClose: () => void;
@@ -199,14 +186,13 @@ const SortModal = memo(({ visible, onClose, currentSort, onSelectSort }: SortMod
                 {SORT_OPTIONS.map((option) => (
                     <TouchableOpacity
                         key={option.key}
-                        className={`flex-row items-center justify-between px-5 py-3.5 border-b border-gray-100 ${currentSort === option.key ? 'bg-green-50' : ''}`}
-                        onPress={() => {
-                            onSelectSort(option.key);
-                            onClose();
-                        }}
+                        className={`flex-row items-center justify-between px-5 py-3.5 border-b border-gray-100 ${currentSort === option.key ? "bg-green-50" : ""}`}
+                        onPress={() => { onSelectSort(option.key); onClose(); }}
                     >
-                        <Text className={`text-[15px] ${currentSort === option.key ? 'font-semibold' : 'text-gray-900'}`}
-                              style={currentSort === option.key ? { color: COLORS.primary } : {}}>
+                        <Text
+                            className={`text-[15px] ${currentSort === option.key ? "font-semibold" : "text-gray-900"}`}
+                            style={currentSort === option.key ? { color: COLORS.primary } : {}}
+                        >
                             {option.label}
                         </Text>
                         {currentSort === option.key && <Check size={18} color={COLORS.primary} />}
@@ -219,8 +205,7 @@ const SortModal = memo(({ visible, onClose, currentSort, onSelectSort }: SortMod
 
 SortModal.displayName = "SortModal";
 
-
-// Section header component with sort button
+// ─── Section Header ───────────────────────────────────────────────────────────
 interface SectionHeaderProps {
     title: string;
     count: number;
@@ -233,8 +218,7 @@ interface SectionHeaderProps {
 }
 
 const SectionHeader = memo(({ title, count, isExpanded, onToggle, color, showSortButton, onSortPress, currentSort }: SectionHeaderProps) => (
-    <View className="flex-row items-center justify-between px-4 py-2.5 bg-gray-50 border-l-4 mt-2"
-          style={{ borderLeftColor: color }}>
+    <View className="flex-row items-center justify-between px-4 py-2.5 bg-gray-50 border-l-4 mt-2" style={{ borderLeftColor: color }}>
         <TouchableOpacity className="flex-row items-center flex-1" onPress={onToggle}>
             <View className="flex-row items-center gap-2.5 flex-1">
                 <Text className="text-base font-semibold text-gray-900">{title}</Text>
@@ -242,11 +226,7 @@ const SectionHeader = memo(({ title, count, isExpanded, onToggle, color, showSor
                     <Text className="text-xs font-semibold text-white">{count}</Text>
                 </View>
             </View>
-            {isExpanded ? (
-                <ChevronUp size={20} color={COLORS.textSub} />
-            ) : (
-                <ChevronDown size={20} color={COLORS.textSub} />
-            )}
+            {isExpanded ? <ChevronUp size={20} color={COLORS.textSub} /> : <ChevronDown size={20} color={COLORS.textSub} />}
         </TouchableOpacity>
         {showSortButton && (
             <TouchableOpacity className="flex-row items-center gap-1.5 px-2.5 py-1.5 bg-green-50 rounded-md" onPress={onSortPress}>
@@ -261,6 +241,7 @@ const SectionHeader = memo(({ title, count, isExpanded, onToggle, color, showSor
 
 SectionHeader.displayName = "SectionHeader";
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function DraggableRosterScreen({ navigation }: { navigation: any }) {
     const [rosterMembers, setRosterMembers] = useState<RosterMember[]>([]);
     const [onDeckMembers, setOnDeckMembers] = useState<RosterMember[]>([]);
@@ -271,23 +252,16 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
     const [sortBy, setSortBy] = useState<SortOption>("position");
     const [showSortModal, setShowSortModal] = useState(false);
 
-    // Client-side sorting function
     const sortMembers = useCallback((members: RosterMember[], sort: SortOption): RosterMember[] => {
         const sorted = [...members];
         switch (sort) {
-            case "socialRate":
-                return sorted.sort((a, b) => (b.socialRate ?? -1) - (a.socialRate ?? -1));
-            case "handicap":
-                return sorted.sort((a, b) => (a.handicap ?? 999) - (b.handicap ?? 999));
-            case "distance":
-                return sorted.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
-            case "membership":
-                return sorted.sort((a, b) => (a.membership || "zzz").localeCompare(b.membership || "zzz"));
-            case "name":
-                return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+            case "socialRate":  return sorted.sort((a, b) => (b.socialRate ?? -1) - (a.socialRate ?? -1));
+            case "handicap":    return sorted.sort((a, b) => (a.handicap ?? 999) - (b.handicap ?? 999));
+            case "distance":    return sorted.sort((a, b) => (a.distance ?? 999) - (b.distance ?? 999));
+            case "membership":  return sorted.sort((a, b) => (a.membership || "zzz").localeCompare(b.membership || "zzz"));
+            case "name":        return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
             case "position":
-            default:
-                return sorted.sort((a, b) => a.position - b.position);
+            default:            return sorted.sort((a, b) => a.position - b.position);
         }
     }, []);
 
@@ -301,14 +275,9 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             const rosterEntries = rosterRes.success ? rosterRes.roster || [] : [];
             const onDeckEntries = onDeckRes.success ? onDeckRes.onDeck || [] : [];
 
-            if (!rosterRes.success) {
-                logger.error("[DraggableRosterScreen] Failed to load roster");
-            }
-            if (!onDeckRes.success) {
-                logger.error("[DraggableRosterScreen] Failed to load on-deck");
-            }
+            if (!rosterRes.success) logger.error("[DraggableRosterScreen] Failed to load roster");
+            if (!onDeckRes.success) logger.error("[DraggableRosterScreen] Failed to load on-deck");
 
-            // Roster and on-deck come only from roster APIs — friendship is separate.
             const roster: RosterMember[] = rosterEntries.map((r, idx) =>
                 mapRosterRowToMember(r as RosterListRow, idx, false),
             );
@@ -326,9 +295,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         }
     }, [sortMembers]);
 
-    useEffect(() => {
-        loadData(sortBy);
-    }, [loadData, sortBy]);
+    useEffect(() => { loadData(sortBy); }, [loadData, sortBy]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -338,74 +305,34 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
     const handleSortChange = useCallback((newSort: SortOption) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setSortBy(newSort);
-        // Re-sort existing data immediately
         setRosterMembers(prev => sortMembers(prev, newSort));
         setOnDeckMembers(prev => sortMembers(prev, newSort));
     }, [sortMembers]);
 
-
-    // Move item up in list (only when sorting by position)
-    const moveUp = useCallback(async (isOnDeck: boolean, index: number) => {
-        if (index === 0 || sortBy !== "position") return;
-
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-        if (isOnDeck) {
-            setOnDeckMembers(prev => {
-                const newList = [...prev];
-                [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
-                return newList.map((item, idx) => ({ ...item, position: idx }));
-            });
-        } else {
-            setRosterMembers(prev => {
-                const newList = [...prev];
-                [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
-                return newList.map((item, idx) => ({ ...item, position: idx }));
-            });
-        }
-
+    // Called when a drag ends — reorders the list and syncs to the API.
+    const handleRosterDragEnd = useCallback(async ({ data }: { data: RosterMember[] }) => {
+        const reordered = data.map((item, idx) => ({ ...item, position: idx }));
+        setRosterMembers(reordered);
         try {
-            const list = isOnDeck ? onDeckMembers : rosterMembers;
-            const orderedIds = [...list];
-            [orderedIds[index - 1], orderedIds[index]] = [orderedIds[index], orderedIds[index - 1]];
             await rosterApi.reorderRoster(
-                orderedIds.map(rosterRowIdForApi).filter((id): id is string => !!id),
+                reordered.map(rosterRowIdForApi).filter((id): id is string => !!id),
             );
         } catch (error) {
-            logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
+            logger.error("[DraggableRosterScreen] Failed to sync roster reorder", error);
         }
-    }, [rosterMembers, onDeckMembers, sortBy]);
+    }, []);
 
-    const moveDown = useCallback(async (isOnDeck: boolean, index: number) => {
-        const list = isOnDeck ? onDeckMembers : rosterMembers;
-        if (index >= list.length - 1 || sortBy !== "position") return;
-
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-        if (isOnDeck) {
-            setOnDeckMembers(prev => {
-                const newList = [...prev];
-                [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
-                return newList.map((item, idx) => ({ ...item, position: idx }));
-            });
-        } else {
-            setRosterMembers(prev => {
-                const newList = [...prev];
-                [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
-                return newList.map((item, idx) => ({ ...item, position: idx }));
-            });
-        }
-
+    const handleOnDeckDragEnd = useCallback(async ({ data }: { data: RosterMember[] }) => {
+        const reordered = data.map((item, idx) => ({ ...item, position: idx }));
+        setOnDeckMembers(reordered);
         try {
-            const orderedIds = [...list];
-            [orderedIds[index], orderedIds[index + 1]] = [orderedIds[index + 1], orderedIds[index]];
             await rosterApi.reorderRoster(
-                orderedIds.map(rosterRowIdForApi).filter((id): id is string => !!id),
+                reordered.map(rosterRowIdForApi).filter((id): id is string => !!id),
             );
         } catch (error) {
-            logger.error("[DraggableRosterScreen] Failed to sync reorder", error);
+            logger.error("[DraggableRosterScreen] Failed to sync on-deck reorder", error);
         }
-    }, [rosterMembers, onDeckMembers, sortBy]);
+    }, []);
 
     const toggleSection = useCallback(async (item: RosterMember) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -428,7 +355,6 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                     newPosition: movingToOnDeck ? onDeckMembers.length : rosterMembers.length,
                 });
             } else {
-                // Friend not on roster yet — add row, then set on-deck / position
                 const addResult = await rosterApi.addToRoster({ contactUserId: item.friendId });
                 if (addResult.success && addResult.entry?.id) {
                     await rosterApi.moveMember(addResult.entry.id, {
@@ -439,13 +365,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
             }
         } catch (error: any) {
             logger.error("[DraggableRosterScreen] Failed to move member", error);
-            // If already in roster error, try to find and move
-            if (error?.message?.includes("already in roster")) {
-                // Reload to get the correct rosterId
-                loadData(sortBy);
-            } else {
-                loadData(sortBy);
-            }
+            loadData(sortBy);
         }
     }, [rosterMembers, onDeckMembers, loadData, sortBy, sortMembers]);
 
@@ -459,7 +379,6 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         setOnDeckExpanded(prev => !prev);
     }, []);
 
-    // Navigate to profile view
     const handleViewProfile = useCallback((item: RosterMember) => {
         navigation?.navigate("RosterProfile", {
             rosterId: item.rosterId || item.id,
@@ -471,6 +390,48 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         });
     }, [navigation]);
 
+    const renderRosterItem = useCallback(({ item, drag, isActive, getIndex }: RenderItemParams<RosterMember>) => {
+        const index = getIndex() ?? 0;
+        return (
+            <ShadowDecorator>
+                <ScaleDecorator>
+                    <RosterItem
+                        item={item}
+                        index={index}
+                        drag={drag}
+                        isActive={isActive}
+                        onToggleSection={() => toggleSection(item)}
+                        onPress={() => handleViewProfile(item)}
+                        isOnDeck={false}
+                        sortBy={sortBy}
+                    />
+                </ScaleDecorator>
+            </ShadowDecorator>
+        );
+    }, [toggleSection, handleViewProfile, sortBy]);
+
+    const renderOnDeckItem = useCallback(({ item, drag, isActive, getIndex }: RenderItemParams<RosterMember>) => {
+        const index = getIndex() ?? 0;
+        return (
+            <ShadowDecorator>
+                <ScaleDecorator>
+                    <RosterItem
+                        item={item}
+                        index={index}
+                        drag={drag}
+                        isActive={isActive}
+                        onToggleSection={() => toggleSection(item)}
+                        onPress={() => handleViewProfile(item)}
+                        isOnDeck={true}
+                        sortBy={sortBy}
+                    />
+                </ScaleDecorator>
+            </ShadowDecorator>
+        );
+    }, [toggleSection, handleViewProfile, sortBy]);
+
+    const keyExtractor = useCallback((item: RosterMember) => item.id, []);
+
     if (loading) {
         return (
             <ScrollView className="flex-1 bg-white" showsVerticalScrollIndicator={false}>
@@ -478,7 +439,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                     <View className="w-32 h-5 bg-gray-200 rounded mb-4" />
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                         <View key={i} className="flex-row items-center py-3 border-b border-gray-100">
-                            <View className="w-6 h-4 bg-gray-200 rounded mr-2" />
+                            <View className="w-6 h-6 bg-gray-200 rounded mr-2" />
                             <View className="w-11 h-11 rounded-full bg-gray-200 ml-2" />
                             <View className="flex-1 ml-3">
                                 <View className="w-32 h-4 bg-gray-200 rounded mb-2" />
@@ -492,28 +453,21 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
         );
     }
 
-    const showReorderButtons = sortBy === "position";
-
-
     return (
-        <>
+        <GestureHandlerRootView style={{ flex: 1 }}>
             <ScrollView
                 className="flex-1 bg-white"
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: 40 }}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={COLORS.primary}
-                    />
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
                 }
             >
-                {/* Info Banner */}
+                {/* Info banner */}
                 <View className="bg-green-50 px-4 py-3 mx-4 mt-4 mb-2 rounded-md">
                     <Text className="text-[13px] text-green-800 leading-[18px]">
                         {sortBy === "position"
-                            ? "Use arrows to reorder players. Tap the star to move between Roster and On Deck."
+                            ? "Hold and drag \u2630 to reorder. Tap the star to move between Roster and On Deck."
                             : "Sorted by " + SORT_OPTIONS.find(o => o.key === sortBy)?.label + ". Switch to Manual Order to reorder."}
                     </Text>
                 </View>
@@ -525,7 +479,7 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                     isExpanded={rosterExpanded}
                     onToggle={toggleRosterExpanded}
                     color={COLORS.primary}
-                    showSortButton={true}
+                    showSortButton
                     onSortPress={() => setShowSortModal(true)}
                     currentSort={sortBy}
                 />
@@ -538,22 +492,14 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                                 <Text className="text-[13px] text-gray-500 mt-1">Find players to add them to your roster</Text>
                             </View>
                         ) : (
-                            rosterMembers.map((item, index) => (
-                                <RosterItem
-                                    key={item.id}
-                                    item={item}
-                                    index={index}
-                                    onMoveUp={() => moveUp(false, index)}
-                                    onMoveDown={() => moveDown(false, index)}
-                                    onToggleSection={() => toggleSection(item)}
-                                    onPress={() => handleViewProfile(item)}
-                                    isFirst={index === 0}
-                                    isLast={index === rosterMembers.length - 1}
-                                    isOnDeck={false}
-                                    sortBy={sortBy}
-                                    showReorderButtons={showReorderButtons}
-                                />
-                            ))
+                            <DraggableFlatList
+                                data={rosterMembers}
+                                renderItem={renderRosterItem}
+                                keyExtractor={keyExtractor}
+                                onDragEnd={handleRosterDragEnd}
+                                scrollEnabled={false}
+                                activationDistance={sortBy === "position" ? 5 : 999}
+                            />
                         )}
                     </View>
                 )}
@@ -582,27 +528,19 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                                 <Text className="text-[13px] text-gray-500 mt-1">Move players here as backup options</Text>
                             </View>
                         ) : (
-                            onDeckMembers.map((item, index) => (
-                                <RosterItem
-                                    key={item.id}
-                                    item={item}
-                                    index={index}
-                                    onMoveUp={() => moveUp(true, index)}
-                                    onMoveDown={() => moveDown(true, index)}
-                                    onToggleSection={() => toggleSection(item)}
-                                    onPress={() => handleViewProfile(item)}
-                                    isFirst={index === 0}
-                                    isLast={index === onDeckMembers.length - 1}
-                                    isOnDeck={true}
-                                    sortBy={sortBy}
-                                    showReorderButtons={showReorderButtons}
-                                />
-                            ))
+                            <DraggableFlatList
+                                data={onDeckMembers}
+                                renderItem={renderOnDeckItem}
+                                keyExtractor={keyExtractor}
+                                onDragEnd={handleOnDeckDragEnd}
+                                scrollEnabled={false}
+                                activationDistance={sortBy === "position" ? 5 : 999}
+                            />
                         )}
                     </View>
                 )}
 
-                <View className="h-[120px]" />
+                <View className="h-[40px]" />
             </ScrollView>
 
             <SortModal
@@ -611,6 +549,6 @@ export default function DraggableRosterScreen({ navigation }: { navigation: any 
                 currentSort={sortBy}
                 onSelectSort={handleSortChange}
             />
-        </>
+        </GestureHandlerRootView>
     );
 }
