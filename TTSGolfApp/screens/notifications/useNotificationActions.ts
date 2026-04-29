@@ -13,6 +13,10 @@ import {
   isDuplicateRosterContactApiError,
 } from "../../services/api";
 import { logger } from "../../utils/logger";
+import {
+  prepareNotificationDataForNavigation,
+  navigateFromNotificationData,
+} from "../../utils/navigateFromNotificationData";
 
 interface UseNotificationActionsProps {
   setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
@@ -40,70 +44,11 @@ export function useNotificationActions({
         }
       }
 
-      // Navigate based on type
-      const notifType = item.data?.type;
-      switch (notifType) {
-        case "friend_request":
-          if (item.data?.senderId)
-            navigation?.navigate("FriendProfile", {
-              userId: item.data.senderId,
-            });
-          break;
-        case "friend_accepted":
-          if (item.data?.userId)
-            navigation?.navigate("FriendProfile", { userId: item.data.userId });
-          break;
-        case "tee_time_invite":
-        case "spot_opened":
-          navigation?.navigate("Invites");
-          break;
-        case "tee_time_response":
-        case "player_cancelled":
-        case "check_in_reminder":
-          if (item.data?.teeTimeId)
-            navigation?.navigate("TeeTimeDetail", {
-              teeTimeId: item.data.teeTimeId,
-              autoOpenCheckIn: notifType === "check_in_reminder",
-            });
-          break;
-        case "no_show":
-          navigation?.navigate("Profile");
-          break;
-        case "roster_add":
-        case "roster_removed":
-        case "group_updated":
-        case "group_deleted":
-        case "on_deck_added":
-        case "on_deck_removed":
-          if (item.data?.ownerId)
-            navigation?.navigate("FriendProfile", {
-              userId: item.data.ownerId,
-            });
-          break;
-        case "roster_exhausted":
-        case "tee_time_not_filled":
-        case "organizer_fill_warning":
-        case "organizer_invite_more":
-          if (item.data?.teeTimeId) {
-            navigation?.navigate("SelectOnDeck", {
-              teeTimeId: item.data.teeTimeId,
-              spotsRemaining: item.data.spotsRemaining || 1,
-              courseName: item.data.courseName,
-              teeDate: item.data.teeDate,
-              teeTime: item.data.teeTime,
-              unfilledSlotAlert: !!(item.data?.unfilledSlotAlert ?? (
-                item.data?.type === "tee_time_not_filled" ||
-                item.data?.type === "organizer_fill_warning" ||
-                item.data?.type === "organizer_invite_more"
-              )),
-            });
-          }
-          break;
-        case "waiver_wire":
-          if (item.data?.waiverWireId) {
-            navigation?.navigate("WaiverWire");
-          }
-          break;
+      if (navigation?.navigate && item.data) {
+        const prepared = prepareNotificationDataForNavigation(
+          item.data as Record<string, unknown>,
+        );
+        navigateFromNotificationData(navigation.navigate.bind(navigation), prepared);
       }
     },
     [navigation, setNotifications],
@@ -224,7 +169,12 @@ export function useNotificationActions({
               : n,
           ),
         );
-        navigation?.navigate("Invites");
+        if (navigation?.navigate && item.data) {
+          const prepared = prepareNotificationDataForNavigation(
+            item.data as Record<string, unknown>,
+          );
+          navigateFromNotificationData(navigation.navigate.bind(navigation), prepared);
+        }
       } catch (error) {
         logger.error("[useNotificationActions] Error accepting spot", error);
       }

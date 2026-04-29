@@ -131,10 +131,10 @@ export function navigateFromNotificationData(
   }
 
   if (dataType === "tee_time_invite" || dataType === "spot_opened") {
-    if (d.inviteId) {
-      navigate("InviteDetail", { inviteId: String(d.inviteId) });
-    } else if (d.teeTimeId) {
+    if (d.teeTimeId) {
       navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+    } else if (d.inviteId) {
+      navigate("InviteDetail", { inviteId: String(d.inviteId) });
     } else {
       navigate("Invites");
     }
@@ -168,6 +168,11 @@ export function navigateFromNotificationData(
 
   if (dataType === "waiver_wire") {
     navigate("WaiverWire");
+    return true;
+  }
+
+  if (dataType === "tee_time_response" && d.inviteId) {
+    navigate("InviteDetail", { inviteId: String(d.inviteId) });
     return true;
   }
 

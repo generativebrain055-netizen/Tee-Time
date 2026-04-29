@@ -299,7 +299,8 @@ class InviteController {
                             teeTime.creator_id,
                             { id: userId, firstName: responder.first_name || "", lastName: responder.last_name || "" },
                             teeTime,
-                            response === INVITE_RESPONSES.ACCEPTED
+                            response === INVITE_RESPONSES.ACCEPTED,
+                            inviteId
                         );
                     }
                 } catch (notifErr) {

@@ -32,7 +32,10 @@ import { useUser } from "../../contexts/UserContext";
 import { spacing, fontSize, radii, palette } from "../../ui/theme/tokens";
 import { logger } from "../../utils/logger";
 import { formatRemainingClock, formatDateMMDDYYYY } from "../../utils/formatting";
-import { navigateFromNotificationData } from "../../utils/navigateFromNotificationData";
+import {
+  prepareNotificationDataForNavigation,
+  navigateFromNotificationData,
+} from "../../utils/navigateFromNotificationData";
 
 /** e.g. "04/12/2026 • 1:30 PM" for tee / spot-opened invites */
 function formatTeeInviteWhen(dateVal: unknown, timeVal: unknown): string {
@@ -263,7 +266,8 @@ export default function NotificationsScreen({ navigation }: any) {
         }
         const d = item.data as Record<string, unknown> | undefined;
         if (navigation?.navigate) {
-            navigateFromNotificationData(navigation.navigate.bind(navigation), d);
+            const prepared = prepareNotificationDataForNavigation(d);
+            navigateFromNotificationData(navigation.navigate.bind(navigation), prepared);
         }
     }, [navigation]);
 

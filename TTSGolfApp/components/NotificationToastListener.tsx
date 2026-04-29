@@ -10,6 +10,10 @@ import { useToast, type ToastLeadingIcon } from "../ui/feedback";
 import { notificationApi } from "../services/api";
 import { logger } from "../utils/logger";
 import { formatRelativeToastTime } from "../utils/formatting";
+import {
+  prepareNotificationDataForNavigation,
+  navigateFromNotificationData,
+} from "../utils/navigateFromNotificationData";
 
 function leadingIconForNotificationKind(kind?: string): ToastLeadingIcon {
   if (!kind) return "bell";
@@ -86,11 +90,12 @@ export function NotificationToastListener({
       title: string,
       body: string,
       type: "info" | "success" | "warning" | "error",
-      opts?: { kind?: string; createdAt?: string },
+      opts?: { kind?: string; createdAt?: string; navData?: Record<string, unknown> },
     ) => {
       const t = toastRef.current;
       const kind = opts?.kind;
       const createdAt = opts?.createdAt;
+      const navData = opts?.navData;
       t.show({
         title,
         message: body ? `${title}\n${truncate(body, 160)}` : title,
@@ -103,6 +108,14 @@ export function NotificationToastListener({
         action: {
           label: "View",
           onPress: () => {
+            if (navData && typeof navData === "object") {
+              const prepared = prepareNotificationDataForNavigation(navData);
+              const didRoute = navigateFromNotificationData(
+                navigation.navigate.bind(navigation),
+                prepared,
+              );
+              if (didRoute) return;
+            }
             navigation.navigate("Notifications");
           },
         },
@@ -150,6 +163,7 @@ export function NotificationToastListener({
           showNotificationToast(title, summaryBody, getToastType(latest.data?.type), {
             kind: latest.data?.type,
             createdAt: latest.createdAt,
+            navData: (latest.data || {}) as Record<string, unknown>,
           });
         }
         return;
@@ -176,6 +190,7 @@ export function NotificationToastListener({
       showNotificationToast(title, summaryBody, getToastType(latest.data?.type), {
         kind: latest.data?.type,
         createdAt: latest.createdAt,
+        navData: (latest.data || {}) as Record<string, unknown>,
       });
     } catch (e) {
       logger.warn("[NotificationToastListener] poll failed", e);
@@ -225,7 +240,10 @@ export function NotificationToastListener({
       const kind = typeof data.type === "string" ? data.type : undefined;
       const title = (content.title || "Notification").trim();
       const body = (content.body || "").trim();
-      showNotificationToast(title, body, getToastType(kind), { kind });
+      showNotificationToast(title, body, getToastType(kind), {
+        kind,
+        navData: data,
+      });
     });
     return () => sub.remove();
   }, [profile?.id, getToastType, showNotificationToast]);

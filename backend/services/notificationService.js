@@ -439,7 +439,7 @@ class NotificationService {
   /**
    * Create tee time invite response notification
    */
-  async notifyTeeTimeResponse(ownerId, responder, teeTime, accepted) {
+  async notifyTeeTimeResponse(ownerId, responder, teeTime, accepted, inviteId = null) {
     const responderName =
       `${responder.firstName || ""} ${responder.lastName || ""}`.trim() ||
       "Someone";
@@ -452,6 +452,7 @@ class NotificationService {
       data: {
         type: "tee_time_response",
         teeTimeId: teeTime.id,
+        inviteId: inviteId || null,
         responderId: responder.id,
         responderName,
         accepted,

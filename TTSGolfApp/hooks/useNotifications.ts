@@ -268,18 +268,40 @@ export function getNotificationNavigation(item: AppNotification): {
 
     case "tee_time_invite":
     case "spot_opened":
+      if (item.data?.teeTimeId) {
+        return { screen: "TeeTimeDetail", params: { teeTimeId: item.data.teeTimeId } };
+      }
+      if (item.data?.inviteId) {
+        return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };
+      }
       return { screen: "Invites" };
 
     case "tee_time_response":
+      if (item.data?.inviteId) {
+        return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };
+      }
+      if (item.data?.teeTimeId) {
+        return {
+          screen: "TeeTimeDetail",
+          params: { teeTimeId: item.data.teeTimeId },
+        };
+      }
+      return { screen: null };
+
     case "check_in_reminder":
       return item.data?.teeTimeId
         ? {
             screen: "TeeTimeDetail",
             params: {
               teeTimeId: item.data.teeTimeId,
-              autoOpenCheckIn: notifType === "check_in_reminder",
+              autoOpenCheckIn: true,
             },
           }
+        : { screen: null };
+
+    case "player_cancelled":
+      return item.data?.teeTimeId
+        ? { screen: "TeeTimeDetail", params: { teeTimeId: item.data.teeTimeId } }
         : { screen: null };
 
     case "no_show":
