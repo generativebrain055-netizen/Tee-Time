@@ -14,6 +14,10 @@ import {
   prepareNotificationDataForNavigation,
   navigateFromNotificationData,
 } from "../utils/navigateFromNotificationData";
+import {
+  tryConsumeMessageToastSlot,
+  clearMessageToastDedupeForUser,
+} from "../utils/messageNotificationToastDedupe";
 
 function leadingIconForNotificationKind(kind?: string): ToastLeadingIcon {
   if (!kind) return "bell";
@@ -41,10 +45,11 @@ function leadingIconForNotificationKind(kind?: string): ToastLeadingIcon {
   ) {
     return "users";
   }
+  if (kind === "message") return "message";
   return "bell";
 }
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 6_000;
 const INITIAL_TOAST_LOOKBACK_MS = 15 * 60 * 1000;
 
 function truncate(s: string, max: number): string {
@@ -104,6 +109,19 @@ export function NotificationToastListener({
       const createdAt = opts?.createdAt;
       const navData = opts?.navData;
       const notificationId = opts?.notificationId;
+
+      if (kind === "message" && navData && typeof navData === "object") {
+        const nd = navData as Record<string, unknown>;
+        const rawCid = nd.conversationId ?? nd.conversation_id;
+        const cid =
+          typeof rawCid === "string"
+            ? rawCid.trim()
+            : rawCid != null
+              ? String(rawCid).trim()
+              : "";
+        if (cid && !tryConsumeMessageToastSlot(cid)) return;
+      }
+
       t.show({
         title,
         message: body ? `${title}\n${truncate(body, 160)}` : title,
@@ -116,12 +134,6 @@ export function NotificationToastListener({
         action: {
           label: "View",
           onPress: () => {
-            if (notificationId && String(notificationId).trim()) {
-              navigation.navigate("Notifications", {
-                highlightNotificationId: String(notificationId).trim(),
-              });
-              return;
-            }
             if (navData && typeof navData === "object") {
               const prepared = prepareNotificationDataForNavigation(navData);
               const didRoute = navigateFromNotificationData(
@@ -129,6 +141,12 @@ export function NotificationToastListener({
                 prepared,
               );
               if (didRoute) return;
+            }
+            if (notificationId && String(notificationId).trim()) {
+              navigation.navigate("Notifications", {
+                highlightNotificationId: String(notificationId).trim(),
+              });
+              return;
             }
             navigation.navigate("Notifications");
           },
@@ -218,6 +236,7 @@ export function NotificationToastListener({
       knownIdsRef.current.clear();
       hasSeededRef.current = false;
       profileIdRef.current = null;
+      clearMessageToastDedupeForUser();
       return;
     }
     if (profileIdRef.current !== profile.id) {

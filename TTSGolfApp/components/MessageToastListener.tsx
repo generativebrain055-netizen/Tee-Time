@@ -21,8 +21,12 @@ import { formatRelativeToastTime } from "../utils/formatting";
 import { messagesApi } from "../services/api";
 import type { ConversationListItem } from "../services/api/messagesApi";
 import { logger } from "../utils/logger";
+import {
+  tryConsumeMessageToastSlot,
+  clearMessageToastDedupeForUser,
+} from "../utils/messageNotificationToastDedupe";
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 6_000;
 const INITIAL_LOOKBACK_MS = 10 * 60 * 1000; // 10 min
 
 // ---------------------------------------------------------------------------
@@ -120,6 +124,9 @@ export function MessageToastListener({ navigation, children }: Props) {
 
         if (recentUnread.length > 0) {
           const top = recentUnread[0];
+          if (!tryConsumeMessageToastSlot(top.id)) {
+            return;
+          }
           const extra = recentUnread.length - 1;
           const title = top.title || "New Message";
           const body = top.lastMessage?.body
@@ -185,6 +192,9 @@ export function MessageToastListener({ navigation, children }: Props) {
       });
 
       const top = newlyUnread[0];
+      if (!tryConsumeMessageToastSlot(top.id)) {
+        return;
+      }
       const extra = newlyUnread.length - 1;
       const title = top.title || "New Message";
       const body = top.lastMessage?.body
@@ -234,6 +244,7 @@ export function MessageToastListener({ navigation, children }: Props) {
       hasSeededRef.current = false;
       profileIdRef.current = null;
       setUnreadConversations([]);
+      clearMessageToastDedupeForUser();
       return;
     }
     if (profileIdRef.current !== profile.id) {

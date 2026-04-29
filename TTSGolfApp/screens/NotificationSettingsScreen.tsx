@@ -50,6 +50,7 @@ const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: stri
     { type: 'group_deleted', label: 'Group Deleted', description: 'When someone deletes a roster group you were in' },
     { type: 'waiver_wire', label: 'Availability (Matching Availability)', description: 'When roster members with matching availability post their availability' },
     { type: 'check_in_reminder', label: 'Check-in Reminders', description: 'Reminders for upcoming tee times' },
+    { type: 'message', label: 'Messages', description: 'When someone sends you a chat message' },
 ];
 
 export default function NotificationSettingsScreen({ navigation }: any) {

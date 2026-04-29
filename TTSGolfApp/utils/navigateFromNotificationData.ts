@@ -149,6 +149,22 @@ export function navigateFromNotificationData(
     return true;
   }
 
+  if (dataType === "message" && d.conversationId) {
+    navigate("ChatDetail", {
+      chatInfo: {
+        conversationId: String(d.conversationId),
+        id: String(d.conversationId),
+        name:
+          typeof d.senderName === "string" && String(d.senderName).trim()
+            ? String(d.senderName).trim()
+            : "Messages",
+        subtitle: "Message",
+        isGroup: false,
+      },
+    });
+    return true;
+  }
+
   if (dataType === "tee_time_booked") {
     if (d.conversationId) {
       navigate("ChatDetail", {

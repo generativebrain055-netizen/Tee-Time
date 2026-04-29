@@ -25,6 +25,7 @@ import { ScreenShell, AppHeader } from "../../ui";
 import { COLORS } from "./constants";
 import DatePickerModal from "./DatePickerModal";
 import TimePickerModal from "./TimePickerModal";
+import { parseFlexibleTeeTime } from "./timeInputUtils";
 import InviteDetailsStep from "./InviteDetailsStep";
 import InviteTypeStep, { InviteType } from "./InviteTypeStep";
 import RosterInviteStep from "./RosterInviteStep";
@@ -106,6 +107,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   // Form state - Step 2 (Details: date, time, course, group size)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("10:00 AM");
+  const [timeInputDraft, setTimeInputDraft] = useState<string>("10:00 AM");
   const [location, setLocation] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<{ id?: string; name: string; location?: string } | null>(null);
   const [groupSize, setGroupSize] = useState(4);
@@ -375,10 +377,17 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   );
 
   /** Fetch friends with availability matching selected date + time and show modal. */
+  const applyParsedTime = useCallback((t: string) => {
+    setSelectedTime(t);
+    setTimeInputDraft(t);
+  }, []);
+
   const handleSeeMatchingAvailability = useCallback(async () => {
-    if (!selectedDate || !selectedTime) return;
+    const effectiveTime =
+      parseFlexibleTeeTime(timeInputDraft.trim()) ?? selectedTime ?? "";
+    if (!selectedDate || !effectiveTime) return;
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
-    const timeSlot = getTimeSlotFromTime(selectedTime);
+    const timeSlot = getTimeSlotFromTime(effectiveTime);
     const allUserFriends = [...friends, ...onDeckFriends];
     const userIds = allUserFriends.map((f) => f.id).filter(Boolean);
     if (userIds.length === 0) {
@@ -411,7 +420,7 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
     } finally {
       setLoadingMatchingFriends(false);
     }
-  }, [selectedDate, selectedTime, friends, onDeckFriends]);
+  }, [selectedDate, selectedTime, timeInputDraft, friends, onDeckFriends]);
 
   const formatDateForApi = (date: Date | null) => {
     if (!date) return "";
@@ -428,7 +437,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
   };
 
   const formatTimeForApi = (time: string) => {
-    const match = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    const normalized = parseFlexibleTeeTime(time.trim()) ?? time;
+    const match = normalized.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!match) return "10:00";
     let hour = parseInt(match[1]);
     const minute = match[2];
@@ -448,13 +458,24 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         return;
       }
 
+      const parsedTime = parseFlexibleTeeTime(timeInputDraft.trim());
+      if (!parsedTime) {
+        Alert.alert(
+          "Invalid time",
+          "Enter a valid time such as 8:30 AM, 2:45 PM, or 14:30 (24-hour).",
+        );
+        return;
+      }
+      setSelectedTime(parsedTime);
+      setTimeInputDraft(parsedTime);
+
       // Validate tee time is not in the past
       const now = new Date();
       const teeDateTime = new Date(selectedDate);
-      const timeParts = selectedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      const timeParts = parsedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
       if (timeParts) {
-        let hour = parseInt(timeParts[1]);
-        const minute = parseInt(timeParts[2]);
+        let hour = parseInt(timeParts[1], 10);
+        const minute = parseInt(timeParts[2], 10);
         const period = timeParts[3].toUpperCase();
         if (period === "PM" && hour !== 12) hour += 12;
         if (period === "AM" && hour === 12) hour = 0;
@@ -873,6 +894,9 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         <InviteDetailsStep
           selectedDate={selectedDate}
           selectedTime={selectedTime}
+          timeInputDraft={timeInputDraft}
+          onTimeInputDraftChange={setTimeInputDraft}
+          onParsedTime={applyParsedTime}
           location={location}
           groupSize={groupSize}
           onOpenDatePicker={() => setShowDatePicker(true)}
@@ -1047,8 +1071,8 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
       <TimePickerModal
         visible={showTimePicker}
         onClose={() => setShowTimePicker(false)}
-        onSelect={setSelectedTime}
-        initialTime={selectedTime}
+        onSelect={(t) => applyParsedTime(t)}
+        initialTime={timeInputDraft}
       />
 
       {/* Matching availability modal */}

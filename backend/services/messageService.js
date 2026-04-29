@@ -1,7 +1,9 @@
+const logger = require("../config/logger");
 const conversationRepository = require("../repositories/conversationRepository");
 const messageRepository = require("../repositories/messageRepository");
 const teeTimeRepository = require("../repositories/teeTimeRepository");
 const friendRepository = require("../repositories/friendRepository");
+const notificationService = require("./notificationService");
 
 /**
  * Get or create a conversation and return it with metadata.
@@ -119,6 +121,20 @@ async function sendMessage(conversationId, userId, body, imageUrl = null, file =
   }
   await conversationRepository.ensureParticipant(conversationId, userId);
   const msg = await messageRepository.create(conversationId, userId, body, imageUrl, file);
+
+  const text = typeof body === "string" ? body.trim() : "";
+  let previewText = text;
+  if (!previewText && imageUrl) previewText = "Sent a photo";
+  else if (!previewText && file?.name) previewText = `Sent a file: ${file.name}`;
+
+  notificationService
+    .notifyNewChatMessage({
+      conversationId,
+      senderId: userId,
+      previewText,
+    })
+    .catch((err) => logger.warn("[sendMessage] notifyNewChatMessage:", err?.message));
+
   const senders = await messageRepository.getSendersInfo([userId]);
   return { ...mapMessageToApi(msg, senders, userId), isMe: true };
 }

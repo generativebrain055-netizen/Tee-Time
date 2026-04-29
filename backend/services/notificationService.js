@@ -4,6 +4,7 @@ const { invitesLogger } = require("../config/logger");
 const deviceRepository = require("../repositories/deviceRepository");
 const userRepository = require("../repositories/userRepository");
 const conversationRepository = require("../repositories/conversationRepository");
+const friendRepository = require("../repositories/friendRepository");
 
 /** Resolve profile avatar URL when callers pass a partial user (e.g. only id + names). */
 async function resolveUserAvatarUrl(userLike) {
@@ -744,6 +745,64 @@ class NotificationService {
       }
     } catch (e) {
       logger.error("notifyPlayersTeeTimeBooked error:", e?.message);
+    }
+  }
+
+  /**
+   * When a user sends a chat message, notify other active participants (push + in-app per preferences).
+   * Skips muted threads and blocked relationships (direct / tee_time / group).
+   */
+  async notifyNewChatMessage({ conversationId, senderId, previewText }) {
+    if (!conversationId || !senderId) return;
+    try {
+      const { data: parts, error: partsErr } = await supabaseAdmin
+        .from("conversation_participants")
+        .select("user_id, is_muted")
+        .eq("conversation_id", conversationId)
+        .is("left_at", null);
+
+      if (partsErr || !parts?.length) return;
+
+      const { data: senderUser } = await supabaseAdmin
+        .from("users")
+        .select("first_name, last_name")
+        .eq("id", senderId)
+        .maybeSingle();
+      const senderName =
+        [senderUser?.first_name, senderUser?.last_name].filter(Boolean).join(" ").trim() ||
+        "Someone";
+
+      const rawPreview = typeof previewText === "string" ? previewText.trim() : "";
+      const body =
+        rawPreview.length > 0
+          ? rawPreview.length > 160
+            ? `${rawPreview.slice(0, 159)}…`
+            : rawPreview
+          : "Sent a message";
+
+      for (const p of parts) {
+        const uid = p.user_id;
+        if (!uid || uid === senderId) continue;
+        if (p.is_muted) continue;
+
+        const blocked = await friendRepository.isBlocked(senderId, uid);
+        if (blocked) continue;
+
+        await this.createNotification({
+          userId: uid,
+          title: senderName,
+          body,
+          data: {
+            type: "message",
+            conversationId,
+            senderId,
+            senderName,
+          },
+          sendPush: true,
+        });
+      }
+    } catch (e) {
+      logger.warn("notifyNewChatMessage:", e?.message);
     }
   }
 
