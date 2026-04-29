@@ -197,10 +197,11 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
 
   const loadData = async () => {
     try {
-      const [friendsRes, groupsRes, onDeckRes] = await Promise.all([
+      const [friendsRes, groupsRes, onDeckRes, rosterRes] = await Promise.all([
         friendApi.getFriends(),
         rosterApi.getGroups(),
         rosterApi.getOnDeck(),
+        rosterApi.getRoster(),
       ]);
 
       // Get on-deck user IDs to filter them out from roster
@@ -235,27 +236,64 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
         setOnDeckFriends(onDeck);
       }
 
+      // Start with friends list, then merge in roster members who aren't friends.
+      // This ensures every roster member (friend or not) appears in the invite step.
+      const friendIds = new Set<string>();
+      let combinedRosterList: ExtendedFriend[] = [];
+
       if (friendsRes.success) {
-        // Filter out on-deck players from friends for roster invite
-        const rosterFriends = friendsRes.friends.filter(
-          (f) => !onDeckUserIds.has(f.id)
-        );
-        setFriends(rosterFriends);
-        // Initialize ordered players with roster friend IDs only
-        setOrderedPlayers(rosterFriends.map((f) => f.id));
-        // Initialize FCFS selected players with all roster friends
-        setFcfsSelectedPlayers(rosterFriends.map((f) => f.id));
-        // Add to all loaded players - friends have valid user UUIDs
-        setAllLoadedPlayers((prev) => {
-          const existingIds = new Set(prev.map((p) => p.id));
-          const newPlayers: ExtendedFriend[] = friendsRes.friends
-            .filter((f) => !existingIds.has(f.id))
-            .map((f) => ({ ...f, rosterId: undefined, phone: undefined }));
-          const updated = [...prev, ...newPlayers];
-          allLoadedPlayersRef.current = updated;
-          return updated;
-        });
+        combinedRosterList = friendsRes.friends.map((f) => ({
+          ...f,
+          rosterId: undefined,
+          phone: (f as any).phone ?? undefined,
+        }));
+        friendsRes.friends.forEach((f) => friendIds.add(f.id));
       }
+
+      // Append roster members who are NOT already in friends and NOT on-deck.
+      if (rosterRes.success && rosterRes.roster) {
+        const rosterOnlyMembers: ExtendedFriend[] = rosterRes.roster
+          .filter((m) => {
+            const uid = m.contact?.userId;
+            return uid && !friendIds.has(uid) && !onDeckUserIds.has(uid);
+          })
+          .map((m) => {
+            const nameParts = (m.contact?.name ?? "").split(" ");
+            return {
+              id: m.contact!.userId!,
+              rosterId: m.id,
+              contactUserId: m.contact!.userId,
+              firstName: nameParts[0] || "",
+              lastName: nameParts.slice(1).join(" ") || "",
+              username: m.contact?.username,
+              handicap: m.contact?.handicap,
+              avatar: m.contact?.avatar,
+              phone: m.contact?.phone,
+              friendshipStatus: "friend" as const,
+              friendsSince: "",
+            };
+          });
+        combinedRosterList = [...combinedRosterList, ...rosterOnlyMembers];
+      }
+
+      // Exclude anyone already on-deck from the main invite list
+      const rosterFriends = combinedRosterList.filter(
+        (f) => !onDeckUserIds.has(f.id)
+      );
+
+      setFriends(rosterFriends);
+      setOrderedPlayers(rosterFriends.map((f) => f.id));
+      setFcfsSelectedPlayers(rosterFriends.map((f) => f.id));
+
+      // Add all roster members to the loaded-players pool used by manual invite & review
+      setAllLoadedPlayers((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const newPlayers = combinedRosterList.filter((f) => !existingIds.has(f.id));
+        const updated = [...prev, ...newPlayers];
+        allLoadedPlayersRef.current = updated;
+        return updated;
+      });
+
       if (groupsRes.success) {
         setGroups(groupsRes.groups);
       }
@@ -518,13 +556,15 @@ export default function CreateTeeTimeScreen({ navigation, route }: any) {
             order: number;
           }> = [];
           
-          // Add roster players
+          // Add roster players (friends and non-friend roster members)
           orderedPlayers.forEach((id, index) => {
-            const friend = friends.find((f) => f.id === id);
+            const player =
+              friends.find((f) => f.id === id) ??
+              allLoadedPlayersRef.current.find((p) => p.id === id);
             invitees.push({
               userId: id,
-              name: friend
-                ? `${friend.firstName} ${friend.lastName}`
+              name: player
+                ? `${player.firstName} ${player.lastName}`
                 : undefined,
               order: index + 1,
             });
