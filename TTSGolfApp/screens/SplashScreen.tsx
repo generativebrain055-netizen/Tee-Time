@@ -10,6 +10,7 @@ import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { logger } from "../utils/logger";
 import { BannerAd } from "../components/BannerAd";
+import { refreshAccessToken } from "../services/api/core";
 
 const { width, height } = Dimensions.get("window");
 
@@ -67,8 +68,9 @@ export default function SplashScreen({
     // Check for existing session and navigate accordingly
     const checkSession = async () => {
       try {
-        const [accessToken, userStr] = await Promise.all([
+        const [accessToken, refreshToken, userStr] = await Promise.all([
           AsyncStorage.getItem("accessToken"),
+          AsyncStorage.getItem("refreshToken"),
           AsyncStorage.getItem("user"),
         ]);
 
@@ -81,28 +83,48 @@ export default function SplashScreen({
         // Wait for animation to complete
         await new Promise((resolve) => setTimeout(resolve, 1500));
 
-        if (accessToken && userStr) {
-          // Validate token by checking if it's expired
+        if (userStr && (accessToken || refreshToken)) {
+          // Validate / restore access token (short-lived JWT); refresh keeps users signed in across launches
           try {
-            // Decode JWT to check expiration (simple check without verification)
-            const tokenParts = accessToken.split('.');
-            if (tokenParts.length === 3) {
-              const payload = JSON.parse(atob(tokenParts[1]));
-              const currentTime = Math.floor(Date.now() / 1000);
-
-              logger.debug("[SplashScreen] Token validation", {
-                expiration: payload.exp,
-                currentTime,
-                isExpired: payload.exp && payload.exp < currentTime,
-              });
-
-              // Check if token is expired
-              if (payload.exp && payload.exp < currentTime) {
-                // Token expired, clear storage and go to Welcome
-                logger.info("[SplashScreen] Token expired, clearing session");
+            let effectiveAccess = accessToken;
+            if (!effectiveAccess && refreshToken) {
+              logger.info("[SplashScreen] No access token; attempting refresh");
+              effectiveAccess = await refreshAccessToken();
+              if (!effectiveAccess) {
                 await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
                 navigation.replace("Welcome");
                 return;
+              }
+            }
+
+            if (effectiveAccess) {
+              const tokenParts = effectiveAccess.split(".");
+              if (tokenParts.length === 3) {
+                const payload = JSON.parse(atob(tokenParts[1]));
+                const currentTime = Math.floor(Date.now() / 1000);
+
+                logger.debug("[SplashScreen] Token validation", {
+                  expiration: payload.exp,
+                  currentTime,
+                  isExpired: payload.exp && payload.exp < currentTime,
+                });
+
+                if (payload.exp && payload.exp < currentTime && refreshToken) {
+                  logger.info("[SplashScreen] Access token expired; attempting refresh");
+                  const newAccess = await refreshAccessToken();
+                  if (!newAccess) {
+                    logger.info("[SplashScreen] Refresh failed, clearing session");
+                    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                    navigation.replace("Welcome");
+                    return;
+                  }
+                  logger.debug("[SplashScreen] Access token refreshed on cold start");
+                } else if (payload.exp && payload.exp < currentTime) {
+                  logger.info("[SplashScreen] Token expired and no refresh token, clearing session");
+                  await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+                  navigation.replace("Welcome");
+                  return;
+                }
               }
             }
 

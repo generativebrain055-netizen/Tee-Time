@@ -34,7 +34,10 @@ class SessionManager {
   async isLoggedIn(): Promise<boolean> {
     try {
       const token = await AsyncStorage.getItem("accessToken");
-      if (!token) return false;
+      const refreshToken = await AsyncStorage.getItem("refreshToken");
+      if (!token && !refreshToken) return false;
+      // Access missing or expired but refresh present — still logged in; apiCall will refresh
+      if (!token && refreshToken) return true;
 
       // Decode JWT to check expiration
       const tokenParts = token.split(".");
@@ -43,9 +46,8 @@ class SessionManager {
       const payload = JSON.parse(atob(tokenParts[1]));
       const currentTime = Math.floor(Date.now() / 1000);
 
-      // Check if token is expired
       if (payload.exp && payload.exp < currentTime) {
-        // Token expired, clear session
+        if (refreshToken) return true;
         await this.clearSession();
         return false;
       }

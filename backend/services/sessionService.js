@@ -4,6 +4,50 @@ const deviceFingerprint = require("../utils/deviceFingerprint");
 const logger = require("../config/logger");
 
 /**
+ * Parse JWT-style expiry strings (same subset jsonwebtoken supports: 15m, 24h, 7d, 2w, 1y, etc.).
+ * Used so DB `sessions.expires_at` stays aligned with refresh token lifetime.
+ */
+function jwtExpiryToMs(expiryStr) {
+  const raw = String(expiryStr || "").trim();
+  const m = raw.match(/^(\d+)([smhdwMy])$/i);
+  if (!m) return 7 * 24 * 60 * 60 * 1000;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return 7 * 24 * 60 * 60 * 1000;
+  const u = m[2].toLowerCase();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  switch (u) {
+    case "s":
+      return n * 1000;
+    case "m":
+      return n * minute;
+    case "h":
+      return n * hour;
+    case "d":
+      return n * day;
+    case "w":
+      return n * 7 * day;
+    case "y":
+      return n * 365 * day;
+    default:
+      return 7 * day;
+  }
+}
+
+function accessExpiryEnv() {
+  return process.env.JWT_ACCESS_EXPIRY || process.env.JWT_EXPIRES_IN || "7d";
+}
+
+function refreshExpiryEnv() {
+  return process.env.JWT_REFRESH_EXPIRY || process.env.JWT_REFRESH_EXPIRES_IN || "7d";
+}
+
+function sessionExpiresAtFromRefreshEnv() {
+  return new Date(Date.now() + jwtExpiryToMs(refreshExpiryEnv()));
+}
+
+/**
  * Session Service
  * Handles session creation, token generation, and device management
  */
@@ -27,17 +71,17 @@ const createSession = async ({
   const tokenFamilyId = cryptoUtils.generateSessionId();
   const accessToken = cryptoUtils.generateAccessToken(
     { userId },
-    process.env.JWT_ACCESS_EXPIRY || "15m"
+    accessExpiryEnv()
   );
   const refreshToken = cryptoUtils.generateRefreshToken(
     { userId, tokenFamilyId },
-    process.env.JWT_REFRESH_EXPIRY || "7d"
+    refreshExpiryEnv()
   );
 
-  // Create session in database
+  // Create session in database — must match refresh JWT lifetime so refresh isn't rejected early
   const ipAddress = req.ip || req.connection.remoteAddress;
   const userAgent = req.headers["user-agent"];
-  const expiresAt = new Date(Date.now() + (rememberMe ? 30 : 7) * 24 * 60 * 60 * 1000);
+  const expiresAt = sessionExpiresAtFromRefreshEnv();
 
   const session = await sessionRepository.create({
     userId,
@@ -84,7 +128,7 @@ const refreshSession = async (oldRefreshToken) => {
   // Generate new tokens
   const newAccessToken = cryptoUtils.generateAccessToken(
     { userId: session.user_id, sessionId: session.id },
-    process.env.JWT_ACCESS_EXPIRY || "15m"
+    accessExpiryEnv()
   );
 
   const newRefreshToken = cryptoUtils.generateRefreshToken(
@@ -93,13 +137,13 @@ const refreshSession = async (oldRefreshToken) => {
       sessionId: session.id,
       tokenFamilyId: session.token_family_id,
     },
-    process.env.JWT_REFRESH_EXPIRY || "7d"
+    refreshExpiryEnv()
   );
 
-  // Update session with new token hashes
+  // Update session with new token hashes — roll forward full refresh window (stay signed in)
   const newAccessTokenHash = cryptoUtils.hashToken(newAccessToken);
   const newRefreshTokenHash = cryptoUtils.hashToken(newRefreshToken);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = sessionExpiresAtFromRefreshEnv();
 
   await sessionRepository.updateTokens(
     session.id,

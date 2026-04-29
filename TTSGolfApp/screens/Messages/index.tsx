@@ -425,12 +425,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F1F1",
     marginLeft: FIGMA_SEPARATOR_MARGIN_LEFT,
   },
+  /** Stretch scroll content when list is empty so empty state fills visible list area only */
+  listContentEmpty: {
+    flexGrow: 1,
+  },
   emptyWrap: {
-    flex: 1,
+    flexGrow: 1,
+    width: "100%",
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing["4xl"],
-    paddingVertical: spacing["7xl"],
+    paddingVertical: spacing.lg,
   },
   emptyIcon: { marginBottom: spacing.lg },
   emptyTitle: {
@@ -438,11 +443,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: palette.gray900,
     marginTop: spacing.lg,
+    textAlign: "center",
+    alignSelf: "stretch",
   },
   emptySub: {
     fontSize: fontSize.sm,
     color: palette.gray500,
     textAlign: "center",
+    alignSelf: "stretch",
     marginTop: spacing.sm,
   },
 });
@@ -453,6 +461,8 @@ function MessagesScreen({ navigation, route }: any) {
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  /** Height of the list slot (below tabs, above ads/nav) — used so empty state centers in the viewport, not an oversized scroll canvas */
+  const [listViewportHeight, setListViewportHeight] = useState(0);
   const colors = useColors();
   const insets = useSafeAreaInsets();
   // Keep ad fixed just above the absolute bottom nav.
@@ -655,23 +665,33 @@ function MessagesScreen({ navigation, route }: any) {
         })}
       </View>
 
-      <View style={styles.listArea}>
+      <View
+        style={styles.listArea}
+        onLayout={({ nativeEvent }) => {
+          const h = Math.round(nativeEvent.layout.height);
+          if (h > 0) setListViewportHeight(h);
+        }}
+      >
         {loading ? (
-          <View style={[styles.emptyWrap, { backgroundColor: palette.white, flex: 1 }]}>
-            <Text style={{ color: palette.gray400 }}>Loading...</Text>
+          <View style={[styles.emptyWrap, { backgroundColor: palette.white, flex: 1, minHeight: listViewportHeight || undefined }]}>
+            <Text style={{ color: palette.gray400, textAlign: "center", alignSelf: "stretch" }}>Loading...</Text>
           </View>
         ) : (
           <FlatList
+          key={activeTab}
           data={currentList}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           ListEmptyComponent={listEmpty}
           contentContainerStyle={
             currentList.length === 0
-              ? { flex: 1 }
+              ? [
+                  styles.listContentEmpty,
+                  listViewportHeight > 0 ? { minHeight: listViewportHeight } : null,
+                ]
               : { paddingBottom: STATIC_AD_STRIP_HEIGHT + bottomNavHeight + spacing.md }
           }
-          style={[styles.list, { backgroundColor: palette.white }]}
+          style={[styles.list, { backgroundColor: palette.white, flex: 1, minHeight: 0 }]}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           refreshControl={

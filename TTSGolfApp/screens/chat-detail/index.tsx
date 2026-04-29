@@ -263,9 +263,11 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                     showsVerticalScrollIndicator={false}
                 >
                     {messages.length === 0 ? (
-                        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 100 }}>
-                            <Text style={{ fontSize: 16, fontWeight: "600", color: COLORS.textMain }}>No messages yet</Text>
-                            <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8, textAlign: "center", paddingHorizontal: 24 }}>
+                        <View style={{ flex: 1, width: "100%", justifyContent: "center", alignItems: "center", paddingTop: 100 }}>
+                            <Text style={{ fontSize: 16, fontWeight: "600", color: COLORS.textMain, textAlign: "center", alignSelf: "stretch" }}>
+                                No messages yet
+                            </Text>
+                            <Text style={{ fontSize: 14, color: COLORS.textSub, marginTop: 8, textAlign: "center", alignSelf: "stretch" }}>
                                 {blockBannerText || "Send a message to start the conversation"}
                             </Text>
                         </View>
