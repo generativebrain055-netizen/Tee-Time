@@ -38,6 +38,7 @@ interface NotificationTypeSetting {
 
 const NOTIFICATION_TYPES: Array<{ type: string; label: string; description: string }> = [
     { type: 'tee_time_invite', label: 'Tee Time Invites', description: 'When someone invites you to a tee time' },
+    { type: 'tee_time_booked', label: 'Tee Time Booked', description: 'When your tee time is full and the group chat is ready' },
     { type: 'tee_time_response', label: 'Tee Time Responses', description: 'When someone responds to your invite' },
     { type: 'player_cancelled', label: 'Player Cancelled', description: 'When a player cancels their spot in your tee time' },
     { type: 'spot_opened', label: 'Spot Opened', description: 'When a spot opens in a tee time' },

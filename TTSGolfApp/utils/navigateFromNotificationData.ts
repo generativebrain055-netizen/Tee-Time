@@ -68,6 +68,9 @@ export function prepareNotificationDataForNavigation(
   if (out.tee_time_id != null && out.teeTimeId == null) {
     out.teeTimeId = out.tee_time_id;
   }
+  if (out.conversation_id != null && out.conversationId == null) {
+    out.conversationId = out.conversation_id;
+  }
   if (out.notificationType != null && out.type == null) {
     out.type = out.notificationType;
   }
@@ -144,6 +147,44 @@ export function navigateFromNotificationData(
   if (dataType === "fcfs_deadline" && d.teeTimeId) {
     navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
     return true;
+  }
+
+  if (dataType === "tee_time_booked") {
+    if (d.conversationId) {
+      navigate("ChatDetail", {
+        chatInfo: {
+          conversationId: String(d.conversationId),
+          teeTimeId: d.teeTimeId != null ? String(d.teeTimeId) : undefined,
+          id:
+            d.teeTimeId != null
+              ? String(d.teeTimeId)
+              : String(d.conversationId),
+          name:
+            typeof d.courseName === "string" && String(d.courseName).trim()
+              ? String(d.courseName).trim()
+              : "Tee time",
+          subtitle: "Group chat",
+          isGroup: true,
+        },
+      });
+      return true;
+    }
+    if (d.teeTimeId) {
+      navigate("ChatDetail", {
+        chatInfo: {
+          teeTimeId: String(d.teeTimeId),
+          id: String(d.teeTimeId),
+          name:
+            typeof d.courseName === "string" && String(d.courseName).trim()
+              ? String(d.courseName).trim()
+              : "Tee time",
+          subtitle: "Group chat",
+          isGroup: true,
+        },
+      });
+      return true;
+    }
+    return false;
   }
 
   if (dataType === "no_show") {

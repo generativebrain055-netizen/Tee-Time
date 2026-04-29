@@ -337,6 +337,14 @@ class TeeTimeRepository {
 
   async updateStatus(teeTimeId, status) {
     try {
+      const { data: prior } = await supabaseAdmin
+        .from("tee_times")
+        .select("status")
+        .eq("id", teeTimeId)
+        .maybeSingle();
+
+      const wasAlreadyConfirmed = prior?.status === "confirmed";
+
       const { data, error } = await supabaseAdmin
         .from("tee_times")
         .update({ status })
@@ -350,8 +358,14 @@ class TeeTimeRepository {
       if (status === "confirmed") {
         try {
           const conversationRepository = require("./conversationRepository");
-          await conversationRepository.createTeeTimeConversationWithParticipants(teeTimeId);
+          const conv = await conversationRepository.createTeeTimeConversationWithParticipants(
+            teeTimeId,
+          );
           logger.info(`Created group chat for confirmed tee time ${teeTimeId}`);
+          if (!wasAlreadyConfirmed && conv?.id) {
+            const notificationService = require("../services/notificationService");
+            await notificationService.notifyPlayersTeeTimeBooked(teeTimeId, conv.id);
+          }
         } catch (chatError) {
           // Don't fail status update if chat creation fails
           logger.error(`Failed to create group chat for tee time ${teeTimeId}:`, chatError.message);

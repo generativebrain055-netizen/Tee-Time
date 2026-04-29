@@ -347,6 +347,10 @@ async function notifyInviteesOfDeadline(invites, teeTime, deadline) {
     minute: "2-digit",
     hour12: true,
   });
+  const courseName = teeTime.course_name || teeTime.courseName || "the course";
+  const dateStr = notificationService.formatDateForNotification(
+    teeTime.tee_date || teeTime.date,
+  );
 
   for (const invite of invites) {
     if (invite.invitee_user_id) {
@@ -354,7 +358,9 @@ async function notifyInviteesOfDeadline(invites, teeTime, deadline) {
         await notificationService.createNotification({
           userId: invite.invitee_user_id,
           title: "Response Deadline Set",
-          body: `You have until ${deadlineStr} to respond to the tee time invitation.`,
+          body: dateStr
+            ? `Respond by ${deadlineStr} for the tee time at ${courseName} on ${dateStr}.`
+            : `Respond by ${deadlineStr} for the tee time at ${courseName}.`,
           data: {
             type: "fcfs_deadline_set",
             teeTimeId: teeTime.id,

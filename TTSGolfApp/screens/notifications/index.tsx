@@ -2,7 +2,7 @@
  * Notifications Screen (Figma 1269-817, 1269-900, 1269-1025, 1269-1140)
  * Activity & Invites tabs: Activity = user activities; Invites = invitations (accept/decline).
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -14,6 +14,9 @@ import {
     Image,
     StyleSheet,
     Alert,
+    InteractionManager,
+    findNodeHandle,
+    UIManager,
 } from "react-native";
 import { Bell, Check, X, Inbox, Filter, ChevronDown, ChevronUp, Clock, Users, CheckCircle, Mail, MapPin, MessageCircle } from "lucide-react-native";
 import {
@@ -182,6 +185,7 @@ type TabType = 'activity' | 'invites';
 type NotificationTypeFilter =
     | 'all'
     | 'tee_time_invite'
+    | 'tee_time_booked'
     | 'tee_time_response'
     | 'friend_request'
     | 'friend_accepted'
@@ -201,7 +205,7 @@ interface CategorySection {
     inviteKind?: "tee" | "group" | "friend";
 }
 
-export default function NotificationsScreen({ navigation }: any) {
+export default function NotificationsScreen({ navigation, route }: any) {
     const { fetchProfile } = useUser();
     const toast = useToast();
     const { unreadConversations } = useUnreadConversations();
@@ -212,6 +216,10 @@ export default function NotificationsScreen({ navigation }: any) {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const scrollViewRef = useRef<ScrollView>(null);
+    const notificationRowRefs = useRef<Record<string, View | null>>({});
+    /** Brief ring around the row opened from a toast / deep link */
+    const [pulseHighlightId, setPulseHighlightId] = useState<string | null>(null);
 
     // Reset filter when switching tabs
     const handleTabChange = useCallback((tab: TabType) => {
@@ -456,6 +464,82 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const getDataType = (n: AppNotification) => (n.data as Record<string, unknown> | undefined)?.type as string | undefined;
 
+    const tabForNotificationDataType = useCallback((t: string | undefined): TabType => {
+        if (
+            t === "tee_time_invite" ||
+            t === "spot_opened" ||
+            t === "group_invite" ||
+            t === "friend_request"
+        ) {
+            return "invites";
+        }
+        return "activity";
+    }, []);
+
+    /** Open the correct tab and highlight a row when navigated from a toast (see NotificationToastListener). */
+    useEffect(() => {
+        const param = route?.params?.highlightNotificationId;
+        if (!param || typeof param !== "string" || loading) return;
+        const id = param.trim();
+        if (!id) return;
+        const n = notifications.find((x) => x.id === id);
+        if (!n) return;
+        const t = (n.data as Record<string, unknown> | undefined)?.type as string | undefined;
+        setActiveTab(tabForNotificationDataType(t));
+        setTypeFilter("all");
+        setShowTypeFilter(false);
+        setPulseHighlightId(id);
+        navigation?.setParams?.({ highlightNotificationId: undefined });
+        const clearPulse = setTimeout(() => setPulseHighlightId(null), 5500);
+        return () => clearTimeout(clearPulse);
+    }, [
+        route?.params?.highlightNotificationId,
+        loading,
+        notifications,
+        tabForNotificationDataType,
+        navigation,
+    ]);
+
+    /** If the id never appears (deleted / not in first page), drop the param so we do not spin forever. */
+    useEffect(() => {
+        const param = route?.params?.highlightNotificationId;
+        if (!param || typeof param !== "string" || loading) return;
+        const id = param.trim();
+        if (!id) return;
+        const t = setTimeout(() => {
+            if (!notifications.some((x) => x.id === id)) {
+                navigation?.setParams?.({ highlightNotificationId: undefined });
+            }
+        }, 8000);
+        return () => clearTimeout(t);
+    }, [route?.params?.highlightNotificationId, loading, notifications, navigation]);
+
+    useEffect(() => {
+        if (!pulseHighlightId || loading) return;
+        const id = pulseHighlightId;
+        const task = InteractionManager.runAfterInteractions(() => {
+            requestAnimationFrame(() => {
+                const sv = scrollViewRef.current;
+                const row = notificationRowRefs.current[id];
+                if (!sv || !row) return;
+                const scrollNative = findNodeHandle(sv);
+                const rowNative = findNodeHandle(row);
+                if (!scrollNative || !rowNative) return;
+                UIManager.measureLayout(
+                    rowNative,
+                    scrollNative,
+                    () => {},
+                    (_x: number, y: number) => {
+                        sv.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                    },
+                );
+            });
+        });
+        return () => {
+            (task as { cancel?: () => void })?.cancel?.();
+        };
+    }, [pulseHighlightId, loading, activeTab, typeFilter, notifications.length]);
+
     // Get filter options based on current tab
     const getTypeFilterOptions = (tab: TabType): { key: NotificationTypeFilter; label: string }[] => {
         const baseOptions: { key: NotificationTypeFilter; label: string }[] = [
@@ -474,6 +558,7 @@ export default function NotificationsScreen({ navigation }: any) {
         // activity tab
         return [
             ...baseOptions,
+            { key: 'tee_time_booked', label: 'Tee Time Booked' },
             { key: 'tee_time_response', label: 'Invite Responses' },
             { key: 'player_cancelled', label: 'Player Cancelled' },
             { key: 'group_updated', label: 'Group Updated' },
@@ -559,6 +644,7 @@ export default function NotificationsScreen({ navigation }: any) {
         let filtered = notifs.filter(n => {
             const t = getDataType(n);
             return (
+                t === "tee_time_booked" ||
                 t === "tee_time_response" ||
                 t === "group_invite_accepted" ||
                 t === "waiver_wire" ||
@@ -602,6 +688,7 @@ export default function NotificationsScreen({ navigation }: any) {
             else if (type === "roster_add") title = "Roster Adds";
             else if (type === "organizer_fill_warning" || type === "tee_time_not_filled" || type === "organizer_invite_more")
                 title = "Unfilled Slot Alerts";
+            else if (type === "tee_time_booked") title = "Tee Time Booked";
             else if (type === "tee_time_response") title = "Invite Responses";
             else if (type === "group_invite_accepted") title = "Group Invitations";
             else if (type === "waiver_wire") title = "Waiver Wire Posts";
@@ -870,15 +957,21 @@ export default function NotificationsScreen({ navigation }: any) {
                     item.status === "accepted" ||
                     (((d?.responded as boolean) === true) && !isDeclined);
                 const isHistoricalFriend = isAccepted || isDeclined;
+                const rowHl = item.id === pulseHighlightId ? styles.notificationRowHighlight : undefined;
                 return (
                     <View
                         key={item.id}
+                        ref={(el) => {
+                            notificationRowRefs.current[item.id] = el;
+                        }}
+                        collapsable={false}
                         style={[
                             styles.friendBundleRow,
                             isHistoricalFriend && styles.friendBundleRowHistorical,
                             index < items.length - 1 && styles.friendBundleRowDivider,
                             !item.isRead && styles.friendBundleRowUnread,
                             isHistoricalFriend && styles.inviteShellCardExpired,
+                            rowHl,
                         ]}
                     >
                         {isHistoricalFriend ? (
@@ -1025,6 +1118,8 @@ export default function NotificationsScreen({ navigation }: any) {
         const location = (d?.location as string | undefined) || sender?.location || "";
         const initials = hostName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
+        const hl = item.id === pulseHighlightId ? styles.notificationRowHighlight : undefined;
+
         const handleUnfilledSlotPress = () => {
             if (d?.teeTimeId) {
                 navigation?.navigate("SelectOnDeck", {
@@ -1054,6 +1149,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             styles.inviteShellCard,
                             !item.isRead && styles.inviteShellCardUnread,
                             isHistoricalInvite && styles.inviteShellCardExpired,
+                            hl,
                         ]}
                         activeOpacity={0.7}
                         onPress={() => handleNotificationPress(item)}
@@ -1159,6 +1255,7 @@ export default function NotificationsScreen({ navigation }: any) {
                         styles.inviteCard,
                         !item.isRead && styles.cardUnread,
                         isHistoricalInvite && styles.inviteShellCardExpired,
+                        hl,
                     ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
@@ -1295,6 +1392,7 @@ export default function NotificationsScreen({ navigation }: any) {
                             styles.inviteShellCard,
                             !item.isRead && styles.inviteShellCardUnread,
                             isGroupInviteHistorical && styles.inviteShellCardExpired,
+                            hl,
                         ]}
                         activeOpacity={0.7}
                         onPress={() => handleNotificationPress(item)}
@@ -1363,6 +1461,7 @@ export default function NotificationsScreen({ navigation }: any) {
                         styles.card,
                         !item.isRead && styles.cardUnread,
                         isGroupInviteHistorical && styles.inviteShellCardExpired,
+                        hl,
                     ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
@@ -1427,7 +1526,7 @@ export default function NotificationsScreen({ navigation }: any) {
             return (
                 <TouchableOpacity
                     key={item.id}
-                    style={[styles.card, !item.isRead && styles.cardUnread]}
+                    style={[styles.card, !item.isRead && styles.cardUnread, hl]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
                     onLongPress={() => showReadUnreadMenu(item)}
@@ -1477,6 +1576,7 @@ export default function NotificationsScreen({ navigation }: any) {
                         styles.card,
                         !item.isRead && styles.cardUnread,
                         isFriendHistorical && styles.inviteShellCardExpired,
+                        hl,
                     ]}
                     activeOpacity={0.7}
                     onPress={() => handleNotificationPress(item)}
@@ -1551,6 +1651,7 @@ export default function NotificationsScreen({ navigation }: any) {
                     styles.card,
                     !item.isRead && styles.cardUnread,
                     isDefaultInvitesHistorical && styles.inviteShellCardExpired,
+                    hl,
                 ]}
                 activeOpacity={0.7}
                 onPress={() => handleNotificationPress(item)}
@@ -1662,6 +1763,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const activityCount = notifications.filter(n => {
         const t = getDataType(n);
         return (
+            t === "tee_time_booked" ||
             t === "tee_time_response" ||
             t === "waiver_wire" ||
             t === "group_invite_accepted" ||
@@ -1823,6 +1925,7 @@ export default function NotificationsScreen({ navigation }: any) {
             )}
 
             <ScrollView
+                ref={scrollViewRef}
                 style={[styles.scrollView, activeTab === "invites" && styles.scrollViewInvites]}
                 contentContainerStyle={activeTab === "invites" ? styles.scrollContentInvites : undefined}
                 refreshControl={
@@ -1955,7 +2058,15 @@ export default function NotificationsScreen({ navigation }: any) {
                                 renderFriendRequestsBundle(section.items)
                             ) : (
                                 section.items.map(item => (
-                                    <View key={item.id}>{renderNotificationItem(item)}</View>
+                                    <View
+                                        key={item.id}
+                                        ref={(el) => {
+                                            notificationRowRefs.current[item.id] = el;
+                                        }}
+                                        collapsable={false}
+                                    >
+                                        {renderNotificationItem(item)}
+                                    </View>
                                 ))
                             )}
                         </View>
@@ -2051,6 +2162,11 @@ const styles = StyleSheet.create({
     scrollView: {
         flex: 1,
         backgroundColor: "#FFFFFF",
+    },
+    /** Inset accent (not a full outer stroke) so rounded / overflow-hidden parents do not clip edges */
+    notificationRowHighlight: {
+        borderLeftWidth: 4,
+        borderLeftColor: palette.green600,
     },
     scrollViewInvites: {
         backgroundColor: "#F3F4F6",

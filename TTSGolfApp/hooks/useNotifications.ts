@@ -276,6 +276,38 @@ export function getNotificationNavigation(item: AppNotification): {
       }
       return { screen: "Invites" };
 
+    case "tee_time_booked":
+      if (item.data?.conversationId) {
+        return {
+          screen: "ChatDetail",
+          params: {
+            chatInfo: {
+              conversationId: item.data.conversationId,
+              teeTimeId: item.data.teeTimeId,
+              id: item.data.teeTimeId || item.data.conversationId,
+              name: item.data.courseName || "Tee time",
+              subtitle: "Group chat",
+              isGroup: true,
+            },
+          },
+        };
+      }
+      if (item.data?.teeTimeId) {
+        return {
+          screen: "ChatDetail",
+          params: {
+            chatInfo: {
+              teeTimeId: item.data.teeTimeId,
+              id: item.data.teeTimeId,
+              name: item.data.courseName || "Tee time",
+              subtitle: "Group chat",
+              isGroup: true,
+            },
+          },
+        };
+      }
+      return { screen: null };
+
     case "tee_time_response":
       if (item.data?.inviteId) {
         return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };

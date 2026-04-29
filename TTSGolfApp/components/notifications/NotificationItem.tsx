@@ -44,6 +44,7 @@ function getNotificationIcon(type: string | undefined) {
     case "on_deck_removed":
       return <Users size={20} color={COLORS.primary} />;
     case "tee_time_invite":
+    case "tee_time_booked":
     case "tee_time_response":
     case "check_in_reminder":
     case "spot_opened":

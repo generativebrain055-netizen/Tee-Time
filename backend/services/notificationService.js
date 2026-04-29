@@ -3,6 +3,7 @@ const logger = require("../config/logger");
 const { invitesLogger } = require("../config/logger");
 const deviceRepository = require("../repositories/deviceRepository");
 const userRepository = require("../repositories/userRepository");
+const conversationRepository = require("../repositories/conversationRepository");
 
 /** Resolve profile avatar URL when callers pass a partial user (e.g. only id + names). */
 async function resolveUserAvatarUrl(userLike) {
@@ -695,6 +696,55 @@ class NotificationService {
         action: "RESPOND_NOW",
       },
     });
+  }
+
+  /**
+   * Tee time just became fully booked (confirmed): notify every participant to open the tee-time group chat.
+   * Copy uses MM/DD/YYYY at course; tap opens the pre-created conversation.
+   */
+  async notifyPlayersTeeTimeBooked(teeTimeId, conversationId) {
+    if (!teeTimeId || !conversationId) return;
+    try {
+      const { data: tt, error: ttErr } = await supabaseAdmin
+        .from("tee_times")
+        .select("course_name, tee_date")
+        .eq("id", teeTimeId)
+        .single();
+      if (ttErr || !tt) {
+        logger.warn("notifyPlayersTeeTimeBooked: tee time not found", teeTimeId, ttErr?.message);
+        return;
+      }
+      const courseName = String(tt.course_name || "the course").trim() || "the course";
+      const dateStr = this.formatDateForNotification(tt.tee_date);
+      const datePart = dateStr || "your scheduled date";
+
+      const userIds = await conversationRepository.getTeeTimeChatEligibleUserIds(teeTimeId);
+      if (!userIds.length) {
+        logger.warn("notifyPlayersTeeTimeBooked: no eligible recipients", teeTimeId);
+        return;
+      }
+      const title = "Tee time booked";
+      const body = `Congratulations, your tee time is booked for ${datePart} at ${courseName}. Tap to message your group.`;
+      const data = {
+        type: "tee_time_booked",
+        teeTimeId,
+        conversationId,
+        courseName,
+        teeDate: tt.tee_date,
+      };
+
+      for (const userId of userIds) {
+        await this.createNotification({
+          userId,
+          title,
+          body,
+          data,
+          sendPush: true,
+        });
+      }
+    } catch (e) {
+      logger.error("notifyPlayersTeeTimeBooked error:", e?.message);
+    }
   }
 
   /**

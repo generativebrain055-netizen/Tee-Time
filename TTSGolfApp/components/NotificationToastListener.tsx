@@ -19,6 +19,7 @@ function leadingIconForNotificationKind(kind?: string): ToastLeadingIcon {
   if (!kind) return "bell";
   if (
     kind === "tee_time_invite" ||
+    kind === "tee_time_booked" ||
     kind === "tee_time_response" ||
     kind === "check_in_reminder" ||
     kind === "spot_opened" ||
@@ -90,12 +91,19 @@ export function NotificationToastListener({
       title: string,
       body: string,
       type: "info" | "success" | "warning" | "error",
-      opts?: { kind?: string; createdAt?: string; navData?: Record<string, unknown> },
+      opts?: {
+        kind?: string;
+        createdAt?: string;
+        navData?: Record<string, unknown>;
+        /** In-app row id — opens Notifications and scrolls to this item */
+        notificationId?: string;
+      },
     ) => {
       const t = toastRef.current;
       const kind = opts?.kind;
       const createdAt = opts?.createdAt;
       const navData = opts?.navData;
+      const notificationId = opts?.notificationId;
       t.show({
         title,
         message: body ? `${title}\n${truncate(body, 160)}` : title,
@@ -108,6 +116,12 @@ export function NotificationToastListener({
         action: {
           label: "View",
           onPress: () => {
+            if (notificationId && String(notificationId).trim()) {
+              navigation.navigate("Notifications", {
+                highlightNotificationId: String(notificationId).trim(),
+              });
+              return;
+            }
             if (navData && typeof navData === "object") {
               const prepared = prepareNotificationDataForNavigation(navData);
               const didRoute = navigateFromNotificationData(
@@ -164,6 +178,7 @@ export function NotificationToastListener({
             kind: latest.data?.type,
             createdAt: latest.createdAt,
             navData: (latest.data || {}) as Record<string, unknown>,
+            notificationId: latest.id,
           });
         }
         return;
@@ -191,6 +206,7 @@ export function NotificationToastListener({
         kind: latest.data?.type,
         createdAt: latest.createdAt,
         navData: (latest.data || {}) as Record<string, unknown>,
+        notificationId: latest.id,
       });
     } catch (e) {
       logger.warn("[NotificationToastListener] poll failed", e);
@@ -240,9 +256,16 @@ export function NotificationToastListener({
       const kind = typeof data.type === "string" ? data.type : undefined;
       const title = (content.title || "Notification").trim();
       const body = (content.body || "").trim();
+      const nid =
+        typeof data.notificationId === "string"
+          ? data.notificationId
+          : data.notification_id != null
+            ? String(data.notification_id)
+            : undefined;
       showNotificationToast(title, body, getToastType(kind), {
         kind,
         navData: data,
+        notificationId: nid,
       });
     });
     return () => sub.remove();

@@ -70,6 +70,13 @@ async function getOrCreateTeeTimeConversation(userId, teeTimeId) {
 
   if (existing) return existing;
 
+  const eligible = await getTeeTimeChatEligibleUserIds(teeTimeId);
+  if (!userId || !eligible.includes(userId)) {
+    const err = new Error("You do not have access to this tee time group chat.");
+    err.statusCode = 403;
+    throw err;
+  }
+
   const { data: newConv, error } = await supabaseAdmin
     .from("conversations")
     .insert({ type: "tee_time", tee_time_id: teeTimeId })
@@ -77,7 +84,7 @@ async function getOrCreateTeeTimeConversation(userId, teeTimeId) {
     .single();
 
   if (error) handleError(error, "createTeeTimeConversation");
-  // Add current user as participant; others can be added when they open the chat
+  // Add current user as participant; others are synced when they become eligible
   await supabaseAdmin
     .from("conversation_participants")
     .upsert(
@@ -274,13 +281,9 @@ async function getConversationMeta(conv, userId, lastMessage) {
       title = `${month} ${day} @ ${tt.course_name} - ${time}`;
       subtitle = tt.course_location || tt.course_name || "";
     }
-    const { data: participants } = await supabaseAdmin
-      .from("tee_time_participants")
-      .select("user_id")
-      .eq("tee_time_id", conv.tee_time_id)
-      .or("status.is.null,status.neq.cancelled"); // Only count active participants
-    const uids = (participants || []).map((p) => p.user_id).filter(Boolean).slice(0, 3);
-    participantCount = (participants || []).filter(p => p.user_id).length;
+    const eligibleChatIds = await getTeeTimeChatEligibleUserIds(conv.tee_time_id);
+    const uids = eligibleChatIds.slice(0, 3);
+    participantCount = eligibleChatIds.length;
     for (const uid of uids) {
       const { data: up } = await supabaseAdmin
         .from("user_profiles")
@@ -398,6 +401,21 @@ async function getById(conversationId, userId) {
  * Ensure user is in conversation (for tee_time/group, add if not already).
  */
 async function ensureParticipant(conversationId, userId) {
+  const { data: convMeta } = await supabaseAdmin
+    .from("conversations")
+    .select("type, tee_time_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (convMeta?.type === "tee_time" && convMeta.tee_time_id) {
+    const eligible = await getTeeTimeChatEligibleUserIds(convMeta.tee_time_id);
+    if (!eligible.includes(userId)) {
+      const err = new Error("You do not have access to this tee time group chat.");
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
   const { data: existing } = await supabaseAdmin
     .from("conversation_participants")
     .select("id")
@@ -487,6 +505,68 @@ async function setConversationMuted(conversationId, userId, muted) {
 }
 
 /**
+ * User IDs allowed in the tee_time group chat: creator + accepted invitees for roster/manual,
+ * or (for open / fcfs) every non-cancelled confirmed participant row.
+ * Pending invitees must not be in the thread until they accept.
+ */
+async function getTeeTimeChatEligibleUserIds(teeTimeId) {
+  const { data: tt, error: ttErr } = await supabaseAdmin
+    .from("tee_times")
+    .select("creator_id, invite_type")
+    .eq("id", teeTimeId)
+    .maybeSingle();
+  if (ttErr || !tt) return [];
+
+  const creatorId = tt.creator_id;
+  const inviteType = String(tt.invite_type || "roster").toLowerCase();
+  /** Roster + manual: only accepted invitees join chat; open/fcfs use confirmed participant rows. */
+  const isRosterSequential = inviteType === "roster" || inviteType === "manual";
+
+  const { data: partRows, error: partErr } = await supabaseAdmin
+    .from("tee_time_participants")
+    .select("user_id, is_creator, status")
+    .eq("tee_time_id", teeTimeId)
+    .not("user_id", "is", null)
+    .or("status.eq.confirmed,status.is.null");
+
+  if (partErr) {
+    logger.warn("getTeeTimeChatEligibleUserIds participants query:", partErr.message);
+    return creatorId ? [creatorId] : [];
+  }
+
+  let acceptedInvitees = new Set();
+  if (isRosterSequential) {
+    const { data: inv, error: invErr } = await supabaseAdmin
+      .from("invites")
+      .select("invitee_user_id")
+      .eq("tee_time_id", teeTimeId)
+      .eq("status", "accepted");
+    if (!invErr) {
+      acceptedInvitees = new Set((inv || []).map((r) => r.invitee_user_id).filter(Boolean));
+    }
+  }
+
+  const out = new Set();
+  if (creatorId) out.add(creatorId);
+
+  for (const p of partRows || []) {
+    if (!p.user_id) continue;
+    if (p.status === "cancelled" || p.status === "tentative") continue;
+    if (p.is_creator || p.user_id === creatorId) {
+      out.add(p.user_id);
+      continue;
+    }
+    if (!isRosterSequential) {
+      out.add(p.user_id);
+      continue;
+    }
+    if (acceptedInvitees.has(p.user_id)) out.add(p.user_id);
+  }
+
+  return [...out];
+}
+
+/**
  * Create or get tee time conversation and add all active participants automatically.
  * This is called when a tee time is confirmed to ensure all participants can chat.
  * @param {string} teeTimeId - The tee time ID
@@ -517,24 +597,12 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
     conversationId = newConv.id;
   }
 
-  // Get all active participants (exclude cancelled)
-  const { data: participants, error: partError } = await supabaseAdmin
-    .from("tee_time_participants")
-    .select("user_id")
-    .eq("tee_time_id", teeTimeId)
-    .or("status.is.null,status.neq.cancelled")
-    .not("user_id", "is", null);
+  const eligibleUserIds = await getTeeTimeChatEligibleUserIds(teeTimeId);
 
-  if (partError) {
-    handleError(partError, "getTeeTimeParticipants");
-    return existing || { id: conversationId, type: "tee_time", created_at: new Date().toISOString() };
-  }
-
-  // Add all participants to conversation
-  if (participants && participants.length > 0) {
-    const participantRows = participants.map(p => ({
+  if (eligibleUserIds.length > 0) {
+    const participantRows = eligibleUserIds.map((user_id) => ({
       conversation_id: conversationId,
-      user_id: p.user_id,
+      user_id,
     }));
 
     await supabaseAdmin
@@ -545,6 +613,8 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
       });
   }
 
+  await syncTeeTimeConversationParticipants(teeTimeId);
+
   // Post auto welcome message from Tee Time Social
   try {
     const { data: tt } = await supabaseAdmin
@@ -553,21 +623,30 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
       .eq("id", teeTimeId)
       .single();
     if (tt && tt.course_name) {
-      const d = new Date(tt.tee_date);
-      const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
-      const mm = (d.getMonth() + 1).toString().padStart(2, "0");
-      const dd = d.getDate().toString().padStart(2, "0");
-      let timeStr = "";
-      if (tt.tee_time != null) {
-        const t = new Date(tt.tee_time);
-        if (!isNaN(t.getTime())) {
-          timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      let d;
+      if (typeof tt.tee_date === "string") {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(tt.tee_date).trim());
+        if (m) {
+          d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
         } else {
-          timeStr = String(tt.tee_time).slice(0, 5);
+          d = new Date(tt.tee_date);
         }
+      } else {
+        d = new Date(tt.tee_date);
       }
-      const dateTimeStr = timeStr ? `${dayName}, ${mm}/${dd} ${timeStr}` : `${dayName}, ${mm}/${dd}`;
-      const body = `Thanks for organizing with Tee Time Social. Here is your group for Date: ${dateTimeStr} at ${tt.course_name}. Enjoy.`;
+      const mm = Number.isNaN(d.getTime())
+        ? ""
+        : (d.getMonth() + 1).toString().padStart(2, "0");
+      const dd = Number.isNaN(d.getTime())
+        ? ""
+        : d.getDate().toString().padStart(2, "0");
+      const yyyy = Number.isNaN(d.getTime()) ? "" : String(d.getFullYear());
+      const datePart =
+        mm && dd && yyyy ? `${mm}/${dd}/${yyyy}` : String(tt.tee_date || "").trim();
+      const courseName = String(tt.course_name).trim();
+      const body = datePart
+        ? `Congratulations, your tee time is booked for ${datePart} at ${courseName}. Use this group chat to message your group and coordinate.`
+        : `Congratulations, your tee time is booked at ${courseName}. Use this group chat to message your group and coordinate.`;
       const messageRepository = require("./messageRepository");
       await messageRepository.create(conversationId, null, body, null);
     }
@@ -580,8 +659,8 @@ async function createTeeTimeConversationWithParticipants(teeTimeId) {
 }
 
 /**
- * Sync tee time group chat participants to match current active tee time participants.
- * Removes cancelled players and adds newly added players (e.g. from backup invite).
+ * Sync tee time group chat participants to chat-eligible users (accepted invitees for roster/manual, etc.).
+ * Removes ineligible users and adds newly eligible players (e.g. after invite accept).
  * Call after participant cancel or when a new participant is added.
  */
 async function syncTeeTimeConversationParticipants(teeTimeId) {
@@ -594,13 +673,8 @@ async function syncTeeTimeConversationParticipants(teeTimeId) {
       .maybeSingle();
     if (!conv) return;
 
-    const { data: activeParticipants } = await supabaseAdmin
-      .from("tee_time_participants")
-      .select("user_id")
-      .eq("tee_time_id", teeTimeId)
-      .or("status.is.null,status.neq.cancelled")
-      .not("user_id", "is", null);
-    const activeUserIds = new Set((activeParticipants || []).map((p) => p.user_id));
+    const eligibleIds = await getTeeTimeChatEligibleUserIds(teeTimeId);
+    const activeUserIds = new Set(eligibleIds);
 
     const { data: currentRows } = await supabaseAdmin
       .from("conversation_participants")
@@ -698,6 +772,7 @@ module.exports = {
   reopenConversationForUser,
   setConversationMuted,
   createTeeTimeConversationWithParticipants,
+  getTeeTimeChatEligibleUserIds,
   syncTeeTimeConversationParticipants,
   getUnreadCountForConversation,
   getUnreadCounts,

@@ -657,6 +657,7 @@ export default function App(): React.ReactElement {
           <NotificationsScreen
             key={`notifications-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "TeeTimeDetail":
