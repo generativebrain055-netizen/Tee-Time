@@ -339,6 +339,113 @@ async function setFCFSDeadline(teeTimeId, userId, deadline) {
  * Send notifications to invitees about deadline
  * @private
  */
+/**
+ * Organizer updates tee time date/time/course/location — notifies participants with push.
+ * @throws {TeeTimeServiceError}
+ */
+async function updateTeeTimeDetails(teeTimeId, organizerId, body) {
+  const existingRow = await teeTimeRepository.getTeeTimeById(teeTimeId);
+  if (!existingRow) {
+    throw new TeeTimeServiceError("Tee time not found", "NOT_FOUND", 404);
+  }
+  if (existingRow.creator_id !== organizerId) {
+    throw new TeeTimeServiceError(
+      "Only the organizer can update this tee time",
+      "FORBIDDEN",
+      403,
+    );
+  }
+  const status = String(existingRow.status ?? "").toLowerCase().trim();
+  if (["completed", "cancelled", "canceled"].includes(status)) {
+    throw new TeeTimeServiceError(
+      "You can’t change the date, time, or course for a completed or cancelled tee time.",
+      "TEE_TIME_NOT_EDITABLE",
+      400,
+    );
+  }
+
+  const hasField =
+    body.courseName !== undefined ||
+    body.courseLocation !== undefined ||
+    body.teeDate !== undefined ||
+    body.teeTime !== undefined;
+  if (!hasField) {
+    throw new TeeTimeServiceError(
+      "Provide at least one of: courseName, courseLocation, teeDate, teeTime",
+      "NO_FIELDS",
+      400,
+    );
+  }
+
+  const patch = {};
+  if (body.courseName !== undefined) patch.courseName = body.courseName;
+  if (body.courseLocation !== undefined) {
+    patch.courseLocation = body.courseLocation;
+  }
+  if (body.teeDate !== undefined) {
+    const iso = parseApiDateToISO(body.teeDate);
+    if (!iso) {
+      throw new TeeTimeServiceError("Invalid tee date format", "INVALID_DATE");
+    }
+    patch.teeDate = iso;
+  }
+  if (body.teeTime !== undefined) patch.teeTime = body.teeTime;
+
+  const result = await teeTimeRepository.updateTeeTimeByOrganizer(
+    teeTimeId,
+    organizerId,
+    patch,
+  );
+
+  const changeKeys = Object.keys(result.changes || {}).filter(
+    (k) => result.changes[k],
+  );
+  if (changeKeys.length > 0) {
+    try {
+      const conversationRepository = require("../repositories/conversationRepository");
+      const [chatEligibleIds, confirmedParticipantIds] = await Promise.all([
+        conversationRepository.getTeeTimeChatEligibleUserIds(teeTimeId),
+        teeTimeRepository.getConfirmedActiveParticipantUserIds(teeTimeId),
+      ]);
+      const recipientSet = new Set([
+        ...(chatEligibleIds || []),
+        ...(confirmedParticipantIds || []),
+      ]);
+      recipientSet.delete(organizerId);
+      const org = result.updated;
+      const organizerName =
+        `${org.first_name || ""} ${org.last_name || ""}`.trim() ||
+        "The organizer";
+      await notificationService.notifyTeeTimeDetailsUpdated({
+        teeTimeId,
+        organizerName,
+        recipientUserIds: [...recipientSet].filter(Boolean),
+        updatedTeeTime: result.updated,
+        changes: result.changes,
+      });
+    } catch (e) {
+      logger.warn("updateTeeTimeDetails notify:", e?.message);
+    }
+    try {
+      await notificationService.refreshPendingInviteNotificationsAfterTeeTimeDetailsUpdate(
+        {
+          teeTimeId,
+          updatedTeeTime: result.updated,
+          organizer: {
+            id: organizerId,
+            firstName: result.updated.first_name,
+            lastName: result.updated.last_name,
+          },
+        },
+      );
+    } catch (e) {
+      logger.warn("updateTeeTimeDetails refresh invite notifications:", e?.message);
+    }
+  }
+
+  return getTeeTimeById(teeTimeId);
+}
+
 async function notifyInviteesOfDeadline(invites, teeTime, deadline) {
   const deadlineStr = deadline.toLocaleString("en-US", {
     month: "short",
@@ -367,6 +474,7 @@ async function notifyInviteesOfDeadline(invites, teeTime, deadline) {
             expiresAt: deadline.toISOString(),
             courseName: teeTime.course_name,
           },
+          sendPush: true,
         });
       } catch (notifyError) {
         logger.error(
@@ -389,5 +497,6 @@ module.exports = {
   skipInvite,
   sendOnDeckInvites,
   setFCFSDeadline,
+  updateTeeTimeDetails,
   TeeTimeServiceError,
 };

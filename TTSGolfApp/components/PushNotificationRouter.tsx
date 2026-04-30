@@ -54,6 +54,25 @@ function titleSuggestsGroupOrFriend(title: string | null | undefined): boolean {
   return t.includes("group invitation") || t.includes("friend");
 }
 
+/** Organizer unfilled / pipeline alerts (push title may omit or delay `data.type`). */
+function titleSuggestsTeeTimeAtRisk(title: string | null | undefined): boolean {
+  if (!title) return false;
+  const t = title.toLowerCase();
+  return (
+    t.includes("tee time at risk") ||
+    t.includes("unfilled slot") ||
+    t.includes("roster exhausted") ||
+    t.includes("invite more players")
+  );
+}
+
+/** Participant alert when organizer changes date, time, or course/location (`notifyTeeTimeDetailsUpdated`). */
+function titleSuggestsTeeTimeDetailsUpdated(title: string | null | undefined): boolean {
+  if (!title) return false;
+  const t = title.toLowerCase();
+  return t.includes("tee time updated");
+}
+
 type ConsumeResult = { didRoute: boolean; canRetry: boolean; rawKeyCount: number };
 
 function consumeResponseWithHeuristicFallback(
@@ -86,6 +105,47 @@ function consumeResponseWithHeuristicFallback(
   }
   if (didRoute) {
     return { didRoute: true, canRetry: false, rawKeyCount: keyCount };
+  }
+
+  if (
+    titleSuggestsTeeTimeAtRisk(content.title) &&
+    !titleSuggestsGroupOrFriend(content.title)
+  ) {
+    const prepared = prepareNotificationDataForNavigation(raw);
+    const tid =
+      prepared.teeTimeId != null && String(prepared.teeTimeId).trim()
+        ? String(prepared.teeTimeId).trim()
+        : "";
+    if (tid) {
+      try {
+        navigate("TeeTimeDetail", {
+          teeTimeId: tid,
+          fromTeeTimeAtRiskPush: true,
+        });
+        return { didRoute: true, canRetry: false, rawKeyCount: keyCount };
+      } catch (e) {
+        logger.warn("[PushNotificationRouter] TeeTimeDetail (at-risk title) failed", e);
+      }
+    }
+  }
+
+  if (
+    titleSuggestsTeeTimeDetailsUpdated(content.title) &&
+    !titleSuggestsGroupOrFriend(content.title)
+  ) {
+    const prepared = prepareNotificationDataForNavigation(raw);
+    const tid =
+      prepared.teeTimeId != null && String(prepared.teeTimeId).trim()
+        ? String(prepared.teeTimeId).trim()
+        : "";
+    if (tid) {
+      try {
+        navigate("TeeTimeDetail", { teeTimeId: tid });
+        return { didRoute: true, canRetry: false, rawKeyCount: keyCount };
+      } catch (e) {
+        logger.warn("[PushNotificationRouter] TeeTimeDetail (tee time updated title) failed", e);
+      }
+    }
   }
 
   if (titleSuggestsTeeInviteFromPush(content.title) && !titleSuggestsGroupOrFriend(content.title)) {

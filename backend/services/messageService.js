@@ -132,6 +132,7 @@ async function sendMessage(conversationId, userId, body, imageUrl = null, file =
       conversationId,
       senderId: userId,
       previewText,
+      messageId: msg.id,
     })
     .catch((err) => logger.warn("[sendMessage] notifyNewChatMessage:", err?.message));
 

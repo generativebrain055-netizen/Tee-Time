@@ -311,6 +311,39 @@ class InviteController {
             // Check and update tee time status after response
             await teeTimeRepository.checkAndUpdateStatus(invite.tee_time_id);
 
+            // Invitee: push when their invite is fully accepted (not waitlisted)
+            if (
+                result.success &&
+                response === INVITE_RESPONSES.ACCEPTED &&
+                result.status === INVITE_RESPONSES.ACCEPTED
+            ) {
+                try {
+                    const refreshedTee = await teeTimeRepository.getTeeTimeById(
+                        invite.tee_time_id,
+                    );
+                    const org = refreshedTee?.creator_id
+                        ? await userRepository.findById(refreshedTee.creator_id)
+                        : null;
+                    await notificationService.notifyInviteCompleted(
+                        userId,
+                        refreshedTee || teeTime,
+                        org
+                            ? {
+                                  id: org.id,
+                                  firstName: org.first_name,
+                                  lastName: org.last_name,
+                              }
+                            : { id: teeTime.creator_id },
+                        inviteId,
+                    );
+                } catch (inviteeNotifErr) {
+                    logger.error(
+                        "Failed to notify invitee of completed invite",
+                        inviteeNotifErr,
+                    );
+                }
+            }
+
             if (
                 result.success &&
                 (response === INVITE_RESPONSES.ACCEPTED ||

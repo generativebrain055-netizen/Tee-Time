@@ -279,11 +279,16 @@ class InviteManagementService {
       
       for (const invite of expiringInvites) {
         if (invite.invitee_user_id) {
-          await notificationService.notifyFCFSDeadlineApproaching(
-            invite.invitee_user_id,
-            invite,
-            1
+          const teeTime = await teeTimeRepository.getTeeTimeById(
+            invite.tee_time_id,
           );
+          if (teeTime) {
+            await notificationService.notifyFCFSDeadlineApproaching(
+              invite.invitee_user_id,
+              teeTime,
+              1,
+            );
+          }
           await inviteRepository.markDeadlineNotificationSent(invite.id);
         }
       }

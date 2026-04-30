@@ -103,6 +103,29 @@ router.get("/history", teeTimeController.getHistory);
 router.get("/:id", teeTimeController.getTeeTime);
 
 /**
+ * @route   PATCH /api/tee-times/:id
+ * @desc    Organizer updates date/time/course/location (participants receive push)
+ * @access  Private
+ */
+router.patch(
+  "/:id",
+  [
+    body("courseName").optional().trim().notEmpty(),
+    body("courseLocation").optional({ values: "null" }).trim(),
+    body("teeDate")
+      .optional()
+      .matches(/^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$/)
+      .withMessage("Valid date required (MM-DD-YYYY or YYYY-MM-DD)"),
+    body("teeTime")
+      .optional()
+      .matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .withMessage("Valid time required (HH:MM)"),
+  ],
+  validateRequest,
+  teeTimeController.patchTeeTime,
+);
+
+/**
  * @route   POST /api/tee-times/:id/cancel
  * @desc    Cancel a tee time
  * @access  Private

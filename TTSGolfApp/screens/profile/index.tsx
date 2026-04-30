@@ -191,6 +191,22 @@ export default function ProfileScreen({ navigation }: any) {
         }
     }, [showQRModal, fetchQRForModal]);
 
+    // Scan tab: open full-screen scanner immediately (camera runs on ScanQR — no tap on the placeholder).
+    useEffect(() => {
+        if (!showQRModal || qrModalTab !== "scan") return;
+        let cancelled = false;
+        const frame = requestAnimationFrame(() => {
+            if (cancelled) return;
+            setShowQRModal(false);
+            setQrModalTab("mycode");
+            navigation?.navigate("ScanQR");
+        });
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frame);
+        };
+    }, [showQRModal, qrModalTab, navigation]);
+
     const closeQRModal = useCallback(() => {
         setShowQRModal(false);
         setQrModalTab("mycode");
@@ -236,16 +252,6 @@ export default function ProfileScreen({ navigation }: any) {
             ]
         );
     }, []);
-
-    const handleQRScan = useCallback(() => {
-        setShowQRModal(false);
-        navigation?.navigate("ScanQR");
-    }, [navigation]);
-
-    const openScanScreen = useCallback(() => {
-        setShowQRModal(false);
-        navigation?.navigate("ScanQR");
-    }, [navigation]);
 
     const handleSettings = useCallback(() => {
         navigation?.navigate("Settings");
@@ -895,11 +901,9 @@ export default function ProfileScreen({ navigation }: any) {
 
                     {/* Content area + segmented at bottom */}
                     {qrModalTab === "scan" ? (
-                        /* Scan: content #636363, placeholder 319x320 white border, "Scan a code" #FFFFFF */
+                        /* Scan tab: camera opens automatically (see effect); brief placeholder if navigation is delayed */
                         <View style={{ flex: 1, backgroundColor: "#636363", alignItems: "center", justifyContent: "center", paddingBottom: QR_SEGMENTED_HEIGHT + 16 + Math.max(insets.bottom, 24) }}>
-                            <TouchableOpacity
-                                activeOpacity={0.9}
-                                onPress={openScanScreen}
+                            <View
                                 style={{
                                     width: Math.min(QR_SCAN_PLACEHOLDER_SIZE, SCREEN_WIDTH - 48),
                                     height: Math.min(QR_SCAN_PLACEHOLDER_SIZE, SCREEN_WIDTH - 48),
@@ -909,9 +913,13 @@ export default function ProfileScreen({ navigation }: any) {
                                     borderWidth: 1,
                                     borderColor: "#FFFFFF",
                                     borderRadius: 20,
+                                    alignItems: "center",
+                                    justifyContent: "center",
                                 }}
-                            />
-                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 15, lineHeight: 28, color: "#FFFFFF", marginTop: 38 }}>Scan a code</Text>
+                            >
+                                <ActivityIndicator size="large" color="#FFFFFF" />
+                            </View>
+                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 15, lineHeight: 28, color: "#FFFFFF", marginTop: 38 }}>Opening camera…</Text>
                         </View>
                     ) : (
                         /* My code: content #F7F7F7, card 319x370, name 18/700 #1B1B1B, member 14/400 #747474, QR 240 logo 78 */

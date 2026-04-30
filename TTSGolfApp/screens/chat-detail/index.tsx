@@ -69,6 +69,7 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
         handleMuteToggle,
         handleLeaveConversation,
         blockRelation,
+        onMessageBubbleLayout,
     } = useChat(chatInfo);
 
     const isDirectChat = !chatInfo.teeTimeId && !chatInfo.groupId;
@@ -273,14 +274,20 @@ function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
                         </View>
                     ) : (
                         messages.map((message) => (
-                            <MessageBubble
+                            <View
                                 key={message.id}
-                                message={message}
-                                onConvertToGroupMessage={handleConvertToGroupMessage}
-                                canDelete={message.isMe || !!chatInfo.teeTimeId}
-                                onDelete={handleDeleteMessageWithAlert}
-                                onEdit={(id, text) => setEditTarget({ id, text })}
-                            />
+                                onLayout={(e) =>
+                                    onMessageBubbleLayout(message.id, e.nativeEvent.layout.y)
+                                }
+                            >
+                                <MessageBubble
+                                    message={message}
+                                    onConvertToGroupMessage={handleConvertToGroupMessage}
+                                    canDelete={message.isMe || !!chatInfo.teeTimeId}
+                                    onDelete={handleDeleteMessageWithAlert}
+                                    onEdit={(id, text) => setEditTarget({ id, text })}
+                                />
+                            </View>
                         ))
                     )}
                 </ScrollView>

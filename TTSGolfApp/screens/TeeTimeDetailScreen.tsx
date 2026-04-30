@@ -12,7 +12,7 @@ import {
     RefreshControl,
     Image,
 } from "react-native";
-import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck, Check, UserPlus } from "lucide-react-native";
+import { ChevronLeft, Calendar, MapPin, Users, Clock, ChevronDown, ChevronRight, X, LogOut, AlertCircle, SkipForward, MessageCircle, ClipboardCheck, Check, UserPlus, Pencil } from "lucide-react-native";
 import { teeTimeApi, attendanceApi, inviteApi } from "../services/api";
 import { ScreenShell } from "../ui";
 import { TeeTimeConfirmSheet } from "../ui/sheets/TeeTimeConfirmSheet";
@@ -22,6 +22,7 @@ import { useAuthStore } from "../stores";
 import { useUser } from "../contexts/UserContext";
 import { logger } from "../utils/logger";
 import { formatDateMMDDYYYY, formatRemainingClock, parseCalendarDateLocal } from "../utils/formatting";
+import { EditTeeTimeDetailsModal } from "../components/tee-time/EditTeeTimeDetailsModal";
 import { getDisplayTeeTimeStatus } from "../utils/teeTimeStatusDisplay";
 
 // Import tick and cross assets
@@ -438,7 +439,10 @@ const BackupDeclinedRow = memo(
 );
 
 function TeeTimeDetailScreen({ navigation, route }: any) {
-    const { teeTimeId } = route.params || {};
+    const { teeTimeId, fromTeeTimeAtRiskPush: fromTeeTimeAtRiskPushParam } = route.params || {};
+    const fromTeeTimeAtRiskPush = fromTeeTimeAtRiskPushParam === true;
+    const mainScrollRef = useRef<ScrollView>(null);
+    const consumedAtRiskScrollRef = useRef(false);
     const currentUserId = useAuthStore((s) => s.user?.id);
     const { fetchProfile } = useUser();
     const toast = useToast();
@@ -450,6 +454,7 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
     const [showCancelledMembers, setShowCancelledMembers] = useState(false);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showEditTeeDetailsModal, setShowEditTeeDetailsModal] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [respondingToInvite, setRespondingToInvite] = useState(false);
@@ -712,6 +717,24 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         });
     }, [teeTime, isOrganizer, autoOpenCheckInParam, inCheckInWindow, navigation]);
 
+    // Push / notification tap: “Tee Time at Risk” → land on this tee time and scroll toward organizer actions.
+    useEffect(() => {
+        if (
+            loading ||
+            !teeTime ||
+            !fromTeeTimeAtRiskPush ||
+            consumedAtRiskScrollRef.current
+        ) {
+            return;
+        }
+        consumedAtRiskScrollRef.current = true;
+        const t = setTimeout(() => {
+            mainScrollRef.current?.scrollToEnd({ animated: true });
+            navigation?.setParams?.({ fromTeeTimeAtRiskPush: false });
+        }, 400);
+        return () => clearTimeout(t);
+    }, [loading, teeTime, fromTeeTimeAtRiskPush, navigation]);
+
     // Check if current user is a participant
     const isParticipant = useMemo(() => {
         if (!teeTime || !currentUserId) return false;
@@ -722,6 +745,11 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         () => normalizeTeeDetailStatus(effectiveTeeStatusForUi(teeTime)),
         [teeTime],
     );
+
+    const canEditScheduledDetails = useMemo(() => {
+        if (!isOrganizer || !teeTime) return false;
+        return !["completed", "cancelled", "canceled"].includes(normalizedTeeStatus);
+    }, [isOrganizer, teeTime, normalizedTeeStatus]);
 
     /** Raw pending invite for the current user (same source as Invite Detail). */
     const pendingInviteForMe = useMemo(() => {
@@ -990,19 +1018,34 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
                 <Text className="font-jakarta-bold text-lg text-gray-900">
                     Tee time status
                 </Text>
-                {normalizedTeeStatus === "confirmed" && (
-                    <TouchableOpacity 
-                        onPress={() => navigation?.navigate("ChatDetail", { chatInfo: { teeTimeId: teeTimeId } })} 
-                        className="p-1 -mr-1" 
-                        activeOpacity={0.7}
-                    >
-                        <MessageCircle size={24} color="#5EBC68" strokeWidth={2} />
-                    </TouchableOpacity>
-                )}
-                {normalizedTeeStatus !== "confirmed" && <View className="w-8" />}
+                <View className="flex-row items-center min-w-[44px] justify-end">
+                    {canEditScheduledDetails && (
+                        <TouchableOpacity
+                            onPress={() => setShowEditTeeDetailsModal(true)}
+                            className="p-1 mr-1"
+                            activeOpacity={0.7}
+                            accessibilityLabel="Edit date, time, and club"
+                        >
+                            <Pencil size={22} color="#6B7280" strokeWidth={2} />
+                        </TouchableOpacity>
+                    )}
+                    {normalizedTeeStatus === "confirmed" && (
+                        <TouchableOpacity
+                            onPress={() => navigation?.navigate("ChatDetail", { chatInfo: { teeTimeId: teeTimeId } })}
+                            className="p-1 -mr-1"
+                            activeOpacity={0.7}
+                        >
+                            <MessageCircle size={24} color="#5EBC68" strokeWidth={2} />
+                        </TouchableOpacity>
+                    )}
+                    {!canEditScheduledDetails && normalizedTeeStatus !== "confirmed" ? (
+                        <View className="w-8" />
+                    ) : null}
+                </View>
             </View>
 
             <ScrollView
+                ref={mainScrollRef}
                 className="flex-1 bg-white"
                 contentContainerStyle={{ paddingBottom: 40 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#5EBC68" />}
@@ -1379,6 +1422,21 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
 
                 <View className="h-24" />
             </ScrollView>
+
+            <EditTeeTimeDetailsModal
+                visible={showEditTeeDetailsModal}
+                teeTimeId={String(teeTimeId)}
+                initial={{
+                    courseName: teeTime.courseName,
+                    courseLocation: teeTime.courseLocation || "",
+                    teeDate: teeTime.teeDate,
+                    teeTime: teeTime.teeTime,
+                }}
+                onClose={() => setShowEditTeeDetailsModal(false)}
+                onSaved={() => {
+                    void fetchTeeTimeDetails();
+                }}
+            />
 
             {/* Leave Tee Time Modal */}
             <ConfirmModal

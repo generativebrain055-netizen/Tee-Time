@@ -496,6 +496,31 @@ class TeeTimeRepository {
     }
   }
 
+  /**
+   * Distinct user IDs on the tee time with a confirmed (or legacy null) participant row,
+   * still active (not left). Used so detail-change notifications reach every confirmed player,
+   * not only users matching group-chat eligibility rules.
+   */
+  async getConfirmedActiveParticipantUserIds(teeTimeId) {
+    if (!teeTimeId) return [];
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("user_id")
+        .eq("tee_time_id", teeTimeId)
+        .not("user_id", "is", null)
+        .is("left_at", null)
+        .or("status.eq.confirmed,status.is.null");
+
+      if (error) throw error;
+      return [
+        ...new Set((data || []).map((r) => r.user_id).filter(Boolean)),
+      ];
+    } catch (error) {
+      handleError(error, "getConfirmedActiveParticipantUserIds");
+    }
+  }
+
   /** Users who left after joining (detail API only; excluded from active participant queries). */
   async getCancelledParticipants(teeTimeId) {
     try {
@@ -1237,6 +1262,90 @@ class TeeTimeRepository {
       return teeTimesWithDistance.filter(tt => tt !== null);
     } catch (error) {
       handleError(error, "getOpenInvites");
+    }
+  }
+
+  /**
+   * Organizer-only update for date/time/course/location. Returns merged row and which fields changed.
+   */
+  async updateTeeTimeByOrganizer(teeTimeId, organizerId, patch) {
+    try {
+      const existing = await this.getTeeTimeById(teeTimeId);
+      if (!existing) {
+        const err = new Error("Tee time not found");
+        err.code = "NOT_FOUND";
+        throw err;
+      }
+      if (existing.creator_id !== organizerId) {
+        const err = new Error("Forbidden");
+        err.code = "FORBIDDEN";
+        throw err;
+      }
+
+      const updates = {};
+      if (patch.courseName !== undefined) {
+        updates.course_name = String(patch.courseName).trim();
+      }
+      if (patch.courseLocation !== undefined) {
+        updates.course_location =
+          patch.courseLocation == null || patch.courseLocation === ""
+            ? null
+            : String(patch.courseLocation).trim();
+      }
+      if (patch.teeDate !== undefined) {
+        updates.tee_date = patch.teeDate;
+      }
+      if (patch.teeTime !== undefined) {
+        updates.tee_time = patch.teeTime;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return { previous: existing, updated: existing, changes: {} };
+      }
+
+      updates.updated_at = new Date().toISOString();
+
+      const { error } = await supabaseAdmin
+        .from("tee_times")
+        .update(updates)
+        .eq("id", teeTimeId)
+        .eq("creator_id", organizerId);
+
+      if (error) throw error;
+
+      const merged = await this.getTeeTimeById(teeTimeId);
+      const data = merged || existing;
+
+      const changes = {};
+      if (
+        patch.courseName !== undefined &&
+        String(existing.course_name || "") !== String(data.course_name || "")
+      ) {
+        changes.courseName = true;
+      }
+      if (
+        patch.courseLocation !== undefined &&
+        String(existing.course_location || "") !==
+          String(data.course_location || "")
+      ) {
+        changes.courseLocation = true;
+      }
+      if (
+        patch.teeDate !== undefined &&
+        String(existing.tee_date) !== String(data.tee_date)
+      ) {
+        changes.teeDate = true;
+      }
+      if (
+        patch.teeTime !== undefined &&
+        String(existing.tee_time) !== String(data.tee_time)
+      ) {
+        changes.teeTime = true;
+      }
+
+      return { previous: existing, updated: data, changes };
+    } catch (error) {
+      handleError(error, "updateTeeTimeByOrganizer");
     }
   }
 }

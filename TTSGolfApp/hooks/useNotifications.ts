@@ -320,6 +320,52 @@ export function getNotificationNavigation(item: AppNotification): {
       }
       return { screen: null };
 
+    case "message": {
+      if (!item.data?.conversationId) return { screen: null };
+      const mid =
+        item.data?.messageId != null && String(item.data.messageId).trim()
+          ? String(item.data.messageId).trim()
+          : undefined;
+      return {
+        screen: "ChatDetail",
+        params: {
+          chatInfo: {
+            conversationId: item.data.conversationId,
+            id: item.data.conversationId,
+            name:
+              typeof item.data.senderName === "string" &&
+              String(item.data.senderName).trim()
+                ? String(item.data.senderName).trim()
+                : "Messages",
+            subtitle: "Message",
+            isGroup: false,
+            ...(mid ? { focusMessageId: mid } : {}),
+          },
+        },
+      };
+    }
+
+    case "invite_completed":
+      if (item.data?.inviteId) {
+        return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };
+      }
+      return item.data?.teeTimeId
+        ? { screen: "TeeTimeDetail", params: { teeTimeId: item.data.teeTimeId } }
+        : { screen: null };
+
+    case "tee_time_details_updated":
+      return item.data?.teeTimeId
+        ? { screen: "TeeTimeDetail", params: { teeTimeId: item.data.teeTimeId } }
+        : { screen: null };
+
+    case "fcfs_deadline":
+    case "fcfs_deadline_set":
+    case "invite_warning":
+    case "invite_expired":
+      return item.data?.teeTimeId
+        ? { screen: "TeeTimeDetail", params: { teeTimeId: item.data.teeTimeId } }
+        : { screen: null };
+
     case "check_in_reminder":
       return item.data?.teeTimeId
         ? {
@@ -353,16 +399,13 @@ export function getNotificationNavigation(item: AppNotification): {
     case "tee_time_not_filled":
     case "organizer_fill_warning":
     case "organizer_invite_more":
+    case "tee_time_at_risk":
       return item.data?.teeTimeId
         ? {
-            screen: "SelectOnDeck",
+            screen: "TeeTimeDetail",
             params: {
               teeTimeId: item.data.teeTimeId,
-              spotsRemaining: item.data.spotsRemaining || 1,
-              courseName: item.data.courseName,
-              teeDate: item.data.teeDate,
-              teeTime: item.data.teeTime,
-              unfilledSlotAlert: true,
+              fromTeeTimeAtRiskPush: true,
             },
           }
         : { screen: null };

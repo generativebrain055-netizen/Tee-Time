@@ -28,6 +28,8 @@ export interface ChatInfo {
   recipientId?: string;
   teeTimeId?: string;
   groupId?: string;
+  /** When set (e.g. from push / notification tap), scroll this message into view after load */
+  focusMessageId?: string;
   name: string;
   subtitle: string;
   img?: string;

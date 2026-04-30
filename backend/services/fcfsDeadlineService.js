@@ -133,6 +133,7 @@ class FCFSDeadlineService {
                 teeTimeId: invite.tee_time_id,
                 inviteId: invite.id,
               },
+              sendPush: true,
             });
           } catch (err) {
             logger.error(
@@ -180,6 +181,7 @@ class FCFSDeadlineService {
                     teeTimeId: invite.tee_time_id,
                     inviteId: invite.id,
                   },
+                  sendPush: true,
                 });
               } catch (notifyError) {
                 logger.error(

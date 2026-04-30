@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ScrollView, Alert } from "react-native";
+import { ScrollView, Alert, InteractionManager } from "react-native";
 import { messagesApi, friendApi } from "../../../services/api";
 import { ApiError } from "../../../services/api/core";
 import type { ChatMessage, ChatDetailState, ChatInfo, DirectBlockRelation } from "../types";
@@ -33,6 +33,40 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
   const [isMuted, setIsMuted] = useState(false);
   const [blockRelation, setBlockRelation] = useState<DirectBlockRelation | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const messageLayoutYsRef = useRef<Record<string, number>>({});
+  const focusMessageId =
+    typeof chatInfo?.focusMessageId === "string" && chatInfo.focusMessageId.trim()
+      ? chatInfo.focusMessageId.trim()
+      : undefined;
+
+  useEffect(() => {
+    messageLayoutYsRef.current = {};
+  }, [
+    chatInfo?.conversationId,
+    chatInfo?.recipientId,
+    chatInfo?.teeTimeId,
+    chatInfo?.groupId,
+  ]);
+
+  const tryScrollToFocusedMessage = useCallback(() => {
+    if (!focusMessageId || !scrollViewRef.current) return;
+    const y = messageLayoutYsRef.current[focusMessageId];
+    if (typeof y !== "number" || Number.isNaN(y)) return;
+    scrollViewRef.current.scrollTo({
+      y: Math.max(0, y - 72),
+      animated: true,
+    });
+  }, [focusMessageId]);
+
+  const onMessageBubbleLayout = useCallback(
+    (messageId: string, y: number) => {
+      messageLayoutYsRef.current[messageId] = y;
+      if (focusMessageId && messageId === focusMessageId) {
+        requestAnimationFrame(() => tryScrollToFocusedMessage());
+      }
+    },
+    [focusMessageId, tryScrollToFocusedMessage],
+  );
 
   // Resolve conversation and load messages
   useEffect(() => {
@@ -140,10 +174,38 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
   }, [conversationId]);
 
   useEffect(() => {
+    if (focusMessageId) return;
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [state.messages]);
+  }, [state.messages, focusMessageId]);
+
+  // Opened from push / notification with a specific message — scroll after list lays out
+  useEffect(() => {
+    if (focusMessageId == null || focusMessageId === "") return;
+    if (state.loading) return;
+    if (!state.messages.some((m) => m.id === focusMessageId)) return;
+    let cancelled = false;
+    let t1: ReturnType<typeof setTimeout> | undefined;
+    let t2: ReturnType<typeof setTimeout> | undefined;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      t1 = setTimeout(() => {
+        if (!cancelled) tryScrollToFocusedMessage();
+      }, 50);
+      t2 = setTimeout(() => {
+        if (!cancelled) tryScrollToFocusedMessage();
+      }, 280);
+    });
+    return () => {
+      cancelled = true;
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
+      if (task && typeof (task as { cancel?: () => void }).cancel === "function") {
+        (task as { cancel: () => void }).cancel();
+      }
+    };
+  }, [focusMessageId, state.loading, state.messages, tryScrollToFocusedMessage]);
 
   const setMessageText = useCallback((text: string) => {
     setState((prev) => ({ ...prev, messageText: text }));
@@ -395,5 +457,6 @@ export const useChat = (chatInfo: ChatInfo | undefined) => {
     handleUpdateMessage,
     handleMuteToggle,
     handleLeaveConversation,
+    onMessageBubbleLayout,
   };
 };

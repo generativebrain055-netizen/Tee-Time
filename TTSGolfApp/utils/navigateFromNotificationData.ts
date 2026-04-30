@@ -71,6 +71,12 @@ export function prepareNotificationDataForNavigation(
   if (out.conversation_id != null && out.conversationId == null) {
     out.conversationId = out.conversation_id;
   }
+  if (out.message_id != null && out.messageId == null) {
+    out.messageId = out.message_id;
+  }
+  if (out.notification_id != null && out.notificationId == null) {
+    out.notificationId = out.notification_id;
+  }
   if (out.notificationType != null && out.type == null) {
     out.type = out.notificationType;
   }
@@ -88,6 +94,15 @@ export function prepareNotificationDataForNavigation(
  * Navigate based on API / push `data` (expects `type` and related ids).
  * @returns true if a `navigate()` was invoked (stack update scheduled).
  */
+function pushHighlightNotificationId(
+  d: Record<string, unknown>,
+): string | undefined {
+  const raw = d.notificationId ?? d.notification_id;
+  if (raw == null) return undefined;
+  const s = String(raw).trim();
+  return s.length > 0 ? s : undefined;
+}
+
 export function navigateFromNotificationData(
   navigate: NotificationNavigateFn,
   rawData: Record<string, unknown> | null | undefined,
@@ -99,20 +114,14 @@ export function navigateFromNotificationData(
     dataType === "organizer_fill_warning" ||
     dataType === "tee_time_not_filled" ||
     dataType === "organizer_invite_more" ||
-    dataType === "roster_exhausted"
+    dataType === "roster_exhausted" ||
+    dataType === "tee_time_at_risk"
   ) {
     if (d.teeTimeId) {
-      const unfilled =
-        dataType === "tee_time_not_filled" ||
-        dataType === "organizer_fill_warning" ||
-        dataType === "organizer_invite_more";
-      navigate("SelectOnDeck", {
+      // Organizer “at risk” / unfilled flows: open that tee time’s detail (scroll to actions there).
+      navigate("TeeTimeDetail", {
         teeTimeId: String(d.teeTimeId),
-        spotsRemaining: (d.spotsRemaining as number) ?? 1,
-        courseName: d.courseName as string | undefined,
-        teeDate: d.teeDate as string | undefined,
-        teeTime: d.teeTime as string | undefined,
-        unfilledSlotAlert: unfilled,
+        fromTeeTimeAtRiskPush: true,
       });
       return true;
     }
@@ -134,22 +143,73 @@ export function navigateFromNotificationData(
   }
 
   if (dataType === "tee_time_invite" || dataType === "spot_opened") {
-    if (d.teeTimeId) {
-      navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
-    } else if (d.inviteId) {
+    const nid = pushHighlightNotificationId(d);
+    if (nid) {
+      navigate("Notifications", { highlightNotificationId: nid });
+      return true;
+    }
+    if (d.inviteId) {
       navigate("InviteDetail", { inviteId: String(d.inviteId) });
+    } else if (d.teeTimeId) {
+      navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
     } else {
       navigate("Invites");
     }
     return true;
   }
 
-  if (dataType === "fcfs_deadline" && d.teeTimeId) {
+  if (dataType === "invite_completed") {
+    if (d.inviteId) {
+      navigate("InviteDetail", { inviteId: String(d.inviteId) });
+      return true;
+    }
+    const nid = pushHighlightNotificationId(d);
+    if (nid) {
+      navigate("Notifications", { highlightNotificationId: nid });
+      return true;
+    }
+    if (d.teeTimeId) {
+      navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+      return true;
+    }
+    return false;
+  }
+
+  // Date/time/location change — always open this tee time (do not prefer Notifications when notificationId is on the push).
+  if (dataType === "tee_time_details_updated") {
+    if (d.teeTimeId) {
+      navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+      return true;
+    }
+    const nid = pushHighlightNotificationId(d);
+    if (nid) {
+      navigate("Notifications", { highlightNotificationId: nid });
+      return true;
+    }
+    return false;
+  }
+
+  if (
+    (dataType === "fcfs_deadline" ||
+      dataType === "fcfs_deadline_set" ||
+      dataType === "invite_warning" ||
+      dataType === "invite_expired") &&
+    d.teeTimeId
+  ) {
+    const nid = pushHighlightNotificationId(d);
+    if (nid) {
+      navigate("Notifications", { highlightNotificationId: nid });
+      return true;
+    }
     navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
     return true;
   }
 
   if (dataType === "message" && d.conversationId) {
+    const focusMessageId =
+      d.messageId != null && String(d.messageId).trim()
+        ? String(d.messageId).trim()
+        : undefined;
     navigate("ChatDetail", {
       chatInfo: {
         conversationId: String(d.conversationId),
@@ -160,6 +220,7 @@ export function navigateFromNotificationData(
             : "Messages",
         subtitle: "Message",
         isGroup: false,
+        ...(focusMessageId ? { focusMessageId } : {}),
       },
     });
     return true;
@@ -228,14 +289,22 @@ export function navigateFromNotificationData(
     return true;
   }
 
-  // Organizer: invite accepted/declined includes inviteId + teeTimeId — open tee time detail, not invitee InviteDetail.
-  if (dataType === "tee_time_response" && d.teeTimeId) {
-    navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
-    return true;
-  }
-  if (dataType === "tee_time_response" && d.inviteId) {
-    navigate("InviteDetail", { inviteId: String(d.inviteId) });
-    return true;
+  // Organizer: invite accepted/declined — prefer highlighting the in-app row when opened from push.
+  if (dataType === "tee_time_response") {
+    const nid = pushHighlightNotificationId(d);
+    if (nid) {
+      navigate("Notifications", { highlightNotificationId: nid });
+      return true;
+    }
+    if (d.teeTimeId) {
+      navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+      return true;
+    }
+    if (d.inviteId) {
+      navigate("InviteDetail", { inviteId: String(d.inviteId) });
+      return true;
+    }
+    return false;
   }
 
   if (

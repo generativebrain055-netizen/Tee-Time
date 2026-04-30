@@ -22,6 +22,36 @@ async function resolveUserAvatarUrl(userLike) {
   }
 }
 
+/**
+ * Map backend `data.type` to the key used in app `notification_preferences.types`
+ * (see NotificationSettingsScreen NOTIFICATION_TYPES). Unlisted types use themselves or default on.
+ */
+const NOTIFICATION_PREFERENCE_TYPE_ALIASES = {
+  invite_warning: "tee_time_invite",
+  invite_expired: "tee_time_invite",
+  fcfs_deadline: "tee_time_invite",
+  fcfs_deadline_set: "tee_time_invite",
+  invite_completed: "tee_time_booked",
+  tee_time_details_updated: "tee_time_booked",
+  organizer_fill_warning: "tee_time_response",
+  tee_time_not_filled: "tee_time_response",
+  organizer_invite_more: "tee_time_response",
+  roster_exhausted: "tee_time_response",
+  tee_time_at_risk: "tee_time_response",
+  no_show: "check_in_reminder",
+  broadcast: "message",
+  general: "message",
+};
+
+function getEffectiveNotificationPreferenceType(notificationType) {
+  if (!notificationType || typeof notificationType !== "string") {
+    return "message";
+  }
+  return (
+    NOTIFICATION_PREFERENCE_TYPE_ALIASES[notificationType] || notificationType
+  );
+}
+
 /** Expo push tokens start with this prefix. Others are treated as FCM tokens. */
 const EXPO_PUSH_TOKEN_PREFIX = "ExponentPushToken[";
 
@@ -183,10 +213,12 @@ class NotificationService {
       }
 
       const prefs = profile.notification_preferences || {};
+      const effectiveType =
+        getEffectiveNotificationPreferenceType(notificationType);
 
       if (channel === "inApp") {
-        if (prefs.types && prefs.types[notificationType]) {
-          const typePrefs = prefs.types[notificationType];
+        if (prefs.types && prefs.types[effectiveType]) {
+          const typePrefs = prefs.types[effectiveType];
           return typePrefs.inApp !== false;
         }
         return true;
@@ -196,8 +228,8 @@ class NotificationService {
       if (prefs.systemPushEnabled === false) return false;
       if (prefs.push === false) return false;
 
-      if (prefs.types && prefs.types[notificationType]) {
-        const typePrefs = prefs.types[notificationType];
+      if (prefs.types && prefs.types[effectiveType]) {
+        const typePrefs = prefs.types[effectiveType];
         if (typePrefs.push === false) return false;
       }
 
@@ -240,7 +272,7 @@ class NotificationService {
 
       const notificationType = data.type || "general";
 
-      // Group invites must always create an in-app row so invitees can Accept/Decline even if they muted the type.
+      // In-app and push each respect user preferences (and optional type aliases → settings keys).
       const inAppEnabled =
         forceInApp ||
         (await this.checkNotificationPreference(userId, notificationType, "inApp"));
@@ -309,7 +341,11 @@ class NotificationService {
             const pushTokens = devices.map(d => d.push_token).filter(Boolean);
             
             if (pushTokens.length > 0) {
-              await this.sendPushNotifications(pushTokens, title, body, data);
+              const pushData =
+                notification?.id != null
+                  ? { ...data, notificationId: notification.id }
+                  : { ...data };
+              await this.sendPushNotifications(pushTokens, title, body, pushData);
             }
           } catch (pushError) {
             // Log but don't fail - push notifications are optional
@@ -356,6 +392,7 @@ class NotificationService {
         senderAvatar: senderAvatar || null,
         requestId: requestId,
       },
+      sendPush: true,
     });
   }
 
@@ -377,22 +414,21 @@ class NotificationService {
         userName: accepterName,
         userAvatar: userAvatar || null,
       },
+      sendPush: true,
     });
   }
 
   /**
-   * Create tee time invite notification
-   * @param {string} userId - User receiving the notification
-   * @param {Object} teeTime - Tee time info
-   * @param {Object} inviter - Inviter info
-   * @param {string|null} expiresAt - Expiry date/time
-   * @param {string|null} inviteId - The invite ID (required for responding)
+   * Build title/body/data for a tee time invite (new or refreshed row).
+   * @param {Object} teeTime - Must include id, tee_date/tee_time (or date/time), course_name/courseName
+   * @param {Object} inviter - { id, firstName, lastName, ... }
+   * @param {string|null} expiresAt - Invite response deadline ISO
+   * @param {string|null} inviteId - Invite row id
    */
-  async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null, inviteId = null) {
+  async buildTeeTimeInvitePayload(teeTime, inviter, expiresAt, inviteId) {
     const inviterName =
       `${inviter.firstName || ""} ${inviter.lastName || ""}`.trim() ||
       "Someone";
-    // Handle both camelCase and snake_case field names
     const date = teeTime.date || teeTime.tee_date;
     const time = teeTime.time || teeTime.tee_time;
     const courseName = teeTime.courseName || teeTime.course_name;
@@ -410,20 +446,18 @@ class NotificationService {
       });
       body += `. Respond by ${deadlineStr}`;
     }
-    // Second line: full course name (avoids truncation in the middle of a long inline sentence on push/OS previews)
     if (courseName && String(courseName).trim()) {
       body += `\n${String(courseName).trim()}`;
     }
 
     const inviterAvatar = await resolveUserAvatarUrl(inviter);
 
-    return this.createNotification({
-      userId,
+    return {
       title: "Tee Time Invitation",
       body,
       data: {
         type: "tee_time_invite",
-        inviteId: inviteId || null, // Include inviteId so frontend can respond
+        inviteId: inviteId || null,
         teeTimeId: teeTime.id,
         inviterId: inviter.id,
         inviterName,
@@ -434,8 +468,131 @@ class NotificationService {
         maxPlayers: teeTime.maxPlayers || teeTime.max_players || null,
         expiresAt: expiresAt || null,
       },
-      sendPush: true, // So invitees get a push and don't miss the invite
+    };
+  }
+
+  /**
+   * Create tee time invite notification
+   * @param {string} userId - User receiving the notification
+   * @param {Object} teeTime - Tee time info
+   * @param {Object} inviter - Inviter info
+   * @param {string|null} expiresAt - Expiry date/time
+   * @param {string|null} inviteId - The invite ID (required for responding)
+   */
+  async notifyTeeTimeInvite(userId, teeTime, inviter, expiresAt = null, inviteId = null) {
+    const { title, body, data } = await this.buildTeeTimeInvitePayload(
+      teeTime,
+      inviter,
+      expiresAt,
+      inviteId,
+    );
+    return this.createNotification({
+      userId,
+      title,
+      body,
+      data,
+      sendPush: true,
     });
+  }
+
+  /**
+   * When the organizer changes date/time/course, rewrite existing in-app
+   * `tee_time_invite` rows for pending invitees so copy and `data` match the tee time.
+   * Does not insert new rows or send push (invitees already get `tee_time_details_updated`).
+   */
+  async refreshPendingInviteNotificationsAfterTeeTimeDetailsUpdate({
+    teeTimeId,
+    updatedTeeTime,
+    organizer,
+  }) {
+    const inviteRepository = require("../repositories/inviteRepository");
+    if (!teeTimeId || !updatedTeeTime) return;
+
+    let invites;
+    try {
+      invites = await inviteRepository.getInvitesByTeeTime(teeTimeId);
+    } catch (e) {
+      logger.warn(
+        "refreshPendingInviteNotificationsAfterTeeTimeDetailsUpdate: getInvitesByTeeTime",
+        e?.message,
+      );
+      return;
+    }
+    if (!invites?.length) return;
+
+    const teeTimeForPayload = {
+      id: teeTimeId,
+      tee_date: updatedTeeTime.tee_date,
+      tee_time: updatedTeeTime.tee_time,
+      course_name: updatedTeeTime.course_name,
+      courseName: updatedTeeTime.course_name,
+      max_players: updatedTeeTime.max_players,
+      maxPlayers: updatedTeeTime.max_players,
+    };
+
+    const inviter =
+      organizer && organizer.id
+        ? organizer
+        : {
+            id: updatedTeeTime.creator_id,
+            firstName: updatedTeeTime.first_name,
+            lastName: updatedTeeTime.last_name,
+          };
+
+    for (const inv of invites) {
+      if (String(inv.status || "").toLowerCase() !== "pending") continue;
+      const inviteeId = inv.invitee_user_id;
+      if (!inviteeId || !inv.id) continue;
+
+      const { title, body, data } = await this.buildTeeTimeInvitePayload(
+        teeTimeForPayload,
+        inviter,
+        inv.expires_at || null,
+        inv.id,
+      );
+
+      const { data: rows, error } = await supabaseAdmin
+        .from("notifications")
+        .select("id, data")
+        .eq("user_id", inviteeId)
+        .filter("data->>type", "eq", "tee_time_invite")
+        .filter("data->>inviteId", "eq", String(inv.id));
+
+      if (error) {
+        logger.warn(
+          `refreshPendingInviteNotifications invite ${inv.id}:`,
+          error.message,
+        );
+        continue;
+      }
+
+      for (const row of rows || []) {
+        const prev = row.data || {};
+        if (prev.responded === true) continue;
+
+        const mergedData = {
+          ...data,
+          ...(prev.declined === true ? { declined: true } : {}),
+        };
+
+        const { error: upErr } = await supabaseAdmin
+          .from("notifications")
+          .update({
+            title,
+            body,
+            data: mergedData,
+          })
+          .eq("id", row.id)
+          .eq("user_id", inviteeId);
+
+        if (upErr) {
+          logger.warn(
+            `refreshPendingInviteNotifications row ${row.id}:`,
+            upErr.message,
+          );
+        }
+      }
+    }
   }
 
   /**
@@ -499,7 +656,6 @@ class NotificationService {
         memberCount: groupMeta.memberCount ?? null,
       },
       sendPush: true,
-      forceInApp: true,
     });
   }
 
@@ -594,17 +750,20 @@ class NotificationService {
    * Sent 5 minutes before tee time
    */
   async notifyCheckInReminder(organizerId, teeTime) {
+    const course =
+      teeTime.courseName || teeTime.course_name || "the course";
     return this.createNotification({
       userId: organizerId,
       type: "push",
       title: "Is Everyone Here?",
-      body: `Your tee time at ${teeTime.courseName} starts in 5 minutes. Tap to confirm attendance.`,
+      body: `Your tee time at ${course} starts in 5 minutes. Tap to confirm attendance.`,
       data: {
         type: "check_in_reminder",
         teeTimeId: teeTime.id,
-        courseName: teeTime.courseName,
+        courseName: course,
         action: "OPEN_CHECK_IN",
       },
+      sendPush: true,
     });
   }
 
@@ -612,15 +771,18 @@ class NotificationService {
    * Create no-show notification for user
    */
   async notifyNoShow(userId, teeTime) {
+    const course =
+      teeTime.courseName || teeTime.course_name || "the course";
     return this.createNotification({
       userId,
       title: "Attendance Update",
-      body: `You were marked as a no-show for ${teeTime.courseName}. Your Social Rate has been updated.`,
+      body: `You were marked as a no-show for ${course}. Your Social Rate has been updated.`,
       data: {
         type: "no_show",
         teeTimeId: teeTime.id,
         action: "VIEW_SOCIAL_RATE",
       },
+      sendPush: true,
     });
   }
 
@@ -632,7 +794,7 @@ class NotificationService {
       teeTime.course_name || teeTime.courseName || "the course";
     return this.createNotification({
       userId: organizerId,
-      title: "Roster Exhausted",
+      title: "Tee Time at Risk",
       body: `Your tee time at ${courseName} has ${spotsRemaining} spot${
         spotsRemaining > 1 ? "s" : ""
       } remaining. Select from On-Deck players to fill.`,
@@ -696,6 +858,7 @@ class NotificationService {
         time: teeTime.tee_time,
         action: "RESPOND_NOW",
       },
+      sendPush: true,
     });
   }
 
@@ -752,7 +915,7 @@ class NotificationService {
    * When a user sends a chat message, notify other active participants (push + in-app per preferences).
    * Skips muted threads and blocked relationships (direct / tee_time / group).
    */
-  async notifyNewChatMessage({ conversationId, senderId, previewText }) {
+  async notifyNewChatMessage({ conversationId, senderId, previewText, messageId }) {
     if (!conversationId || !senderId) return;
     try {
       const { data: parts, error: partsErr } = await supabaseAdmin
@@ -797,6 +960,7 @@ class NotificationService {
             conversationId,
             senderId,
             senderName,
+            ...(messageId ? { messageId } : {}),
           },
           sendPush: true,
         });
@@ -810,19 +974,23 @@ class NotificationService {
    * Notify user that FCFS deadline is approaching
    */
   async notifyFCFSDeadlineApproaching(userId, teeTime, hoursRemaining) {
+    const course =
+      teeTime.course_name || teeTime.courseName || "the course";
+    const ttId = teeTime.id || teeTime.tee_time_id;
     return this.createNotification({
       userId,
       title: "Response Deadline Approaching",
       body: `Only ${hoursRemaining} hour${
         hoursRemaining > 1 ? "s" : ""
-      } left to respond to the tee time at ${teeTime.course_name}!`,
+      } left to respond to the tee time at ${course}!`,
       data: {
         type: "fcfs_deadline",
-        teeTimeId: teeTime.id,
-        courseName: teeTime.course_name,
+        teeTimeId: ttId,
+        courseName: course,
         hoursRemaining,
         action: "RESPOND_NOW",
       },
+      sendPush: true,
     });
   }
 
@@ -839,7 +1007,7 @@ class NotificationService {
     const teeTimeStr = teeTime.tee_time != null ? String(teeTime.tee_time).slice(0, 5) : "";
     return this.createNotification({
       userId: organizerId,
-      title: "Unfilled Slot Alert",
+      title: "Tee Time at Risk",
       body: `Your tee time at ${
         teeTime.course_name
       } still has ${spotsRemaining} open spot${
@@ -868,7 +1036,7 @@ class NotificationService {
     const teeTimeStr = teeTime.tee_time != null ? String(teeTime.tee_time).slice(0, 5) : "";
     return this.createNotification({
       userId: organizerId,
-      title: "Unfilled Slot Alert",
+      title: "Tee Time at Risk",
       body: `Your tee time at ${
         teeTime.course_name
       } still has ${spotsRemaining} open spot${
@@ -906,7 +1074,7 @@ class NotificationService {
     const pipeWord = pipelineCount === 1 ? "invite" : "invites";
     return this.createNotification({
       userId: organizerId,
-      title: "Invite more players",
+      title: "Tee Time at Risk",
       body: `Your tee time at ${teeTime.course_name} still has ${spotsRemaining} open ${spotWord}, but only ${pipelineCount} active ${pipeWord} can fill them. Add players from your roster or On-Deck.`,
       data: {
         type: "organizer_invite_more",
@@ -995,6 +1163,81 @@ class NotificationService {
       },
       sendPush: true, // Enable push notifications for Waiver Wire posts
     });
+  }
+
+  /**
+   * Invitee successfully confirmed (not waitlisted) — push + in-app so they know the invite is complete.
+   */
+  async notifyInviteCompleted(inviteeUserId, teeTime, organizer, inviteId = null) {
+    if (!inviteeUserId || !teeTime?.id) return null;
+    const course = teeTime.course_name || teeTime.courseName || "the course";
+    const dateStr = this.formatDateForNotification(
+      teeTime.tee_date || teeTime.date,
+    );
+    const orgName =
+      `${organizer?.firstName || organizer?.first_name || ""} ${
+        organizer?.lastName || organizer?.last_name || ""
+      }`.trim() || "The organizer";
+    const datePart = dateStr ? ` on ${dateStr}` : "";
+    return this.createNotification({
+      userId: inviteeUserId,
+      title: "You're in!",
+      body: `Your invite is complete — you're confirmed for ${course}${datePart}.`,
+      data: {
+        type: "invite_completed",
+        teeTimeId: teeTime.id,
+        inviteId: inviteId || null,
+        courseName: teeTime.course_name || teeTime.courseName || null,
+        organizerId: organizer?.id || null,
+        organizerName: orgName,
+      },
+      sendPush: true,
+    });
+  }
+
+  /**
+   * Participants (except organizer) when date/time/course/location changed.
+   */
+  async notifyTeeTimeDetailsUpdated({
+    teeTimeId,
+    organizerName,
+    recipientUserIds,
+    updatedTeeTime,
+    changes,
+  }) {
+    if (!teeTimeId || !updatedTeeTime) return;
+    const course =
+      updatedTeeTime.course_name || updatedTeeTime.courseName || "your tee time";
+    const bits = [];
+    if (changes?.teeDate) bits.push("date");
+    if (changes?.teeTime) bits.push("time");
+    if (changes?.courseName || changes?.courseLocation) {
+      bits.push("course or location");
+    }
+    const detailStr =
+      bits.length > 0 ? bits.join(", ") : "details";
+    const title = "Tee time updated";
+    const body = `${organizerName || "The organizer"} updated the ${detailStr} for ${course}.`;
+    const data = {
+      type: "tee_time_details_updated",
+      teeTimeId,
+      courseName: course,
+    };
+    const ids = Array.isArray(recipientUserIds) ? recipientUserIds : [];
+    for (const uid of ids) {
+      if (!uid) continue;
+      try {
+        await this.createNotification({
+          userId: uid,
+          title,
+          body,
+          data: { ...data },
+          sendPush: true,
+        });
+      } catch (e) {
+        logger.warn("notifyTeeTimeDetailsUpdated:", e?.message);
+      }
+    }
   }
 
   /**

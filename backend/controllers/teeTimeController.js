@@ -35,6 +35,7 @@ class TeeTimeController {
     this.setFCFSDeadline = this.setFCFSDeadline.bind(this);
     this.getOpenInvites = this.getOpenInvites.bind(this);
     this.joinOpenInvite = this.joinOpenInvite.bind(this);
+    this.patchTeeTime = this.patchTeeTime.bind(this);
   }
 
   /**
@@ -102,6 +103,53 @@ class TeeTimeController {
       res
         .status(500)
         .json({ success: false, message: "Failed to get upcoming tee times" });
+    }
+  }
+
+  /**
+   * PATCH /api/tee-times/:id
+   * Organizer updates date/time/course/location — notifies participants (push).
+   */
+  async patchTeeTime(req, res) {
+    try {
+      const result = await teeTimeService.updateTeeTimeDetails(
+        req.params.id,
+        req.user.id,
+        req.body || {},
+      );
+      res.json({
+        success: true,
+        teeTime: formatTeeTimeDetail(
+          result.teeTime,
+          result.participants,
+          result.invites,
+          result.cancelledParticipants,
+        ),
+      });
+    } catch (error) {
+      logger.error("Patch tee time error:", error);
+      if (error.name === "TeeTimeServiceError") {
+        return res.status(error.statusCode).json({
+          success: false,
+          message: error.message,
+          code: error.code,
+        });
+      }
+      if (error?.code === "NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          message: "Tee time not found",
+        });
+      }
+      if (error?.code === "FORBIDDEN") {
+        return res.status(403).json({
+          success: false,
+          message: "Only the organizer can update this tee time",
+        });
+      }
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to update tee time" });
     }
   }
 

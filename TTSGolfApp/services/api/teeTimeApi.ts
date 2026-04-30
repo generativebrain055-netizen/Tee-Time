@@ -50,6 +50,26 @@ export const teeTimeApi = {
     ),
 
   /**
+   * Organizer updates date/time/course/location (notifies participants via push).
+   */
+  patchTeeTime: (
+    id: string,
+    body: Partial<{
+      courseName: string;
+      courseLocation: string | null;
+      teeDate: string;
+      teeTime: string;
+    }>,
+  ) =>
+    apiCall<{ success: boolean; teeTime: TeeTime }>(
+      `${API_ENDPOINTS.TEE_TIMES}/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      },
+    ),
+
+  /**
    * Cancel tee time
    */
   cancelTeeTime: (id: string) =>

@@ -16,6 +16,8 @@ import {
     StyleSheet,
     AppState,
     type AppStateStatus,
+    InteractionManager,
+    useWindowDimensions,
 } from "react-native";
 import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
@@ -52,9 +54,13 @@ function payloadFromBarcodeResult(result: BarcodeScanningResult): string {
 export default function ScanQRScreen({ navigation }: Props) {
     const colors = useColors();
     const insets = useSafeAreaInsets();
+    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
     // ─── Permission ──────────────────────────────────────────────────────────
     const [permission, requestPermission] = useCameraPermissions();
+    /** Mount CameraView only after transitions settle — avoids Android/iOS preview stuck until first tap. */
+    const [cameraMountReady, setCameraMountReady] = useState(false);
+    const resumeBurstTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     // Request permission as soon as the hook has loaded its status.
     useEffect(() => {
@@ -64,10 +70,29 @@ export default function ScanQRScreen({ navigation }: Props) {
         requestPermission();
     }, [permission, requestPermission]);
 
-    // Camera is active only when permission is definitively granted.
-    // This avoids mounting CameraView while permission is still being requested,
-    // which is what caused the camera to only work after a tap.
-    const cameraActive = permission?.granted === true;
+    // Defer mounting until after InteractionManager (opening from QR modal / stack avoids SurfaceView race).
+    useEffect(() => {
+        if (!permission?.granted) {
+            setCameraMountReady(false);
+            return;
+        }
+        let cancelled = false;
+        let delayTimeout: ReturnType<typeof setTimeout> | undefined;
+        const task = InteractionManager.runAfterInteractions(() => {
+            if (cancelled) return;
+            const delayMs = Platform.OS === "android" ? 140 : 56;
+            delayTimeout = setTimeout(() => {
+                if (!cancelled) setCameraMountReady(true);
+            }, delayMs);
+        });
+        return () => {
+            cancelled = true;
+            task.cancel?.();
+            if (delayTimeout) clearTimeout(delayTimeout);
+        };
+    }, [permission?.granted]);
+
+    const cameraActive = permission?.granted === true && cameraMountReady;
 
     // ─── Scanner state ────────────────────────────────────────────────────────
     const [scanned, setScanned] = useState(false);
@@ -93,6 +118,34 @@ export default function ScanQRScreen({ navigation }: Props) {
     useEffect(() => { scannedRef.current = scanned; }, [scanned]);
     useEffect(() => { processingRef.current = processing; }, [processing]);
 
+    useEffect(() => {
+        if (!cameraActive) setCameraReady(false);
+    }, [cameraActive]);
+
+    const clearResumeBurstTimeouts = useCallback(() => {
+        resumeBurstTimeoutsRef.current.forEach(clearTimeout);
+        resumeBurstTimeoutsRef.current = [];
+    }, []);
+
+    const runResumePreviewBurst = useCallback(() => {
+        const run = () => {
+            try {
+                cameraRef.current?.resumePreview?.();
+            } catch {
+                /* ignore */
+            }
+        };
+        run();
+        requestAnimationFrame(run);
+        const delays = Platform.OS === "android" ? [80, 220, 450] : [50, 180, 380];
+        delays.forEach((ms) => {
+            const id = setTimeout(run, ms);
+            resumeBurstTimeoutsRef.current.push(id);
+        });
+    }, []);
+
+    useEffect(() => () => clearResumeBurstTimeouts(), [clearResumeBurstTimeouts]);
+
     // iOS: stop camera session when app backgrounds; resume when foreground (Expo recommends one active preview).
     useEffect(() => {
         const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
@@ -110,25 +163,6 @@ export default function ScanQRScreen({ navigation }: Props) {
         });
         return () => sub.remove();
     }, []);
-
-    // Auto-start scanning as soon as the camera is ready — no tap needed.
-    useEffect(() => {
-        if (!cameraReady) return;
-        cameraRef.current?.resumePreview();
-    }, [cameraReady]);
-
-    // Android: session/preview sometimes needs a frame after mount; avoids "tap to wake" camera.
-    useEffect(() => {
-        if (!cameraActive) return;
-        const id = requestAnimationFrame(() => {
-            try {
-                cameraRef.current?.resumePreview?.();
-            } catch {
-                /* ignore */
-            }
-        });
-        return () => cancelAnimationFrame(id);
-    }, [cameraActive]);
 
     // ─── Simulator fallback ───────────────────────────────────────────────────
     useEffect(() => {
@@ -266,10 +300,30 @@ export default function ScanQRScreen({ navigation }: Props) {
              * No key-based remounting, no osCameraGranted race — clean single mount.
              */}
             {cameraActive && (
-                <View style={StyleSheet.absoluteFillObject} collapsable={false} pointerEvents="auto">
+                <View
+                    style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]}
+                    collapsable={false}
+                    pointerEvents="none"
+                    onLayout={() => {
+                        requestAnimationFrame(() => {
+                            try {
+                                cameraRef.current?.resumePreview?.();
+                            } catch {
+                                /* ignore */
+                            }
+                        });
+                    }}
+                >
                     <CameraView
                         ref={cameraRef}
-                        style={StyleSheet.absoluteFillObject}
+                        pointerEvents="none"
+                        style={{
+                            position: "absolute",
+                            left: 0,
+                            top: 0,
+                            width: windowWidth,
+                            height: windowHeight,
+                        }}
                         facing="back"
                         // Expo FocusMode: "on" = AF once then lock; "off" = continuous AF — better for QR at varying distances.
                         autofocus="off"
@@ -282,6 +336,8 @@ export default function ScanQRScreen({ navigation }: Props) {
                             logger.debug("[ScanQRScreen] Camera ready", { platform: Platform.OS });
                             setCameraReady(true);
                             setCameraPreviewLikelyUnavailable(false);
+                            clearResumeBurstTimeouts();
+                            runResumePreviewBurst();
                         }}
                         onMountError={(e) => {
                             logger.error("[ScanQRScreen] Camera mount error", { message: e.message, platform: Platform.OS });
@@ -291,8 +347,8 @@ export default function ScanQRScreen({ navigation }: Props) {
                 </View>
             )}
 
-            {/* ── Overlay (StyleSheet fill — reliable on iOS/Android vs NativeWind inset-0) ─ */}
-            <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+            {/* ── Overlay above camera (zIndex) — camera pointerEvents none so hit-testing stays predictable ─ */}
+            <View style={[StyleSheet.absoluteFillObject, { zIndex: 1 }]} pointerEvents="box-none">
                 {/* Top bar */}
                 <View className="bg-black/70 items-center px-5" style={{ paddingTop: insets.top }}>
                     <View className="flex-row items-center justify-between w-full pt-4 pb-2">
