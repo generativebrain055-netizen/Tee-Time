@@ -51,21 +51,54 @@ class RosterServiceError extends Error {
   }
 }
 
+function mergeLatestIsoString(columnIso, teeIso) {
+  if (!columnIso) return teeIso || null;
+  if (!teeIso) return columnIso;
+  const ta = new Date(columnIso).getTime();
+  const tb = new Date(teeIso).getTime();
+  if (Number.isNaN(ta)) return teeIso;
+  if (Number.isNaN(tb)) return columnIso;
+  return tb >= ta ? teeIso : columnIso;
+}
+
+/** Fill last_played_together from past shared tee times when roster stats are missing or older. */
+async function enrichRosterLastPlayedFromTees(userId, rows) {
+  if (!rows?.length) return rows || [];
+  const contactIds = rows.map((r) => r.contact_user_id).filter(Boolean);
+  if (!contactIds.length) return rows;
+  try {
+    const teeMap = await rosterRepository.getLastPlayedFromPastSharedTees(userId, contactIds);
+    return rows.map((r) => {
+      if (!r.contact_user_id) return r;
+      const fromTee = teeMap.get(r.contact_user_id);
+      if (!fromTee) return r;
+      const merged = mergeLatestIsoString(r.last_played_together, fromTee);
+      return { ...r, last_played_together: merged };
+    });
+  } catch (e) {
+    logger.warn("enrichRosterLastPlayedFromTees:", e?.message);
+    return rows;
+  }
+}
+
 /**
  * Get user's roster (non-on-deck entries)
  */
 async function getRoster(userId, options = {}) {
-  return rosterRepository.getRoster(userId, {
+  const rows = await rosterRepository.getRoster(userId, {
     sortBy: options.sortBy,
     isOnDeck: false,
+    groupId: options.groupId,
   });
+  return enrichRosterLastPlayedFromTees(userId, rows);
 }
 
 /**
  * Get user's on-deck roster entries
  */
 async function getOnDeck(userId) {
-  return rosterRepository.getOnDeck(userId);
+  const rows = await rosterRepository.getOnDeck(userId);
+  return enrichRosterLastPlayedFromTees(userId, rows);
 }
 
 /**
@@ -826,6 +859,21 @@ async function getMemberProfile(userId, rosterId) {
   const profile = await rosterRepository.getMemberProfile(userId, rosterId);
   if (!profile) {
     throw new RosterServiceError("Member not found", "NOT_FOUND", 404);
+  }
+  const cid = profile.contact_user_id;
+  if (cid) {
+    try {
+      const teeMap = await rosterRepository.getLastPlayedFromPastSharedTees(userId, [cid]);
+      const fromTee = teeMap.get(cid);
+      if (fromTee) {
+        profile.last_played_together = mergeLatestIsoString(
+          profile.last_played_together,
+          fromTee,
+        );
+      }
+    } catch (e) {
+      logger.warn("getMemberProfile tee last played:", e?.message);
+    }
   }
   return profile;
 }

@@ -15,7 +15,7 @@ export interface FriendProfileData extends Omit<DiscoveredUser, 'friendshipStatu
   drinkOfChoice?: string;
   roundsCount?: number;
   coursesCount?: number;
-  recentRounds?: { courseName: string; date: string }[];
+  recentRounds?: { id?: string; courseName: string; date: string }[];
   membership?: { name: string; location?: string };
   phone?: string;
 }

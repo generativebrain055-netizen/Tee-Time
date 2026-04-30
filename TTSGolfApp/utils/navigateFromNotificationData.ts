@@ -228,15 +228,18 @@ export function navigateFromNotificationData(
     return true;
   }
 
+  // Organizer: invite accepted/declined includes inviteId + teeTimeId — open tee time detail, not invitee InviteDetail.
+  if (dataType === "tee_time_response" && d.teeTimeId) {
+    navigate("TeeTimeDetail", { teeTimeId: String(d.teeTimeId) });
+    return true;
+  }
   if (dataType === "tee_time_response" && d.inviteId) {
     navigate("InviteDetail", { inviteId: String(d.inviteId) });
     return true;
   }
 
   if (
-    (dataType === "tee_time_response" ||
-      dataType === "player_cancelled" ||
-      dataType === "check_in_reminder") &&
+    (dataType === "player_cancelled" || dataType === "check_in_reminder") &&
     d.teeTimeId
   ) {
     navigate("TeeTimeDetail", {

@@ -25,6 +25,7 @@ import {
 } from "../services/api";
 import { spacing, fontSize, radii } from "../ui/theme/tokens";
 import { useColors } from "../ui/theme/ThemeContext";
+import { formatPlayerSearchLocationLine } from "../utils/formatting";
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
@@ -192,11 +193,24 @@ export default function GlobalSearchScreen({
                     <Text style={[styles.rowTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                       {u.name || u.username || "Unknown"}
                     </Text>
-                    {u.username && (
-                      <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                        @{u.username}
-                      </Text>
-                    )}
+                    {(() => {
+                      const place = formatPlayerSearchLocationLine(u.location, u.zipCode);
+                      if (place) {
+                        return (
+                          <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                            {place}
+                          </Text>
+                        );
+                      }
+                      if (u.username) {
+                        return (
+                          <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                            @{u.username}
+                          </Text>
+                        );
+                      }
+                      return null;
+                    })()}
                   </View>
                 </TouchableOpacity>
               ))}

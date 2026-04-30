@@ -595,7 +595,7 @@ class FriendRepository {
       // Get completed tee-time aggregates for unified stats logic:
       // - roundsCount: total completed rounds
       // - coursesCount: unique completed courses
-      // - recentRounds: latest 3 completed rounds
+      // - recentRounds: latest completed rounds (for profile list)
       let recentRounds = [];
       let uniqueCourses = new Set();
       let completedRoundsCount = 0;
@@ -620,25 +620,24 @@ class FriendRepository {
           .eq("tee_times.status", "completed");
 
         if (!allCompletedError && allCompleted && allCompleted.length > 0) {
-          completedRoundsCount = allCompleted.length;
-
-          // Extract, normalize, and sort tee times by date (most recent first)
-          const teeTimes = allCompleted
-            .map((p) => {
-              const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
-              return tt;
-            })
-            .filter(Boolean)
+          // Extract, dedupe by tee time id, sort most recent first
+          const byTeeId = new Map();
+          for (const p of allCompleted) {
+            const tt = Array.isArray(p.tee_times) ? p.tee_times[0] : p.tee_times;
+            if (tt?.id) byTeeId.set(tt.id, tt);
+          }
+          const teeTimes = [...byTeeId.values()]
             .sort((a, b) => {
-              // Sort by date descending (most recent first)
               const dateCompare = (b.tee_date || "").localeCompare(a.tee_date || "");
               if (dateCompare !== 0) return dateCompare;
-              // If same date, sort by time descending
               return (b.tee_time || "").localeCompare(a.tee_time || "");
             })
-            .slice(0, 3); // Take top 3
+            .slice(0, 3);
+
+          completedRoundsCount = byTeeId.size;
 
           recentRounds = teeTimes.map((round) => ({
+            id: round.id,
             courseName: round.course_name,
             date: round.tee_date,
           }));

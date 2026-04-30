@@ -232,7 +232,12 @@ function FriendProfileScreen({ navigation, route }: Props) {
             </View>
             
             <GolfStats rounds={rounds} courses={courses} socialScore={socialScore} />
-            <RecentRounds rounds={recentRounds} />
+            <RecentRounds
+              rounds={recentRounds}
+              onPressRound={(teeTimeId) =>
+                navigation?.navigate("TeeTimeDetail", { teeTimeId })
+              }
+            />
           </>
         ) : null}
       </ScrollView>

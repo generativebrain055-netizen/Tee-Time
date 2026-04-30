@@ -309,14 +309,14 @@ export function getNotificationNavigation(item: AppNotification): {
       return { screen: null };
 
     case "tee_time_response":
-      if (item.data?.inviteId) {
-        return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };
-      }
       if (item.data?.teeTimeId) {
         return {
           screen: "TeeTimeDetail",
           params: { teeTimeId: item.data.teeTimeId },
         };
+      }
+      if (item.data?.inviteId) {
+        return { screen: "InviteDetail", params: { inviteId: item.data.inviteId } };
       }
       return { screen: null };
 

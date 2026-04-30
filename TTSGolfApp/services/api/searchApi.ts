@@ -11,6 +11,9 @@ export interface SearchUser {
   username?: string;
   avatar?: string;
   handicap?: number;
+  location?: string | null;
+  homeCourse?: string | null;
+  zipCode?: string | null;
 }
 
 export interface SearchTeeTime {

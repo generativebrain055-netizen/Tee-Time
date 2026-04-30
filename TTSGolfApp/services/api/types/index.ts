@@ -132,6 +132,8 @@ export interface DiscoveredUser {
   avatar?: string;
   location?: string;
   homeCourse?: string;
+  /** When privacy allows showing location details (e.g. roster / user search) */
+  zipCode?: string;
   preferredTeeTime?: string;
   walkOrRide?: string;
   socialRate?: number;

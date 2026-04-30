@@ -11,7 +11,6 @@ import { useAuthStore, useTeeTimeStore } from "../../stores";
 import { DAYS_SHORT } from "./constants";
 import { WeekDay, UpcomingTeeTime } from "./types";
 import { Header, QuickActions, WeekCalendar, NextTeeTime } from "./components";
-import { BannerAd } from "../../components/BannerAd";
 import { palette, spacing, fontSize, radii } from "../../ui/theme/tokens";
 import { toCalendarDateKey } from "../../utils/formatting";
 
@@ -193,7 +192,6 @@ function HomePage({ navigation }: any) {
             onPress={handleTeeTimePress}
           />
         </WeekCalendar>
-        <BannerAd slotKey="banner_1" />
       </ContentArea>
       <AppBottomNav activeTab="Home" navigation={navigation} />
 

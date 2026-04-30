@@ -10,6 +10,46 @@ function totalGroupMemberCount(rosterRowCount) {
   return (Number(rosterRowCount) || 0) + 1;
 }
 
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Start-of-tee instant in ms (local JS Date from DB date + time). */
+function teeDateTimeToMs(teeDate, teeTime) {
+  if (teeDate == null) return null;
+  let day;
+  if (teeDate instanceof Date) {
+    const y = teeDate.getFullYear();
+    const mo = String(teeDate.getMonth() + 1).padStart(2, "0");
+    const d = String(teeDate.getDate()).padStart(2, "0");
+    day = `${y}-${mo}-${d}`;
+  } else if (typeof teeDate === "string") {
+    day = teeDate.split("T")[0];
+  } else {
+    return null;
+  }
+  if (!day || day.length < 8) return null;
+  let timePart = "12:00:00";
+  if (teeTime != null && String(teeTime).trim()) {
+    const raw = String(teeTime).trim();
+    if (raw.includes("T")) {
+      const t = raw.split("T")[1] || raw;
+      timePart = t.slice(0, 8);
+    } else {
+      const parts = raw.split(":");
+      const h = (parts[0] || "0").padStart(2, "0");
+      const m = (parts[1] || "0").padStart(2, "0");
+      const s = (parts[2] || "00").padStart(2, "0").slice(0, 2);
+      timePart = `${h}:${m}:${s}`;
+    }
+  }
+  const d = new Date(`${day}T${timePart}`);
+  const ms = d.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 class RosterRepository {
   /**
    * Roster row ids in this group: roster_group_members plus legacy roster.group_id rows.
@@ -420,7 +460,7 @@ class RosterRepository {
       const { data, error } = await supabaseAdmin
         .from("users")
         .select(
-          "id, phone_number, first_name, last_name, username, user_profiles(avatar_url, handicap)"
+          "id, phone_number, first_name, last_name, username, user_profiles(avatar_url, handicap, location, home_course, zip_code, privacy_settings)"
         )
         .neq("id", excludeUserId)
         .is("deleted_at", null)
@@ -432,15 +472,107 @@ class RosterRepository {
 
       if (error) throw error;
       const rows = data || [];
-      return rows.map((row) => {
+      const mapped = rows.map((row) => {
         const profile = row.user_profiles?.[0] || row.user_profiles || {};
         const { user_profiles, ...rest } = row;
-        return { ...rest, avatar_url: profile?.avatar_url, handicap: profile?.handicap };
+        return {
+          ...rest,
+          avatar_url: profile?.avatar_url,
+          handicap: profile?.handicap,
+          location: profile?.location ?? null,
+          home_course: profile?.home_course ?? null,
+          zip_code: profile?.zip_code ?? null,
+          privacy_settings: profile?.privacy_settings ?? null,
+        };
       });
+      const ids = mapped.map((row) => row.id).filter(Boolean);
+      const teeLast = await this.getLastPlayedFromPastSharedTees(excludeUserId, ids);
+      return mapped.map((row) => ({
+        ...row,
+        last_played_together: teeLast.get(row.id) || row.last_played_together || null,
+      }));
     } catch (error) {
       logger.error("searchUsers error", error);
       return [];
     }
+  }
+
+  /**
+   * Latest tee start (ISO) where viewer and each other user were non-cancelled participants
+   * on the same tee time in the past, status confirmed/completed/in_progress.
+   * @returns {Map<string, string>} otherUserId -> ISO timestamp
+   */
+  async getLastPlayedFromPastSharedTees(viewerUserId, otherUserIds) {
+    const mapMs = new Map();
+    const out = new Map();
+    const others = [...new Set((otherUserIds || []).filter(Boolean))];
+    if (!viewerUserId || !others.length) return out;
+
+    const { data: myRows, error: e1 } = await supabaseAdmin
+      .from("tee_time_participants")
+      .select("tee_time_id")
+      .eq("user_id", viewerUserId)
+      .neq("status", "cancelled")
+      .neq("status", "tentative");
+
+    if (e1) {
+      logger.warn("getLastPlayedFromPastSharedTees my participants:", e1.message);
+      return out;
+    }
+
+    const myTeeIds = [...new Set((myRows || []).map((r) => r.tee_time_id).filter(Boolean))];
+    if (!myTeeIds.length) return out;
+
+    const now = Date.now();
+    const pastTeeEndMs = new Map();
+    for (const chunk of chunkArray(myTeeIds, 200)) {
+      const { data: tees, error: e2 } = await supabaseAdmin
+        .from("tee_times")
+        .select("id, tee_date, tee_time, status")
+        .in("id", chunk);
+      if (e2) {
+        logger.warn("getLastPlayedFromPastSharedTees tee_times:", e2.message);
+        continue;
+      }
+      for (const t of tees || []) {
+        if (!t?.id) continue;
+        if (t.status === "cancelled" || t.status === "pending") continue;
+        if (!["confirmed", "completed", "in_progress"].includes(t.status)) continue;
+        const ms = teeDateTimeToMs(t.tee_date, t.tee_time);
+        if (ms == null || ms > now) continue;
+        pastTeeEndMs.set(t.id, ms);
+      }
+    }
+
+    const playedIds = [...pastTeeEndMs.keys()];
+    if (!playedIds.length) return out;
+
+    for (const cChunk of chunkArray(others, 80)) {
+      const { data: parts, error: e3 } = await supabaseAdmin
+        .from("tee_time_participants")
+        .select("tee_time_id, user_id")
+        .in("tee_time_id", playedIds)
+        .in("user_id", cChunk)
+        .neq("status", "cancelled")
+        .neq("status", "tentative");
+
+      if (e3) {
+        logger.warn("getLastPlayedFromPastSharedTees contact participants:", e3.message);
+        continue;
+      }
+      for (const row of parts || []) {
+        const ms = pastTeeEndMs.get(row.tee_time_id);
+        if (ms == null) continue;
+        const uid = row.user_id;
+        const prev = mapMs.get(uid) ?? 0;
+        if (ms > prev) mapMs.set(uid, ms);
+      }
+    }
+
+    for (const [uid, ms] of mapMs) {
+      out.set(uid, new Date(ms).toISOString());
+    }
+    return out;
   }
 
   /**

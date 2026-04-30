@@ -100,17 +100,40 @@ const formatGroup = (g) => ({
  */
 const formatGroups = (groups) => (groups || []).map(formatGroup);
 
+/** @param {unknown} raw */
+function parseUserPrivacySettings(raw) {
+  if (raw == null) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const p = JSON.parse(raw);
+      return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 /**
- * Format user search result
+ * Format user search result (roster search + global search people)
  */
-const formatUserSearchResult = (u) => ({
-  id: u.id,
-  phone: u.phone_number,
-  name: `${u.first_name || ""} ${u.last_name || ""}`.trim(),
-  username: u.username,
-  avatar: u.avatar_url,
-  handicap: u.handicap,
-});
+const formatUserSearchResult = (u) => {
+  const privacy = parseUserPrivacySettings(u.privacy_settings);
+  const showLocation = privacy.show_location !== false;
+  return {
+    id: u.id,
+    phone: u.phone_number,
+    name: `${u.first_name || ""} ${u.last_name || ""}`.trim(),
+    username: u.username,
+    avatar: u.avatar_url,
+    handicap: u.handicap,
+    lastPlayedTogether: u.last_played_together || undefined,
+    location: showLocation ? u.location || null : null,
+    homeCourse: u.home_course || null,
+    zipCode: showLocation ? u.zip_code || null : null,
+  };
+};
 
 /**
  * Format auto-invite member

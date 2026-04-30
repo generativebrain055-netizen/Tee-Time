@@ -149,11 +149,15 @@ const FilterTabs = memo(({ activeFilter, onFilterChange }: FilterTabsProps) => (
     </View>
 ));
 
-export default function TeeTimeHistoryScreen({ navigation }: any) {
+export default function TeeTimeHistoryScreen({ navigation, route }: any) {
     const [history, setHistory] = useState<TeeTimeHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [filter, setFilter] = useState<FilterType>("all");
+    const [filter, setFilter] = useState<FilterType>(() => {
+        const raw = route?.params?.initialFilter;
+        if (raw && FILTERS.some((f) => f.key === raw)) return raw as FilterType;
+        return "all";
+    });
 
     const loadHistory = useCallback(async (selectedFilter: FilterType = filter) => {
         try {
@@ -170,7 +174,9 @@ export default function TeeTimeHistoryScreen({ navigation }: any) {
     }, [filter]);
 
     useEffect(() => {
-        loadHistory();
+        void loadHistory(filter);
+        // Initial fetch only; tab changes call loadHistory via handleFilterChange.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleFilterChange = useCallback((newFilter: FilterType) => {

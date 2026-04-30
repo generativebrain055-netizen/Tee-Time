@@ -20,6 +20,7 @@ import { Skeleton } from "../../ui/feedback/Skeleton";
 import { teeTimeApi, TeeTime, profileApi, TeeTimeHistoryEntry, draftApi } from "../../services/api";
 import { useUser } from "../../contexts";
 import { logger } from "../../utils/logger";
+import { parseCalendarDateLocal } from "../../utils/formatting";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -64,6 +65,18 @@ const formatScore = (score?: number | string): string => {
     if (!score) return "—";
     return String(score);
 };
+
+/** History API returns calendar tee dates (often MM-DD-YYYY); avoid `new Date(string)` parsing bugs. */
+function formatHistoryTeeDateLabel(teeDateStr: string | undefined): string {
+    if (!teeDateStr) return "";
+    const cal = parseCalendarDateLocal(String(teeDateStr));
+    if (Number.isNaN(cal.getTime())) return String(teeDateStr);
+    return cal.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    });
+}
 
 const getPreferredTeeTimeDisplay = (pref?: string): string => {
     if (!pref) return "Not set";
@@ -713,7 +726,7 @@ export default function ProfileScreen({ navigation }: any) {
                     </View>
                 </View>
 
-                {/* Recent Rounds */}
+                {/* Recent completed tee times */}
                 <View style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 24 }}>
                     <View style={{
                         backgroundColor: '#FFFFFF',
@@ -726,9 +739,17 @@ export default function ProfileScreen({ navigation }: any) {
                             fontFamily: 'Inter_700Bold',
                             fontSize: 18,
                             color: '#111827',
-                            marginBottom: 16,
+                            marginBottom: 4,
                         }}>
                             Recent rounds
+                        </Text>
+                        <Text style={{
+                            fontFamily: 'Inter_400Regular',
+                            fontSize: 13,
+                            color: '#6B7280',
+                            marginBottom: 16,
+                        }}>
+                            Completed tee times
                         </Text>
                         {roundsLoading ? (
                             <View style={{
@@ -738,7 +759,8 @@ export default function ProfileScreen({ navigation }: any) {
                                 <ActivityIndicator size="small" color="#22C55E" />
                             </View>
                         ) : recentRounds.length > 0 ? (
-                            recentRounds.slice(0, 3).map((round, index) => (
+                            <>
+                            {recentRounds.slice(0, 3).map((round, index) => (
                                 <TouchableOpacity
                                     key={round.id || index}
                                     activeOpacity={0.7}
@@ -747,7 +769,7 @@ export default function ProfileScreen({ navigation }: any) {
                                         backgroundColor: '#F9FAFB',
                                         borderRadius: 12,
                                         padding: 16,
-                                        marginBottom: index < recentRounds.length - 1 ? 12 : 0,
+                                        marginBottom: 12,
                                         borderWidth: 1,
                                         borderColor: '#E5E7EB',
                                     }}
@@ -760,17 +782,26 @@ export default function ProfileScreen({ navigation }: any) {
                                     }}>
                                         {round.courseName}
                                     </Text>
+                                    {round.courseLocation ? (
+                                        <Text
+                                            numberOfLines={1}
+                                            style={{
+                                                fontFamily: 'Inter_400Regular',
+                                                fontSize: 12,
+                                                color: '#9CA3AF',
+                                                marginBottom: 6,
+                                            }}
+                                        >
+                                            {round.courseLocation}
+                                        </Text>
+                                    ) : null}
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <Text style={{
                                             fontFamily: 'Inter_400Regular',
                                             fontSize: 13,
                                             color: '#6B7280',
                                         }}>
-                                            {new Date(round.teeDate).toLocaleDateString('en-US', { 
-                                                month: 'long', 
-                                                day: 'numeric', 
-                                                year: 'numeric' 
-                                            })}
+                                            {formatHistoryTeeDateLabel(round.teeDate)}
                                         </Text>
                                         {round.gameScore !== undefined && round.gameScore !== null && (
                                             <Text style={{
@@ -783,7 +814,29 @@ export default function ProfileScreen({ navigation }: any) {
                                         )}
                                     </View>
                                 </TouchableOpacity>
-                            ))
+                            ))}
+                            <TouchableOpacity
+                                onPress={() => navigation?.navigate("TeeTimeHistory", { initialFilter: "completed" })}
+                                activeOpacity={0.7}
+                                style={{
+                                    marginTop: 4,
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 4,
+                                }}
+                            >
+                                <Text style={{
+                                    fontFamily: "Inter_600SemiBold",
+                                    fontSize: 15,
+                                    color: "#166534",
+                                }}>
+                                    View all tee time history
+                                </Text>
+                                <ChevronRight size={20} color="#166534" strokeWidth={2} />
+                            </TouchableOpacity>
+                            </>
                         ) : (
                             <View style={{
                                 padding: 24,

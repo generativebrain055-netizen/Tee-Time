@@ -17,6 +17,7 @@ import { friendApi, rosterApi, type DiscoveredUser } from '../services/api';
 import { useDebounce } from '../hooks';
 import { ScreenShell, AppHeader } from '../ui';
 import { logger } from '../utils/logger';
+import { formatPlayerSearchLocationLine } from '../utils/formatting';
 
 interface FindPlayersScreenProps {
   navigation: any;
@@ -130,7 +131,8 @@ const UserListItem: React.FC<{
   };
 
   const buttonStyle = getButtonStyle();
-  const location = user.location || user.homeCourse || 'Unknown location';
+  const location =
+    formatPlayerSearchLocationLine(user.location, user.zipCode) || "Location not set";
   const IconComponent = buttonStyle.icon;
   
   // Handle both name formats

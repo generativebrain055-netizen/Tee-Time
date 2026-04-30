@@ -285,8 +285,19 @@ const ParticipantRow = memo(({ participant, showTimeLeft, calculateTimeLeft, isI
     };
 
     const statusConfig = getStatusConfig();
-    const timeLeft = showTimeLeft && participant.expiresAt && calculateTimeLeft ? 
-                     calculateTimeLeft(participant.expiresAt) : null;
+    // Skipped invites use status `expired` but may still have a future expires_at; never show a live countdown for terminal states.
+    const statusAllowsCountdown =
+        participant.status === "pending" ||
+        participant.status === "queued" ||
+        participant.status === "invited" ||
+        participant.status === "waitlist";
+    const timeLeft =
+        showTimeLeft &&
+        statusAllowsCountdown &&
+        participant.expiresAt &&
+        calculateTimeLeft
+            ? calculateTimeLeft(participant.expiresAt)
+            : null;
 
     const highlightRow = !!isInAwaitingGroup || !!isActiveInvitedSlot;
     const highlightAvatarRing = !!isInAwaitingGroup || !!isActiveInvitedSlot;

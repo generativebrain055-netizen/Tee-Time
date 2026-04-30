@@ -38,6 +38,11 @@ function normalizeFriendProfileApi(raw: Record<string, unknown>): FriendProfileD
 
     let recentRounds = raw.recentRounds ?? raw.recent_rounds;
     if (!Array.isArray(recentRounds)) recentRounds = [];
+    recentRounds = recentRounds.map((row: Record<string, unknown>) => ({
+        id: row.id != null ? String(row.id) : undefined,
+        courseName: pickStr(row.courseName, row.course_name) ?? "",
+        date: pickStr(row.date, row.tee_date) ?? "",
+    }));
 
     const playingPartnerPreference = pickStr(raw.playingPartnerPreference, raw.playing_partner_preference);
     const fs = raw.friendshipStatus ?? raw.friendship_status;

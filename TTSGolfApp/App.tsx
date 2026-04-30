@@ -673,6 +673,7 @@ export default function App(): React.ReactElement {
           <TeeTimeHistoryScreen
             key={`tee-time-history-${screenKey}`}
             navigation={navigation as any}
+            route={{ params: screenParams } as any}
           />
         );
       case "CheckIn":

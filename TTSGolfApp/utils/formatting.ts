@@ -27,15 +27,24 @@ export function formatDate(dateStr: string) {
 }
 
 /**
- * Format a HH:MM or HH:MM:SS time string to 12-hour format
+ * Format a HH:MM or HH:MM:SS time string to 12-hour format.
+ * Handles ISO fragments (e.g. from drivers) and values that already include AM/PM.
  */
 export function formatTime(timeStr: string): string {
   if (!timeStr) return "";
-  const [hours, minutes] = timeStr.split(":");
-  const hour = parseInt(hours, 10);
+  const s = String(timeStr).trim();
+  if (/am|pm/i.test(s)) return s;
+  const tail = s.includes("T") ? (s.split("T").pop() ?? s) : s;
+  const cleaned = tail.replace(/Z|[+-]\d{2}:?\d{2}$/i, "").trim();
+  const parts = cleaned.split(":");
+  const hour = parseInt(parts[0], 10);
+  const minPart = parts[1] ?? "0";
+  const minute = parseInt(String(minPart).replace(/\D/g, "").slice(0, 2) || "0", 10);
+  if (Number.isNaN(hour)) return s;
   const ampm = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
-  return `${hour12}:${minutes} ${ampm}`;
+  const mm = Number.isNaN(minute) ? "00" : String(minute).padStart(2, "0");
+  return `${hour12}:${mm} ${ampm}`;
 }
 
 /**
@@ -139,6 +148,8 @@ export function toCalendarDateKey(
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = /^(\d{2})-(\d{2})-(\d{4})/.exec(s);
   if (m) return `${m[3]}-${m[1]}-${m[2]}`;
+  m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[1]}-${m[2]}`;
   const dt = new Date(s);
   if (Number.isNaN(dt.getTime())) return "";
   return `${dt.getFullYear()}-${padZero(dt.getMonth() + 1)}-${padZero(dt.getDate())}`;
@@ -155,7 +166,48 @@ export function parseCalendarDateLocal(dateStr: string): Date {
   if (m) {
     return new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
   }
+  m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (m) {
+    return new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+  }
   return new Date(dateStr);
+}
+
+/** True when `dateStr` is the same local calendar day as `ref` (default: now). */
+export function isSameLocalCalendarDayAsToday(
+  dateStr: string | null | undefined,
+  ref: Date = new Date(),
+): boolean {
+  if (dateStr == null || String(dateStr).trim() === "") return false;
+  const cal = parseCalendarDateLocal(String(dateStr).trim());
+  if (Number.isNaN(cal.getTime())) return false;
+  return (
+    cal.getFullYear() === ref.getFullYear() &&
+    cal.getMonth() === ref.getMonth() &&
+    cal.getDate() === ref.getDate()
+  );
+}
+
+/**
+ * One line for player search: city/location + zip when needed, never duplicate zip
+ * if it is already part of `location`.
+ */
+export function formatPlayerSearchLocationLine(
+  location?: string | null,
+  zipCode?: string | null,
+): string {
+  const loc = location != null ? String(location).trim() : "";
+  const zip = zipCode != null ? String(zipCode).trim() : "";
+  if (!loc && !zip) return "";
+  if (!zip) return loc;
+  if (!loc) return zip;
+  if (loc.includes(zip)) return loc;
+  const zipDigits = zip.replace(/\D/g, "");
+  if (zipDigits.length >= 5) {
+    const locDigits = loc.replace(/\D/g, "");
+    if (locDigits.endsWith(zipDigits)) return loc;
+  }
+  return `${loc} · ${zip}`;
 }
 
 /**
@@ -191,6 +243,9 @@ export function formatDateMMDDYYYY(
       return "";
     }
     return `${padZero(m)}/${padZero(d)}/${y}`;
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    return s;
   }
   const dt = new Date(s);
   if (Number.isNaN(dt.getTime())) return "";
