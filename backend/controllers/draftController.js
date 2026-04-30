@@ -159,6 +159,8 @@ class DraftController {
           handicap: userProfile.handicap,
           homeCourse: userProfile.home_course,
           location: userProfile.location,
+          // Account signup on users table (not profile row timestamps)
+          createdAt: userProfile.created_at,
         },
         mutualClubs,
         confirmationRequired: true,

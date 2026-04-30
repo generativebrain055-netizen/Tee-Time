@@ -20,7 +20,7 @@ import { Skeleton } from "../../ui/feedback/Skeleton";
 import { teeTimeApi, TeeTime, profileApi, TeeTimeHistoryEntry, draftApi } from "../../services/api";
 import { useUser } from "../../contexts";
 import { logger } from "../../utils/logger";
-import { parseCalendarDateLocal } from "../../utils/formatting";
+import { parseCalendarDateLocal, getMemberSinceText } from "../../utils/formatting";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -46,19 +46,6 @@ const getInitials = (firstName?: string, lastName?: string): string => {
 
 const getFullName = (firstName?: string, lastName?: string): string => {
     return `${firstName || ""} ${lastName || ""}`.trim() || "User";
-};
-
-const getMemberSinceText = (createdAt?: string): string => {
-    try {
-        const d = createdAt ? new Date(createdAt) : new Date();
-        if (Number.isNaN(d.getTime())) return `Member since ${new Date().toLocaleString("en-US", { month: "short" })} ${new Date().getFullYear()}`;
-        const month = d.toLocaleString("en-US", { month: "short" });
-        const year = d.getFullYear();
-        return `Member since ${month} ${year}`;
-    } catch {
-        const now = new Date();
-        return `Member since ${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
-    }
 };
 
 const formatScore = (score?: number | string): string => {

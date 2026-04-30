@@ -304,6 +304,8 @@ export interface ScannedUser {
   handicap?: number;
   homeCourse?: string;
   location?: string;
+  /** ISO date — user account first signup (`users.created_at`). */
+  createdAt?: string;
 }
 
 export interface ScanResult {

@@ -630,7 +630,7 @@ const getPublicProfile = async (userId) => {
       .from("users")
       .select(
         `
-        id, first_name, last_name, username,
+        id, first_name, last_name, username, created_at,
         user_profiles (
           handicap, social_rate, avatar_url, location, home_course,
           preferred_tee_time, walk_or_ride, bio, rounds_played, average_score

@@ -285,3 +285,22 @@ export function formatRemainingClock(
     ? `${padZero(totalHours)}:${padZero(minutes)}:${padZero(seconds)}`
     : `${padZero(totalHours)}:${padZero(minutes)}`;
 }
+
+/**
+ * "Member since Mon YYYY" from account signup ISO (`users.created_at`).
+ */
+export function getMemberSinceText(createdAt?: string): string {
+  try {
+    const d = createdAt ? new Date(createdAt) : new Date();
+    if (Number.isNaN(d.getTime())) {
+      const now = new Date();
+      return `Member since ${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
+    }
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const year = d.getFullYear();
+    return `Member since ${month} ${year}`;
+  } catch {
+    const now = new Date();
+    return `Member since ${now.toLocaleString("en-US", { month: "short" })} ${now.getFullYear()}`;
+  }
+}
