@@ -30,7 +30,9 @@ function leadingIconForNotificationKind(kind?: string): ToastLeadingIcon {
     kind === "tee_time_not_filled" ||
     kind === "organizer_fill_warning" ||
     kind === "organizer_invite_more" ||
-    kind === "roster_exhausted"
+    kind === "roster_exhausted" ||
+    kind === "tee_time_details_updated" ||
+    kind === "tee_time_at_risk"
   ) {
     return "calendar";
   }
@@ -82,7 +84,8 @@ export function NotificationToastListener({
       kind === "tee_time_not_filled" ||
       kind === "organizer_fill_warning" ||
       kind === "organizer_invite_more" ||
-      kind === "roster_exhausted"
+      kind === "roster_exhausted" ||
+      kind === "tee_time_at_risk"
     ) {
       return "warning";
     }

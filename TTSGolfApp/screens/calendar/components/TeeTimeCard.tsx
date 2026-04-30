@@ -24,7 +24,7 @@ import {
 import { CalendarTeeTime } from "../types";
 import { CALENDAR_COLORS } from "../constants";
 import { formatTeeTimeDate, formatTeeTimeTime } from "../utils";
-import { isSameLocalCalendarDayAsToday, parseCalendarDateLocal } from "../../../utils/formatting";
+import { parseCalendarDateLocal } from "../../../utils/formatting";
 import { attendanceApi, teeTimeApi } from "../../../services/api";
 import { useAuthStore } from "../../../stores";
 import { useToast } from "../../../ui/feedback";
@@ -127,12 +127,12 @@ const TeeTimeCard = memo(({ teeTime, onPress, onCancelSuccess, onPreTeeTimeCheck
     teeTime.status !== "completed" &&
     teeTime.status !== "cancelled";
 
-  /** "Is everyone here?" / check-in — only on the scheduled tee date; hosts confirmed or in session */
+  /** Host check-in: tee date today or past; status confirmed or completed only. */
   const showPreTeeTimeCheck =
     !!onPreTeeTimeCheck &&
     !!teeTime.isOrganizer &&
-    isSameLocalCalendarDayAsToday(teeTime.date) &&
-    (displayStatus === "confirmed" || displayStatus === "in_progress");
+    !isFutureTeeDate(teeTime.date) &&
+    (displayStatus === "confirmed" || displayStatus === "completed");
 
   const checkInCourseLine = `${formatTeeTimeDate(teeTime.date)}, ${formatTeeTimeTime(teeTime.time)} – ${teeTime.course}`;
   const hideManagePlayersForFuture = isFutureTeeDate(teeTime.date);

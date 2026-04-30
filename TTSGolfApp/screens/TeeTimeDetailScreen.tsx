@@ -837,12 +837,13 @@ function TeeTimeDetailScreen({ navigation, route }: any) {
         [pendingInviteForMe, fetchProfile, fetchTeeTimeDetails, toast],
     );
 
-    /** Host must see check-in while group is active — not only when API says "confirmed" (in_progress after check-in reminder / cancel flow is common). */
+    /** Host: check participant when tee date is today or past and status is confirmed or completed. */
     const canShowCheckParticipantStatus = useMemo(() => {
         if (!teeTime || !isOrganizer) return false;
         const s = normalizedTeeStatus;
         if (s === "cancelled" || s === "canceled") return false;
-        return isTodayOrPastDate;
+        if (!isTodayOrPastDate) return false;
+        return s === "confirmed" || s === "completed";
     }, [isOrganizer, teeTime, normalizedTeeStatus, isTodayOrPastDate]);
     const showLeaveTeeTimeButton = useMemo(
         () =>

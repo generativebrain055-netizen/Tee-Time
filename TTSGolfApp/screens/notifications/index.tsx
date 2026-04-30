@@ -187,6 +187,8 @@ type NotificationTypeFilter =
     | 'tee_time_invite'
     | 'tee_time_booked'
     | 'tee_time_response'
+    | 'tee_time_details_updated'
+    | 'tee_time_at_risk'
     | 'friend_request'
     | 'friend_accepted'
     | 'spot_opened'
@@ -298,6 +300,10 @@ export default function NotificationsScreen({ navigation, route }: any) {
         );
     }, []);
 
+    /** In-app rows that navigate only — must not run invite accept/decline APIs. */
+    const isTeeNotificationNavigateOnly = (dataType: string) =>
+        dataType === "tee_time_details_updated" || dataType === "tee_time_at_risk";
+
     const handleAccept = async (notificationId: string, type: string, data?: any) => {
         console.log("🔵 [NotificationsScreen] handleAccept CALLED", { notificationId, type, data });
         
@@ -321,7 +327,10 @@ export default function NotificationsScreen({ navigation, route }: any) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
                 }
                 markNotificationHistorical(notificationId, "accepted");
-            } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
+            } else if (
+                (dataType.includes('tee_time') || dataType.includes('invite')) &&
+                !isTeeNotificationNavigateOnly(dataType)
+            ) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
                     console.warn("🟡 [NotificationsScreen] No inviteId in notification data, cannot respond", { notificationId, data });
@@ -372,10 +381,11 @@ export default function NotificationsScreen({ navigation, route }: any) {
             
             // Refresh notifications list to ensure UI is in sync (skip when we keep the row and update locally)
             const persistInviteLocally =
-                dataType.includes("tee_time") ||
-                dataType.includes("invite") ||
-                dataType.includes("friend") ||
-                type.includes("friend");
+                !isTeeNotificationNavigateOnly(dataType) &&
+                (dataType.includes("tee_time") ||
+                    dataType.includes("invite") ||
+                    dataType.includes("friend") ||
+                    type.includes("friend"));
             if (!persistInviteLocally) {
                 await fetchNotifications();
             }
@@ -410,7 +420,10 @@ export default function NotificationsScreen({ navigation, route }: any) {
                     console.warn("🟡 [NotificationsScreen] Failed to mark friend request notification as responded", { notificationId, error: markError });
                 }
                 markNotificationHistorical(notificationId, "declined");
-            } else if (dataType.includes('tee_time') || dataType.includes('invite')) {
+            } else if (
+                (dataType.includes('tee_time') || dataType.includes('invite')) &&
+                !isTeeNotificationNavigateOnly(dataType)
+            ) {
                 const inviteId = data?.inviteId;
                 if (!inviteId) {
                     console.warn("🟡 [NotificationsScreen] No inviteId in notification data, cannot respond", { notificationId, data });
@@ -447,10 +460,11 @@ export default function NotificationsScreen({ navigation, route }: any) {
             
             // Refresh notifications list to ensure UI is in sync (skip when we keep the row and update locally)
             const persistInviteLocally =
-                dataType.includes("tee_time") ||
-                dataType.includes("invite") ||
-                dataType.includes("friend") ||
-                type.includes("friend");
+                !isTeeNotificationNavigateOnly(dataType) &&
+                (dataType.includes("tee_time") ||
+                    dataType.includes("invite") ||
+                    dataType.includes("friend") ||
+                    type.includes("friend"));
             if (!persistInviteLocally) {
                 await fetchNotifications();
             }
@@ -559,6 +573,8 @@ export default function NotificationsScreen({ navigation, route }: any) {
         return [
             ...baseOptions,
             { key: 'tee_time_booked', label: 'Tee Time Booked' },
+            { key: 'tee_time_details_updated', label: 'Tee Time Updates' },
+            { key: 'tee_time_at_risk', label: 'Tee Time at Risk' },
             { key: 'tee_time_response', label: 'Invite Responses' },
             { key: 'player_cancelled', label: 'Player Cancelled' },
             { key: 'group_updated', label: 'Group Updated' },
@@ -645,6 +661,9 @@ export default function NotificationsScreen({ navigation, route }: any) {
             const t = getDataType(n);
             return (
                 t === "tee_time_booked" ||
+                t === "invite_completed" ||
+                t === "tee_time_details_updated" ||
+                t === "tee_time_at_risk" ||
                 t === "tee_time_response" ||
                 t === "group_invite_accepted" ||
                 t === "waiver_wire" ||
@@ -688,7 +707,9 @@ export default function NotificationsScreen({ navigation, route }: any) {
             else if (type === "roster_add") title = "Roster Adds";
             else if (type === "organizer_fill_warning" || type === "tee_time_not_filled" || type === "organizer_invite_more")
                 title = "Unfilled Slot Alerts";
-            else if (type === "tee_time_booked") title = "Tee Time Booked";
+            else if (type === "tee_time_booked" || type === "invite_completed") title = "Tee Time Booked";
+            else if (type === "tee_time_details_updated") title = "Tee Time Updates";
+            else if (type === "tee_time_at_risk") title = "Tee Time at Risk";
             else if (type === "tee_time_response") title = "Invite Responses";
             else if (type === "group_invite_accepted") title = "Group Invitations";
             else if (type === "waiver_wire") title = "Waiver Wire Posts";
@@ -1074,6 +1095,10 @@ export default function NotificationsScreen({ navigation, route }: any) {
         const dataType = (item.data as Record<string, unknown> | undefined)?.type as string | undefined;
         const d = item.data as Record<string, unknown> | undefined;
         const isUnfilledSlotAlert = dataType === "organizer_fill_warning" || dataType === "tee_time_not_filled" || dataType === "organizer_invite_more";
+        const isTeeTimeDetailsUpdated = dataType === "tee_time_details_updated";
+        const isTeeTimeAtRisk = dataType === "tee_time_at_risk";
+        const isTeeTimeUpdateOrRiskCard =
+            isTeeTimeDetailsUpdated || isTeeTimeAtRisk;
         const isFriendRequest = dataType === "friend_request" || item.type.includes("friend_request");
         const isGroupInvite = dataType === "group_invite";
         const isRosterAdd = dataType === "roster_add";
@@ -1667,14 +1692,20 @@ export default function NotificationsScreen({ navigation, route }: any) {
                     )}
                 </View>
                 <View style={styles.content}>
-                    {isUnfilledSlotAlert && (
+                    {(isUnfilledSlotAlert || isTeeTimeUpdateOrRiskCard) && (
                         <>
-                            <Text style={styles.unfilledLabel}>Unfilled Slot Alert</Text>
+                            <Text style={styles.unfilledLabel}>
+                                {isTeeTimeAtRisk
+                                    ? "Tee Time at Risk"
+                                    : isTeeTimeDetailsUpdated
+                                      ? "Tee Time Update"
+                                      : "Unfilled Slot Alert"}
+                            </Text>
                             <Text style={styles.cardTitle}>{item.title}</Text>
                             <Text style={styles.cardBody}>{item.body}</Text>
                         </>
                     )}
-                    {!isUnfilledSlotAlert && (
+                    {!isUnfilledSlotAlert && !isTeeTimeUpdateOrRiskCard && (
                         <Text style={[styles.cardBody, isDefaultInvitesHistorical && styles.inviteMutedText]}>
                             <Text style={[styles.cardTitleInline, isDefaultInvitesHistorical && styles.inviteMutedText]}>
                                 {senderName}
@@ -1764,6 +1795,9 @@ export default function NotificationsScreen({ navigation, route }: any) {
         const t = getDataType(n);
         return (
             t === "tee_time_booked" ||
+            t === "invite_completed" ||
+            t === "tee_time_details_updated" ||
+            t === "tee_time_at_risk" ||
             t === "tee_time_response" ||
             t === "waiver_wire" ||
             t === "group_invite_accepted" ||
